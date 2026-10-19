@@ -61,5 +61,24 @@ class LocalSigningTests(unittest.TestCase):
         )
 
 
+class ReleaseSigningModeTests(unittest.TestCase):
+    def test_release_signing_has_no_timestamp_fallback(self):
+        completed = subprocess.run(
+            ['make', '--no-print-directory', '--dry-run', 'app', 'RELEASE_SIGNING=1',
+             'SIGN_ID=Developer ID Application: Fixture (TESTTEAM)'],
+            cwd=ROOT, capture_output=True, text=True, check=True, timeout=60)
+        commands = completed.stdout.replace('\\\n', ' ')
+        self.assertNotIn('--timestamp=none', commands)
+        self.assertIn('--options runtime --timestamp', commands)
+        self.assertNotRegex(commands, r'\|\|\s*codesign')
+
+    def test_release_rejects_ad_hoc_before_build(self):
+        completed = subprocess.run(
+            ['make', '--no-print-directory', '--dry-run', 'app', 'RELEASE_SIGNING=1', 'SIGN_ID=-'],
+            cwd=ROOT, capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn('ad-hoc signing is development only', completed.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

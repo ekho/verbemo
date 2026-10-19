@@ -17,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 ACTIVE = ("Sources", "windows/src", "windows/scripts", "scripts", ".github",
           "landing", "Packaging", "Makefile", "Package.swift", "README.md",
           "docs/releasing.md")
-MIGRATED = ("Sources/verbemo/Analytics", "Sources/verbemo/Settings",
+MIGRATED = ("Sources/verbemo/Updates", "Packaging/Verbemo-Info.plist",
+            "scripts/build-macos-release.sh", "scripts/build-macos-plist.py",
+            "scripts/release_manifest.py", "scripts/verify-sparkle-signature.swift", "Makefile",
+            "Sources/verbemo/Analytics", "Sources/verbemo/Settings",
             "Sources/verbemo/Home.swift", "Sources/verbemo/UI/SetupForm.swift",
             "Sources/verbemo/UI/ConfigWatch.swift", "Sources/verbemo/Verbemo.swift",
             "Sources/verbemo/Config.swift", "Sources/verbemo/App", "Sources/verbemo/Setup",

@@ -10,3 +10,13 @@ dist/
 windows/.tools/
 windows/artifacts/
 /artifacts/live-validation/
+
+# Verbemo release credentials are local only.
+.env.verbemo-release
+*.p8
+*.p12
+*.pfx
+*.key
+*.pem
+*.cer
+*.cert

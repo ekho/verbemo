@@ -34,20 +34,16 @@
     <false/>
     <key>NSSupportsSuddenTermination</key>
     <false/>
-    <!-- Sparkle. The canonical feed is served from amanu.me; the release binaries it
-         points at live on GitHub. The public half of the EdDSA key pair is
-         here so the app can refuse an update it cannot verify — the private
-         half is not in this repository and never should be. -->
+    <!-- Own feed only. build-macos-plist.py injects the explicitly configured
+         public key; without one development bundles keep updates disabled. -->
     <key>SUFeedURL</key>
-    <string>https://amanu.me/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>/AxdBBPOFIca/y7RYwvi83FE6WqnIAjkVV0nTkRq9/c=</string>
+    <string>https://github.com/ekho/verbemo/releases/latest/download/appcast.xml</string>
     <!-- Check on our own rather than asking on first launch: verbemo already
          opens a setup window the first time, and a second dialog about update
          policy on top of it is one question too many. UpdateGate keeps the
          checks out of the way of a recording. -->
     <key>SUEnableAutomaticChecks</key>
-    <true/>
+    <false/>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
     <key>NSMicrophoneUsageDescription</key>

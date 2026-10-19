@@ -22,7 +22,9 @@ final class SweepScheduler {
         case sweeping(again: Bool)
     }
 
-    private var state = State.idle
+    var onActivityChange: (() -> Void)?
+
+    private var state = State.idle { didSet { onActivityChange?() } }
     private let waitForQueue: () async -> Void
     private let sweep: () async -> Void
 

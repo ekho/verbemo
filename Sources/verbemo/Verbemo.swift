@@ -251,8 +251,23 @@ final class AppController {
     /// built in `init` all the same, where the menu asks whether updates are
     /// available at all.
     private lazy var updates = AppUpdates(
-        gate: UpdateGate(isRecording: { [weak self] in self?.isRecording == true })
+        gate: UpdateGate(isBusy: { [weak self] in self?.isBusyForUpdate == true })
     )
+    // Reserve synchronously before spawning a Task: otherwise stopping the
+    // recording leaves a gap before the actor has accepted its work.
+    private var pendingProcessing = 0
+    private var isBusyForUpdate: Bool {
+        isRecording || pendingProcessing > 0 || imports.isRunning || mediaImportTask != nil
+            || sweeps?.isBusy == true || (recordingsBuilt && recordings.isProcessing)
+    }
+    private func processingStarted() {
+        pendingProcessing += 1
+        updates.activityDidChange()
+    }
+    private func processingFinished() {
+        pendingProcessing -= 1
+        updates.activityDidChange()
+    }
     private let transcription = TranscriptionCoordinator()
     /// The sweep of the recordings folder, after the queue and one at a time
     /// — see `SweepScheduler`. It sweeps whatever folder is current when it
@@ -281,14 +296,19 @@ final class AppController {
     private func makeRecordingsWindow() -> RecordingsWindow {
         recordingsBuilt = true
         let window = RecordingsWindow(root: root)
+        window.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
         window.onImportFiles = { [weak self] files in self?.importFiles(files) }
         window.onCancelImport = { [weak self] in self?.cancelImport() }
         window.onChooseImport = { [weak self] in self?.chooseMediaToImport() }
         let coordinator = transcription
-        window.onRetryDiarization = { dir in
+        window.onRetryDiarization = { [weak self] dir in
+            self?.processingStarted()
+            defer { self?.processingFinished() }
             try await coordinator.diarizeNow(dir)
         }
-        window.onSkipDiarization = { dir in
+        window.onSkipDiarization = { [weak self] dir in
+            self?.processingStarted()
+            defer { self?.processingFinished() }
             try await coordinator.skipDiarization(dir)
         }
         return window
@@ -347,6 +367,7 @@ final class AppController {
                 await PostProcessor.sweep(root: root)
                 sessionsChanged()
             })
+        sweeps.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
 
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onTogglePause = { [weak self] in self?.togglePause() }
@@ -484,7 +505,9 @@ final class AppController {
         guard !automaticFeaturesStarted else { return }
         automaticFeaturesStarted = true
 
+        processingStarted()
         Task { [transcription, root, self] in
+            defer { processingFinished() }
             await transcription.setStatusHandler { status in
                 Task { @MainActor [weak self] in
                     self?.showTranscription(status)
@@ -498,6 +521,7 @@ final class AppController {
             // returns as soon as its drain begins, and a sweep started then
             // walked the folder alongside it.
             sweeps.request()
+            await transcription.waitUntilIdle()
         }
 
         // A backlog deferred for want of a model is only half-solved by
@@ -536,6 +560,7 @@ final class AppController {
     /// the ordinary transcription queue, exactly like a recording just ended.
     func importFiles(_ files: [URL]) {
         if imports.add(files) { startImportRun() }
+        updates.activityDidChange()
     }
 
     /// One run of the importer: batch after batch until nothing is waiting
@@ -555,7 +580,12 @@ final class AppController {
                 combined.failures.append(contentsOf: result.failures)
                 combined.cancelled = combined.cancelled || result.cancelled
                 for imported in result.imported {
+                    processingStarted()
                     await transcription.enqueue(imported.session)
+                    Task { [self, transcription] in
+                        await transcription.waitUntilIdle()
+                        processingFinished()
+                    }
                 }
                 if result.cancelled { break }
             }
@@ -569,6 +599,7 @@ final class AppController {
             } else {
                 adoptPendingRoot()
             }
+            updates.activityDidChange()
         }
     }
 
@@ -756,6 +787,7 @@ final class AppController {
             let newSession = try RecordingSession(root: root, context: context, trigger: trigger)
             try newSession.start()
             session = newSession
+            updates.activityDidChange()
             FileHandle.standardError.write(Data(
                 "● recording (\(trigger.rawValue)) → \(newSession.dir.path)\n".utf8
             ))
@@ -829,11 +861,10 @@ final class AppController {
         FileHandle.standardError.write(Data(
             "○ stopped (\(reason)) · \(Self.format(duration)) · \(session.dir.path)\n".utf8
         ))
+        processingStarted()
         self.session = nil
         present(.idle, elapsed: nil)
         adoptPendingRoot()
-        // If Sparkle was told to wait for this recording, it has waited.
-        updates.recordingDidFinish()
 
         // A mic that opened for a few seconds was never a meeting. Throwing
         // these away is what keeps the recordings folder worth opening — but
@@ -853,7 +884,10 @@ final class AppController {
                     + "minimum for an automatic recording\n").utf8
             ))
             session.discard()
-            Task { [liveTranscription] in await liveTranscription.finishRecording() }
+            Task { [self, liveTranscription] in
+                await liveTranscription.finishRecording()
+                processingFinished()
+            }
             return
         }
 
@@ -869,12 +903,14 @@ final class AppController {
                 ("not queued: \(dir.lastPathComponent) has no meta.json yet — recovery "
                     + "finishes it at the next launch\n").utf8))
         }
-        Task { [liveTranscription] in
+        Task { [self, liveTranscription] in
             // Drop the large streaming model before Parakeet begins its final,
             // canonical pass so the two heavyweight ASR pipelines don't
             // compete for memory or the Neural Engine.
             await liveTranscription.finishRecording()
             await queue?.enqueue(dir)
+            await queue?.waitUntilIdle()
+            processingFinished()
         }
     }
 
@@ -917,9 +953,12 @@ final class AppController {
     /// one sweep.
     private func catchUp() {
         let folder = root
-        Task { [transcription, weak self] in
+        processingStarted()
+        Task { [transcription, self] in
             await transcription.resumePending(root: folder)
-            self?.sweeps.request()
+            sweeps.request()
+            await transcription.waitUntilIdle()
+            processingFinished()
         }
     }
 
@@ -1041,9 +1080,8 @@ final class AppController {
     private func showRecordings() {
         // A session put back in the queue should start transcribing now, not
         // at the next launch — the person asking for it is watching.
-        recordings.onRetranscribe = { [weak self, transcription] _ in
-            guard let root = self?.root else { return }
-            Task { await transcription.resumePending(root: root) }
+        recordings.onRetranscribe = { [weak self] _ in
+            self?.catchUp()
         }
         NSApp.activate(ignoringOtherApps: true)
         recordings.show()

@@ -67,17 +67,17 @@ NEMOTRON_ROOT = .build/nemotron
 NEMOTRON_HELPER = $(NEMOTRON_ROOT)/bin/nemo-speech
 NEMOTRON_BUNDLE = $(APP)/Contents/Helpers/NeMoSpeech
 
-# Prefer Developer ID (distributable, long-lived) over Apple Development
-# (fine for a machine-local tool). Falls back to ad-hoc so a clean checkout on
-# a machine with no certificates still builds.
-SIGN_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
-	| grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
-ifeq ($(strip $(SIGN_ID)),)
-SIGN_ID := $(shell security find-identity -v -p codesigning 2>/dev/null \
-	| grep -o '"Apple Development: [^"]*"' | head -1 | tr -d '"')
+# Local builds are explicitly ad-hoc unless an identity is selected. Release
+# packaging passes the user's own Developer ID after credential preflight.
+SIGN_ID ?= $(if $(VERBEMO_SIGN_ID),$(VERBEMO_SIGN_ID),-)
+RELEASE_SIGNING ?= 0
+ifeq ($(RELEASE_SIGNING),1)
+ifeq ($(strip $(SIGN_ID)),-)
+$(error signed releases require VERBEMO_SIGN_ID; ad-hoc signing is development only)
 endif
-ifeq ($(strip $(SIGN_ID)),)
-SIGN_ID := -
+SIGN_TIMESTAMP = --timestamp
+else
+SIGN_TIMESTAMP = --timestamp=none
 endif
 
 # Ad-hoc signatures have no Team ID for hardened runtime library validation.
@@ -129,8 +129,8 @@ app: build $(ICON)
 	@cp $(NEMOTRON_HELPER) $(NEMOTRON_BUNDLE)/bin/nemo-speech
 	@cp -R $(NEMOTRON_ROOT)/lib/. $(NEMOTRON_BUNDLE)/lib/
 	@cp $(NEMOTRON_ROOT)/verification.json $(APP)/Contents/Resources/Nemotron-verification.json
-	@sed -e 's/__SHORT_VERSION__/$(VERSION)/' -e 's/__BUILD_VERSION__/$(BUILD)/' \
-		Packaging/Verbemo-Info.plist > $(APP)/Contents/Info.plist
+	@python3 scripts/build-macos-plist.py Packaging/Verbemo-Info.plist $(APP)/Contents/Info.plist \
+		--version $(VERSION) --build $(BUILD)
 	@printf 'APPL????' > $(APP)/Contents/PkgInfo
 	@cp $(BUILT_ICON)/Verbemo.icns $(APP)/Contents/Resources/Verbemo.icns
 	@cp $(BUILT_ICON)/Assets.car $(APP)/Contents/Resources/Assets.car
@@ -198,8 +198,6 @@ app: build $(ICON)
 	@# install; verbemo is not sandboxed, so they are two more binaries to sign,
 	@# notarize and ship for nothing.
 	@rm -rf $(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices
-	@[ -x $(HOME)/.local/bin/unlock-signing-keychain ] \
-		&& $(HOME)/.local/bin/unlock-signing-keychain >/dev/null 2>&1 || true
 	@echo "signing app as: $(SIGN_ID)"
 	@# Innermost first. codesign seals what it finds, so anything signed after
 	@# the app that contains it invalidates the app's own seal — and the failure
@@ -218,20 +216,13 @@ app: build $(ICON)
 		$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate \
 		$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app \
 		$(APP)/Contents/Frameworks/Sparkle.framework ; do \
-		codesign --force --sign "$(SIGN_ID)" $(SIGN_OPTIONS) --timestamp "$$nested" \
-			2>/dev/null \
-		|| codesign --force --sign "$(SIGN_ID)" $(SIGN_OPTIONS) --timestamp=none "$$nested" ; \
+		codesign --force --sign "$(SIGN_ID)" $(SIGN_OPTIONS) $(SIGN_TIMESTAMP) "$$nested" || exit $$? ; \
 	done
 	@codesign --force --sign "$(SIGN_ID)" \
 		--identifier name.ekho.verbemo \
 		$(SIGN_OPTIONS) \
 		--entitlements Packaging/Verbemo.entitlements \
-		--timestamp $(APP) 2>/dev/null \
-	|| codesign --force --sign "$(SIGN_ID)" \
-		--identifier name.ekho.verbemo \
-		$(SIGN_OPTIONS) \
-		--entitlements Packaging/Verbemo.entitlements \
-		--timestamp=none $(APP)
+		$(SIGN_TIMESTAMP) $(APP)
 	@codesign --verify --strict --verbose=2 $(APP)
 	@# A missing slice is invisible until someone on the wrong Mac opens the
 	@# disk image, so fail here instead.

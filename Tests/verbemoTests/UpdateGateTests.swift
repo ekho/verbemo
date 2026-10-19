@@ -1,68 +1,108 @@
+import AVFoundation
 import Foundation
 import Testing
 @testable import verbemo
 
-/// The rule these pin down is the one that cannot be tested by hand without
-/// waiting a day for Sparkle's timer and then holding a real meeting to see
-/// what it does.
 @MainActor
-@Suite("An update never interrupts a recording")
+@Suite("Updates wait for all recording work")
 struct UpdateGateTests {
-    @Test("A scheduled check waits until the recording is over")
-    func backgroundCheckDefersToRecording() {
+    @Test func recordingProcessingAndNewRecordingKeepInstallPending() {
         var recording = true
-        let gate = UpdateGate(isRecording: { recording })
-
+        var processing = false
+        var importing = false
+        let gate = UpdateGate(isBusy: { recording || processing || importing })
+        var installs = 0
+        #expect(gate.postponeInstallIfBusy { installs += 1 })
         #expect(!gate.mayCheck(.background))
-        recording = false
-        #expect(gate.mayCheck(.background))
-    }
-
-    @Test("Asking from the menu is answered even mid-meeting")
-    func userInitiatedCheckIsAlwaysAllowed() {
-        let gate = UpdateGate(isRecording: { true })
-
-        // Finding out costs nothing; it is installing that is dangerous, and
-        // that is gated separately.
         #expect(gate.mayCheck(.userInitiated))
         #expect(gate.mayCheck(.informationOnly))
-    }
-
-    @Test("An install offered during a recording is held, then runs when it ends")
-    func installIsPostponedUntilTheRecordingStops() {
-        var recording = true
-        let gate = UpdateGate(isRecording: { recording })
-
-        var installed = 0
-        #expect(gate.postponeInstallIfRecording { installed += 1 })
-        #expect(gate.hasPostponedInstall)
-        #expect(installed == 0)
-
+        processing = true
         recording = false
-        gate.recordingDidFinish()
-        #expect(installed == 1)
+        gate.activityDidChange()
+        #expect(installs == 0)
+        recording = true
+        processing = false
+        gate.activityDidChange()
+        #expect(installs == 0)
+        importing = true
+        recording = false
+        gate.activityDidChange()
+        #expect(installs == 0)
+        importing = false
+        gate.activityDidChange()
+        gate.activityDidChange()
+        #expect(installs == 1)
         #expect(!gate.hasPostponedInstall)
     }
 
-    @Test("Held installs run once, not once per recording that ends afterwards")
-    func aPostponedInstallIsNotRunTwice() {
-        let gate = UpdateGate(isRecording: { true })
-        var installed = 0
-        _ = gate.postponeInstallIfRecording { installed += 1 }
-
-        gate.recordingDidFinish()
-        gate.recordingDidFinish()
-        #expect(installed == 1)
+    @Test func failedUpdaterDropsHandlerAndPreservesRecording() throws {
+        var recording = true
+        let gate = UpdateGate(isBusy: { recording })
+        var installs = 0
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let audio = directory.appendingPathComponent("mic.caf")
+        let bytes = Data("recording still in progress".utf8)
+        try bytes.write(to: audio)
+        #expect(gate.postponeInstallIfBusy { installs += 1 })
+        gate.updaterDidAbort()
+        #expect(recording)
+        #expect(try Data(contentsOf: audio) == bytes)
+        recording = false
+        gate.activityDidChange()
+        #expect(installs == 0)
+        #expect(!gate.hasPostponedInstall)
     }
 
-    @Test("With nothing recording the installer is not held at all")
-    func idleInstallProceedsImmediately() {
-        let gate = UpdateGate(isRecording: { false })
+    @Test func idleDoesNotRetainHandlerAndClearsBeforeInvoking() {
+        var busy = false
+        let gate = UpdateGate(isBusy: { busy })
+        #expect(!gate.postponeInstallIfBusy { Issue.record("not retained") })
+        busy = true
+        var installs = 0
+        #expect(gate.postponeInstallIfBusy {
+            installs += 1
+            gate.activityDidChange()
+        })
+        gate.activityDidChange()
+        #expect(installs == 0)
+        busy = false
+        gate.activityDidChange()
+        #expect(installs == 1)
+    }
 
-        // False means "don't wait for me" — Sparkle goes ahead on its own, so
-        // the handler must not be stored, or the update would never install.
-        #expect(!gate.postponeInstallIfRecording { Issue.record("must not be kept") })
-        #expect(!gate.hasPostponedInstall)
-        gate.recordingDidFinish()
+    @Test("Recording-only save finishes before idle releases an update", .freshHome)
+    func recordingOnlySaveIsIncludedInIdle() async throws {
+        try Home.current.writeConfig(["transcription": ["enabled": false]])
+        let dir = Home.current.defaultRecordings.appendingPathComponent("save-before-update")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try TestAudio.write(to: dir.appendingPathComponent("mic.caf"), seconds: 2,
+                            sampleRate: 16_000, channels: 1) { _, frame in
+            0.2 * Float(sin(2 * .pi * 440 * Double(frame) / 16_000))
+        }
+        try JSONSerialization.data(withJSONObject: ["files": ["mic": "mic.caf"]])
+            .write(to: dir.appendingPathComponent("meta.json"))
+        let coordinator = TranscriptionCoordinator(onStop: { nil })
+        var processing = true
+        var installed = false
+        let gate = UpdateGate(isBusy: { processing })
+        #expect(gate.postponeInstallIfBusy { installed = true })
+        await coordinator.enqueue(dir)
+        await coordinator.waitUntilIdle()
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("audio.m4a").path))
+        #expect(!SessionClaim.isHeld(dir))
+        processing = false
+        gate.activityDidChange()
+        #expect(installed)
+    }
+
+    @Test func updaterNeedsOwnFeedAndValidKey() {
+        let key = Data(repeating: 7, count: 32).base64EncodedString()
+        #expect(!AppUpdates.isConfigured(info: [:]))
+        #expect(!AppUpdates.isConfigured(info: ["SUFeedURL": AppUpdates.feedURL]))
+        #expect(!AppUpdates.isConfigured(info: ["SUFeedURL": "https://example.invalid/feed", "SUPublicEDKey": key]))
+        #expect(!AppUpdates.isConfigured(info: ["SUFeedURL": AppUpdates.feedURL, "SUPublicEDKey": "broken"]))
+        #expect(AppUpdates.isConfigured(info: ["SUFeedURL": AppUpdates.feedURL, "SUPublicEDKey": key]))
     }
 }

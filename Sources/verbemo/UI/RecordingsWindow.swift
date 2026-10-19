@@ -76,7 +76,9 @@ final class RecordingsWindow: NSObject {
     /// Naming and summarizing take a while and talk to the network; the
     /// buttons stay disabled meanwhile so a second click can't start the same
     /// work twice.
-    private var working = false
+    var onActivityChange: (() -> Void)?
+    var isProcessing: Bool { working }
+    private var working = false { didSet { onActivityChange?() } }
 
     init(root: URL) {
         self.root = root

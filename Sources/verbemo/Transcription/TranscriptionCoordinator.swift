@@ -31,6 +31,7 @@ actor TranscriptionCoordinator {
     /// back in front of the queue the next time something is queued, rather
     /// than at once: the same drain would only fail them the same way.
     private var heldBack: [URL] = []
+    private var recordingArchives = 0
     private var draining = false
     private var processing = false
     private var processingWaiters: [CheckedContinuation<Void, Never>] = []
@@ -94,7 +95,12 @@ actor TranscriptionCoordinator {
     /// on_stop hook still fires — it just gets an untranscribed folder.
     func enqueue(_ sessionDir: URL) {
         guard Config.transcriptionEnabled() else {
+            recordingArchives += 1
             Task {
+                defer {
+                    recordingArchives -= 1
+                    resumeIdleWaitersIfIdle()
+                }
                 do { try await archiveRecordingOnly(sessionDir) }
                 catch { log(sessionDir, "recording-only archive deferred: \(error)") }
             }
@@ -251,13 +257,17 @@ actor TranscriptionCoordinator {
         // An enqueue that landed between the loop exiting and the release
         // finishing would otherwise sit until the next enqueue.
         drainIfIdle()
-        guard !draining else { return }
+        resumeIdleWaitersIfIdle()
+    }
+
+    private func resumeIdleWaitersIfIdle() {
+        guard !draining, recordingArchives == 0 else { return }
         let waiters = idleWaiters
         idleWaiters = []
         for waiter in waiters { waiter.resume() }
     }
 
-    /// Return once nothing is being transcribed: at once when the queue is
+    /// Return once transcription and recording-only audio archiving are done: at once when the queue is
     /// idle, otherwise when the drain running now — and any it runs into —
     /// has finished.
     ///
@@ -267,7 +277,7 @@ actor TranscriptionCoordinator {
     /// the drain, reaching for the session being settled and filling its log
     /// with "another verbemo has this session".
     func waitUntilIdle() async {
-        guard draining else { return }
+        guard draining || recordingArchives > 0 else { return }
         await withCheckedContinuation { idleWaiters.append($0) }
     }
 

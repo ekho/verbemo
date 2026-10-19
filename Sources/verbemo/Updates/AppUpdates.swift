@@ -13,6 +13,15 @@ import Sparkle
 /// read-only and disappears when ejected; starting it in either place only
 /// produces a framework that logs its disappointment once a day.
 final class AppUpdates: NSObject, SPUUpdaterDelegate {
+    static let feedURL = "https://github.com/ekho/verbemo/releases/latest/download/appcast.xml"
+
+    static func isConfigured(info: [String: Any]) -> Bool {
+        guard info["SUFeedURL"] as? String == feedURL,
+              let key = info["SUPublicEDKey"] as? String,
+              let bytes = Data(base64Encoded: key), bytes.count == 32 else { return false }
+        return true
+    }
+
     private var controller: SPUStandardUpdaterController?
     private let gate: UpdateGate
 
@@ -25,7 +34,8 @@ final class AppUpdates: NSObject, SPUUpdaterDelegate {
     init(gate: UpdateGate) {
         self.gate = gate
         super.init()
-        guard Runtime.supportsPersistentFeatures else { return }
+        guard Runtime.supportsPersistentFeatures,
+              Self.isConfigured(info: Bundle.main.infoDictionary ?? [:]) else { return }
         controller = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: self,
@@ -38,12 +48,15 @@ final class AppUpdates: NSObject, SPUUpdaterDelegate {
         controller?.checkForUpdates(nil)
     }
 
-    /// A recording just ended. Anything Sparkle was told to hold on to goes
-    /// ahead now, which is what makes postponing safe rather than a way of
-    /// quietly never updating.
+    /// Recording, saving, processing or import changed. The gate rechecks
+    /// all work before invoking a postponed relaunch.
     @MainActor
-    func recordingDidFinish() {
-        gate.recordingDidFinish()
+    func activityDidChange() {
+        gate.activityDidChange()
+    }
+
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        MainActor.assumeIsolated { gate.updaterDidAbort() }
     }
 
     // MARK: - SPUUpdaterDelegate
@@ -64,21 +77,21 @@ final class AppUpdates: NSObject, SPUUpdaterDelegate {
             throw NSError(
                 domain: "name.ekho.verbemo.updates",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "verbemo is recording; the update check can wait."]
+                userInfo: [NSLocalizedDescriptionKey: "Verbemo is recording or processing; the update check can wait."]
             )
         }
     }
 
     /// The last gate, and the one that actually matters. Installing means
     /// quitting, and quitting mid-meeting loses the meeting — so the install
-    /// is held until the recording stops, and then it runs by itself.
+    /// is held until the recording and all subsequent processing are idle.
     func updater(
         _ updater: SPUUpdater,
         shouldPostponeRelaunchForUpdate item: SUAppcastItem,
         untilInvokingBlock installHandler: @escaping () -> Void
     ) -> Bool {
         MainActor.assumeIsolated {
-            gate.postponeInstallIfRecording(installHandler)
+            gate.postponeInstallIfBusy(installHandler)
         }
     }
 }

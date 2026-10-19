@@ -23,11 +23,11 @@ final class UpdateGate {
         case informationOnly
     }
 
-    private let isRecording: () -> Bool
+    private let isBusy: () -> Bool
     private var postponedInstall: (() -> Void)?
 
-    init(isRecording: @escaping () -> Bool) {
-        self.isRecording = isRecording
+    init(isBusy: @escaping () -> Bool) {
+        self.isBusy = isBusy
     }
 
     func mayCheck(_ check: Check) -> Bool {
@@ -36,29 +36,32 @@ final class UpdateGate {
             // Nothing good comes of discovering an update mid-meeting: the
             // download competes for the same network the far end is on, and
             // the only thing it can lead to is the offer to restart.
-            return !isRecording()
+            return !isBusy()
         case .userInitiated, .informationOnly:
             return true
         }
     }
 
-    /// Hold an installation back while a recording is running.
+    /// Hold an installation back while recording, saving, processing or importing.
     ///
     /// Returns true when the install was postponed, in which case `install` is
-    /// kept and run by `recordingDidFinish()`. Returns false when there is
+    /// kept and run by `activityDidChange()`. Returns false when there is
     /// nothing to wait for and the caller should proceed immediately.
-    func postponeInstallIfRecording(_ install: @escaping () -> Void) -> Bool {
-        guard isRecording() else { return false }
+    func postponeInstallIfBusy(_ install: @escaping () -> Void) -> Bool {
+        guard isBusy() else { return false }
         postponedInstall = install
         return true
     }
 
-    /// The recording ended; anything held back may go ahead now.
-    func recordingDidFinish() {
-        guard let install = postponedInstall else { return }
+    /// Recheck all activity before releasing the retained installer.
+    func activityDidChange() {
+        guard !isBusy(), let install = postponedInstall else { return }
         postponedInstall = nil
         install()
     }
+
+    /// An aborted updater attempt must never revive its old relaunch handler.
+    func updaterDidAbort() { postponedInstall = nil }
 
     var hasPostponedInstall: Bool { postponedInstall != nil }
 }
