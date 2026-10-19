@@ -1,4 +1,16 @@
-# Amanu agent instructions
+# Verbemo agent instructions
+
+## Repository ownership and upstream exchange
+
+- `ekho/verbemo` is the independent product repository. Use it for development, issues and pull requests.
+- In the Verbemo checkout, `origin` points to `git@github.com:ekho/verbemo.git`, `upstream` to `git@github.com:gsamat/amanu.git`, and `amanu` to `git@github.com:ekho/amanu.git`.
+- Keep `ekho/amanu` as the upstream-facing fork. Prepare focused upstream contributions there from `upstream/master`.
+- Verbemo's initial `master` includes the local speaker diarization work from `codex/local-speaker-diarization`. `codex/amanu-baseline` preserves the original fork's `master`.
+- Existing application identifiers, signing, update feeds and release destinations still belong to the imported Amanu baseline. Prepare Verbemo's own release route before publishing; do not use the inherited upstream publication destinations for Verbemo.
+- Preserve the original copyright notices and license files.
+
+The release guidance below describes the imported Amanu baseline and must be
+adapted explicitly when preparing Verbemo releases.
 
 ## Windows release source
 

@@ -1,4 +1,15 @@
-# Amanu
+# Verbemo
+
+Verbemo is an independently maintained continuation of [Amanu](https://github.com/gsamat/amanu).
+Development and issues live in [ekho/verbemo](https://github.com/ekho/verbemo).
+[ekho/amanu](https://github.com/ekho/amanu) remains the fork for upstream contributions.
+
+The imported code includes the current local speaker diarization work and still
+uses the Amanu application and command names. The download links and release
+instructions below refer to upstream Amanu; Verbemo has no independent release
+or update channel yet.
+
+## Inherited Amanu documentation
 
 **Records and transcribes online meetings. Automatically.**
 
