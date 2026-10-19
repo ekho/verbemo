@@ -17,7 +17,7 @@ public partial class App : System.Windows.Application
     private static RecordingsWindow? recordings;
     private static SettingsWindow? settings;
     private static SetupWindow? setup;
-    private Mutex? instance;
+    private static UpdateStartupAdmission? startupAdmission;
     private EventWaitHandle? doorbell;
 
     public static ImageSource? WindowIcon { get; private set; }
@@ -31,10 +31,33 @@ public partial class App : System.Windows.Application
             Environment.ExitCode = LiveSpeechWorker.Main(arguments);
             return;
         }
-        VelopackApp.Build().SetAutoApplyOnStartup(true).Run();
-        var app = new App();
-        app.InitializeComponent();
-        app.Run();
+        var scope = InstanceScope;
+        startupAdmission = new UpdateStartupAdmission(ProductIdentity.InstanceName + scope, ProductIdentity.DoorbellName + scope);
+        try
+        {
+            // Only the retained primary owner can apply a pending update. Hooks still run
+            // in secondary processes, before the ordinary doorbell/exit path.
+            VelopackApp.Build().SetAutoApplyOnStartup(startupAdmission.IsPrimary).Run();
+            var app = new App();
+            app.InitializeComponent();
+            app.Run();
+        }
+        finally
+        {
+            startupAdmission.Dispose();
+            startupAdmission = null;
+        }
+    }
+
+    private static string InstanceScope
+    {
+        get
+        {
+#if DEBUG
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ProductIdentity.TestDataEnvironmentVariable))) return ".LiveTest";
+#endif
+            return "";
+        }
     }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -42,12 +65,9 @@ public partial class App : System.Windows.Application
         // One Verbemo per person. Opening it again — from Start, or the installer's
         // shortcut — rings the running one, which shows its window: with both
         // icons off, that is the only way back to it.
-        var scope = "";
-#if DEBUG
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ProductIdentity.TestDataEnvironmentVariable))) scope = ".LiveTest";
-#endif
-        instance = new Mutex(initiallyOwned: true, ProductIdentity.InstanceName + scope, out var first);
-        doorbell = new EventWaitHandle(false, EventResetMode.AutoReset, ProductIdentity.DoorbellName + scope);
+        var admission = startupAdmission ?? throw new InvalidOperationException("Startup admission was not acquired.");
+        doorbell = admission.Doorbell;
+        var first = admission.IsPrimary;
         if (!first)
         {
             // Opened from Start or Explorer, this process may bring a window to
@@ -55,7 +75,7 @@ public partial class App : System.Windows.Application
             // the right over first is what lets its window come forward rather
             // than only flash on the taskbar.
             AllowSetForegroundWindow(-1);
-            doorbell.Set();
+            admission.SignalExistingInstance();
             Shutdown();
             return;
         }
@@ -212,18 +232,6 @@ public partial class App : System.Windows.Application
         if (runtime is not { } current) return;
         bool Busy() => current.State.IsRecording || current.IsProcessing;
         var result = await UpdateService.CheckAsync(Busy, interactive: true, CancellationToken.None);
-        if (result.Outcome == UpdateOutcome.Ready && !Busy())
-        {
-            var answer = System.Windows.MessageBox.Show(result.Message + Environment.NewLine + Environment.NewLine
-                + T("Restart Verbemo now to install it?", "Перезапустить Verbemo и установить сейчас?"),
-                T("Update ready", "Обновление готово"), MessageBoxButton.YesNo, MessageBoxImage.Information);
-            if (answer == MessageBoxResult.Yes)
-            {
-                await TearDownAsync();
-                UpdateService.RestartIntoUpdate(() => false);
-            }
-            return;
-        }
         if (result.Message.Length > 0)
             System.Windows.MessageBox.Show(result.Message, "Verbemo", MessageBoxButton.OK,
                 result.Outcome == UpdateOutcome.Failed ? MessageBoxImage.Warning : MessageBoxImage.Information);
@@ -264,8 +272,6 @@ public partial class App : System.Windows.Application
         tray?.Dispose();
         tray = null;
         if (runtime is not null) Task.Run(TearDownAsync).Wait(TimeSpan.FromSeconds(10));
-        doorbell?.Dispose();
-        instance?.Dispose();
         base.OnExit(e);
     }
 

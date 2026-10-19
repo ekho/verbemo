@@ -56,6 +56,63 @@ class ReleaseManifestTests(unittest.TestCase):
                 self.module.validate_release(root, '0.1.0', 'a' * 40, 12)
 
 
+class WindowsManifestTests(unittest.TestCase):
+    setUpClass = classmethod(ReleaseManifestTests.setUpClass.__func__)
+
+    def fixture(self, root):
+        names = ['Verbemo-0.1.0-windows-x64-Setup.exe', 'Verbemo-0.1.0-windows-x64-Portable.zip',
+                 'Verbemo-0.1.0-stable-full.nupkg', 'assets.stable.json', 'releases.stable.json']
+        for name in names:
+            (root / name).write_bytes(b'fixture final bytes')
+        package = self.module.file_record(root / names[2])
+        (root / 'releases.stable.json').write_text(json.dumps({'Assets': [{
+            'PackageId': 'Verbemo', 'Version': '0.1.0', 'Type': 'Full', 'FileName': names[2],
+            'SHA256': package['sha256'], 'Size': package['size']}]}))
+        (root / 'assets.stable.json').write_text(json.dumps([
+            {'RelativeFileName': name, 'Type': kind}
+            for name, kind in zip(names, ['Installer', 'Portable', 'Full'])]))
+        receipt = {'platform': 'windows', 'version': '0.1.0', 'source_commit': 'a' * 40,
+                   'build_number': 12, 'publishable': True,
+                   'signature': {'authenticode': 'verified', 'timestamp': 'verified',
+                                 'certificate_thumbprint': 'A' * 40},
+                   'files': [self.module.file_record(root / name) for name in names]}
+        (root / 'windows-build.json').write_text(json.dumps(receipt))
+        return receipt
+
+    def test_windows_receipt_feed_inventory_and_bytes_agree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            self.module.validate_windows_release(root, '0.1.0', 'a' * 40, 12)
+            (root / 'Verbemo-0.1.0-stable-full.nupkg').unlink()
+            with self.assertRaises(ValueError):
+                self.module.validate_windows_release(root, '0.1.0', 'a' * 40, 12)
+
+    def test_windows_rejects_unsigned_mismatch_and_external_or_old_packages(self):
+        for mutation in ('development', 'version', 'source', 'build', 'external', 'old', 'hash', 'inventory'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                receipt = self.fixture(root)
+                if mutation == 'development': receipt['publishable'] = False
+                if mutation == 'version': receipt['version'] = '0.2.0'
+                if mutation == 'source': receipt['source_commit'] = 'b' * 40
+                if mutation == 'build': receipt['build_number'] = 13
+                if mutation in ('external', 'old', 'hash'):
+                    feed = json.loads((root / 'releases.stable.json').read_text())
+                    asset = feed['Assets'][0]
+                    if mutation == 'external': asset['FileName'] = 'https://elsewhere.invalid/full.nupkg'
+                    if mutation == 'old': asset['Version'] = '0.0.1'
+                    if mutation == 'hash': asset['SHA256'] = '0' * 64
+                    (root / 'releases.stable.json').write_text(json.dumps(feed))
+                if mutation == 'inventory':
+                    (root / 'assets.stable.json').write_text('[]')
+                # Refresh receipt hashes so feed/inventory policy, not stale bytes, rejects it.
+                receipt['files'] = [self.module.file_record(root / item['name']) for item in receipt['files']]
+                (root / 'windows-build.json').write_text(json.dumps(receipt))
+                with self.assertRaises(ValueError):
+                    self.module.validate_windows_release(root, '0.1.0', 'a' * 40, 12)
+
+
 class SparkleSignatureTests(unittest.TestCase):
     def test_cryptokit_verifies_rfc8032_vector_and_rejects_other_public_key(self):
         import base64

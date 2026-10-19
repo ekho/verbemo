@@ -14,9 +14,11 @@ function New-ReleaseFixture {
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     [IO.File]::WriteAllBytes((Join-Path $directory 'Verbemo-stable-Setup.exe'), [byte[]](0, 1, 2, 255))
     [IO.File]::WriteAllText((Join-Path $directory 'Verbemo-0.1.0-stable-full.nupkg'), 'update package')
-    [IO.File]::WriteAllText((Join-Path $directory 'releases.stable.json'), '{"Assets":[]}')
+    [IO.File]::WriteAllBytes((Join-Path $directory 'Verbemo-stable-Portable.zip'), [byte[]](3, 4, 5, 254))
+    [IO.File]::WriteAllText((Join-Path $directory 'releases.stable.json'), '{"Assets":[]}' )
     $assets = @(
         @{ RelativeFileName = 'Verbemo-stable-Setup.exe'; Type = 'Installer' },
+        @{ RelativeFileName = 'Verbemo-stable-Portable.zip'; Type = 'Portable' },
         @{ RelativeFileName = 'Verbemo-0.1.0-stable-full.nupkg'; Type = 'Full' }
     )
     [IO.File]::WriteAllText((Join-Path $directory 'assets.stable.json'), ($assets | ConvertTo-Json))
@@ -44,17 +46,12 @@ $tests = @(
             Assert-True (@($assets | Where-Object Type -eq 'Installer')[0].RelativeFileName -eq 'Verbemo-0.1.0-windows-x64-Setup.exe') 'Installer metadata still points at a stale filename.'
             Assert-True (@($assets | Where-Object Type -eq 'Full')[0].RelativeFileName -eq 'Verbemo-0.1.0-stable-full.nupkg') 'Update package metadata changed.'
             Assert-True ([IO.File]::ReadAllText((Join-Path $directory 'releases.stable.json')) -eq '{"Assets":[]}') 'The updater feed changed.'
-            $lines = @(Get-Content -LiteralPath (Join-Path $directory 'SHA256SUMS'))
-            Assert-True ($lines.Count -eq 4) 'Every final release file must have exactly one checksum.'
-            foreach ($line in $lines) {
-                Assert-True ($line -match '^([a-f0-9]{64})  (.+)$') "Malformed checksum: $line"
-                $expectedHash = $Matches[1]
-                $name = $Matches[2]
-                Assert-True ($name -ne 'SHA256SUMS') 'The checksum file must not include itself.'
-                $actualHash = (Get-FileHash -LiteralPath (Join-Path $directory $name) -Algorithm SHA256).Hash.ToLowerInvariant()
-                Assert-True ($actualHash -eq $expectedHash) "Wrong checksum for $name"
-            }
-            Assert-True (@($lines | Where-Object { $_ -like '*  Verbemo-0.1.0-windows-x64-Setup.exe' }).Count -eq 1) 'Installer checksum does not use the public filename.'
+            $portable = Join-Path $directory 'Verbemo-0.1.0-windows-x64-Portable.zip'
+            Assert-True (Test-Path -LiteralPath $portable) 'Portable filename must include version and architecture.'
+            Assert-True ([Convert]::ToBase64String([IO.File]::ReadAllBytes($portable)) -eq 'AwQF/g==') 'Portable bytes changed.'
+            Assert-True (@($assets | Where-Object Type -eq 'Portable')[0].RelativeFileName -eq 'Verbemo-0.1.0-windows-x64-Portable.zip') 'Portable inventory name is stale.'
+            Assert-True (-not (Test-Path (Join-Path $directory 'SHA256SUMS'))) 'Platform finalization must not produce private checksums.'
+
         }
     },
     @{
@@ -81,6 +78,24 @@ $tests = @(
         }
     },
     @{
+        Name = 'Portable collision leaves every original file and inventory unchanged'
+        Run = {
+            param($directory)
+            [IO.File]::WriteAllText((Join-Path $directory 'Verbemo-0.1.0-windows-x64-Portable.zip'), 'existing')
+            Assert-Rejected { & $ScriptPath -ReleaseDirectory $directory -Version '0.1.0' } 'already exists'
+            Assert-True (Test-Path (Join-Path $directory 'Verbemo-stable-Setup.exe')) 'Partial rename after portable collision.'
+        }
+    },
+    @{
+        Name = 'Missing referenced package rejects before rename'
+        Run = {
+            param($directory)
+            Remove-Item (Join-Path $directory 'Verbemo-0.1.0-stable-full.nupkg')
+            Assert-Rejected { & $ScriptPath -ReleaseDirectory $directory -Version '0.1.0' } 'missing'
+            Assert-True (Test-Path (Join-Path $directory 'Verbemo-stable-Setup.exe')) 'Partial rename without full package.'
+        }
+    },
+    @{
         Name = 'Invalid version cannot rename files'
         Run = {
             param($directory)
@@ -89,14 +104,14 @@ $tests = @(
         }
     },
     @{
-        Name = 'Repeated finalization preserves installer and checksum bytes'
+        Name = 'Repeated finalization preserves bytes and inventory'
         Run = {
             param($directory)
             & $ScriptPath -ReleaseDirectory $directory -Version '0.1.0' | Out-Null
-            $checksums = [IO.File]::ReadAllText((Join-Path $directory 'SHA256SUMS'))
+            $metadata = [IO.File]::ReadAllText((Join-Path $directory 'assets.stable.json'))
             $result = & $ScriptPath -ReleaseDirectory $directory -Version '0.1.0'
             Assert-True ($result -eq (Join-Path $directory 'Verbemo-0.1.0-windows-x64-Setup.exe')) 'Repeated finalization changed the filename.'
-            Assert-True ([IO.File]::ReadAllText((Join-Path $directory 'SHA256SUMS')) -eq $checksums) 'Repeated finalization changed checksums.'
+            Assert-True ([IO.File]::ReadAllText((Join-Path $directory 'assets.stable.json')) -eq $metadata) 'Repeated finalization changed inventory.'
         }
     }
 )

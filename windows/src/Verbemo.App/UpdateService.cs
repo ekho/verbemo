@@ -1,5 +1,6 @@
 using Velopack;
 using Velopack.Exceptions;
+using Velopack.Locators;
 using Velopack.Sources;
 using static Verbemo.Core.Localization.Localized;
 
@@ -9,7 +10,7 @@ public enum UpdateOutcome
 {
     NotInstalled,
     UpToDate,
-    /// <summary>Downloaded and waiting: it installs at the next start, or now through <see cref="UpdateService.RestartIntoUpdate"/>.</summary>
+    /// <summary>Downloaded and waiting for the next primary startup, before recording begins.</summary>
     Ready,
     Busy,
     Failed,
@@ -18,17 +19,17 @@ public enum UpdateOutcome
 public sealed record UpdateResult(UpdateOutcome Outcome, string Message);
 
 /// <summary>
-/// The stable channel on GitHub releases. An update is downloaded in the background
-/// and never applied while a meeting records or a session is being processed.
+/// Checks the stable feed and prepares a package for the next primary startup.
+/// This service never arms an updater or exits a running recording/processing session.
 /// </summary>
 public static class UpdateService
 {
     private static UpdateManager? manager;
-    private static UpdateInfo? pending;
+    private static UpdateManager Manager => manager ??= CreateManager();
 
-    private static UpdateManager Manager => manager ??= new UpdateManager(
-        new GithubSource("https://github.com/gsamat/amanu", accessToken: null, prerelease: false),
-        new UpdateOptions { ExplicitChannel = "stable" });
+    internal static UpdateManager CreateManager(IFileDownloader? downloader = null, IVelopackLocator? locator = null) => new(
+        new SimpleWebSource("https://github.com/ekho/verbemo/releases/latest/download/", downloader),
+        new UpdateOptions { ExplicitChannel = "stable" }, locator);
 
     public static async Task<UpdateResult> CheckAsync(Func<bool> busy, bool interactive, CancellationToken cancellationToken)
     {
@@ -39,14 +40,16 @@ public static class UpdateService
                     "Эта копия Verbemo установлена не установщиком, поэтому сама не обновляется."));
             cancellationToken.ThrowIfCancellationRequested();
             var update = await Manager.CheckForUpdatesAsync();
+            // Velopack 1.2's feed request has no cancellation-token parameter.
+            cancellationToken.ThrowIfCancellationRequested();
             if (update is null)
                 return new(UpdateOutcome.UpToDate, T($"Verbemo {VerbemoRuntime.AppVersion} is the latest version.", $"Verbemo {VerbemoRuntime.AppVersion} — последняя версия."));
-            if (busy() && !interactive)
+            if (busy())
                 return new(UpdateOutcome.Busy, T("An update waits until the recording ends.", "Обновление подождёт конца записи."));
             await Manager.DownloadUpdatesAsync(update, progress: null, cancelToken: cancellationToken);
-            pending = update;
-            return new(UpdateOutcome.Ready, T($"Verbemo {update.TargetFullRelease.Version} is downloaded and installs at the next start.",
-                $"Verbemo {update.TargetFullRelease.Version} скачана и установится при следующем запуске."));
+            cancellationToken.ThrowIfCancellationRequested();
+            return new(UpdateOutcome.Ready, T($"Verbemo {update.TargetFullRelease.Version} is downloaded and installs the next time you open Verbemo after closing it.",
+                $"Verbemo {update.TargetFullRelease.Version} скачана и установится, когда вы закроете и снова откроете Verbemo."));
         }
         catch (NotInstalledException)
         {
@@ -63,11 +66,4 @@ public static class UpdateService
         }
     }
 
-    /// <summary>Restarts into the downloaded update — only when nothing is recording or processing.</summary>
-    public static bool RestartIntoUpdate(Func<bool> busy)
-    {
-        if (pending is null || busy()) return false;
-        Manager.ApplyUpdatesAndRestart(pending);
-        return true;
-    }
 }

@@ -167,6 +167,52 @@ def validate_release(directory: Path, version: str, source_commit: str, build_nu
     return receipt
 
 
+def validate_windows_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
+    """Validate the Windows receipt without weakening the macOS-only API."""
+    validate_version(version)
+    if not re.fullmatch(r'[0-9a-f]{40}', source_commit) or build_number < 1:
+        raise ValueError('invalid source commit or build number')
+    receipt = json.loads((directory / 'windows-build.json').read_text())
+    for key, value in {'platform': 'windows', 'version': version, 'source_commit': source_commit,
+                       'build_number': build_number, 'publishable': True}.items():
+        if receipt.get(key) != value:
+            raise ValueError(f'Windows receipt {key} mismatch')
+    signature = receipt.get('signature', {})
+    if (signature.get('authenticode') != 'verified' or signature.get('timestamp') != 'verified'
+            or not re.fullmatch(r'[A-F0-9]{40}', signature.get('certificate_thumbprint', ''))):
+        raise ValueError('Windows signature validation missing')
+    installer = f'Verbemo-{version}-windows-x64-Setup.exe'
+    portable = f'Verbemo-{version}-windows-x64-Portable.zip'
+    package = f'Verbemo-{version}-stable-full.nupkg'
+    expected = {installer, portable, package, 'assets.stable.json', 'releases.stable.json'}
+    files = receipt.get('files', [])
+    if len(files) != len(expected) or {item.get('name') for item in files} != expected:
+        raise ValueError('Windows receipt files mismatch')
+    for item in files:
+        if file_record(directory / item['name']) != item:
+            raise ValueError(f'release file hash/size mismatch: {item["name"]}')
+    inventory = json.loads((directory / 'assets.stable.json').read_text())
+    if (not isinstance(inventory, list) or len(inventory) != 3 or
+            {(item.get('RelativeFileName'), item.get('Type')) for item in inventory} !=
+            {(installer, 'Installer'), (portable, 'Portable'), (package, 'Full')}):
+        raise ValueError('Windows inventory mismatch')
+    feed = json.loads((directory / 'releases.stable.json').read_text())
+    assets = feed.get('Assets', [])
+    if len(assets) != 1:
+        raise ValueError('Windows feed must contain only the current full package')
+    asset = assets[0]
+    package_record = file_record(directory / package)
+    for key, value in {'PackageId': 'Verbemo', 'Version': version, 'Type': 'Full',
+                       'FileName': package, 'SHA256': package_record['sha256'].upper(),
+                       'Size': package_record['size']}.items():
+        actual = asset.get(key)
+        if key == 'SHA256' and isinstance(actual, str):
+            actual = actual.upper()
+        if actual != value:
+            raise ValueError(f'Windows feed {key} mismatch')
+    return receipt
+
+
 def write_checksums(directory: Path) -> Path:
     files = sorted(p for p in directory.iterdir() if p.name != 'SHA256SUMS' and p.is_file())
     lines = [f'{file_record(path)["sha256"]}  {path.name}\n' for path in files]
