@@ -2,6 +2,7 @@
 .build/
 .claude/
 .superpowers/
+__pycache__/
 dist/
 .env.asc
 **/bin/

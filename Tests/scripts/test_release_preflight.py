@@ -1,9 +1,12 @@
+import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +25,8 @@ class ReleasePreflightTests(unittest.TestCase):
         self.git('init', '-q')
         self.git('config', 'user.name', 'Fixture')
         self.git('config', 'user.email', 'fixture@example.invalid')
+        self.git('config', 'core.excludesFile', os.devnull)
+        (self.root / '.git/info/exclude').write_text('')
         self.git('remote', 'add', 'origin', 'git@github.com:ekho/verbemo.git')
         self.git('add', '.')
         self.git('commit', '-qm', 'fixture')
@@ -47,9 +52,61 @@ class ReleasePreflightTests(unittest.TestCase):
         import importlib.util
         spec = importlib.util.spec_from_file_location('fixture_manifest', self.root / 'scripts/release_manifest.py')
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        with patch('sys.pycache_prefix', None), patch('sys.dont_write_bytecode', False):
+            with patch('sys.dont_write_bytecode', True):
+                spec.loader.exec_module(module)
+            self.assertFalse(sys.dont_write_bytecode)
+        self.assertEqual(self.git('status', '--porcelain', '--untracked-files=all'), '')
         self.git('tag', 'v99.0.0')
         self.assertEqual(module.validate_source(self.root, '0.1.0', self.sha), 1)
+        (self.root / 'VERSION').write_text('0.1.1\n')
+        with self.assertRaisesRegex(ValueError, 'dirty'):
+            module.validate_source(self.root, '0.1.0', self.sha)
+
+    def test_cold_cli_and_ordinary_import_caches_preserve_clean_source(self):
+        for name in ('release.py', 'release_github.py'):
+            shutil.copyfile(ROOT / 'scripts' / name, self.root / 'scripts' / name)
+        shutil.copyfile(ROOT / '.gitignore', self.root / '.gitignore')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'production CLI fixture')
+        sha = self.git('rev-parse', 'HEAD')
+        self.assertFalse((self.root / 'scripts/__pycache__').exists())
+        # Override Apple Python's external cache and any inherited -B setting.
+        normal_python = ('import sys; sys.pycache_prefix = None; '
+                         'sys.dont_write_bytecode = False; sys.path.insert(0, "scripts"); ')
+
+        def preflight():
+            return subprocess.run([sys.executable, '-c', normal_python +
+                                   'import runpy; sys.argv = ["scripts/release.py", '
+                                   '"preflight", "--ref", "HEAD", "--version", "0.1.0"]; '
+                                   'runpy.run_path("scripts/release.py", run_name="__main__")'],
+                                  cwd=self.root, capture_output=True, text=True)
+
+        for state in ('cold', 'after ordinary imports'):
+            with self.subTest(state=state):
+                if state != 'cold':
+                    shutil.rmtree(self.root / 'scripts/__pycache__')
+                    subprocess.run([sys.executable, '-c', normal_python +
+                                    'import release_manifest, release_github'],
+                                   cwd=self.root, check=True, capture_output=True, text=True)
+                result = preflight()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout),
+                                 {'source_commit': sha, 'version': '0.1.0', 'build_number': 2})
+                self.assertTrue(list((self.root / 'scripts/__pycache__').glob('*.pyc')))
+                self.assertEqual(self.git('status', '--porcelain', '--untracked-files=all'), '')
+
+        for name, content in (('VERSION', '0.1.1\n'), ('unrelated.py', '# untracked source\n')):
+            with self.subTest(dirty_source=name):
+                path = self.root / name
+                path.write_text(content)
+                result = preflight()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('working tree is dirty', result.stderr)
+                if name == 'VERSION':
+                    path.write_text('0.1.0\n')
+                else:
+                    path.unlink()
 
     def test_wrong_origin(self):
         self.git('remote', 'set-url', 'origin', 'git@github.com:somebody/other.git')

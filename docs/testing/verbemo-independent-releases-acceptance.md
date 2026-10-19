@@ -161,14 +161,28 @@ release asset/tag replacement, catalog publication or merge was performed.
 The controller verified `ekho`, pushed initial source `8bc6f6b` and opened
 [draft PR #4](https://github.com/ekho/verbemo/pull/4).
 [Initial CI run 39274074192](https://github.com/ekho/verbemo/actions/runs/39274074192)
-uses exact SHA `8bc6f6be2bf6d5830dc1f1e8f3b5f122170db942`.
-At the updated snapshot, macOS LocalVQE and the full Swift test step completed
-successfully on `8bc6f6b`; the CI test count has not been extracted. The universal
-development build was in progress. Windows installer metadata / preflight passed,
-with its development build/tests still in progress. Remaining steps had no result.
-The overall CI run is **pending**, not complete success.
+has associated PR head `8bc6f6be2bf6d5830dc1f1e8f3b5f122170db942`, but actually
+tested synthetic merge checkout `6da08f4c0492e8fbda17e9a1044731deed8ad980`.
+The controller separately verified that both trees equal
+`135e00c9e469c15968bd8a46d70886fc6fb21187`. Tree equality preserves the relevance
+of those source checks; it does not make the commit identities equal.
 
-This evidence/screenshot commit and subsequent task 10 changes produce later PR
-heads. Their exact CI, final whole-branch review and review readiness must be
-recorded by the controller after task 10; the initial run does not validate a
-later head. Actual runtime/screenshots remain explicitly bound to build 476.
+The retained initial macOS job log records LocalVQE verification, **866 tests in
+115 Swift suites passing**, and a successful universal ad-hoc development build.
+That CI checkout was shallow and its bundle build was **1**. The local GUI bundle
+above was built from the full-history PR head and remains **0.1.0 (476)**; the CI
+bundle is not the bundle used for the screenshots or local runtime checks.
+The initial macOS job later failed its release-script suite: 70 tests, one error
+in the historical-tag fixture, which generated an untracked Python bytecode file.
+The overall initial run is not successful acceptance. Windows metadata/preflight
+and managed tests passed (Core 147, Live 57), then packaging failed because
+`windows/RELEASE_NOTES.md` was missing; that blocker remains deferred in issue #2.
+
+The final fix corrects repository bytecode ignores, isolates the historical-tag
+fixture import, and makes both CI jobs select the event's exact PR head (or push
+SHA), fetch full history and assert the actual checkout SHA and non-shallow state.
+Final CI is collected by the controller **after the final commit**, through
+[PR #4 checks](https://github.com/ekho/verbemo/pull/4/checks), its description and
+the controller's local evidence archive. No final-head CI result is claimed here.
+Later documentation, release-test and CI changes do not change Swift runtime
+source; actual runtime/screenshots remain explicitly bound to build 476.

@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import subprocess
+import tempfile
 import unittest
 import yaml
 
@@ -10,6 +13,49 @@ def workflow(name):
 
 
 class CommonReleaseWorkflowTests(unittest.TestCase):
+    def test_ci_checks_out_and_asserts_exact_event_head_with_full_history(self):
+        for name, job in workflow('ci.yml')['jobs'].items():
+            with self.subTest(job=name):
+                steps = job['steps']
+                checkout = next(s for s in steps if s.get('uses', '').startswith('actions/checkout@'))
+                self.assertEqual(checkout.get('with', {}).get('ref'),
+                                 '${{ github.event.pull_request.head.sha || github.sha }}')
+                self.assertEqual(checkout['with']['fetch-depth'], '0')
+                proof = next(s for s in steps if s.get('name') == 'Verify source checkout')
+                self.assertEqual(steps.index(proof), steps.index(checkout) + 1)
+                self.assertEqual(proof['env']['EXPECTED_SOURCE_COMMIT'],
+                                 '${{ github.event.pull_request.head.sha || github.sha }}')
+                self.assertNotIn('${{', proof['run'])
+                self.assertIn('git rev-parse HEAD', proof['run'])
+                self.assertIn('git rev-parse --is-shallow-repository', proof['run'])
+                if name == 'windows':
+                    self.assertEqual(proof['shell'], 'pwsh')
+                    self.assertEqual(proof['run'].count("if ($LASTEXITCODE -ne 0) { throw"), 2)
+                    self.assertIn("if ($actual -cne $env:EXPECTED_SOURCE_COMMIT) { throw", proof['run'])
+                    self.assertIn("if ($shallow -cne 'false') { throw", proof['run'])
+
+    def test_ci_macos_checkout_assertion_rejects_mismatch_and_shallow_history(self):
+        proof = next((s for s in workflow('ci.yml')['jobs']['test']['steps']
+                      if s.get('name') == 'Verify source checkout'), None)
+        self.assertIsNotNone(proof, 'CI must verify the checked-out source before builds')
+        with tempfile.TemporaryDirectory() as directory:
+            def git(*args):
+                return subprocess.check_output(['git', '-C', directory, *args], text=True).strip()
+            git('init', '-q')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                'commit', '--allow-empty', '-qm', 'fixture')
+            sha = git('rev-parse', 'HEAD')
+            for expected, shallow, success in ((sha, False, True), ('0' * 40, False, False),
+                                               (sha, True, False)):
+                with self.subTest(expected=expected, shallow=shallow):
+                    if shallow:
+                        (Path(directory) / '.git/shallow').write_text(sha + '\n')
+                    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', proof['run']],
+                                            cwd=directory, env={**os.environ, 'EXPECTED_SOURCE_COMMIT': expected},
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+                    self.assertIn(sha, result.stdout)
+
     def test_prepare_default_and_only_publish_resume_have_write_permission(self):
         data = workflow('release.yml')
         self.assertEqual(data['on']['workflow_dispatch']['inputs']['operation']['default'], 'prepare')

@@ -46,7 +46,8 @@ need a running local Ollama server. Cloud processing and subscription CLIs send
 meeting input to the selected provider; a desktop login may not sign in its CLI.
 Windows has no public Verbemo CLI and no calendar integration.
 
-Settings, models, logs and keys live under `%LOCALAPPDATA%\Verbemo Data`;
+Settings, models and logs live under `%LOCALAPPDATA%\Verbemo Data`.
+API keys are stored in Windows Credential Manager under the `Verbemo/` prefix;
 recordings default to `%USERPROFILE%\Verbemo Recordings`. Verbemo does not
 modify Amanu's files or migrate them automatically. Choose an existing recordings
 directory explicitly if needed. See [Support](../SUPPORT.md) and [Privacy](../PRIVACY.md).

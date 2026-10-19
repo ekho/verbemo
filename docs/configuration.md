@@ -163,18 +163,23 @@ only values that differ from the defaults. A compact example:
   allow OpenAI-compatible servers and a non-default Ollama host; only a
   loopback Ollama URL keeps the transcript on your computer, and any other host
   must be reached over https — plain http is refused for remote servers. The OpenAI
-  key is only ever sent to OpenAI: `summary.openai_api_key_path` names it for
+  key is not automatically forwarded to remote third-party servers:
+  `summary.openai_api_key_path` names it for
   summaries while `openai_base_url` is OpenAI's own, and
   `transcription.openai.api_key_path` names it for transcription (an older
   config's `summary.openai_api_key_path` still counts for transcription while
-  the summary talks to OpenAI). The key for any other server is
+  the summary talks to OpenAI). A compatible server uses
   `summary.openai_compatible_api_key_path`, or one pasted in Setup, which is
-  kept in `~/.config/verbemo/keys/openai-compatible`. `verbemo doctor` walks the configured summary backend,
+  kept in `~/.config/verbemo/keys/openai-compatible`. For a loopback compatible
+  endpoint, Verbemo falls back to the OpenAI key when no dedicated compatible
+  key is configured or saved; remote third-party endpoints get no automatic fallback.
+  `verbemo doctor` walks the configured summary backend,
   including whether Ollama is answering and has the chosen model. `template` contains
   the complete summary instructions and starts with Verbemo's built-in default.
   In Settings → Setup → My own key, choose OpenAI, Anthropic, or
   OpenAI-compatible. The compatible option exposes the server URL and uses its
-  own key. `summary.openai_compatible: false` selects OpenAI’s API while keeping
+  dedicated key, with the loopback fallback described above.
+  `summary.openai_compatible: false` selects OpenAI’s API while keeping
   a saved custom URL; `true` selects that URL. Older configs infer the choice
   from `openai_base_url` when the setting is absent.
 - `mic_voice_processing` enables Apple's capture-time voice processing;
@@ -196,7 +201,9 @@ only values that differ from the defaults. A compact example:
 
 For Anthropic summaries, `summary.api_key_path` names the key file;
 `ANTHROPIC_API_KEY` takes precedence. The OpenAI and compatible-server key-file
-settings above are separate, so a provider key is not sent to another server.
+settings above are separate. The OpenAI key is not automatically forwarded to
+remote third-party endpoints; loopback compatible endpoints can use the OpenAI
+fallback described above.
 
 Inline and file-based API keys remain supported for compatibility, but the UI
 never displays an inline secret. Environment variables take precedence.
