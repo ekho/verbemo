@@ -41,7 +41,7 @@
 | --- | --- |
 | Название приложения, .app, .exe | `Verbemo` |
 | Команда и Swift package / executable target | `verbemo` |
-| macOS bundle ID, префикс собственных IPC/notification/service identifiers | `io.github.ekho.verbemo` |
+| macOS bundle ID, префикс собственных IPC/notification/service identifiers | `name.ekho.verbemo` |
 | .NET namespaces / проекты | `Verbemo.*` |
 | Windows Velopack package ID | `Verbemo` |
 | Репозиторий, поддержка и исходники | `https://github.com/ekho/verbemo` |
