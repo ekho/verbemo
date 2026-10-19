@@ -22,6 +22,42 @@ Quit the running app and confirm no recording is active before replacing its
 bundle. Deleting a bundle does not terminate its process or release its doorbell.
 Tests use sandbox homes; do not edit the user's real configuration for a test.
 
+## Idle sleep and work in progress
+
+The app's lifetime activity uses `userInitiatedAllowingIdleSystemSleep` to keep
+App Nap from delaying timers and command-line requests, with the existing
+sudden/automatic termination protections. Plain `userInitiated` includes
+`idleSystemSleepDisabled`: a lifetime activity with it prevents idle sleep even
+between meetings. Recording keeps a separate sleep-blocking activity.
+
+An active transcription drain holds idle sleep off while waiting for its
+processing turn, transcribing, running local diarization and post-processing,
+and releasing the engines. A `defer` ends that activity after success, error or
+cancellation. Work enqueued during engine release starts another drain, taking
+its activity before the old drain releases its own. An empty queue takes no hold.
+These assertions prevent **idle**
+sleep; they do not prevent closing the lid or choosing Sleep.
+
+There is no continuous handover guarantee from recording to transcription:
+`stopSession` ends the recording activity before stopping the capture, finishing
+the live transcription engine and asynchronously enqueueing the folder. The Mac
+can idle-sleep in that gap if nothing else holds it awake. A later drain starts
+when the process resumes. Finished sessions remain on disk and `resumePending`
+rescans them at launch; failed metadata finalization retains the recording
+manifest for recovery instead of queueing an incomplete session.
+
+Direct CLI operations (`process`, including speaker retries) do not take the
+queue's sleep activity. Neither do standalone `PostProcessor.finish`/`sweep`,
+recording-only archiving, media normalization or update downloads. They may
+pause over sleep. Sleep itself does not terminate them; a network operation can
+still fail on wake. Original session data and unfinished processing state remain
+available for the existing retry/sweep paths. Do not infer successful wake-time
+completion from activity flags alone: test automatic idle sleep, wake and resume
+on a Mac without unrelated sleep assertions, using an isolated build/profile.
+
+See [upstream attribution](../THIRD-PARTY-NOTICES.md#idle-sleep-policy) for
+the original activity-policy fix adapted here.
+
 ## Local signing and public signing
 
 `make app SIGN_ID=-` is the local ad-hoc route. It does not require membership

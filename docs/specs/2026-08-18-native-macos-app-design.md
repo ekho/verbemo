@@ -137,9 +137,11 @@ windows, permissions, the recording session and post-processing. It is the only
 process allowed to start audio capture or mutate an active session. Two things
 a bundle needs that the daemon did not: a second launch hands over to the copy
 already running rather than becoming a second recorder (`SingleInstance`), and
-the process holds a `userInitiated` activity for its whole life, because App
-Nap throttles a background application and a recorder is in the background by
-definition.
+the process holds a `userInitiatedAllowingIdleSystemSleep` activity for its whole
+life, because App Nap throttles a background application and a recorder is in the
+background by definition. Recording and the active transcription queue hold idle sleep off
+separately; see [the sleep policy](../pitfalls.md#idle-sleep-and-work-in-progress)
+for handover gaps and direct CLI/background processing boundaries.
 
 Repeated launches activate the existing app instead of starting another
 recorder. Window closure and Dock visibility are AppKit state, not process

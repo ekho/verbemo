@@ -49,6 +49,7 @@ actor TranscriptionCoordinator {
     private let echoCanceller: EchoCancellerFactory
     private let diarizerFactory: @Sendable (DiarizationSettings) -> any LocalDiarizationRuntime
     private let modelFingerprint: @Sendable (DiarizationModel) async throws -> String
+    private let keepAwake: Wakefulness.Hold
 
     typealias EchoCancellerFactory = @Sendable () throws -> EchoCanceller
 
@@ -63,12 +64,14 @@ actor TranscriptionCoordinator {
          },
          modelFingerprint: @escaping @Sendable (DiarizationModel) async throws -> String = { model in
              try DiarizationModelStore.shared(for: model).fingerprint()
-         }) {
+         },
+         keepAwake: @escaping Wakefulness.Hold = Wakefulness.holdAwake) {
         engines = EngineResolver(fixed: engine)
         self.onStop = onStop
         self.echoCanceller = echoCanceller
         self.diarizerFactory = diarizerFactory
         self.modelFingerprint = modelFingerprint
+        self.keepAwake = keepAwake
     }
 
     init(engines: EngineResolver,
@@ -79,12 +82,14 @@ actor TranscriptionCoordinator {
          },
          modelFingerprint: @escaping @Sendable (DiarizationModel) async throws -> String = { model in
              try DiarizationModelStore.shared(for: model).fingerprint()
-         }) {
+         },
+         keepAwake: @escaping Wakefulness.Hold = Wakefulness.holdAwake) {
         self.engines = engines
         self.onStop = onStop
         self.echoCanceller = echoCanceller
         self.diarizerFactory = diarizerFactory
         self.modelFingerprint = modelFingerprint
+        self.keepAwake = keepAwake
     }
 
     func setStatusHandler(_ handler: @escaping @Sendable (Status) -> Void) {
@@ -207,10 +212,14 @@ actor TranscriptionCoordinator {
         draining = true
         lastFailure = nil
         environmentalFailureNoted = false
-        Task { await drain() }
+        // Acquire before scheduling so a restarted drain overlaps the old hold.
+        let releaseSleep = keepAwake("verbemo is transcribing a meeting")
+        Task { await drain(releasing: releaseSleep) }
     }
 
-    private func drain() async {
+    private func drain(releasing releaseSleep: () -> Void) async {
+        // Cover the processing turn, diarization and asynchronous engine cleanup.
+        defer { releaseSleep() }
         await takeProcessingTurn()
         defer { releaseProcessingTurn() }
         while !queue.isEmpty {
