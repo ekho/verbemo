@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>name.ekho.verbemo</string>
+    <key>CFBundleName</key>
+    <string>Verbemo</string>
+    <key>CFBundleDisplayName</key>
+    <string>Verbemo</string>
+    <key>CFBundleExecutable</key>
+    <string>Verbemo</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleIconFile</key>
+    <string>Verbemo</string>
+    <key>CFBundleIconName</key>
+    <string>Verbemo</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__SHORT_VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__BUILD_VERSION__</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.2</string>
+    <!-- A Dock icon and a menu bar item, not an accessory: the app switches
+         to .accessory at runtime when someone turns the Dock icon off. -->
+    <key>LSUIElement</key>
+    <false/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
+    <key>NSSupportsSuddenTermination</key>
+    <false/>
+    <!-- Sparkle. The canonical feed is served from amanu.me; the release binaries it
+         points at live on GitHub. The public half of the EdDSA key pair is
+         here so the app can refuse an update it cannot verify — the private
+         half is not in this repository and never should be. -->
+    <key>SUFeedURL</key>
+    <string>https://amanu.me/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>/AxdBBPOFIca/y7RYwvi83FE6WqnIAjkVV0nTkRq9/c=</string>
+    <!-- Check on our own rather than asking on first launch: verbemo already
+         opens a setup window the first time, and a second dialog about update
+         policy on top of it is one question too many. UpdateGate keeps the
+         checks out of the way of a recording. -->
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Verbemo records your microphone during meetings so you can transcribe them later. Transcription stays on this Mac unless you choose a cloud engine.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Verbemo records system audio (the other side of your meetings) so you can transcribe them later. Transcription stays on this Mac unless you choose a cloud engine.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Verbemo reads your calendar to identify and name meetings and, if you enable it, start recording scheduled calls. Meeting titles and participants stay on this Mac unless you choose a cloud or CLI model for summaries or speaker names.</string>
+</dict>
+</plist>

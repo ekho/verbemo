@@ -1,0 +1,606 @@
+import AVFoundation
+import Foundation
+import Testing
+
+@testable import verbemo
+
+/// Transcribing a session again, from the command line, once its two tracks
+/// have become one stereo archive.
+///
+/// The interesting part is that a settled session has no per-track audio left
+/// at all: `audio.m4a` is the whole recording, mic on the left and the far end
+/// on the right, and a per-track engine has to be handed the channels back one
+/// at a time. The rest is about refusing clearly — a folder whose audio was
+/// discarded on purpose cannot be transcribed again, and saying so is the
+/// entire feature there.
+///
+/// The suite runs with offline echo cancellation off, because it is not about
+/// echo: that is on by default, needs the LocalVQE assets a fresh checkout has
+/// not built, and used to fail three of these tests for that reason alone.
+/// The one test that does check the echo canceller's record turns it back on
+/// and is gated on the assets.
+@Suite(.freshHome(config: #"{"offline_echo_cancellation": false}"#))
+struct RetranscriptionTests {
+    @Test("Recording-only processing keeps an archive without creating a transcript")
+    func recordingOnlyKeepsAudio() async throws {
+        let dir = try Self.rawSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try await TranscriptionCoordinator(onStop: { nil }).archiveRecordingOnly(dir)
+        let archive = dir.appendingPathComponent("audio.m4a")
+        #expect(try AVAudioFile(forReading: archive).length > 0)
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("mic.caf").path))
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("transcript.json").path))
+        #expect(!SessionClaim.isHeld(dir))
+    }
+    private actor FailingTrackEngine: TranscriptionEngine {
+        struct DecodeFailure: Error {}
+        nonisolated let name = "test"
+        nonisolated let model = "test"
+        nonisolated let input: TranscriptionInput = .perTrack
+        let empty: Bool
+        init(empty: Bool = false) { self.empty = empty }
+        func prepare() async throws {}
+        func release() async {}
+        func transcribe(_ audio: URL) async throws -> [TranscriptSegment] {
+            if empty { return [] }
+            if audio.lastPathComponent == "system.caf" { throw DecodeFailure() }
+            return [.init(start: 0, end: 1, text: "the local statement survived")]
+        }
+    }
+
+    @Test("A failed track never commits a partial transcript or discards the recording")
+    func failedTrackPreservesAudio() async throws {
+        let dir = try Self.rawSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await #expect(throws: (any Error).self) {
+            try await TranscriptionCoordinator(engine: FailingTrackEngine(), onStop: { nil }).transcribeNow(dir)
+        }
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("transcript.json").path))
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("system.caf").path))
+    }
+
+    @Test("An empty result preserves audio for a manual retry")
+    func emptyResultPreservesAudio() async throws {
+        let dir = try Self.rawSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await #expect(throws: (any Error).self) {
+            try await TranscriptionCoordinator(engine: FailingTrackEngine(empty: true), onStop: { nil }).transcribeNow(dir)
+        }
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("transcript.json").path))
+        let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(files.contains { $0.hasSuffix(".caf") || $0 == "audio.m4a" })
+    }
+    /// An engine that recognizes nothing and remembers what it was given. What
+    /// it was given is the point: one mono file per speaker means the channels
+    /// were pulled out of the archive rather than the stereo file being read
+    /// twice.
+    private actor RecordingEngine: TranscriptionEngine {
+        struct Heard {
+            let channels: AVAudioChannelCount
+            let seconds: Double
+        }
+
+        nonisolated let name = "fake"
+        nonisolated let model = "test"
+        nonisolated let input: TranscriptionInput = .perTrack
+
+        private(set) var heard: [Heard] = []
+        /// One line per track, deliberately sharing no words: the echo filter
+        /// drops mic segments that repeat what the far end said, and this test
+        /// is not about the echo filter.
+        private let lines = [
+            "the microphone side of the conversation",
+            "and now the far end answering back",
+        ]
+
+        func prepare() async throws {}
+        func release() async {}
+
+        func transcribe(_ audio: URL) async throws -> [TranscriptSegment] {
+            let file = try AVAudioFile(forReading: audio)
+            let format = file.processingFormat
+            heard.append(Heard(
+                channels: format.channelCount,
+                seconds: Double(file.length) / format.sampleRate))
+            return [TranscriptSegment(
+                start: 0,
+                end: 1,
+                text: lines[min(heard.count - 1, lines.count - 1)])]
+        }
+    }
+
+    /// An engine that cannot start at all, which is how a transcription is made
+    /// to fail without a network: `prepare()` throwing is the one failure the
+    /// per-track path doesn't shrug off and keep going from.
+    private actor BrokenEngine: TranscriptionEngine {
+        struct CannotPrepare: Error {}
+
+        nonisolated let name = "broken"
+        nonisolated let model = "test"
+        nonisolated let input: TranscriptionInput = .perTrack
+
+        func prepare() async throws { throw CannotPrepare() }
+        func release() async {}
+        func transcribe(_ audio: URL) async throws -> [TranscriptSegment] { [] }
+    }
+
+    private actor MultichannelEngine: TranscriptionEngine {
+        nonisolated let name = "assemblyai-test"
+        nonisolated let model = "multichannel"
+        nonisolated let input: TranscriptionInput = .multichannel
+
+        private(set) var heardChannels: AVAudioChannelCount = 0
+        private(set) var heardURL: URL?
+
+        func prepare() async throws {}
+        func release() async {}
+
+        func transcribe(_ audio: URL) async throws -> [TranscriptSegment] {
+            heardChannels = try AVAudioFile(forReading: audio).processingFormat.channelCount
+            heardURL = audio
+            return [
+                .init(start: 0, end: 1, text: "the remote sentence contains seven distinct words", speaker: "2A"),
+                .init(start: 0.05, end: 1.05, text: "the remote sentence contains seven distinct words", speaker: "1A"),
+                .init(start: 1.2, end: 2, text: "the local answer", speaker: "1B"),
+            ]
+        }
+    }
+
+    /// A session as it stands after transcription and settling: one stereo
+    /// archive, meta.json pointing both tracks at it, and no transcript —
+    /// which is exactly what the recordings window leaves behind when somebody
+    /// asks for a re-transcription and then quits the app.
+    private static func rawSession(seconds: Double = 2) throws -> URL {
+        try TestAudio.rawSession(seconds: seconds, prefix: "verbemo-again")
+    }
+
+    private static func settledSession(seconds: Double = 2) throws -> URL {
+        let dir = try rawSession(seconds: seconds)
+        TrackCompressor.compress(sessionDir: dir)
+        return dir
+    }
+
+    private static let noPostProcessing = PostProcessor.Policy(names: false, summary: false)
+    /// And the policy a Mac in ordinary use is under, where both steps are
+    /// on. It is what makes a retired recording look outstanding — neither
+    /// step has had its turn, because the transcript they read never
+    /// arrived — and so what leaves the window's button enabled for one.
+    private static let bothSteps = PostProcessor.Policy(names: true, summary: true)
+
+    // MARK: - the route from the command line
+
+    @Test(
+        "A raw session reaches a multichannel engine with sides intact",
+        .enabled(if: LocalVQEGate.runs), .freshHome)
+    func rawSessionTranscribesAsMultichannel() async throws {
+        let dir = try Self.rawSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = MultichannelEngine()
+
+        try await TranscriptionCoordinator(engine: engine, onStop: { nil }).transcribeNow(dir)
+
+        #expect(await engine.heardChannels == 2)
+        let heardURL = try #require(await engine.heardURL)
+        #expect(heardURL.deletingLastPathComponent() != dir)
+        #expect(!FileManager.default.fileExists(atPath: heardURL.path))
+        let transcript = try #require(PostProcessor.readTranscript(dir))
+        #expect(transcript.segments.map(\.speaker) == ["them", "me"])
+        #expect(transcript.segments.map(\.text) == [
+            "the remote sentence contains seven distinct words", "the local answer",
+        ])
+        let meta = try #require(SessionState.read(dir))
+        #expect(meta["transcription_input"] as? String == "multichannel")
+        let echo = try #require(meta["echo_filter"] as? [String: Any])
+        #expect(echo["ran"] as? Bool == true)
+        #expect(echo["dropped_segments"] as? Int == 1)
+        #expect(echo["mode"] as? String == "residual_exact_phrases")
+        let audioEcho = try #require(meta["audio_echo_cancellation"] as? [String: Any])
+        #expect(audioEcho["sample_rate"] as? Int == 16000)
+    }
+
+    @Test("A settled session is transcribed back out of its stereo archive")
+    func settledSessionTranscribesFromTheArchive() async throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pcm = dir.appendingPathComponent("mic.caf")
+        #expect(!FileManager.default.fileExists(atPath: pcm.path))
+
+        let engine = RecordingEngine()
+        try await TranscriptionCoordinator(engine: engine, onStop: { nil }).transcribeNow(dir)
+
+        // One call per logical track, each on a mono file the length of the
+        // recording: the archive was taken apart, not handed over whole.
+        let heard = await engine.heard
+        #expect(heard.count == 2)
+        #expect(heard.allSatisfy { $0.channels == 1 })
+        #expect(heard.allSatisfy { $0.seconds > 1.9 && $0.seconds < 2.2 })
+
+        let transcript = try #require(PostProcessor.readTranscript(dir))
+        #expect(transcript.engine == "fake")
+        #expect(transcript.segments.map(\.speaker) == ["me", "them"])
+        let markdown = try String(
+            contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)
+        #expect(markdown.contains("the microphone side of the conversation"))
+    }
+
+    /// The bug this whole route exists to fix: `verbemo process` used to read a
+    /// settled session, report `transcript: pending`, and do nothing at all.
+    @Test("A settled session with no transcript is transcribed, not shrugged at")
+    func aPendingSettledSessionIsPlannedForTranscription() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        #expect(item.hasAudio)
+        #expect(PostProcessor.obstacleToTranscribing(dir) == nil)
+        #expect(PostProcessor.plan(for: item, transcriptionEnabled: true)
+            == .transcribe(clearingFirst: false))
+    }
+
+    @Test("A session whose audio was discarded is refused, and says why")
+    func discardedAudioIsRefusedWithAReason() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        TrackCompressor.discard(sessionDir: dir)
+        #expect(SessionState.value(dir, "audio_discarded") as? Bool == true)
+
+        #expect(PostProcessor.obstacleToTranscribing(dir) == .audioDiscarded)
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        guard case .refuse(let why) = PostProcessor.plan(
+            for: item, again: true, transcriptionEnabled: true
+        ) else {
+            Issue.record("Expected a session with no audio left to be refused.")
+            return
+        }
+        #expect(why.description.contains("discarded"))
+        #expect(why.description.contains("keep_audio"))
+    }
+
+    /// Deleted with the Finder rather than by verbemo, which reads the same to
+    /// everything downstream but not to the person being told about it.
+    @Test("A recording that has gone missing is refused as missing")
+    func missingAudioIsRefusedAsMissing() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("audio.m4a"))
+
+        #expect(PostProcessor.obstacleToTranscribing(dir) == .audioGone)
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        #expect(!item.hasAudio)
+    }
+
+    @Test("A retired session waits to be asked twice")
+    func aRetiredSessionNeedsAgain() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        SessionState.update(dir, with: [
+            SessionState.Key.transcriptionFailed: "assemblyai returned no speech",
+        ])
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        guard case .refuse(let why) = PostProcessor.plan(for: item, transcriptionEnabled: true)
+        else {
+            Issue.record("Expected a retired session to be refused without --again.")
+            return
+        }
+        #expect(why.description.contains("no speech"))
+        #expect(why.description.contains("--again"))
+
+        #expect(PostProcessor.plan(for: item, again: true, transcriptionEnabled: true)
+            == .transcribe(clearingFirst: true))
+    }
+
+    @Test("Transcription turned off in the config is said out loud")
+    func transcriptionOffIsExplained() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        guard case .refuse(let why) = PostProcessor.plan(for: item, transcriptionEnabled: false)
+        else {
+            Issue.record("Expected transcription being off to be refused.")
+            return
+        }
+        #expect(why.description.contains("transcription.enabled"))
+    }
+
+    /// A transcribed session is left alone: `verbemo process` on it is still the
+    /// command that names its speakers and summarizes it, and must not throw
+    /// away a transcript because it was run twice.
+    @Test("A session that already has a transcript is only finished")
+    func aTranscribedSessionIsOnlyFinished() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Transcript(
+            engine: "parakeet", model: "v3", created_at: "2026-08-19T09:00:00Z",
+            segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Привет.")]
+        ).write(to: dir)
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        #expect(PostProcessor.plan(for: item, transcriptionEnabled: true) == .finish)
+        #expect(PostProcessor.plan(for: item, again: true, transcriptionEnabled: true)
+            == .transcribe(clearingFirst: true))
+    }
+
+    // MARK: - one session, two processes
+
+    /// The claim is only worth having if it goes away again. A run that leaves
+    /// `.transcribing.json` behind locks the session out of every later queue
+    /// until the process that wrote it dies.
+    @Test("A finished transcription leaves no claim behind, and neither does a failed one")
+    func theClaimIsReleasedByBothOutcomes() async throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let claim = SessionClaim.url(dir)
+
+        try await TranscriptionCoordinator(engine: RecordingEngine(), onStop: { nil }).transcribeNow(dir)
+        #expect(!FileManager.default.fileExists(atPath: claim.path))
+
+        PostProcessor.markForRetranscription(dir)
+        await #expect(throws: (any Error).self) {
+            try await TranscriptionCoordinator(engine: BrokenEngine(), onStop: { nil }).transcribeNow(dir)
+        }
+        #expect(
+            !FileManager.default.fileExists(atPath: claim.path),
+            "A transcription that threw must still give the session back."
+        )
+    }
+
+    /// What the menu bar counts as its backlog. A session another verbemo has is
+    /// in progress, not pending; one whose claimant is gone is nobody's.
+    @Test("A session under a live claim is not pending; one under a dead claim is")
+    func pendingLeavesOutSessionsSomebodyElseHas() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("verbemo-claims-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let live = root.appendingPathComponent("2026-08-20-live", isDirectory: true)
+        let dead = root.appendingPathComponent("2026-08-20-dead", isDirectory: true)
+        for dir in [live, dead] {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: ["files": ["mic": "mic.caf"]])
+                .write(to: dir.appendingPathComponent("meta.json"))
+        }
+        // Our own pid stands in for a second verbemo mid-transcription; 999999
+        // for one that died holding the folder.
+        try Self.claim(live, pid: ProcessInfo.processInfo.processIdentifier)
+        try Self.claim(dead, pid: 999_999)
+
+        #expect(TranscriptionCoordinator.pendingSessions(in: root)
+            .map { $0.lastPathComponent } == [dead.lastPathComponent])
+    }
+
+    /// The other cost centre. Both surfaces that finish a session — the sweep
+    /// at launch, the button, the command line, and the coordinator itself —
+    /// ask the same models, and two of them in one folder is one answer paid
+    /// for twice.
+    @Test("Post-processing a session somebody else is finishing does nothing at all")
+    func finishRefusesUnderALiveClaim() async throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Transcript(
+            engine: "parakeet", model: "v3", created_at: "2026-08-20T09:00:00Z",
+            segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Привет.")]
+        ).write(to: dir)
+        // Naming and summarizing gave up on the fixture; take that back, so
+        // that what stops this run is the claim and nothing else.
+        SessionState.update(dir, with: [
+            SessionState.Key.speakersStatus: nil,
+            SessionState.Key.summaryStatus: nil,
+        ])
+        #expect(!PostProcessor.outstanding(dir, policy: Self.bothSteps).isEmpty)
+
+        try Self.claim(dir, pid: ProcessInfo.processInfo.processIdentifier, stage: "finish")
+        let work = await PostProcessor.finish(dir, policy: Self.bothSteps)
+
+        #expect(work.isEmpty)
+        #expect(!FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("summary.md").path))
+        #expect(!FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent(SpeakerNames.file).path))
+    }
+
+    /// And the transcript a run in flight is about to rewrite: clearing it from
+    /// under that run is how a summarizer ends up reading a file that has just
+    /// been deleted.
+    @Test("A session somebody else has is not cleared for re-transcription")
+    func retranscriptionWaitsForTheOwner() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Transcript(
+            engine: "parakeet", model: "v3", created_at: "2026-08-20T09:00:00Z",
+            segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Привет.")]
+        ).write(to: dir)
+        try Self.claim(dir, pid: ProcessInfo.processInfo.processIdentifier)
+
+        PostProcessor.markForRetranscription(dir)
+
+        #expect(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("transcript.json").path))
+    }
+
+    /// A claim as another process would have left it, written by hand so the
+    /// pid in it can be one this test chooses.
+    @discardableResult
+    private static func claim(_ dir: URL, pid: Int32, stage: String = "transcribe") throws -> URL {
+        let url = SessionClaim.url(dir)
+        try JSONSerialization.data(
+            withJSONObject: ["pid": pid, "started": "2026-08-20T09:00:00Z", "stage": stage],
+            options: [.prettyPrinted, .sortedKeys]
+        ).write(to: url)
+        return url
+    }
+
+    // MARK: - the same route from the recordings window
+
+    /// The bug the window had after the command line stopped having it: the
+    /// button ran the post-processing that needs a transcript, on a session
+    /// whose transcript is the thing missing, and said nothing when nothing
+    /// came back.
+    @Test("Finish processing transcribes a settled recording rather than doing nothing")
+    @MainActor
+    func theWindowTranscribesASettledRecording() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        #expect(item.isOutstanding, "the button is only offered for a recording that owes work")
+        #expect(RecordingsWindow.decision(
+            for: item, policy: Self.noPostProcessing, transcriptionEnabled: true)
+            == .transcribe(clearingFirst: false))
+    }
+
+    /// A retired recording enables the button too, because the names and the
+    /// summary it never got still read as outstanding. It is sent to the
+    /// button next to it rather than left to press this one for ever.
+    @Test("A retired recording is sent to Re-transcribe, in words")
+    @MainActor
+    func theWindowSendsARetiredRecordingToRetranscribe() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        SessionState.update(dir, with: [
+            SessionState.Key.transcriptionFailed: "assemblyai returned no speech",
+        ])
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.bothSteps))
+        #expect(item.isOutstanding)
+        guard case .refuse(let why) = RecordingsWindow.decision(
+            for: item, policy: Self.bothSteps, transcriptionEnabled: true
+        ) else {
+            Issue.record("Expected the window to refuse a retired recording.")
+            return
+        }
+        #expect(why.contains("no speech"))
+        #expect(why.contains("Re-transcribe"))
+        // The window sends nobody to the command line: that flag is not in
+        // this window and there is a button here that does the same thing.
+        #expect(!why.contains("--again"))
+    }
+
+    @Test("A failed transcript with retained audio offers Re-transcribe in its row")
+    @MainActor
+    func aFailedRowOffersRetranscriptionBesideTheFailure() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        SessionState.update(dir, with: [
+            SessionState.Key.transcriptionFailed: "assemblyai returned no speech",
+        ])
+
+        let retryable = try #require(
+            SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        #expect(RecordingsWindow.inlineRetranscribeTitle(for: retryable)
+            == localised("Re-transcribe", "Расшифровать заново"))
+
+        TrackCompressor.discard(sessionDir: dir)
+        let missingAudio = try #require(
+            SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        #expect(RecordingsWindow.inlineRetranscribeTitle(for: missingAudio) == nil)
+    }
+
+    @MainActor
+    @Test("A re-transcribe engine choice is stored with that session")
+    func retranscriptionEngineOverride() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        #expect(RecordingsWindow.retranscriptionEngines.map(\.id)
+            == ["parakeet", "whisper", "gigaam", "assemblyai", "openai", "elevenlabs"])
+        RecordingsWindow.markForRetranscription(dir, engine: "whisper")
+        #expect(SessionState.value(dir, SessionState.Key.transcriptionEngine) as? String
+            == "whisper")
+        #expect(EngineResolver.configuredEngine(for: dir) == "whisper")
+    }
+
+    /// The engine choice was written first and the clearing then refused
+    /// in silence: the recording kept its transcript, gained an engine
+    /// nobody saw take effect, and the window said nothing.
+    @MainActor
+    @Test("Re-transcribing a recording another verbemo has is refused before anything is written")
+    func retranscriptionUnderAClaimIsRefused() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Transcript(
+            engine: "parakeet", model: "v3", created_at: "2026-08-20T09:00:00Z",
+            segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Привет.")]
+        ).write(to: dir)
+        let claim = try Self.claim(dir, pid: ProcessInfo.processInfo.processIdentifier)
+
+        let refusal = RecordingsWindow.markForRetranscription(dir, engine: "whisper")
+
+        #expect(refusal == SessionClaim.Busy(
+            session: dir.lastPathComponent, holder: SessionClaim.holder(dir)).described)
+        #expect(SessionState.value(dir, SessionState.Key.transcriptionEngine) == nil,
+                "the engine choice was left behind by a clearing that never happened")
+        #expect(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("transcript.json").path))
+
+        try FileManager.default.removeItem(at: claim)
+        #expect(RecordingsWindow.markForRetranscription(dir, engine: "whisper") == nil)
+        #expect(SessionState.value(dir, SessionState.Key.transcriptionEngine) as? String
+            == "whisper")
+    }
+
+    /// Finish processing came back empty and said everything was done — also
+    /// when the session was somebody else's, or the config file had broken.
+    @MainActor
+    @Test("Finish processing that did nothing says why, when there is a why")
+    func emptyFinishIsExplained() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(RecordingsWindow.nothingDoneLine(for: dir) == RecordingsWindow.nothingOwedLine)
+
+        let claim = try Self.claim(dir, pid: ProcessInfo.processInfo.processIdentifier, stage: "finish")
+        let busy = RecordingsWindow.nothingDoneLine(for: dir)
+        #expect(busy != RecordingsWindow.nothingOwedLine)
+        #expect(busy.contains("naming and summarizing"))
+        let russian = InterfaceLanguage.$scoped.withValue(.russian) {
+            RecordingsWindow.nothingDoneLine(for: dir)
+        }
+        #expect(russian != busy && russian.contains("саммари"))
+        try FileManager.default.removeItem(at: claim)
+
+        try Home.current.writeConfig(text: #"{ "keep_audio": "#)
+        let config = RecordingsWindow.nothingDoneLine(for: dir)
+        #expect(config.contains("config.json"))
+        #expect(RecordingsWindow.retranscriptionRefusal(for: dir) == config)
+        try Home.current.writeConfig(["offline_echo_cancellation": false])
+    }
+
+    @Test("A recording whose audio was discarded is refused in the window too")
+    @MainActor
+    func theWindowRefusesDiscardedAudio() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        TrackCompressor.discard(sessionDir: dir)
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        guard case .refuse(let why) = RecordingsWindow.decision(
+            for: item, policy: Self.noPostProcessing, transcriptionEnabled: true
+        ) else {
+            Issue.record("Expected the window to refuse a recording with no audio left.")
+            return
+        }
+        #expect(why.contains("keep_audio"))
+    }
+
+    /// And the answer that is not a refusal at all: there was a transcript,
+    /// nothing after it was owed, and the button says so instead of running
+    /// for a moment and leaving the window exactly as it was.
+    @Test("A recording with nothing left to do says so")
+    @MainActor
+    func theWindowSaysWhenNothingIsOwed() throws {
+        let dir = try Self.settledSession()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Transcript(
+            engine: "parakeet", model: "v3", created_at: "2026-08-19T09:00:00Z",
+            segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Привет.")]
+        ).write(to: dir)
+
+        let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
+        #expect(RecordingsWindow.decision(
+            for: item, policy: Self.noPostProcessing, transcriptionEnabled: true)
+            == .nothingOwed)
+    }
+}

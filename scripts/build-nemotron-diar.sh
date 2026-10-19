@@ -8,23 +8,23 @@ OUT="$ROOT/.build/nemotron"
 SOURCE_REV=8642eaa5cc51efbc17ad0f3e433944ba858a873f
 LLAMA_REV=bd4f514db14d87fded667787a7a963bfbaa98e89
 SENTENCEPIECE_REV=31646a467d2051eb904e0b45de3a73e91fe1c1e3
-MINIMUM_MACOS=${AMANU_MINIMUM_MACOS:-14.2}
-JOBS=${AMANU_NEMOTRON_JOBS:-4}
-CMAKE=${AMANU_CMAKE:-$(command -v cmake || true)}
+MINIMUM_MACOS=${VERBEMO_MINIMUM_MACOS:-14.2}
+JOBS=${VERBEMO_NEMOTRON_JOBS:-4}
+CMAKE=${VERBEMO_CMAKE:-$(command -v cmake || true)}
 
 [ "$MINIMUM_MACOS" = 14.2 ] || { echo "Nemotron helper requires macOS deployment target 14.2" >&2; exit 1; }
 [ -n "$CMAKE" ] && [ -x "$CMAKE" ] || { echo "cmake is required" >&2; exit 1; }
-case "$JOBS" in ''|*[!0-9]*) echo "AMANU_NEMOTRON_JOBS must be a positive integer" >&2; exit 1;; esac
-[ "$JOBS" -ge 1 ] && [ "$JOBS" -le 8 ] || { echo "AMANU_NEMOTRON_JOBS must be 1..8" >&2; exit 1; }
+case "$JOBS" in ''|*[!0-9]*) echo "VERBEMO_NEMOTRON_JOBS must be a positive integer" >&2; exit 1;; esac
+[ "$JOBS" -ge 1 ] && [ "$JOBS" -le 8 ] || { echo "VERBEMO_NEMOTRON_JOBS must be 1..8" >&2; exit 1; }
 [ "$(uname -m)" = arm64 ] || { echo "Nemotron helper must be built on arm64 macOS" >&2; exit 1; }
 for tool in git lipo otool vtool shasum python3; do
     command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
 done
 
 mkdir -p "$OUT"
-SOURCE=${AMANU_NEMOTRON_SOURCE:-$OUT/source}
+SOURCE=${VERBEMO_NEMOTRON_SOURCE:-$OUT/source}
 if [ ! -d "$SOURCE/.git" ]; then
-    [ -z "${AMANU_NEMOTRON_SOURCE:-}" ] || { echo "AMANU_NEMOTRON_SOURCE is not a checkout" >&2; exit 1; }
+    [ -z "${VERBEMO_NEMOTRON_SOURCE:-}" ] || { echo "VERBEMO_NEMOTRON_SOURCE is not a checkout" >&2; exit 1; }
     git init "$SOURCE"
     git -C "$SOURCE" remote add origin https://github.com/NVIDIA/NeMo-Speech.cpp.git
     git -C "$SOURCE" fetch --depth 1 origin "$SOURCE_REV"
@@ -35,7 +35,7 @@ fi
 [ "$(git -C "$SOURCE" rev-parse HEAD)" = "$SOURCE_REV" ] \
     || { echo "NeMo source revision mismatch" >&2; exit 1; }
 if [ ! -f "$SOURCE/llama.cpp/ggml/CMakeLists.txt" ]; then
-    [ -z "${AMANU_NEMOTRON_SOURCE:-}" ] || { echo "pinned llama.cpp submodule is missing" >&2; exit 1; }
+    [ -z "${VERBEMO_NEMOTRON_SOURCE:-}" ] || { echo "pinned llama.cpp submodule is missing" >&2; exit 1; }
     git -C "$SOURCE" submodule update --init --depth 1 llama.cpp
 fi
 [ "$(git -C "$SOURCE/llama.cpp" rev-parse HEAD)" = "$LLAMA_REV" ] \
@@ -43,10 +43,10 @@ fi
 [ -z "$(git -C "$SOURCE" status --porcelain --untracked-files=no)" ] \
     || { echo "NeMo source has local edits" >&2; exit 1; }
 
-SENTENCEPIECE=${AMANU_NEMOTRON_SENTENCEPIECE_SOURCE:-$OUT/sentencepiece-source}
+SENTENCEPIECE=${VERBEMO_NEMOTRON_SENTENCEPIECE_SOURCE:-$OUT/sentencepiece-source}
 if [ ! -d "$SENTENCEPIECE/.git" ]; then
-    [ -z "${AMANU_NEMOTRON_SENTENCEPIECE_SOURCE:-}" ] \
-        || { echo "AMANU_NEMOTRON_SENTENCEPIECE_SOURCE is not a checkout" >&2; exit 1; }
+    [ -z "${VERBEMO_NEMOTRON_SENTENCEPIECE_SOURCE:-}" ] \
+        || { echo "VERBEMO_NEMOTRON_SENTENCEPIECE_SOURCE is not a checkout" >&2; exit 1; }
     git init "$SENTENCEPIECE"
     git -C "$SENTENCEPIECE" remote add origin https://github.com/google/sentencepiece.git
     git -C "$SENTENCEPIECE" fetch --depth 1 origin "$SENTENCEPIECE_REV"

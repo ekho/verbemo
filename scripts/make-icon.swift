@@ -1,13 +1,13 @@
 #!/usr/bin/env swift
 //
-// make-icon.swift — build Resources/Amanu.icns from the same feather the app
+// make-icon.swift — build Resources/Verbemo.icns from the same feather the app
 // draws at runtime.
 //
-//   swift scripts/make-icon.swift Resources/Amanu.icns
+//   swift scripts/make-icon.swift Resources/Verbemo.icns
 //
-// The feather path is copied from Sources/amanu/UI/FeatherIcon.swift rather
+// The feather path is copied from Sources/verbemo/UI/FeatherIcon.swift rather
 // than imported: this runs as a standalone script, before and independently of
-// the amanu target, so it cannot link against it. The two are only three SVG
+// the verbemo target, so it cannot link against it. The two are only three SVG
 // path strings apart, and those come from Lucide and do not change.
 //
 // The Dock icon is not the menu bar icon. In the menu bar the feather is a
@@ -201,8 +201,8 @@ guard args.count == 2 else {
 let output = URL(fileURLWithPath: args[1]).standardizedFileURL
 
 let fm = FileManager.default
-let work = fm.temporaryDirectory.appendingPathComponent("amanu-icon-\(UUID().uuidString)")
-let iconset = work.appendingPathComponent("Amanu.iconset")
+let work = fm.temporaryDirectory.appendingPathComponent("verbemo-icon-\(UUID().uuidString)")
+let iconset = work.appendingPathComponent("Verbemo.iconset")
 try fm.createDirectory(at: iconset, withIntermediateDirectories: true)
 defer { try? fm.removeItem(at: work) }
 

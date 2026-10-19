@@ -84,42 +84,42 @@ python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
 python3 landing/tests/check.py
 make verify-localvqe
 # Built just above, so the tests that use it must run rather than skip.
-AMANU_REQUIRE_LOCALVQE=1 swift test --no-parallel 2>&1 | tail -3
+VERBEMO_REQUIRE_LOCALVQE=1 swift test --no-parallel 2>&1 | tail -3
 
 step "2/8  building and signing $VERSION (build $BUILD)"
 make app
-python3 scripts/verify-macos-compatibility.py .build/Amanu.app "$MINIMUM_MACOS"
+python3 scripts/verify-macos-compatibility.py .build/Verbemo.app "$MINIMUM_MACOS"
 SPARKLE_BIN=$(find .build/artifacts/sparkle -type d -name bin -print -quit)
 [ -x "$SPARKLE_BIN/sign_update" ] || die "Sparkle sign_update is missing after the build"
-test -s .build/Amanu.app/Contents/Resources/LICENSE \
+test -s .build/Verbemo.app/Contents/Resources/LICENSE \
     || die "the app bundle has no Amanu license"
-test -s .build/Amanu.app/Contents/Resources/THIRD-PARTY-NOTICES.md \
+test -s .build/Verbemo.app/Contents/Resources/THIRD-PARTY-NOTICES.md \
     || die "the app bundle has no third-party notices"
-[ "$(find .build/Amanu.app/Contents/Resources/Licenses -type f | wc -l | tr -d ' ')" = 22 ] \
+[ "$(find .build/Verbemo.app/Contents/Resources/Licenses -type f | wc -l | tr -d ' ')" = 22 ] \
     || die "the app bundle does not contain every dependency license"
-test -s .build/Amanu.app/Contents/Resources/Models/localvqe-v1.4-aec-200K-f32.gguf \
+test -s .build/Verbemo.app/Contents/Resources/Models/localvqe-v1.4-aec-200K-f32.gguf \
     || die "the app bundle has no LocalVQE model"
-test -s .build/Amanu.app/Contents/Frameworks/liblocalvqe.dylib \
+test -s .build/Verbemo.app/Contents/Frameworks/liblocalvqe.dylib \
     || die "the app bundle has no LocalVQE library"
-test -s .build/Amanu.app/Contents/Frameworks/CTranscribe.framework/Versions/A/CTranscribe \
+test -s .build/Verbemo.app/Contents/Frameworks/CTranscribe.framework/Versions/A/CTranscribe \
     || die "the app bundle has no transcribe.cpp runtime"
-test -s .build/Amanu.app/Contents/Resources/Nemotron-verification.json \
+test -s .build/Verbemo.app/Contents/Resources/Nemotron-verification.json \
     || die "the app bundle has no Nemotron runtime verification"
-python3 scripts/verify-nemotron-diar.py .build/Amanu.app/Contents/Helpers/NeMoSpeech \
+python3 scripts/verify-nemotron-diar.py .build/Verbemo.app/Contents/Helpers/NeMoSpeech \
     --skip-licenses --minimum "$MINIMUM_MACOS"
 
 step "3/8  verifying the signature"
-codesign --verify --deep --strict --verbose=2 .build/Amanu.app
+codesign --verify --deep --strict --verbose=2 .build/Verbemo.app
 # Captured rather than piped: `grep -q` closes the pipe on its first match,
 # codesign takes a SIGPIPE for it, and under `set -o pipefail` a successful
 # check then reads as a failed one.
-DETAILS=$(codesign -dvvv .build/Amanu.app 2>&1)
-REQUIREMENT=$(codesign -d -r- .build/Amanu.app 2>&1)
+DETAILS=$(codesign -dvvv .build/Verbemo.app 2>&1)
+REQUIREMENT=$(codesign -d -r- .build/Verbemo.app 2>&1)
 grep -E 'Identifier|Authority=Developer ID|TeamIdentifier' <<<"$DETAILS"
 grep -q '^Authority=Developer ID Application:' <<<"$DETAILS" \
     || die "the app is not signed with a Developer ID Application certificate"
-grep -q 'me.samat.amanu' <<<"$REQUIREMENT" \
-    || die "designated requirement does not name me.samat.amanu"
+grep -q 'name.ekho.verbemo' <<<"$REQUIREMENT" \
+    || die "designated requirement does not name name.ekho.verbemo"
 # The hardened runtime is not optional: without it the notary service rejects
 # the submission, and it does so after the upload rather than before it.
 grep -q 'flags=.*runtime' <<<"$DETAILS" || die "hardened runtime missing"
@@ -127,7 +127,7 @@ grep -q 'flags=.*runtime' <<<"$DETAILS" || die "hardened runtime missing"
 step "4/8  building the disk image"
 rm -rf dist/stage "$DMG"
 mkdir -p dist/stage
-cp -R .build/Amanu.app dist/stage/
+cp -R .build/Verbemo.app dist/stage/
 ln -s /Applications dist/stage/Applications
 hdiutil create -volname "$VOLNAME" -srcfolder dist/stage \
     -ov -format UDZO -quiet "$DMG"

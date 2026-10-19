@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 APPCAST = ROOT / "landing" / "appcast.xml"
-INFO_PLIST = ROOT / "Packaging" / "Amanu-Info.plist"
+INFO_PLIST = ROOT / "Packaging" / "Verbemo-Info.plist"
 FEED_URL = "https://amanu.me/appcast.xml"
 
 

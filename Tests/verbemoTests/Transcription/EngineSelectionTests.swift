@@ -1,0 +1,95 @@
+import Foundation
+import Testing
+
+@testable import verbemo
+
+/// What the configured engine adds up to, decided before any network call.
+/// The interesting half is the Intel one: verbemo ships a universal binary, and
+/// the x86_64 slice has no local models at all — so the questions are what it
+/// falls back to, and what it does when there is nothing to fall back to.
+struct EngineSelectionTests {
+    private static func choice(
+        _ configured: String, key: Bool, localModels: Bool
+    ) -> EngineResolver.EngineChoice {
+        EngineResolver.resolveEngine(
+            configured: configured, hasKey: key, localModels: localModels)
+    }
+
+    @Test("On Apple Silicon auto prefers the cloud only when there is a key")
+    func autoOnAppleSilicon() {
+        #expect(Self.choice("auto", key: true, localModels: true) == .cloudOrLocal)
+        #expect(Self.choice("auto", key: false, localModels: true) == .local)
+    }
+
+    /// Catches an Intel Mac being handed a local engine that throws
+    /// `unsupportedPlatform` deep inside Core ML — the same session failing
+    /// three times and retiring, instead of transcribing through the cloud.
+    @Test("Without local models auto is the cloud engine, with no local rescue")
+    func autoWithoutLocalModels() {
+        #expect(Self.choice("auto", key: true, localModels: false) == .cloud)
+    }
+
+    /// An Intel Mac with no key can't transcribe at all, and the queue has to
+    /// say so rather than pick an engine that cannot run.
+    @Test("Without local models and without a key there is no engine")
+    func nothingAvailable() {
+        #expect(Self.choice("auto", key: false, localModels: false) == .unavailable)
+        #expect(Self.choice("parakeet", key: false, localModels: false) == .unavailable)
+    }
+
+    /// The one place a stated preference is overridden: parakeet cannot run
+    /// here, and a transcript through the other engine beats no transcript.
+    @Test("A configured parakeet falls back to the cloud when it cannot run")
+    func parakeetFallsBack() {
+        #expect(Self.choice("parakeet", key: true, localModels: false) == .cloud)
+        #expect(Self.choice("parakeet", key: true, localModels: true) == .local)
+    }
+
+    @Test("Whisper is a local engine")
+    func whisperIsLocal() {
+        #expect(Self.choice("whisper", key: true, localModels: true) == .local)
+        #expect(Self.choice("whisper", key: true, localModels: false) == .cloud)
+        #expect(Self.choice("whisper", key: false, localModels: false) == .unavailable)
+    }
+
+    @Test("GigaAM is a local engine")
+    func gigaAMIsLocal() {
+        #expect(Self.choice("gigaam", key: true, localModels: true) == .local)
+        #expect(Self.choice("gigaam", key: true, localModels: false) == .cloud)
+        #expect(Self.choice("gigaam", key: false, localModels: false) == .unavailable)
+    }
+
+    /// assemblyai is not overridden in either direction: it is chosen for
+    /// diarization, which the local engine does not do, so a missing key is a
+    /// failure to report rather than a reason to transcribe differently.
+    @Test("A configured assemblyai is never swapped for the local engine")
+    func assemblyAIStays() {
+        #expect(Self.choice("assemblyai", key: false, localModels: true) == .cloud)
+        #expect(Self.choice("assemblyai", key: true, localModels: false) == .cloud)
+    }
+
+    /// openai is a cloud engine like assemblyai, and is treated as one
+    /// everywhere: insisted on when named, never swapped for the local model.
+    @Test("A configured openai behaves like the other cloud engine")
+    func openAIIsCloud() {
+        #expect(Self.choice("openai", key: false, localModels: true) == .cloud)
+        #expect(Self.choice("openai", key: true, localModels: false) == .cloud)
+        #expect(Self.choice("elevenlabs", key: false, localModels: true) == .cloud)
+        #expect(Self.choice("elevenlabs", key: true, localModels: false) == .cloud)
+    }
+
+    /// Which cloud service a configuration means. An engine naming one
+    /// outright is that one — the branch that needs no config file to answer.
+    @Test("A named cloud engine is its own provider")
+    func providerFromEngineName() {
+        #expect(EngineResolver.cloudProvider(configured: "openai") == "openai")
+        #expect(EngineResolver.cloudProvider(configured: "assemblyai") == "assemblyai")
+        #expect(EngineResolver.cloudProvider(configured: "elevenlabs") == "elevenlabs")
+    }
+
+    @Test("An unrecognised engine name is treated as auto")
+    func unknownIsAuto() {
+        #expect(Self.choice("future-engine", key: true, localModels: true) == .cloudOrLocal)
+        #expect(Self.choice("", key: false, localModels: true) == .local)
+    }
+}

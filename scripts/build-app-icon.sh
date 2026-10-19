@@ -21,7 +21,7 @@ test -f "$FALLBACK_ICON" || {
     exit 1
 }
 
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/amanu-app-icon.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/verbemo-app-icon.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/compiled" "$OUTPUT_DIR"
 
@@ -29,7 +29,7 @@ xcrun actool \
     --compile "$WORK/compiled" \
     --platform macosx \
     --minimum-deployment-target "$MINIMUM_MACOS" \
-    --app-icon Amanu \
+    --app-icon Verbemo \
     --output-partial-info-plist "$WORK/partial.plist" \
     "$ADAPTIVE_ICON" >/dev/null
 
@@ -42,4 +42,4 @@ test -s "$WORK/compiled/Assets.car" || {
 # hand-tuned classic icon beside it instead of actool's flattened fallback, so
 # Sonoma and Sequoia retain the exact icon they already know.
 cp "$WORK/compiled/Assets.car" "$OUTPUT_DIR/Assets.car"
-cp "$FALLBACK_ICON" "$OUTPUT_DIR/Amanu.icns"
+cp "$FALLBACK_ICON" "$OUTPUT_DIR/Verbemo.icns"

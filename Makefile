@@ -1,15 +1,15 @@
-# amanu — build the application.
+# verbemo — build the application.
 #
 # Signing is not cosmetic here. macOS attributes the microphone and Screen &
 # System Audio Recording grants to the code signature, and SwiftPM only ad-hoc
 # signs, which means the identity *is* the hash — every rebuild would look like
 # a brand-new program and macOS would ask for permission again, leaving a trail
-# of dead amanu entries in System Settings. A real identity gives the bundle a
+# of dead verbemo entries in System Settings. A real identity gives the bundle a
 # stable designated requirement, and the grants survive rebuilds.
 #
-#   make            build + sign Amanu.app
+#   make            build + sign Verbemo.app
 #   make run-app    and launch it through LaunchServices
-#   make icon       redraw Resources/Amanu.icns from the feather
+#   make icon       redraw Resources/Verbemo.icns from the feather
 #   make identities list available signing identities
 #   make verify     show the built app's signature
 #   make release    build, notarize and publish a release
@@ -22,23 +22,23 @@
 # runs on Apple Silicon and Intel Macs. Two
 # --arch flags select a multi-arch directory. Ask SwiftPM for its path:
 # Xcode 27's Swift Build engine uses .build/out instead of .build/apple.
-BUILT = $(shell swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/amanu
+BUILT = $(shell swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/verbemo
 
 # The application bundle. Assembled by hand rather than by an Xcode project:
 # the package already builds and tests with SwiftPM, and an .app is a
 # directory with a plist in it — a second build system to maintain buys
 # nothing here.
-APP        = .build/Amanu.app
-APP_NAME   = Amanu
+APP        = .build/Verbemo.app
+APP_NAME   = Verbemo
 VERSION   ?= $(shell cat VERSION)
 MINIMUM_MACOS ?= 14.2
 # A build number that only ever goes up, and says which commit it was.
 BUILD     ?= $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
-ICON       = Resources/Amanu.icns
-ADAPTIVE_ICON = Resources/Amanu.icon
+ICON       = Resources/Verbemo.icns
+ADAPTIVE_ICON = Resources/Verbemo.icon
 BUILT_ICON = .build/app-icon
 DIST       = dist
-DMG        = $(DIST)/amanu-v$(VERSION)-macos-universal.dmg
+DMG        = $(DIST)/Verbemo-$(VERSION)-macos-universal.dmg
 
 # Sparkle arrives as a binary framework in SwiftPM's artifact cache. There is
 # no Xcode "Embed Frameworks" phase here, so `make app` copies it in and signs
@@ -52,7 +52,7 @@ SPARKLE_FW = $(shell find .build/artifacts/sparkle -type d -name Sparkle.framewo
 	-path '*macos-arm64_x86_64*' 2>/dev/null | head -1)
 #
 # The package's own binary targets sit under a directory SwiftPM names after
-# the checkout's folder, not after the package: `amanu` in the main checkout,
+# the checkout's folder, not after the package: `verbemo` in the main checkout,
 # something else in a worktree. Hence the wildcard, and `extract` left out.
 WHISPER_FW = $(shell find .build/artifacts/*/WhisperFramework -type d \
 	-name whisper.framework -path '*macos-arm64_x86_64*' \
@@ -92,13 +92,13 @@ endif
 all: app
 
 localvqe:
-	@AMANU_MINIMUM_MACOS=$(MINIMUM_MACOS) scripts/build-localvqe.sh
+	@VERBEMO_MINIMUM_MACOS=$(MINIMUM_MACOS) scripts/build-localvqe.sh
 
 verify-localvqe: localvqe
 	@scripts/verify-localvqe.py
 
 nemotron:
-	@AMANU_MINIMUM_MACOS=$(MINIMUM_MACOS) scripts/build-nemotron-diar.sh
+	@VERBEMO_MINIMUM_MACOS=$(MINIMUM_MACOS) scripts/build-nemotron-diar.sh
 
 verify-nemotron: nemotron
 	@python3 scripts/verify-nemotron-diar.py $(NEMOTRON_ROOT) \
@@ -130,9 +130,9 @@ app: build $(ICON)
 	@cp -R $(NEMOTRON_ROOT)/lib/. $(NEMOTRON_BUNDLE)/lib/
 	@cp $(NEMOTRON_ROOT)/verification.json $(APP)/Contents/Resources/Nemotron-verification.json
 	@sed -e 's/__SHORT_VERSION__/$(VERSION)/' -e 's/__BUILD_VERSION__/$(BUILD)/' \
-		Packaging/Amanu-Info.plist > $(APP)/Contents/Info.plist
+		Packaging/Verbemo-Info.plist > $(APP)/Contents/Info.plist
 	@printf 'APPL????' > $(APP)/Contents/PkgInfo
-	@cp $(BUILT_ICON)/Amanu.icns $(APP)/Contents/Resources/Amanu.icns
+	@cp $(BUILT_ICON)/Verbemo.icns $(APP)/Contents/Resources/Verbemo.icns
 	@cp $(BUILT_ICON)/Assets.car $(APP)/Contents/Resources/Assets.car
 	@mkdir -p $(APP)/Contents/Resources/Licenses
 	@cp LICENSE $(APP)/Contents/Resources/LICENSE
@@ -164,7 +164,7 @@ app: build $(ICON)
 		Resources/Licenses/NeMo-Speech.cpp-* \
 		$(APP)/Contents/Resources/Licenses/
 	@test -s $(APP)/Contents/Resources/LICENSE \
-		&& test -s $(APP)/Contents/Resources/Amanu.icns \
+		&& test -s $(APP)/Contents/Resources/Verbemo.icns \
 		&& test -s $(APP)/Contents/Resources/Assets.car \
 		&& test -s $(APP)/Contents/Resources/THIRD-PARTY-NOTICES.md \
 		&& test -s $(APP)/Contents/Resources/Models/localvqe-v1.4-aec-200K-f32.gguf \
@@ -195,7 +195,7 @@ app: build $(ICON)
 	@ln -s Versions/Current/Resources $(APP)/Contents/Frameworks/CTranscribe.framework/Resources
 	@test -L $(APP)/Contents/Frameworks/CTranscribe.framework/Versions/Current
 	@# Sparkle's XPC services exist so a sandboxed app can still download and
-	@# install; amanu is not sandboxed, so they are two more binaries to sign,
+	@# install; verbemo is not sandboxed, so they are two more binaries to sign,
 	@# notarize and ship for nothing.
 	@rm -rf $(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices
 	@[ -x $(HOME)/.local/bin/unlock-signing-keychain ] \
@@ -223,14 +223,14 @@ app: build $(ICON)
 		|| codesign --force --sign "$(SIGN_ID)" $(SIGN_OPTIONS) --timestamp=none "$$nested" ; \
 	done
 	@codesign --force --sign "$(SIGN_ID)" \
-		--identifier me.samat.amanu \
+		--identifier name.ekho.verbemo \
 		$(SIGN_OPTIONS) \
-		--entitlements Packaging/Amanu.entitlements \
+		--entitlements Packaging/Verbemo.entitlements \
 		--timestamp $(APP) 2>/dev/null \
 	|| codesign --force --sign "$(SIGN_ID)" \
-		--identifier me.samat.amanu \
+		--identifier name.ekho.verbemo \
 		$(SIGN_OPTIONS) \
-		--entitlements Packaging/Amanu.entitlements \
+		--entitlements Packaging/Verbemo.entitlements \
 		--timestamp=none $(APP)
 	@codesign --verify --strict --verbose=2 $(APP)
 	@# A missing slice is invisible until someone on the wrong Mac opens the
