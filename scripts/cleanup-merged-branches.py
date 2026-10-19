@@ -76,7 +76,7 @@ class Repository:
 
     def snapshot(self):
         self.require_origin()
-        self.git('fetch', '--no-tags', '--no-write-fetch-head', '--recurse-submodules=no', '--prune', 'origin',
+        self.git('fetch', '--refmap=', '--no-tags', '--no-write-fetch-head', '--recurse-submodules=no', '--prune', 'origin',
                  '+refs/heads/*:refs/remotes/origin/*')
         remote = self.remote_refs()
         heads = {ref.removeprefix('refs/heads/'): sha for ref, sha in remote.items()

@@ -6,7 +6,8 @@ fetched `origin/master`. Ancestry is the only merge test; the tool does not insp
 unmerged branch contents or create archive tags.
 
 Running the script without arguments prints a read-only inventory. `inventory`
-additionally saves it. Both fetch only origin heads with `--no-tags` and inspect
+additionally saves it. Both fetch only origin heads with `--refmap=` (ignoring additional configured
+fetch destinations) and `--no-tags`, and inspect
 remote heads/tags, local refs, all worktrees and every page of open GitHub PRs.
 Fetching updates local origin tracking refs; it does not change remote refs.
 The configured and resolved fetch/push URLs must point exclusively to the own

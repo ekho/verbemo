@@ -120,6 +120,23 @@ class BranchCleanupTests(unittest.TestCase):
         self.assertEqual(self.refs(other), before)
         self.assertEqual(self.run_git(self.local, 'for-each-ref', 'refs/remotes/amanu', 'refs/remotes/upstream'), tracking)
 
+    def test_ExtraOriginFetchMappingsPreserveOtherRefsAndLocalTags(self):
+        base = self.run_git(self.local, 'rev-parse', 'master')
+        self.run_git(self.local, 'update-ref', 'refs/remotes/upstream/master', base)
+        self.run_git(self.local, 'tag', 'master', base)
+        self.run_git(self.local, 'commit', '--allow-empty', '-m', 'advance origin master')
+        advanced = self.run_git(self.local, 'rev-parse', 'HEAD')
+        self.assertNotEqual(base, advanced)
+        self.run_git(self.local, 'push', 'origin', 'active:master')
+        for mapping in ('+refs/heads/*:refs/remotes/upstream/*', '+refs/heads/*:refs/tags/*'):
+            self.run_git(self.local, 'config', '--add', 'remote.origin.fetch', mapping)
+        self.module.inventory(self.repo, self.inventory_path)
+        with self.subTest(ref='upstream tracking'):
+            self.assertEqual(self.run_git(self.local, 'rev-parse', 'refs/remotes/upstream/master'), base)
+        with self.subTest(ref='local tag'):
+            self.assertEqual(self.run_git(self.local, 'rev-parse', 'refs/tags/master'), base)
+        self.assertEqual(self.run_git(self.local, 'rev-parse', 'refs/remotes/origin/master'), advanced)
+
     def test_BundleRestoresDeletedRefs(self):
         before = self.prepare()
         result = self.apply('merged')
