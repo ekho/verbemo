@@ -48,6 +48,9 @@ It does not automatically migrate or modify Amanu's settings, recordings or
 models. You can explicitly choose an existing recordings directory in Settings.
 Shared provider credentials are read only; Verbemo writes its own keys locally.
 
+The [CLI and configuration reference](docs/configuration.md) documents every
+setting and provider key-file path, with platform differences and examples.
+
 Application and website usage statistics are disabled. There is no analytics
 backend, installation identifier or event upload. Old analytics fields cannot
 enable reporting. Selected cloud processing, update checks and model downloads
@@ -85,8 +88,8 @@ Quit the running app and confirm no recording is active before replacing a bundl
 
 The macOS CLI includes `verbemo setup`, `verbemo doctor`, `verbemo sessions`
 and `verbemo process`. Run `verbemo --help` for the actual command options.
-Windows has no equivalent public CLI. The [CLI and configuration reference](docs/configuration.md)
-covers command examples, model selection, provider routing, hooks and platform differences.
+Windows has no equivalent public CLI. See the configuration reference above for
+command examples, model selection, provider routing and hooks.
 
 ## Updates and distribution
 

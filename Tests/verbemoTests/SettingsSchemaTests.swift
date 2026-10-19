@@ -564,64 +564,65 @@ struct SettingsWindowTests {
     }
 }
 
-/// The README is the third place a setting has to appear, and the only one no
-/// compiler checks.
-///
-/// `SettingsSchema` says of itself that nothing is secret: a setting that
-/// exists but appears in no window and no README is a setting nobody will
-/// find. The window half is enforced — `SettingsWindowTests` renders the
-/// schema and counts the controls. The README half was enforced by a comment
-/// claiming the documentation was generated from the schema, which it never
-/// was: `README.md` is written by hand, and a setting added to the schema
-/// today reaches the window automatically and the README only if somebody
-/// remembers. This is that somebody.
+/// The public configuration reference must remain discoverable from the README
+/// and cover every setting that the schema exposes, including provider key paths.
 @Suite("Every setting is documented")
 struct SettingsDocumentationTests {
-    /// The repository root, found from this file rather than from the working
-    /// directory, which `swift test` does not promise anything about.
+    private static let referencePath = "docs/configuration.md"
+
+    /// Find the repository from this file; SwiftPM does not promise a working directory.
+    private static var root: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // verbemoTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // repository root
+    }
+
     static var readme: String {
         get throws {
-            let root = URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()  // verbemoTests
-                .deletingLastPathComponent()  // Tests
-                .deletingLastPathComponent()  // repository root
-            return try String(
-                contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
+            try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
         }
     }
 
-    /// A key counts as documented when the README names it — either in full
-    /// (`auto_record.start_delay_seconds`) or as a leaf under a group the
-    /// README documents wholesale (`summary.*` covering `openai_model`). The
-    /// second form is how the README actually reads, and demanding the first
-    /// would fail on prose that is already correct.
-    @Test("Every setting in the schema is named in the README")
-    func everySettingIsInTheReadme() throws {
+    static var configurationReference: String {
+        get throws {
+            try String(contentsOf: root.appendingPathComponent(referencePath), encoding: .utf8)
+        }
+    }
+
+    @Test("The README links to the complete public configuration reference")
+    func referenceIsDiscoverable() throws {
         let readme = try Self.readme
+        let reference = try Self.configurationReference
+        #expect(readme.contains("](\(Self.referencePath))"), "README.md must link to \(Self.referencePath)")
+        #expect(!reference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    /// Name each setting in full, or name its group and leaf in the reference prose.
+    @Test("Every setting in the schema is named in the configuration reference")
+    func everySettingIsInTheReference() throws {
+        let reference = try Self.configurationReference
         var undocumented: [String] = []
 
         for entry in SettingsSchema.sections.flatMap({ $0.entries }) {
             let path = entry.path.joined(separator: ".")
-            if readme.contains(path) { continue }
+            if reference.contains(path) { continue }
 
             let group = entry.path.dropLast().joined(separator: ".")
             let leaf = entry.path[entry.path.count - 1]
-            if !group.isEmpty, readme.contains("`\(group).*`"), readme.contains(leaf) {
+            if !group.isEmpty, reference.contains("`\(group).*`"), reference.contains(leaf) {
                 continue
             }
             undocumented.append(path)
         }
 
-        #expect(undocumented.isEmpty, "not in README.md: \(undocumented.joined(separator: ", "))")
+        #expect(undocumented.isEmpty, "not in \(Self.referencePath): \(undocumented.joined(separator: ", "))")
     }
 
-    /// And the other direction, for the keys that carry a secret. A key file
-    /// path documented in the README that `Config` does not read sends someone
-    /// to put their AssemblyAI token somewhere nothing looks — and the symptom
-    /// is a meeting that failed to transcribe hours later.
-    @Test("The key-file settings the README advertises are settings verbemo reads")
+    /// Advertised provider paths must be explicit and still be real Config keys.
+    @Test("The advertised key-file settings are documented settings verbemo reads")
     func keyPathsAreReal() throws {
-        let readme = try Self.readme
+        let reference = try Self.configurationReference
         let advertised = [
             "transcription.assemblyai.api_key_path",
             "summary.api_key_path",
@@ -630,7 +631,7 @@ struct SettingsDocumentationTests {
             "transcription.openai.api_key_path",
         ]
         for key in advertised {
-            #expect(readme.contains(key.components(separatedBy: ".").last!))
+            #expect(reference.contains(key), "\(key) must be explicit in \(Self.referencePath)")
             #expect(SettingsSchema.knownKeys.contains(key), "\(key) is not a known setting")
         }
     }

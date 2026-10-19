@@ -194,6 +194,10 @@ only values that differ from the defaults. A compact example:
 - `interface_language` is `auto`, `en`, or `ru`. `dock_icon`, `menu_bar_icon`,
   and `window` control where Verbemo appears.
 
+For Anthropic summaries, `summary.api_key_path` names the key file;
+`ANTHROPIC_API_KEY` takes precedence. The OpenAI and compatible-server key-file
+settings above are separate, so a provider key is not sent to another server.
+
 Inline and file-based API keys remain supported for compatibility, but the UI
 never displays an inline secret. Environment variables take precedence.
 
