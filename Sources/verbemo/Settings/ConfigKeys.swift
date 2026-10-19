@@ -74,7 +74,6 @@ extension Config {
         case summaryKeyPath = "summary.api_key_path"
         case summaryOpenAIKeyPath = "summary.openai_api_key_path"
         case summaryOpenAICompatibleKeyPath = "summary.openai_compatible_api_key_path"
-        case analytics
 
         /// The key as a path into the JSON: `["auto_record", "enabled"]`.
         var path: [String] { rawValue.split(separator: ".").map(String.init) }

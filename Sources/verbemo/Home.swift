@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// Everything verbemo keeps for the person running it, and everything it may
-/// borrow from their machine: the config file, the setup and analytics state
+/// borrow from their machine: the config file, the setup state
 /// beside it, the key drawer, the key files other tools share, the API keys in
 /// the environment, the command-line tools a login shell can find, and the
 /// language models those tools and keys reach.
@@ -118,10 +118,6 @@ struct Home: Sendable {
 
     var configFile: URL { configDirectory.appendingPathComponent("config.json") }
     var setupFile: URL { configDirectory.appendingPathComponent("setup.json") }
-    var analyticsIdentityFile: URL { configDirectory.appendingPathComponent("analytics.json") }
-    var analyticsPendingFile: URL {
-        configDirectory.appendingPathComponent("analytics-pending.json")
-    }
     var keysDirectory: URL { configDirectory.appendingPathComponent("keys", isDirectory: true) }
 
     /// Where other tools keep the same secret — see `Config.sharedKeyPaths`.

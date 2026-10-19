@@ -1,169 +1,82 @@
+import ArgumentParser
 import Foundation
 import Testing
 
 @testable import verbemo
 
-@Suite("Analytics consent and delivery transitions")
-struct AnalyticsConsentTests {
-    @Test("Flushing before start never creates an identity or a queue")
-    func flushBeforeStart() async {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let sink = AnalyticsSink(store: root.appendingPathComponent("pending.json"),
-                                 transport: { _ in .all }, switchIsOn: { true },
-                                 identity: { Issue.record("Identity requested before start"); return ("test", true) },
-                                 schedulesSends: false)
-        await sink.flush()
-        #expect(sink.bufferedCount == 0)
-        #expect(!FileManager.default.fileExists(atPath: root.path))
-    }
-    @Test("HTTP rejection retains the batch even when the body claims success")
-    func retryableResponses() {
-        let receipt = Data(#"{"size":2,"processed":2,"errors":0,"details":[],"cache":"test-receipt"}"#.utf8)
-        for status in [400, 401, 403, 408, 413, 429, 500, 503] {
-            guard case .retry = AnalyticsSink.deliveryResponse(status: status, data: receipt, sentCount: 2) else {
-                Issue.record("HTTP \(status) must not retire analytics")
-                continue
-            }
-        }
-    }
+@Suite("Product analytics disabled", .serialized)
+struct DisabledAnalyticsTests {
+    @Test("Legacy config cannot enable collection or network requests", .freshHome,
+          arguments: ["{}", #"{"analytics":true}"#, #"{"analytics":false}"#,
+                      #"{"analytics":"yes"}"#, #"{"analytics":true"#])
+    func lifecycleDoesNothing(config: String) throws {
+        try Home.current.writeConfig(text: config)
+        let before = Home.current.configText
+        let identity = Home.current.configDirectory.appendingPathComponent("analytics.json")
+        let pending = Home.current.configDirectory.appendingPathComponent("analytics-pending.json")
+        // A real legacy queue must not be replayed, rewritten, or deleted.
+        let oldQueue = try JSONSerialization.data(withJSONObject: ["pending": [[
+            "queue_id": "legacy-event", "type": "event", "payload": [
+                "id": "legacy-installation", "website": "legacy-site", "hostname": "legacy.invalid",
+                "name": "recording_started", "timestamp": Date().timeIntervalSince1970,
+                "data": ["trigger": "manual"],
+            ],
+        ]]])
+        try oldQueue.write(to: pending)
+        let previousCalls = DisabledAnalyticsHTTP.calls.count
+        URLProtocol.registerClass(DisabledAnalyticsHTTP.self)
+        defer { URLProtocol.unregisterClass(DisabledAnalyticsHTTP.self) }
 
-    @Test("An opted-out launch removes events left by an earlier process")
-    func optedOutLaunchClearsDisk() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let store = root.appendingPathComponent("pending.json")
-        try Data("previous backlog".utf8).write(to: store)
-        let sink = sink(store, Switch(false))
-        sink.start(surface: .app)
-        #expect(sink.bufferedCount == 0)
-        #expect(!FileManager.default.fileExists(atPath: store.path))
-    }
-    private final class Switch: @unchecked Sendable {
-        private let lock = NSLock()
-        private var value: Bool
-        init(_ value: Bool) { self.value = value }
-        func get() -> Bool { lock.withLock { value } }
-        func set(_ value: Bool) { lock.withLock { self.value = value } }
+        Analytics.start(surface: .app)
+        Analytics.start(surface: .cli)
+        Analytics.track(.recordingStarted, [.trigger: .text("manual")])
+        Analytics.track(.recordingFinished, [.durationBucket: .text("5_15m")])
+        Analytics.settingChanged(path: ["user_name"], value: "private name")
+        Analytics.flushOnExit()
+        var status = try AnalyticsCommand.parse([])
+        try status.run()
+        status = try AnalyticsCommand.parse(["off"])
+        try status.run()
+        status = try AnalyticsCommand.parse(["on"])
+        #expect(throws: ValidationError.self) { try status.run() }
+
+        #expect(!Analytics.isEnabled)
+        #expect(DisabledAnalyticsHTTP.calls.count == previousCalls)
+        #expect(!FileManager.default.fileExists(atPath: identity.path))
+        #expect(try Data(contentsOf: pending) == oldQueue)
+        #expect(Home.current.configText == before)
     }
 
-    private actor Delivery {
-        private var firstReply: CheckedContinuation<Bool, Never>?
-        private var started: CheckedContinuation<Void, Never>?
-        private(set) var bodies: [Data] = []
-
-        func send(_ body: Data) async -> Bool {
-            bodies.append(body)
-            guard bodies.count == 1 else { return true }
-            return await withCheckedContinuation { reply in
-                firstReply = reply
-                started?.resume()
-                started = nil
-            }
-        }
-
-        func waitForFirstSend() async {
-            if firstReply != nil { return }
-            await withCheckedContinuation { started = $0 }
-        }
-
-        func deliverFirst() {
-            firstReply?.resume(returning: true)
-            firstReply = nil
-        }
+    @Test("A fresh launch and CLI create no analytics state", .freshHome)
+    func freshLaunchCreatesNothing() throws {
+        Analytics.start(surface: .app)
+        Analytics.track(.recordingStarted)
+        Analytics.flushOnExit()
+        var command = try AnalyticsCommand.parse([])
+        try command.run()
+        command = try AnalyticsCommand.parse(["on"])
+        #expect(throws: ValidationError.self) { try command.run() }
+        #expect(!FileManager.default.fileExists(atPath: Home.current.configDirectory.path))
     }
+}
 
-    private actor Collector {
-        private(set) var bodies: [Data] = []
-        func send(_ body: Data) -> Bool { bodies.append(body); return true }
+/// Intercepts the inherited telemetry destination, never sends a real request.
+private final class DisabledAnalyticsHTTP: URLProtocol, @unchecked Sendable {
+    static let calls = DisabledTransportSpy()
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "stats.amanu.me"
     }
-
-    @Test("Free text cannot escape through engine, backend or recovery trigger properties")
-    func arbitraryConfigurationStaysLocal() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let collector = Collector()
-        let sink = sink(root.appendingPathComponent("pending.json"), Switch(true),
-                        transport: { await collector.send($0) ? .all : .retry })
-        sink.start(surface: .app)
-        sink.record(.transcriptFailed, [.engine: .text("private-engine-name"),
-                                      .backend: .text("private-server-name"),
-                                      .trigger: .text("private-meeting-name")])
-        await sink.flush()
-        let bodies = await collector.bodies
-        #expect(bodies.count == 1)
-        let text = String(decoding: try #require(bodies.first), as: UTF8.self)
-        #expect(!text.contains("private-"))
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.calls.note()
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
     }
+    override func stopLoading() {}
+}
 
-    private func sink(_ store: URL, _ toggle: Switch,
-                      transport: @escaping AnalyticsSink.Transport = { _ in .retry }) -> AnalyticsSink {
-        AnalyticsSink(store: store, transport: transport, switchIsOn: { toggle.get() },
-                      identity: { ("consent-test", false) }, appVersion: { nil },
-                      markVersionSeen: { _ in false }, schedulesSends: false)
-    }
-
-    @Test("Enabling analytics after an opted-out launch starts collecting")
-    func enableAfterOptedOutLaunch() {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let toggle = Switch(false)
-        let sink = sink(root.appendingPathComponent("pending.json"), toggle)
-        sink.start(surface: .app)
-        #expect(sink.bufferedCount == 0)
-
-        toggle.set(true)
-        NotificationCenter.default.post(name: Config.didChange, object: nil)
-        sink.record(.recordingStarted, [:])
-
-        #expect(sink.bufferedCount == 1)
-    }
-
-    @Test("A config change outside this process is respected before collecting or sending")
-    func externalOptOut() async {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let toggle = Switch(true)
-        let sink = sink(root.appendingPathComponent("pending.json"), toggle)
-        sink.start(surface: .app)
-        sink.record(.recordingStarted, [:])
-        #expect(sink.bufferedCount == 1)
-
-        // Another process can update the file without posting our local notification.
-        toggle.set(false)
-        sink.record(.recordingFinished, [:])
-        await sink.flush()
-
-        #expect(sink.bufferedCount == 0)
-        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("pending.json").path))
-    }
-
-    @Test("A full queue cannot acknowledge an event that arrived after the request started")
-    func overflowDuringDelivery() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let delivery = Delivery()
-        let sink = sink(root.appendingPathComponent("pending.json"), Switch(true),
-                        transport: { await delivery.send($0) ? .all : .retry })
-        sink.start(surface: .app)
-        for _ in 0..<AnalyticsSink.capacity { sink.record(.recordingStarted, [:]) }
-        #expect(sink.bufferedCount == AnalyticsSink.capacity)
-        // Start a send without waiting for it: the transport holds the first
-        // request open until the test says otherwise.
-        sink.flush {}
-        await delivery.waitForFirstSend()
-        sink.record(.summaryFinished, [:])
-        #expect(sink.bufferedCount == AnalyticsSink.capacity)
-
-        await delivery.deliverFirst()
-        await sink.flush()
-
-        let bodies = await delivery.bodies
-        let names = try bodies.flatMap { body -> [String] in
-            let batch = try #require(JSONSerialization.jsonObject(with: body) as? [[String: Any]])
-            return batch.compactMap { ($0["payload"] as? [String: Any])?["name"] as? String }
-        }
-        #expect(names.filter { $0 == "summary_finished" }.count == 1)
-    }
+private final class DisabledTransportSpy: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    func note() { lock.lock(); calls += 1; lock.unlock() }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return calls }
 }

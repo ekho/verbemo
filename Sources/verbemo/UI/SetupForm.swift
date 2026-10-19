@@ -227,7 +227,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         return label
     }()
     private let autoRecord = NSSwitch()
-    private let analytics = NSSwitch()
 
     /// What is wrong with the config file, above everything else in the form:
     /// while it stands, the switches below show defaults rather than the
@@ -309,10 +308,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         // without anyone opening this form again.
         form.addArrangedSubview(SetupLayout.box([autoRecordRow()]))
 
-        // Last in the form so the default-on reporting choice is visible on
-        // first setup and remains easy to change when setup is reopened.
-        form.addArrangedSubview(SetupLayout.box([analyticsRow()]))
-
         for view in form.arrangedSubviews {
             view.widthAnchor.constraint(
                 equalTo: form.widthAnchor, constant: -2 * SetupLayout.gutter).isActive = true
@@ -327,7 +322,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             (diarizationSwitch, "transcription.local-diarization"),
             (keepAudio, "files.keep-audio"),
             (summariesOn, "summary.enabled"), (menuBarIcon, "icons.menu-bar"),
-            (dockIcon, "icons.dock"), (autoRecord, "auto-record"), (analytics, "analytics"),
+            (dockIcon, "icons.dock"), (autoRecord, "auto-record"),
         ] {
             toggle.identifier = NSUserInterfaceItemIdentifier(name)
         }
@@ -984,24 +979,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 lines: 2, width: 520))
     }
 
-    private func analyticsRow() -> NSView {
-        analytics.target = self
-        analytics.action = #selector(analyticsToggled)
-        return SetupLayout.row(
-            leading: analytics,
-            title: SetupLayout.title(localised(
-                "Send usage statistics",
-                "Отправлять статистику об использовании")),
-            detail: SetupLayout.detail(
-                localised(
-                    "Feature usage with a random installation identifier; no meeting content.",
-                    "Использование функций со случайным идентификатором установки; без содержимого встреч."),
-                lines: 2, width: 520),
-            trailing: [link(
-                localised("What exactly", "Что именно"),
-                "https://github.com/gsamat/amanu/blob/master/docs/analytics.md")])
-    }
-
     private func link(_ title: String, _ url: String) -> NSButton {
         SetupLayout.link(title, url, target: self, action: #selector(linkClicked(_:)))
     }
@@ -1234,10 +1211,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     @objc private func autoRecordToggled() {
         Config.update(
             path: ["auto_record", "enabled"], value: autoRecord.state == .on ? nil : false)
-    }
-
-    @objc private func analyticsToggled() {
-        Config.update(path: ["analytics"], value: analytics.state == .on ? nil : false)
     }
 
     @objc private func summariesToggled() {
@@ -1937,7 +1910,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         let autoRecordOn = Config.flag(.autoRecordEnabled, in: config)
         autoRecord.state = autoRecordOn ? .on : .off
-        analytics.state = AnalyticsIdentity.isEnabled() ? .on : .off
 
         let problems = showsConfigProblems ? Config.problems() : []
         configProblems.stringValue = problems.map(\.explanation).joined(separator: "\n")

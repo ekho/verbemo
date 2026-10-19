@@ -28,8 +28,6 @@ struct SandboxTests {
         var paths: [String: URL] = [
             "config": Config.path,
             "setup state": SetupState.path,
-            "analytics identity": AnalyticsIdentity.path,
-            "analytics queue": AnalyticsSink.defaultStore,
             "key drawer": Config.keysDir,
             "anthropic key": Config.anthropicKeyPath,
             "default recordings": Config.defaultRoot,

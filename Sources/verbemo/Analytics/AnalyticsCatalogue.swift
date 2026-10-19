@@ -41,89 +41,6 @@ enum AnalyticsCatalogue {
         return reportable
     }
 
-    /// What is attached to the person rather than to the event: the shape of
-    /// the install, resent with every event so that it is never stale.
-    ///
-    /// This is where "does anybody use the live transcript" and "does
-    /// anybody touch diarization" are answered — as a filter over people,
-    /// with no event of their own.
-    enum PersonProperty: String, CaseIterable, Sendable {
-        case analyticsSchemaVersion = "analytics_schema_version"
-        case appVersion = "app_version"
-        case macosVersion = "macos_version"
-        case arch
-        case interfaceLanguage = "interface_language"
-        case liveTranscription = "live_transcription"
-        case speakerNames = "speaker_names"
-        case autoRecord = "auto_record"
-        case transcriptionEngine = "transcription_engine"
-        case transcriptionEnabled = "transcription_enabled"
-        case transcriptionCloudProvider = "transcription_cloud_provider"
-        case summaryBackend = "summary_backend"
-        case summaryEnabled = "summary_enabled"
-        case speakerNamesBackend = "speaker_names_backend"
-        case keepAudio = "keep_audio"
-    }
-
-    static func personProperties() -> [String: Any] {
-        let os = ProcessInfo.processInfo.operatingSystemVersion
-        var values: [PersonProperty: Any] = [
-            .analyticsSchemaVersion: 2,
-            .macosVersion: "\(os.majorVersion).\(os.minorVersion)",
-            .arch: Platform.supportsLocalModels ? "arm64" : "x86_64",
-            .interfaceLanguage: InterfaceLanguage.current.rawValue,
-            .liveTranscription: Config.liveTranscriptionEnabled(),
-            .speakerNames: Config.speakerNames().enabled,
-            .autoRecord: autoRecordShape(Config.autoRecord()),
-            .transcriptionEngine: Config.transcriptionEngine(),
-            .transcriptionEnabled: Config.transcriptionEnabled(),
-            .transcriptionCloudProvider: Config.transcriptionCloudProvider(),
-            .summaryBackend: Config.summary().backend,
-            .summaryEnabled: Config.summary().enabled,
-            // Where naming actually goes, which since it follows the summary
-            // is not what its own key says.
-            .speakerNamesBackend: MeetingEgress.route(for: .speakerNames)?.preference ?? "none",
-            .keepAudio: Config.keepAudio(),
-        ]
-        if let version = appVersion() { values[.appVersion] = version }
-        return sanitized(Dictionary(uniqueKeysWithValues: values.map { ($0.key.rawValue, $0.value) }))
-    }
-
-    /// Config and recovered manifests can be edited by hand. Enforce the
-    /// closed vocabulary at collection and again when replaying older queues.
-    static func sanitized(_ properties: [String: Any]) -> [String: Any] {
-        var result = properties
-        let engines = ["auto"] + Array(Config.localEngines.union(Config.cloudEngines)).sorted()
-        let backends = [
-            "auto", "claude-cli", "codex-cli", "anthropic-api", "openai-api", "ollama", "none",
-        ]
-        let allowed = [
-            "engine": engines, "from_engine": engines, "to_engine": engines,
-            "transcription_engine": engines,
-            "backend": backends, "summary_backend": backends, "speaker_names_backend": backends,
-            "transcription_cloud_provider": ["assemblyai", "openai", "elevenlabs"],
-            "trigger": ["manual", "mic-activity", "calendar"],
-        ]
-        for (key, choices) in allowed where result[key] != nil {
-            if let value = result[key] as? String, choices.contains(value) { continue }
-            result[key] = "custom"
-        }
-        return result
-    }
-
-    /// Automatic recording as one word rather than three switches, because
-    /// the question anybody asks is which of the four shapes an install is
-    /// in, not how it got there.
-    static func autoRecordShape(_ settings: Config.AutoRecordSettings) -> String {
-        guard settings.enabled else { return "off" }
-        switch (settings.micActivity, settings.calendar) {
-        case (true, true): return "mic_and_calendar"
-        case (true, false): return "mic"
-        case (false, true): return "calendar"
-        case (false, false): return "off"
-        }
-    }
-
     /// Model provenance is deliberately narrowed before it reaches the wire.
     /// Transcript files keep the full local string; analytics gets only a
     /// public model we know or `custom`, never a private fine-tune identifier,
@@ -170,9 +87,4 @@ enum AnalyticsCatalogue {
         }
     }
 
-    /// Nil for a bare `swift build`, which has no `Info.plist` for `make app`
-    /// to have stamped a version into.
-    static func appVersion() -> String? {
-        Runtime.appBundle?.infoDictionary?["CFBundleShortVersionString"] as? String
-    }
 }

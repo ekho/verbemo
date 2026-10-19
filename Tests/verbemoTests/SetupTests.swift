@@ -852,19 +852,16 @@ struct SetupTests {
         #expect(cards.contains { $0.id == "claude-cli" })
     }
 
-    @Test("Usage statistics is the last setup choice and starts on")
+    @Test("Setup offers no usage statistics switch")
     @MainActor
-    func analyticsIsLastAndOnByDefault() throws {
+    func analyticsCannotBeEnabledInSetup() {
         let form = SetupForm()
         defer { form.stop() }
-        let last = try #require(form.view.arrangedSubviews.last)
-        let title = last.allDescendants.compactMap { $0 as? NSTextField }
-            .first { $0.stringValue == "Send usage statistics" }
-        #expect(title != nil)
-        #expect(last.allDescendants.contains { $0 is NSSwitch })
-        let setting = try #require(SettingsSchema.sections.flatMap(\.entries)
-            .first { $0.path == ["analytics"] })
-        #expect(setting.defaultValue as? Bool == true)
+        #expect(!form.view.allDescendants.contains { $0.identifier?.rawValue == "analytics" })
+        #expect(!form.view.allDescendants.compactMap { $0 as? NSTextField }
+            .contains { $0.stringValue == "Send usage statistics" })
+        #expect(!SettingsSchema.sections.flatMap(\.entries)
+            .contains { $0.path == ["analytics"] })
     }
 
     /// Setup is a window and also the first tab of Settings, and nothing

@@ -556,16 +556,6 @@ enum SettingsSchema {
                           + "расшифровка и саммари."),
                   .text, describedAs: localised("nothing", "ничего")),
         ]),
-        Section(title: localised("Statistics", "Статистика"), entries: [
-            Entry(["analytics"],
-                  localised(
-                      "Send usage statistics",
-                      "Отправлять статистику об использовании"),
-                  localised(
-                      "Feature usage with a random installation identifier; no meeting content.",
-                      "Использование функций со случайным идентификатором установки; без содержимого встреч."),
-                  .toggle, default: true, askedInSetup: true),
-        ]),
     ] }
 
     /// Every entry, including the Apple Silicon ones on a Mac that does not

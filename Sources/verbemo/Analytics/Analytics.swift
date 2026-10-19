@@ -1,24 +1,9 @@
 import Foundation
 
-/// Everything verbemo reports about how it is used, listed once.
-///
-/// The list is a pair of enumerations rather than a convention about strings,
-/// so "we only send what is written down" is checked by the compiler instead
-/// of by care. `docs/analytics.md` is the same list in prose, and
-/// `AnalyticsCatalogueTests` fails the build when the two drift — which is
-/// what lets the README promise a complete list without hedging.
-///
-/// The design, and the argument for a permanent identifier and for being on
-/// by default, is in `docs/specs/2026-08-22-analytics-design.md`. The short
-/// version: this buys the only view anyone has of what the first run does to
-/// people, and it costs a durable handle on one machine's habits, which is
-/// paid for with full disclosure, a visible switch, no stored addresses, and
-/// a year's retention.
+/// Compatibility API for existing call sites. Product analytics is disabled.
 enum Analytics {
     /// Every event that exists. There is no `track(String)`.
     enum Event: String, CaseIterable, Sendable {
-        /// The first launch on this machine — the run that found no
-        /// identifier file and made one.
         case installed
         case versionSeen = "version_seen"
 
@@ -30,10 +15,6 @@ enum Analytics {
         case systemAudioHeard = "system_audio_heard"
         case systemAudioSilent = "system_audio_silent"
 
-        /// No `first_recording` and no `first_transcript`: a funnel is built
-        /// from the first occurrence of each step per person, and the
-        /// identifier is exactly what makes that possible. This is the whole
-        /// return on the decision — the event list stays short.
         case recordingStarted = "recording_started"
         case recordingStartFailed = "recording_start_failed"
         case recordingFinished = "recording_finished"
@@ -159,12 +140,7 @@ enum Analytics {
         }
     }
 
-    /// Begin reporting. Loads whatever failed to send last time, starts the
-    /// flush timer, and — on a machine that has never run verbemo — sends
-    /// `installed` before anything else can.
-    static func start(surface: Surface) {
-        AnalyticsSink.shared.start(surface: surface)
-    }
+    static func start(surface: Surface) {}
 
     enum Surface: String, Sendable {
         case app
@@ -183,21 +159,10 @@ enum Analytics {
     }
 
     static func track(_ event: Event, _ properties: [Property: Value] = [:]) {
-        AnalyticsSink.shared.record(event, properties)
+        // Intentionally no collection or transport.
     }
 
-    /// A setting a person changed, if it is one of the settings that can be
-    /// reported at all.
-    ///
-    /// Called from `Config.update`, which every write already passes through,
-    /// so a setting added later cannot be quietly left out — or quietly let
-    /// in. Free text never reaches here: `AnalyticsCatalogue.reportableSettings`
-    /// admits toggles and fixed choices only, which is what keeps paths, key
-    /// files, app lists and names out by construction rather than by review.
-    static func settingChanged(path: [String], value: Any?) {
-        guard let change = reportableChange(path: path, value: value) else { return }
-        track(.settingChanged, [.key: .text(change.key), .value: change.value])
-    }
+    static func settingChanged(path: [String], value: Any?) {}
 
     /// The decision on its own, so that "a path can never travel" is a thing
     /// a test can assert rather than a thing a reviewer has to notice.
@@ -222,16 +187,7 @@ enum Analytics {
         }
     }
 
-    /// Send what is buffered, waiting only briefly. Called on the way out.
-    ///
-    /// The wait is capped because quitting is the user's instruction and
-    /// analytics does not get to argue with it; whatever does not go now is
-    /// on disk and goes at the next launch.
-    static func flushOnExit() {
-        AnalyticsSink.shared.flush(waitingUpTo: 1.5)
-    }
+    static func flushOnExit() {}
 
-    static var isEnabled: Bool { AnalyticsIdentity.isEnabled() }
-
-    static var identifier: String { AnalyticsIdentity.identifier() }
+    static var isEnabled: Bool { false }
 }

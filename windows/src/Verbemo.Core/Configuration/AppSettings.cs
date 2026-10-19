@@ -27,7 +27,8 @@ public sealed class AppSettings
     public bool KeepAudio { get; set; }
 
     [JsonPropertyName("analytics")]
-    public bool Analytics { get; set; } = true;
+    // Accept the legacy field without allowing it to enable collection.
+    public bool Analytics { get => false; set { } }
 
     [JsonPropertyName("interface_language")]
     public string InterfaceLanguage { get; set; } = "auto";

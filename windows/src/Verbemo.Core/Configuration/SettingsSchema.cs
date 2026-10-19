@@ -282,14 +282,6 @@ public static class SettingsSchema
                 SettingKind.Command, DescribedAs: T("nothing", "ничего")),
         ]),
 
-        new(T("Statistics", "Статистика"),
-        [
-            new("analytics",
-                T("Send usage statistics", "Отправлять статистику об использовании"),
-                T("Feature usage with a random installation identifier; no meeting content.",
-                  "Использование функций со случайным идентификатором установки; без содержимого встреч."),
-                SettingKind.Toggle, AskedInSetup: true),
-        ]),
     ];
 
     /// <summary><see cref="Sections"/> minus what setup already asks; an emptied section goes with it.</summary>

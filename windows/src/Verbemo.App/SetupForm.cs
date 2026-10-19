@@ -90,7 +90,6 @@ internal sealed class SetupForm
     private readonly TextBlock noIconsNote = Ui.Status();
     private readonly CheckBox autoRecord = Ui.Switch(T("Record meetings automatically", "Записывать встречи автоматически"));
     private readonly TextBlock autoRecordDetail = Ui.Detail("");
-    private readonly CheckBox analytics = Ui.Switch(T("Send usage statistics", "Отправлять статистику об использовании"));
 
     public StackPanel View { get; } = new() { Margin = new Thickness(Ui.Gutter, 20, Ui.Gutter, 8) };
 
@@ -161,13 +160,6 @@ internal sealed class SetupForm
             autoRecordDetail));
         autoBox.Margin = new Thickness(0, 0, 0, Ui.SectionGap);
         View.Children.Add(autoBox);
-
-        var analyticsBox = Ui.Box(Ui.Row(analytics,
-            Ui.Title(T("Send usage statistics", "Отправлять статистику об использовании")),
-            Ui.Detail(T("Feature usage with a random installation identifier; no meeting content.",
-                "Использование функций со случайным идентификатором установки; без содержимого встреч.")),
-            Ui.Link(T("What exactly", "Что именно"), "https://github.com/gsamat/amanu/blob/master/docs/analytics.md")));
-        View.Children.Add(analyticsBox);
 
         Wire();
         runtime.SettingsChanged += OnSettingsChanged;
@@ -380,7 +372,6 @@ internal sealed class SetupForm
         tray.Click += (_, _) => Change(settings => settings.TrayIcon = tray.IsChecked == true);
         taskbar.Click += (_, _) => Change(settings => settings.TaskbarIcon = taskbar.IsChecked == true);
         autoRecord.Click += (_, _) => Change(settings => settings.AutoRecord.Enabled = autoRecord.IsChecked == true);
-        analytics.Click += (_, _) => Change(settings => settings.Analytics = analytics.IsChecked == true);
     }
 
     private string SelectedKeyBackend => keyProvider.SelectedIndex == 1 ? "anthropic-api" : "openai-api";
@@ -768,7 +759,6 @@ internal sealed class SetupForm
             autoRecord.IsChecked = settings.AutoRecord.Enabled;
             autoRecordDetail.Text = T($"And stop when it lets go. A call shorter than {settings.AutoRecord.MinimumDurationSeconds} seconds is thrown away.",
                 $"Звонки короче {settings.AutoRecord.MinimumDurationSeconds} секунд игнорируются.");
-            analytics.IsChecked = settings.Analytics;
         }
         finally
         {
