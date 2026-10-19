@@ -1,36 +1,34 @@
 # The live pass
 
-What to do to a running copy of amanu before believing a release. The setup
+What to do to a running copy of verbemo before believing a release. The setup
 window has its own page — `setup-window-manual-checklist.md` — and this one is
 everything that page cannot reach: a real recording of a real call, the models
 arriving and leaving, the first run, and the command line.
 
-Written after three releases in one night, every one of which shipped with
-"nobody has clicked this" in its notes. Of the bugs those releases fixed, most
-were found by opening a window and looking; none of the ones found that way had
-a failing test first. That is the argument for this page.
+The [original live pass](../history/amanu-live-pass.md) preserves imported
+release history. This procedure requires new evidence from the exact Verbemo build.
 
 ## Before you start
 
 **Check that nothing is being recorded**, like this:
 
 ```sh
-amanu doctor | head -2
-ls ~/Recordings/*/.recording.json
+verbemo doctor | head -2
+ls ~/"Verbemo Recordings"/*/.recording.json
 ```
 
 A session being recorded holds that file, with the owning pid and the moment it
 started; it is written at the start and removed at the end. Nothing printed
 means nothing is recording.
 
-`amanu doctor` reads the same file and says so in its first line — `! recording:
+`verbemo doctor` reads the same file and says so in its first line — `! recording:
 in progress — 2026.08.20-1431 Standup (4:12)`, or `✓ recording: ok` when there
 is nothing. A manifest whose owning process is gone is reported differently
 again, as a crashed session the next launch will adopt. The `ls` is still worth
 knowing: it works when the copy you are about to replace is not the one on your
 PATH.
 
-Do **not** use `amanu sessions` for this. It does not list a recording in
+Do **not** use `verbemo sessions` for this. It does not list a recording in
 progress at all — `SessionInventory` filters on `meta.json`, which is only
 written when the recording stops — so it answers "nothing is running" in
 exactly the case where something is. `.issues/005` says it shows up as a
@@ -45,15 +43,12 @@ The cases below are grouped so that one person, or one agent, can hold the
 application exclusively for a group and hand it on. Two things driving the same
 windows at once produces results that mean nothing.
 
-Install from the published disk image, not from `.build` — the thing under test
-is what a stranger downloads:
-
-```sh
-hdiutil attach -nobrowse amanu-vX.Y.Z-macos-universal.dmg
-rm -rf /Applications/Amanu.app && cp -R "/Volumes/amanu X.Y.Z/Amanu.app" /Applications/
-hdiutil detach "/Volumes/amanu X.Y.Z"
-spctl --assess -v /Applications/Amanu.app     # accepted, Notarized Developer ID
-```
+For local development acceptance, use the exact ad-hoc bundle and record its
+hash and source commit. Do not treat Gatekeeper rejection of an ad-hoc build as
+failed Developer ID notarization. After a real signed public release exists,
+repeat this pass with the downloaded `Verbemo-<VERSION>-macos-universal.dmg` and
+verify its checksum, Developer ID identity, staple and Gatekeeper assessment.
+Quit and confirm there is no active recording before replacing a bundle.
 
 Note the build number (`CFBundleVersion`) and put it in the report. A result
 against an unnamed build is a result about nothing.
@@ -64,9 +59,9 @@ against an unnamed build is a result about nothing.
 
 Nothing here writes anything you would miss, so it goes first.
 
-**A1 — Setup opens and is legible.** `amanu setup` in a terminal (the only door
+**A1 — Setup opens and is legible.** `verbemo setup` in a terminal (the only door
 once the first run is done). Confirm the window opens **in the application**,
-not as a process in the terminal — the title bar belongs to Amanu and the icon
+not as a process in the terminal — the title bar belongs to Verbemo and the icon
 bounces in the Dock. Read every row. Nothing truncated with an ellipsis,
 nothing overflowing its box, no text sitting on a separator.
 
@@ -77,7 +72,7 @@ defect that shipped once already, when a copy run from a terminal read the
 terminal's permissions.
 
 **A3 — The footer says what is left.** With everything granted it reads
-"Everything amanu needs is granted". Take one grant away in System Settings,
+"Everything verbemo needs is granted". Take one grant away in System Settings,
 come back to the window, confirm the sentence names what is missing and the
 button offers to fix it. Put it back.
 
@@ -91,7 +86,7 @@ the Advanced tab. Then the live-transcript switch in the status window against
 both forms.
 
 **A6 — Redrawing writes nothing.** Note the modification time of
-`~/.config/amanu/config.json`. Open both windows, switch tabs back and forth,
+`~/.config/verbemo/config.json`. Open both windows, switch tabs back and forth,
 scroll, close and reopen. The modification time must not change. Two separate
 paths used to rewrite the file just for being looked at.
 
@@ -175,7 +170,7 @@ transcript section collapses and the window returns to its previous height. A
 link in the section header brings the text back, and hides it again.
 
 **C6 — The work finishes.** The session transcribes and a summary is written.
-Watch `amanu sessions` go from `transcript: pending` to `done`, and read what
+Watch `verbemo sessions` go from `transcript: pending` to `done`, and read what
 lands in `~/Recordings/<session>/`: `transcript.md`, `summary.md`, and the
 audio only if **Keep the audio** is on.
 
@@ -204,7 +199,7 @@ ever be short enough.
 **C10 — Quitting mid-recording asks first.** Start another call, and with the
 recording running press ⌘Q. An alert must name how long it has been recording
 and offer **Quit and save the recording** / **Keep recording**. Choose *Keep
-recording*: amanu stays up and the menu bar still says it is recording. Press
+recording*: verbemo stays up and the menu bar still says it is recording. Press
 ⌘Q again and quit for real: the session is in the recordings folder, whole,
 with `"stop_reason": "app-quit"` in its `meta.json`. Read the alert in Russian
 too. It is the one thing on this page that exists because of a specific
@@ -214,28 +209,28 @@ morning — a quit during a call, and three minutes of it gone (`.issues/005`).
 
 ## D. The first run, and the command line
 
-**D1 — `amanu setup` on a Mac with nothing running.** Quit the application
+**D1 — `verbemo setup` on a Mac with nothing running.** Quit the application
 first. The command must open the application rather than becoming a process in
 your terminal, and it must not fail. Both halves were broken until recently:
 the branch that starts the application itself had never worked, and once it did
 it read the terminal's permissions instead of its own.
 
 **D2 — The menu item comes and goes.** With setup complete, **Setup…** is in
-neither menu. `amanu setup` puts it back — it clears the completed mark — and
+neither menu. `verbemo setup` puts it back — it clears the completed mark — and
 pressing **Done** takes it away again without a restart. Settings never
 disappears.
 
-**D3 — `amanu doctor` on both architectures.** Run it, and run it again under
+**D3 — `verbemo doctor` on both architectures.** Run it, and run it again under
 Rosetta:
 
 ```sh
-arch -x86_64 /Applications/Amanu.app/Contents/MacOS/Amanu doctor
+arch -x86_64 /Applications/Verbemo.app/Contents/MacOS/Verbemo doctor
 ```
 
 The Intel slice should report the cloud engine, because the local models are
 refused there. Both should agree with what the windows say. The first line is
 about a recording in progress and reads `✓ recording: ok` when there is none;
-`amanu setup` prints the same line, and only when it is not ok.
+`verbemo setup` prints the same line, and only when it is not ok.
 
 **D4 — The command line is English.** Deliberately: it ends up in bug reports
 and half of it is the names of things. Confirm it stays English even with the

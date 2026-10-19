@@ -12,8 +12,8 @@ CHECKER = ROOT / "scripts" / "verify-macos-compatibility.py"
 class MacOSCompatibilityTests(unittest.TestCase):
     def test_accepts_an_app_whose_bundle_and_binary_run_on_the_declared_minimum(self):
         with tempfile.TemporaryDirectory() as temporary:
-            app = Path(temporary) / "Amanu.app"
-            executable = app / "Contents" / "MacOS" / "Amanu"
+            app = Path(temporary) / "Verbemo.app"
+            executable = app / "Contents" / "MacOS" / "Verbemo"
             executable.parent.mkdir(parents=True)
             with (app / "Contents" / "Info.plist").open("wb") as destination:
                 plistlib.dump({"LSMinimumSystemVersion": "14.2"}, destination)
@@ -35,12 +35,12 @@ class MacOSCompatibilityTests(unittest.TestCase):
 
     def test_rejects_a_bundle_without_its_declared_executable(self):
         with tempfile.TemporaryDirectory() as temporary:
-            app = Path(temporary) / "Amanu.app"
+            app = Path(temporary) / "Verbemo.app"
             contents = app / "Contents"
             contents.mkdir(parents=True)
             with (contents / "Info.plist").open("wb") as destination:
                 plistlib.dump({
-                    "CFBundleExecutable": "Amanu",
+                    "CFBundleExecutable": "Verbemo",
                     "LSMinimumSystemVersion": "14.2",
                 }, destination)
 
@@ -54,14 +54,14 @@ class MacOSCompatibilityTests(unittest.TestCase):
 
     def test_rejects_a_nested_binary_that_requires_a_newer_macos(self):
         with tempfile.TemporaryDirectory() as temporary:
-            app = Path(temporary) / "Amanu.app"
-            executable = app / "Contents" / "MacOS" / "Amanu"
+            app = Path(temporary) / "Verbemo.app"
+            executable = app / "Contents" / "MacOS" / "Verbemo"
             framework = app / "Contents" / "Frameworks" / "Newer.dylib"
             executable.parent.mkdir(parents=True)
             framework.parent.mkdir(parents=True)
             with (app / "Contents" / "Info.plist").open("wb") as destination:
                 plistlib.dump({
-                    "CFBundleExecutable": "Amanu",
+                    "CFBundleExecutable": "Verbemo",
                     "LSMinimumSystemVersion": "14.2",
                 }, destination)
 
@@ -86,14 +86,14 @@ class MacOSCompatibilityTests(unittest.TestCase):
 
     def test_rejects_a_nested_bundle_that_advertises_a_newer_macos(self):
         with tempfile.TemporaryDirectory() as temporary:
-            app = Path(temporary) / "Amanu.app"
-            executable = app / "Contents" / "MacOS" / "Amanu"
+            app = Path(temporary) / "Verbemo.app"
+            executable = app / "Contents" / "MacOS" / "Verbemo"
             nested_info = app / "Contents" / "Frameworks" / "Updater.app" / "Contents" / "Info.plist"
             executable.parent.mkdir(parents=True)
             nested_info.parent.mkdir(parents=True)
             with (app / "Contents" / "Info.plist").open("wb") as destination:
                 plistlib.dump({
-                    "CFBundleExecutable": "Amanu",
+                    "CFBundleExecutable": "Verbemo",
                     "LSMinimumSystemVersion": "14.2",
                 }, destination)
             with nested_info.open("wb") as destination:

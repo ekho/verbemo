@@ -4,23 +4,19 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Amanu — automatic recording and transcription for online meetings</title>
+    <title>Verbemo — automatic recording and transcription for online meetings</title>
     <meta name="description"
-        content="Amanu records and transcribes online meetings automatically: Zoom, Google Meet, Telegram, and WhatsApp. It identifies speakers, writes high-quality summaries, and can run locally without internet access. Free, open source, and available for macOS and Windows." />
+        content="Verbemo records and transcribes online meetings automatically: Zoom, Google Meet, Telegram, and WhatsApp. It identifies speakers, writes high-quality summaries, and can run locally without internet access. Free, open source, and available for macOS and Windows." />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Amanu" />
-    <meta property="og:title" content="Amanu — automatic meeting recording and transcription" />
+    <meta property="og:site_name" content="Verbemo" />
+    <meta property="og:title" content="Verbemo — automatic meeting recording and transcription" />
     <meta property="og:description" content="Records and transcribes online meetings automatically. Free, open source, and available for macOS and Windows." />
-    <meta property="og:url" content="https://amanu.me/" />
-    <meta property="og:image" content="https://amanu.me/assets/social-preview.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Amanu — automatic meeting recording and transcription" />
+    <meta name="twitter:title" content="Verbemo — automatic meeting recording and transcription" />
     <meta name="twitter:description" content="Records and transcribes online meetings automatically. Free and open source. macOS and Windows." />
-    <meta name="twitter:image" content="https://amanu.me/assets/social-preview.png" />
-    <link rel="canonical" href="https://amanu.me/" />
-    <link rel="alternate" hreflang="en" href="https://amanu.me/" />
-    <link rel="alternate" hreflang="ru" href="https://amanu.me/ru/" />
-    <link rel="alternate" hreflang="x-default" href="https://amanu.me/" />
+    <link rel="alternate" hreflang="en" href="/" />
+    <link rel="alternate" hreflang="ru" href="/ru/" />
+    <link rel="alternate" hreflang="x-default" href="/" />
     <link rel="stylesheet" href="/style.css" />
     <link rel="icon" href="/assets/icon-180.png" />
     <link rel="apple-touch-icon" href="/assets/icon-180.png" />
@@ -28,10 +24,10 @@
 
 <body>
     <header class="masthead">
-        <a class="brand" href="#top" aria-label="Amanu — back to the top">
+        <a class="brand" href="#top" aria-label="Verbemo — back to the top">
             <img src="/assets/icon.png" width="40" height="40"
-                alt="Amanu icon: a cream quill on a dark graphite background." />
-            <span class="brand-name">Amanu</span>
+                alt="Verbemo icon: a cream quill on a dark graphite background." />
+            <span class="brand-name">Verbemo</span>
         </a>
         <p class="rec-badge" aria-hidden="true">
             <span class="rec-dot"></span>
@@ -44,29 +40,27 @@
         <section class="hero">
             <div class="hero-text">
                 <h1>Records and transcribes online meetings. <em class="self">Automatically.</em></h1>
-                <p class="lede">Amanu works with any call — Zoom, Google Meet, Telegram,
+                <p class="lede">Verbemo works with any call — Zoom, Google Meet, Telegram,
                     WhatsApp. It starts and stops recording on its own, identifies speakers,
                     and can write a high-quality summary after the meeting.</p>
                 <p class="cta-row">
-                    <a class="btn" href="https://github.com/gsamat/amanu/releases/download/v0.6.5/amanu-v0.6.5-macos-universal.dmg">
+                    <a class="btn" data-download="macOS" href="https://github.com/ekho/verbemo/releases">
                         <svg class="platform-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M17.1 12.4c0-2 1.6-3 1.7-3.1-1-1.5-2.5-1.7-3-1.7-1.3-.1-2.6.8-3.3.8-.7 0-1.8-.8-2.9-.8-1.5 0-2.9.9-3.7 2.2-1.6 2.7-.4 6.7 1.2 8.9.8 1.1 1.6 2.3 2.8 2.2 1.1 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-1.1 2.7-2.2.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.8-1.1-2.8-3.6ZM14.8 6.2c.6-.8 1.1-1.9 1-3-.9.1-2 .6-2.7 1.4-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.5 2.7-1.3Z"/></svg>
                         Download for macOS
                     </a>
-                    <a class="btn" href="https://github.com/gsamat/amanu/releases/download/windows-v0.6.6/Amanu-0.6.6-Setup.exe">
+                    <a class="btn" data-download="Windows" href="https://github.com/ekho/verbemo/releases">
                         <svg class="platform-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M2 3h9v9H2zm11 0h9v9h-9zM2 14h9v9H2zm11 0h9v9h-9z"/></svg>
                         Download for Windows
                     </a>
                 </p>
-                <p class="fineprint">Free · <a href="https://github.com/gsamat/amanu">open source</a>
-                    · Signed by Apple and Microsoft</p>
+                <p class="fineprint">Free · <a href="https://github.com/ekho/verbemo">open source</a>
+                    · Installer release preparation in progress</p>
             </div>
             <figure class="shot shot-status">
-                <picture>
-                    <source srcset="/assets/shots/en/status-recording-dark.png?v=36e030d5a322" data-windows-srcset="/assets/shots/windows/en/status-recording-dark.png?v=4f0708544b83" media="(prefers-color-scheme: dark)" />
-                    <img src="/assets/shots/en/status-recording-light.png?v=8c372c3274ad" data-windows-src="/assets/shots/windows/en/status-recording-light.png?v=774832c3a9a5" data-windows-width="345" data-windows-height="588" data-windows-alt="Amanu for Windows recording a meeting, with a timer, stop and pause controls, automatic recording, and a live transcript." width="320" height="428"
-                        alt="Amanu recording window with a red status dot, timer, stop and pause controls, automatic meeting recording enabled, and a live speaker-by-speaker transcript." />
-                </picture>
-                <figcaption>The meeting is underway — Amanu is recording.</figcaption>
+                <img src="/assets/screenshots/macos/0.1.0-476/main-en.jpg"
+                    data-verified-screenshot="macos" width="640" height="468"
+                    alt="Verbemo main window on macOS, recording stopped and automatic recording off." />
+                <figcaption>Verbemo on macOS, ready to record.</figcaption>
             </figure>
         </section>
 
@@ -105,26 +99,19 @@
             </div>
         </section>
 
-        <figure class="shot shot-wide">
-            <picture>
-                <source srcset="/assets/shots/en/recordings-dark.png?v=5653cdc661de" data-windows-srcset="/assets/shots/windows/en/recordings-dark.png?v=0048a3912ac5" media="(prefers-color-scheme: dark)" />
-                <img src="/assets/shots/en/recordings-light.png?v=0174ba514607" data-windows-src="/assets/shots/windows/en/recordings-light.png?v=385517a57600" data-windows-width="1085" data-windows-height="635" data-windows-alt="Amanu for Windows meeting library, with processing status, transcript, participants and summary tabs, and a formatted meeting transcript." width="860" height="592"
-                    alt="Amanu for macOS meeting library, with processing status, summary, transcript and speakers tabs, and an open demonstration transcript." />
-            </picture>
-            <figcaption>Every meeting: transcript, speaker names, and summary.</figcaption>
-        </figure>
+
 
         <section class="entry">
             <p class="tc tc-blank" aria-hidden="true">&nbsp;</p>
             <div class="entry-body split">
                 <div>
                     <h2>Everything can run locally</h2>
-                    <p>Amanu can record, transcribe, and write summaries without internet access,
+                    <p>Verbemo can record, transcribe, and write summaries without internet access,
                         right on your computer.</p>
                 </div>
                 <div>
                     <h2>Or use more powerful models</h2>
-                    <p>If you prefer, connect powerful paid models: Amanu can use your subscriptions
+                    <p>If you prefer, connect powerful paid models: Verbemo can use your subscriptions
                         and API keys.</p>
                 </div>
             </div>
@@ -134,15 +121,14 @@
             <p class="tc tc-blank" aria-hidden="true">&nbsp;</p>
             <div class="entry-body">
                 <h2>Free and open source</h2>
-                <p>Amanu is completely free: its <a href="https://github.com/gsamat/amanu">source code
-                        is open</a>. The apps are signed by Apple and Microsoft. Installation is simple —
-                    download it and open it.</p>
+                <p>Verbemo is completely free: its <a href="https://github.com/ekho/verbemo">source code
+                        is open</a>. Check Releases for installer availability. Local development builds are available from source.</p>
                 <p class="cta-row">
-                    <a class="btn" href="https://github.com/gsamat/amanu/releases/download/v0.6.5/amanu-v0.6.5-macos-universal.dmg">
+                    <a class="btn" data-download="macOS" href="https://github.com/ekho/verbemo/releases">
                         <svg class="platform-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M17.1 12.4c0-2 1.6-3 1.7-3.1-1-1.5-2.5-1.7-3-1.7-1.3-.1-2.6.8-3.3.8-.7 0-1.8-.8-2.9-.8-1.5 0-2.9.9-3.7 2.2-1.6 2.7-.4 6.7 1.2 8.9.8 1.1 1.6 2.3 2.8 2.2 1.1 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-1.1 2.7-2.2.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.8-1.1-2.8-3.6ZM14.8 6.2c.6-.8 1.1-1.9 1-3-.9.1-2 .6-2.7 1.4-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.5 2.7-1.3Z"/></svg>
                         Download for macOS
                     </a>
-                    <a class="btn" href="https://github.com/gsamat/amanu/releases/download/windows-v0.6.6/Amanu-0.6.6-Setup.exe">
+                    <a class="btn" data-download="Windows" href="https://github.com/ekho/verbemo/releases">
                         <svg class="platform-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M2 3h9v9H2zm11 0h9v9h-9zM2 14h9v9H2zm11 0h9v9h-9z"/></svg>
                         Download for Windows
                     </a>
@@ -154,9 +140,9 @@
     </main>
 
     <footer>
-        <p><a href="https://github.com/gsamat/amanu">Source code</a> ·
+        <p><a href="https://github.com/ekho/verbemo">Source code</a> ·
             <a href="/privacy/">Privacy</a> ·
-            <a href="https://samat.me/">Samat Galimov</a> ·
+            <a href="https://github.com/ekho/verbemo/issues">Support</a> ·
             <a href="/ru/" lang="ru" hreflang="ru">Русский</a></p>
     </footer>
     <script src="/script.js" defer></script>

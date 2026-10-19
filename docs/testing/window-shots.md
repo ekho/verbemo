@@ -1,6 +1,6 @@
 # Seeing the windows
 
-`Tests/amanuTests/WindowShots.swift` renders every window amanu has to PNG
+`Tests/verbemoTests/WindowShots.swift` renders every window verbemo has to PNG
 files, and writes a listing of where every view in the setup window ended up.
 It asserts nothing. It exists because the defects these
 windows produce are not the kind a test catches: a label whose descenders sit
@@ -9,7 +9,7 @@ left, two rows nobody thought to compare that came out different heights. Each
 of those was found by rendering the window and looking at it.
 
 ```sh
-mkdir -p /tmp/shots && AMANU_SHOTS=/tmp/shots swift test --filter 'Window(Shots|Gallery)'
+mkdir -p /tmp/shots && VERBEMO_SHOTS=/tmp/shots swift test --filter 'Window(Shots|Gallery)'
 ```
 
 Two suites live in that file. `WindowShots` is the diagnostic one — the setup
@@ -23,17 +23,17 @@ directory.
 The directory has to exist: the suite writes into it rather than creating it,
 so a first run without the `mkdir` fails on the first PNG.
 
-`AMANU_SHOTS_LANGUAGE=ru` builds the windows in Russian instead. Everything
+`VERBEMO_SHOTS_LANGUAGE=ru` builds the windows in Russian instead. Everything
 else about the run is the same, filenames included, so give it a directory of
 its own:
 
 ```sh
 mkdir -p /tmp/shots-en /tmp/shots-ru
-AMANU_SHOTS=/tmp/shots-en swift test --filter 'Window(Shots|Gallery)'
-AMANU_SHOTS_LANGUAGE=ru AMANU_SHOTS=/tmp/shots-ru swift test --filter 'Window(Shots|Gallery)'
+VERBEMO_SHOTS=/tmp/shots-en swift test --filter 'Window(Shots|Gallery)'
+VERBEMO_SHOTS_LANGUAGE=ru VERBEMO_SHOTS=/tmp/shots-ru swift test --filter 'Window(Shots|Gallery)'
 ```
 
-`AMANU_SHOTS` both switches the suite on and says where to write; without it
+`VERBEMO_SHOTS` both switches the suite on and says where to write; without it
 `swift test` skips the whole thing, which is why it can live in the test target
 without lengthening the suite. It is in the test target because that is the only
 place that can see `SetupWindow` and `SettingsWindow`: they are internal, and
@@ -145,3 +145,7 @@ and it would disagree with the next machine for reasons nobody could act on.
 The tool is here; its output is not. If these ever run unattended, the
 comparison to make is two runs on the same machine — before a change and after
 it — never a run against a file in git.
+
+Website screenshots must come from the final Task9 bundle and actual Windows
+app, with source/build/language provenance. Imported shots and preliminary
+About captures are historical evidence only; do not relabel them as Verbemo.

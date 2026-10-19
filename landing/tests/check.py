@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automated checks for the bilingual Amanu landing page.
+"""Automated checks for the bilingual Verbemo landing page.
 
 Observable structure and behaviour only: English is the default, Russian lives
 at /ru/, language metadata and switching are reciprocal, releases are real,
@@ -7,6 +7,7 @@ resources stay local, and accessibility plus colour/motion preferences hold.
 """
 
 import hashlib
+import json
 import re
 import sys
 from html.parser import HTMLParser
@@ -19,10 +20,7 @@ EN_INDEX = LANDING / "index.html"
 RU_INDEX = LANDING / "ru" / "index.html"
 EN_PRIVACY = LANDING / "privacy" / "index.html"
 RU_PRIVACY = LANDING / "ru" / "privacy" / "index.html"
-NGINX = LANDING / "deploy" / "nginx" / "amanu.conf"
-APPCAST = (LANDING / "appcast.xml").read_text(encoding="utf-8")
-DMG = re.search(r'<enclosure\s+[^>]*url="([^"]+)"', APPCAST, re.S).group(1)
-
+SCREENSHOTS = LANDING / "assets/screenshots/macos/0.1.0-476"
 failures = []
 
 
@@ -143,327 +141,78 @@ def resolves_locally(page_path, url):
     return (page_path.parent / path).resolve().is_file()
 
 
+def valid_download_policy(pages):
+    """Both languages use Releases, or one exact own common-release asset set.
+
+    The updater verifies release evidence before writing; this offline gate
+    checks the resulting public URL policy without making network requests.
+    """
+    releases = "https://github.com/ekho/verbemo/releases"
+    if len(pages) != 2:
+        return False
+    marked_pages = [[anchor for anchor in page.anchors if "data-download" in anchor] for page in pages]
+    if any(len(anchors) != 4 or any(sum(anchor.get("data-download") == platform for anchor in anchors) != 2
+                                  for platform in ("macOS", "Windows")) for anchors in marked_pages):
+        return False
+    first = next(anchor.get("href", "") for anchor in marked_pages[0] if anchor["data-download"] == "macOS")
+    expected = dict.fromkeys(("macOS", "Windows"), releases)
+    if first != releases:
+        component = r"(?:0|[1-9][0-9]*)"
+        version = rf"({component}\.{component}\.{component})"
+        match = re.fullmatch(re.escape(releases) + rf"/download/verbemo-v{version}/Verbemo-\1-macos-universal\.dmg", first)
+        if not match:
+            return False
+        version = match[1]
+        base = f"{releases}/download/verbemo-v{version}/Verbemo-{version}-"
+        expected = {"macOS": base + "macos-universal.dmg", "Windows": base + "windows-x64-Setup.exe"}
+    return all(anchor.get("href") == expected[anchor["data-download"]]
+               for anchors in marked_pages for anchor in anchors)
+
+
 def main():
-    check("английская главная существует", EN_INDEX.is_file())
-    check("русская версия существует в /ru/", RU_INDEX.is_file())
-    check("английская privacy-страница существует", EN_PRIVACY.is_file())
-    check("русская privacy-страница существует", RU_PRIVACY.is_file())
-    if not EN_INDEX.is_file() or not RU_INDEX.is_file():
-        return finish()
-
-    en_html, en = parse_page(EN_INDEX)
-    ru_html, ru = parse_page(RU_INDEX)
-    pages = (("EN", EN_INDEX, en_html, en), ("RU", RU_INDEX, ru_html, ru))
-
-    # Routes, metadata, and reciprocal language navigation.
-    check("lang=en на главной", en.html_lang == "en", f"lang={en.html_lang!r}")
-    check("lang=ru в /ru/", ru.html_lang == "ru", f"lang={ru.html_lang!r}")
-    check("canonical главной", en.canonicals == ["https://amanu.me/"], str(en.canonicals))
-    check("canonical русской версии", ru.canonicals == ["https://amanu.me/ru/"], str(ru.canonicals))
-    expected_alternates = {
-        ("en", "https://amanu.me/"),
-        ("ru", "https://amanu.me/ru/"),
-        ("x-default", "https://amanu.me/"),
-    }
-    for label, _, _, page in pages:
-        check(
-            f"{label}: полная карта hreflang",
-            set(page.alternates) == expected_alternates,
-            str(page.alternates),
-        )
-        check(f"{label}: ровно один <h1>", page.h1_count == 1, f"h1×{page.h1_count}")
-        check(f"{label}: <title> непустой", bool(page.title.strip()))
-        check(
-            f"{label}: meta description непустой",
-            bool(page.meta_description and page.meta_description.strip()),
-        )
-        check(f"{label}: social preview — large image", page.meta.get("twitter:card") == "summary_large_image")
-        check(f"{label}: Open Graph image", page.meta.get("og:image") == "https://amanu.me/assets/social-preview.png")
-        check(f"{label}: Open Graph URL", page.meta.get("og:url") == page.canonicals[0])
-
-    en_to_ru = [a for a in en.anchors if a.get("href") == "/ru/"]
-    ru_to_en = [a for a in ru.anchors if a.get("href") == "/en/"]
-    check(
-        "EN: единственный переключатель в футере ведёт на русский",
-        len(en_to_ru) == 1
-        and all(a.get("lang") == "ru" and a.get("hreflang") == "ru" for a in en_to_ru),
-        str(en_to_ru),
-    )
-    check(
-        "RU: единственный переключатель в футере ведёт на английский",
-        len(ru_to_en) == 1
-        and all(a.get("lang") == "en" and a.get("hreflang") == "en" for a in ru_to_en),
-        str(ru_to_en),
-    )
-    check(
-        "EN: ресурсы абсолютны и работают на ручном адресе /en/",
-        all(url.startswith("/") for _, url in en.resources),
-        str(en.resources),
-    )
-    for label, html in (("EN", en_html), ("RU", ru_html)):
-        masthead = re.search(r'<header class="masthead">(.*?)</header>', html, re.S)
-        check(
-            f"{label}: в шапке нет переключателя языка",
-            bool(masthead) and 'class="lang"' not in masthead.group(1),
-        )
-
-    # Requested Russian copy and attribution remain intact after moving to /ru/.
-    readable_ru = ru_html.replace("&nbsp;", " ")
-    flat_ru = re.sub(r"\s+", " ", readable_ru)
-    check(
-        "RU: указана подпись Apple и Microsoft",
-        readable_ru.count("подписан Apple и Microsoft") == 1
-        and "подписанный бинарник" not in readable_ru,
-    )
-    check(
-        "RU: нижний блок говорит о бесплатности и открытом коде",
-        bool(re.search(
-            r'Amanu полностью бесплатная, у неё <a href="https://github\.com/gsamat/amanu">'
-            r'открытый исходный код</a>\. Установка лёгкая — скачайте и запустите\.',
-            flat_ru,
-        ))
-        and "Amanu полностью бесплатная:" not in flat_ru,
-    )
-    check(
-        "RU: заголовок честно говорит о локальной библиотеке",
-        "<h2>Ваша библиотека встреч хранится на компьютере</h2>" in readable_ru,
-    )
-    check(
-        "RU: в футере Самат Галимов со ссылкой на samat.me/ru",
-        bool(re.search(
-            r'<footer>.*<a href="https://samat\.me/ru">Самат Галимов</a>.*</footer>',
-            ru_html,
-            re.S,
-        ))
-        and "mailto:s@samat.me" not in ru_html,
-    )
-    check(
-        "RU: подпись к статусу без «уже»",
-        "<figcaption>Встреча идёт — Amanu пишет</figcaption>" in ru_html
-        and "Amanu уже пишет" not in ru_html,
-    )
-    check(
-        "RU: фраза об автоматической записи без точки",
-        '<p class="statement">Запускает и&nbsp;останавливает запись автоматически</p>'
-        in ru_html,
-    )
-    check(
-        "RU: модели должны работать по-полной",
-        "Я считаю, что модели должны работать по-полной, тем более если у вас уже "
-        "есть подписка на клод или chatgpt." in flat_ru
-        and "нужно экономить наше время" not in flat_ru,
-    )
-    # Public links, local resources, scripts, and accessibility on both pages.
-    for label, path, html, page in pages:
-        check(
-            f"{label}: обе кнопки ведут прямо на DMG",
-            page.links.count(DMG) == 2,
-            f"ссылок на DMG: {page.links.count(DMG)}",
-        )
-        check(
-            f"{label}: нет ссылок на releases/latest",
-            not any("releases/latest" in href for href in page.links),
-        )
-        check(
-            f"{label}: ссылка на исходный код",
-            any(re.search(r"github\.com/gsamat/amanu/?$", href) for href in page.links),
-        )
-
-        check(f"{label}: две кнопки скачивания Windows", page.links.count("https://github.com/gsamat/amanu/releases/download/windows-v0.6.6/Amanu-0.6.6-Setup.exe") == 2)
-        check(
-            f"{label}: нет формы с сетевым action",
-            all(not action or action.startswith("mailto:") for action in page.forms),
-        )
-        check(
-            f"{label}: скрипт локальный и общий",
-            page.script_srcs == ["/script.js"],
-            str(page.script_srcs),
-        )
-        check(
-            f"{label}: нет внешних ресурсов (img/link/source)",
-            all(not is_external(url) for _, url in page.resources),
-            str([url for _, url in page.resources if is_external(url)]),
-        )
-        check(
-            f"{label}: все локальные ресурсы существуют",
-            all(resolves_locally(path, url) for _, url in page.resources),
-            str([url for _, url in page.resources if not resolves_locally(path, url)]),
-        )
-        scripts = (LANDING / "script.js").read_text(encoding="utf-8")
-        check(f"{label}: нет inline-скриптов", not "".join(page.inline_scripts).strip())
-        check(
-            f"{label}: инлайн-скрипты не ходят на чужие домены",
-            not re.search(r"fetch\(|XMLHttpRequest|https?://", scripts),
-        )
-        check(
-            f"{label}: просмотр считается через first-party /m",
-            bool(re.search(r"new URL\(['\"]\/m['\"],\s*location\.origin\)", scripts))
-            and "location.pathname" in scripts
-            and "document.title" in scripts
-            and "screen.width" in scripts
-            and "document.referrer" in scripts
-            and "new Image().src" in scripts,
-        )
-        expected_privacy = "/privacy/" if label == "EN" else "/ru/privacy/"
-        check(f"{label}: privacy доступна из футера", expected_privacy in page.links)
-        check(f"{label}: у всех <img> есть alt", all("alt" in attrs for attrs in page.imgs))
-        check(
-            f"{label}: у всех <img> есть width и height",
-            all("width" in attrs and "height" in attrs for attrs in page.imgs),
-        )
-        check(f"{label}: нет inline-обработчиков on*", page.onclick_count == 0)
-        check(f"{label}: нет tabindex > 0", page.positive_tabindex == 0)
-        check(
-            f"{label}: скриншоты в обеих темах",
-            any("dark" in url for _, url in page.resources)
-            and any("light" in url for _, url in page.resources),
-        )
-
-        entries = re.findall(r'<section class="entry[^"]*">(.*?)</section>', html, re.S)
-        timed = [entry for entry in entries if re.search(r'<p class="tc"[^>]*>\s*\d', entry)]
-        check(
-            f"{label}: четыре записи протокола с таймкодами",
-            len(timed) == 4,
-            f"с таймкодом: {len(timed)}",
-        )
-        if entries:
-            first = entries[0]
-            check(f"{label}: первая запись без заголовка", "<h2" not in first)
-            check(
-                f"{label}: первая запись — одна фраза",
-                len(re.findall(r"<p[ >]", first)) == 2,
-            )
-
-    en_accent = re.search(r'<em class="self">(.*?)</em>', en_html, re.S)
-    ru_accent = re.search(r'<em class="self">(.*?)</em>', ru_html, re.S)
-    check(
-        "EN: акцент в заголовке — Automatically",
-        bool(en_accent) and "Automatically" in en_accent.group(1),
-    )
-    check(
-        "RU: акцент в заголовке — «Автоматом»",
-        bool(ru_accent) and ru_accent.group(1).strip() == "Автоматом",
-    )
-
-    expected_en_shots = {
-        "status-recording-light.png": "8c372c3274ad657c5c507152768cb76adab9244bd620f8d491d02646418fc70c",
-        "status-recording-dark.png": "36e030d5a3226dc58afd9ec58d013fed0f01f770f61e0c6ef79ab1d57430e40e",
-        "recordings-light.png": "0174ba514607a153bae0b21c3bd8ec536f37dde5a0e7231daa6d39e88010c77d",
-        "recordings-dark.png": "5653cdc661de2b6a9aeeffd4007275a3265d3751e4a8d281a34335caaeffcb7d",
-    }
-    en_shot_urls = {urlsplit(url).path for _, url in en.resources if "/shots/" in url}
-    check(
-        "EN: страница использует отдельные английские скриншоты",
-        en_shot_urls == {
-            f"/assets/shots/en/{filename}" for filename in expected_en_shots
-        },
-        str(sorted(en_shot_urls)),
-    )
-    for filename, digest in expected_en_shots.items():
-        shot = LANDING / "assets" / "shots" / "en" / filename
-        check(f"EN: {filename} существует", shot.is_file())
-        if shot.is_file():
-            actual = hashlib.sha256(shot.read_bytes()).hexdigest()
-            check(f"EN: {filename} — английский снимок", actual == digest, actual)
-
-    ru_shot_urls = {url for _, url in ru.resources if "shots/" in url}
-    check(
-        "RU: страница сохранила русские скриншоты",
-        len(ru_shot_urls) == 4 and all("/en/" not in url for url in ru_shot_urls),
-        str(sorted(ru_shot_urls)),
-    )
-
-    # Shared CSS.
-    css = (LANDING / "style.css").read_text(encoding="utf-8")
-    check("CSS есть", bool(css.strip()))
-    check("CSS уважает prefers-reduced-motion", "prefers-reduced-motion" in css)
-    check(
-        "CSS поддерживает тёмную тему",
-        "prefers-color-scheme: dark" in css or "prefers-color-scheme:dark" in css,
-    )
-    check(
-        "CSS не тянет внешние url()/@import",
-        not re.search(r"url\(\s*['\"]?(https?:)?//|@import\s+['\"]?(https?:)?//", css),
-    )
-
-    # The same server-side language detection as samat.me: an independent `ru`
-    # language tag anywhere in Accept-Language wins. Otherwise `/` serves English.
-    nginx = NGINX.read_text(encoding="utf-8")
-    for header in [
-        "Strict-Transport-Security",
-        "Content-Security-Policy",
-        "X-Content-Type-Options",
-        "Referrer-Policy",
-        "Permissions-Policy",
-    ]:
-        check(f"nginx отдаёт {header}", f"add_header {header}" in nginx)
-    language_map = re.search(
-        r'map\s+\$http_accept_language\s+\$amanu_home_is_ru\s*\{(.*?)\}',
-        nginx,
-        re.S,
-    )
-    check("nginx выбирает язык по Accept-Language", bool(language_map))
-    if language_map:
-        rule = re.search(r'"~\*([^\"]+)"\s+1\s*;', language_map.group(1))
-        check("nginx ищет ru как отдельный языковой тег", bool(rule))
-        if rule:
-            matcher = re.compile(rule.group(1), re.I)
-            cases = {
-                "ru-RU,ru;q=0.9,en;q=0.8": True,
-                "en-US,en;q=0.9,ru;q=0.1": True,
-                "fr-FR,fr;q=0.9": False,
-                "en-RU,en;q=0.9": False,
-                "": False,
-            }
-            for header, expected in cases.items():
-                check(
-                    f"Accept-Language {header or 'пустой'} → "
-                    + ("RU" if expected else "EN"),
-                    bool(matcher.search(header)) is expected,
-                )
-    root_location = re.search(
-        r"location\s*=\s*/\s*\{(.*?)\n\s*\}\s*\n\s*location\s+/",
-        nginx,
-        re.S,
-    )
-    check(
-        "русский браузер получает временный редирект на /ru/",
-        bool(root_location)
-        and "if ($amanu_home_is_ru)" in root_location.group(1)
-        and "return 302 /ru/;" in root_location.group(1),
-    )
-    check(
-        "без русского корень отдаёт английский index.html",
-        bool(root_location) and "try_files /index.html =404;" in root_location.group(1),
-    )
-    explicit_english = re.search(r"location\s*=\s*/en/\s*\{(.*?)\}", nginx, re.S)
-    check(
-        "явный /en/ отдаёт английский без повторной детекции",
-        bool(explicit_english) and "try_files /index.html =404;" in explicit_english.group(1),
-    )
-
-    robots = LANDING / "robots.txt"
-    sitemap = LANDING / "sitemap.xml"
-    check("robots.txt существует", robots.is_file())
-    check("sitemap.xml существует", sitemap.is_file())
-    if robots.is_file():
-        check("robots.txt указывает sitemap", "https://amanu.me/sitemap.xml" in robots.read_text())
-    if sitemap.is_file():
-        sitemap_text = sitemap.read_text()
-        for url in ["https://amanu.me/", "https://amanu.me/ru/", "https://amanu.me/privacy/", "https://amanu.me/ru/privacy/"]:
-            check(f"sitemap содержит {url}", url in sitemap_text)
-
-    return finish()
-
-
-def finish():
-    print()
-    if failures:
-        print(f"{len(failures)} провалено: " + "; ".join(failures))
-        return 1
-    print("все проверки прошли")
-    return 0
-
+    try:
+        provenance = json.loads((SCREENSHOTS / "provenance.json").read_text())
+        shots = provenance["screenshots"]
+        expected = {f"{window}-{language}.jpg" for window in ("main", "settings", "about") for language in ("en", "ru")}
+        verified = ({shot["file"] for shot in shots} == expected and len(shots) == len(expected)
+                    and all((SCREENSHOTS / shot["file"]).stat().st_size == shot["bytes"]
+                            and hashlib.sha256((SCREENSHOTS / shot["file"]).read_bytes()).hexdigest() == shot["sha256"] for shot in shots))
+    except (OSError, ValueError, KeyError, TypeError):
+        verified = False
+    check("macOS screenshots match recorded original capture hashes", verified)
+    download_pages = []
+    for relative, language, alternate in (("index.html", "en", "/ru/"), ("ru/index.html", "ru", "/"),
+                                           ("privacy/index.html", "en", "/ru/privacy/"), ("ru/privacy/index.html", "ru", "/privacy/")):
+        path = LANDING / relative
+        html, page = parse_page(path)
+        check(f"{relative}: product and language", "Verbemo" in page.title and page.html_lang == language)
+        check(f"{relative}: one h1 and description", page.h1_count == 1 and bool(page.meta_description))
+        check(f"{relative}: own source/support", any(url.startswith("https://github.com/ekho/verbemo") for url in page.links))
+        check(f"{relative}: reciprocal language link", alternate in page.links)
+        check(f"{relative}: no unconfigured public domain", not page.canonicals and all(not is_external(url) for _, url in page.alternates))
+        check(f"{relative}: local resources", all(not is_external(url) and resolves_locally(path, url) for _, url in page.resources))
+        check(f"{relative}: accessible images", all("alt" in img and "width" in img and "height" in img for img in page.imgs))
+        check(f"{relative}: no inline scripts/handlers or positive tabindex", not "".join(page.inline_scripts).strip() and not page.onclick_count and not page.positive_tabindex)
+        check(f"{relative}: no forms", not page.forms)
+        check(f"{relative}: shared local script", page.script_srcs == ["/script.js"])
+        check(f"{relative}: no inherited signing claims", not re.search(r"Signed by Apple|подписан Apple|apps are signed", html, re.I))
+        if "privacy" not in relative:
+            download_pages.append(page)
+            check(f"{relative}: no historical screenshots", not any("/shots/" in url for _, url in page.resources) and "data-windows-" not in html)
+            screenshots = [img for img in page.imgs if "data-verified-screenshot" in img]
+            check(f"{relative}: actual macOS screenshot in page language", len(screenshots) == 1 and screenshots[0].get("data-verified-screenshot") == "macos"
+                  and screenshots[0].get("src") == f"/assets/screenshots/macos/0.1.0-476/main-{language}.jpg"
+                  and screenshots[0].get("width") == "640" and screenshots[0].get("height") == "468")
+    check("EN/RU: consistent own Releases or common versioned platform assets", valid_download_policy(download_pages))
+    css = (LANDING / "style.css").read_text()
+    check("CSS preserves motion and color preferences", "prefers-reduced-motion" in css and "prefers-color-scheme: dark" in css)
+    check("CSS has no external imports", not re.search(r"url\(\s*['\"]?(https?:)?//|@import\s+['\"]?(https?:)?//", css))
+    script = (LANDING / "script.js").read_text()
+    check("site has no analytics transport", not re.search(r"fetch\(|XMLHttpRequest|new\s+Image|sendBeacon|location\.origin", script))
+    check("no inherited server or appcast", not (LANDING / "appcast.xml").exists() and not list((LANDING / "deploy").rglob("*.conf")))
+    check("robots/sitemap wait for real domain", "https://" not in (LANDING / "robots.txt").read_text() and "<loc>" not in (LANDING / "sitemap.xml").read_text())
+    print(f"{len(failures)} failed" if failures else "PASS: all landing checks")
+    return bool(failures)
 
 if __name__ == "__main__":
     sys.exit(main())

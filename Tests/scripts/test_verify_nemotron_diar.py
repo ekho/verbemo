@@ -46,7 +46,7 @@ def main() -> None:
     parser.add_argument("helper", type=Path, help="an already-built NeMo helper root")
     source = parser.parse_args().helper.resolve(strict=True)
     external = (source / "lib" / TARGET).resolve(strict=True)
-    with tempfile.TemporaryDirectory(prefix="amanu-nemotron-verifier-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="verbemo-nemotron-verifier-") as temporary:
         base = Path(temporary)
         check("current helper", source, True)
         check("copied relative closure", fixture(source, base / "positive"), True)
@@ -65,7 +65,7 @@ def main() -> None:
 
         rpath = fixture(source, base / "absolute-rpath")
         subprocess.run(
-            ["install_name_tool", "-add_rpath", "/tmp/amanu-verifier-outside",
+            ["install_name_tool", "-add_rpath", "/tmp/verbemo-verifier-outside",
              str(rpath / "bin/nemo-speech")],
             check=True, capture_output=True, text=True,
         )

@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "amanu",
+    name: "verbemo",
     platforms: [.macOS("14.2")],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
@@ -11,7 +11,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "amanu",
+            name: "verbemo",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
@@ -43,8 +43,8 @@ let package = Package(
             checksum: "5fffd4557d561ab6e45edd2445978682a513c1cd030c5a330c8519c5b27b64d9"
         ),
         .testTarget(
-            name: "amanuTests",
-            dependencies: ["amanu"]
+            name: "verbemoTests",
+            dependencies: ["verbemo"]
         ),
     ]
 )

@@ -15,9 +15,9 @@ GGML_REV="c044a8eeae2591faa0950c8b5e514cbc4bbfc4ca"
 # SHA-256 of approved diffs with full object IDs (not Git's variable abbreviations).
 MACOS_PATCH_SHA="0e8dc01c74faa8a014f2782546d6b58631abecc32b747cc10efa7b6121cfd3cf"
 GGML_GRU_PATCH_SHA="4d8b39b91707d984f6ba6a529b821effe4844730a6f0571f42a21c5b0c5b11c7"
-MINIMUM_MACOS=${AMANU_MINIMUM_MACOS:-14.2}
-if [ -n "${AMANU_CMAKE:-}" ]; then
-    CMAKE=$AMANU_CMAKE
+MINIMUM_MACOS=${VERBEMO_MINIMUM_MACOS:-14.2}
+if [ -n "${VERBEMO_CMAKE:-}" ]; then
+    CMAKE=$VERBEMO_CMAKE
 elif command -v cmake >/dev/null; then
     CMAKE=$(command -v cmake)
 elif [ -x "$ROOT/.build/echo-research-2026-09-06/venv/bin/cmake" ]; then
@@ -30,10 +30,10 @@ command -v lipo >/dev/null || { echo "lipo is required to build LocalVQE" >&2; e
 
 mkdir -p "$OUT"
 if [ ! -d "$SOURCE/.git" ]; then
-    if [ -n "${AMANU_LOCALVQE_SOURCE:-}" ]; then
-        test -d "$AMANU_LOCALVQE_SOURCE/.git" \
-            || { echo "AMANU_LOCALVQE_SOURCE is not a git checkout" >&2; exit 1; }
-        ditto "$AMANU_LOCALVQE_SOURCE" "$SOURCE"
+    if [ -n "${VERBEMO_LOCALVQE_SOURCE:-}" ]; then
+        test -d "$VERBEMO_LOCALVQE_SOURCE/.git" \
+            || { echo "VERBEMO_LOCALVQE_SOURCE is not a git checkout" >&2; exit 1; }
+        ditto "$VERBEMO_LOCALVQE_SOURCE" "$SOURCE"
     else
         git clone --no-checkout https://github.com/localai-org/LocalVQE.git "$SOURCE"
         git -C "$SOURCE" checkout --detach "$SOURCE_REV"
@@ -60,15 +60,15 @@ fi
 
 mkdir -p "$OUT/model" "$OUT/lib" "$OUT/licenses"
 MODEL="$OUT/model/$MODEL_NAME"
-if [ -n "${AMANU_LOCALVQE_MODEL:-}" ]; then
-    cp "$AMANU_LOCALVQE_MODEL" "$MODEL"
+if [ -n "${VERBEMO_LOCALVQE_MODEL:-}" ]; then
+    cp "$VERBEMO_LOCALVQE_MODEL" "$MODEL"
 elif [ ! -f "$MODEL" ]; then
     curl -fL --retry 3 --output "$MODEL.tmp" "$MODEL_URL"
     mv "$MODEL.tmp" "$MODEL"
 fi
 printf '%s  %s\n' "$MODEL_SHA" "$MODEL" | shasum -a 256 -c -
 
-JOBS=${AMANU_LOCALVQE_JOBS:-2}
+JOBS=${VERBEMO_LOCALVQE_JOBS:-2}
 for ARCH in arm64 x86_64; do
     BUILD="$OUT/build-$ARCH"
     "$CMAKE" -S "$SOURCE/ggml" -B "$BUILD" \

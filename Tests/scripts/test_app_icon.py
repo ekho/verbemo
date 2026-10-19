@@ -7,8 +7,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ICON = ROOT / "Resources" / "Amanu.icon"
-CLASSIC_ICON = ROOT / "Resources" / "Amanu.icns"
+ICON = ROOT / "Resources" / "Verbemo.icon"
+CLASSIC_ICON = ROOT / "Resources" / "Verbemo.icns"
 BUILD_SCRIPT = ROOT / "scripts" / "build-app-icon.sh"
 
 
@@ -30,7 +30,7 @@ class AppIconTests(unittest.TestCase):
     def test_icon_composer_asset_builds_all_macos_appearances(self):
         self.assertTrue(
             (ICON / "icon.json").is_file(),
-            "Resources/Amanu.icon/icon.json is missing",
+            "Resources/Verbemo.icon/icon.json is missing",
         )
 
         with tempfile.TemporaryDirectory() as directory:
@@ -47,7 +47,7 @@ class AppIconTests(unittest.TestCase):
                     "--minimum-deployment-target",
                     "14.2",
                     "--app-icon",
-                    "Amanu",
+                    "Verbemo",
                     "--output-partial-info-plist",
                     str(partial_plist),
                     str(ICON),
@@ -58,12 +58,12 @@ class AppIconTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue((output / "Assets.car").is_file())
-            self.assertTrue((output / "Amanu.icns").is_file())
+            self.assertTrue((output / "Verbemo.icns").is_file())
 
             with partial_plist.open("rb") as file:
                 generated_info = plistlib.load(file)
-            self.assertEqual(generated_info["CFBundleIconName"], "Amanu")
-            self.assertEqual(generated_info["CFBundleIconFile"], "Amanu")
+            self.assertEqual(generated_info["CFBundleIconName"], "Verbemo")
+            self.assertEqual(generated_info["CFBundleIconFile"], "Verbemo")
 
             catalog = subprocess.run(
                 ["assetutil", "--info", str(output / "Assets.car")],
@@ -76,7 +76,7 @@ class AppIconTests(unittest.TestCase):
                 item.get("Appearance"): item
                 for item in renditions
                 if item.get("AssetType") == "IconImageStack"
-                and item.get("Name") == "Amanu"
+                and item.get("Name") == "Verbemo"
             }
             self.assertEqual(
                 set(stacks),
@@ -97,7 +97,7 @@ class AppIconTests(unittest.TestCase):
                 item.get("Appearance"): item
                 for item in renditions
                 if item.get("AssetType") == "IconGroup"
-                and item.get("Name") == "Amanu/Group"
+                and item.get("Name") == "Verbemo/Group"
             }
             self.assertEqual(set(groups), set(stacks))
             for appearance, group in groups.items():
@@ -132,7 +132,7 @@ class AppIconTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue((output / "Assets.car").is_file())
             self.assertEqual(
-                (output / "Amanu.icns").read_bytes(),
+                (output / "Verbemo.icns").read_bytes(),
                 CLASSIC_ICON.read_bytes(),
             )
 

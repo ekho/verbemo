@@ -1,0 +1,53 @@
+{
+  "source_commit": "8bc6f6be2bf6d5830dc1f1e8f3b5f122170db942",
+  "version": "0.1.0",
+  "build": 476,
+  "binary_sha256": "27ef52ccc35ab154827fd8effc5af77a7651203471dff3e0ff69654cb4b8a52a",
+  "capture_date": "2026-10-19",
+  "method": "CUA native bound-window original JPEG bytes; copied unchanged, no cropping, conversion or retouching",
+  "scope": "macOS main ready, Settings Setup tab and About; EN/RU. Capture and processing disabled. No audio, transcription quality or Windows acceptance represented.",
+  "screenshots": [
+    {
+      "file": "about-en.jpg",
+      "sha256": "97d53030f68a7994d6b72627e6114686c8cd1d73e6f0c53568d8b26caa8a749c",
+      "width": 680,
+      "height": 650,
+      "bytes": 50054
+    },
+    {
+      "file": "about-ru.jpg",
+      "sha256": "6f8e3bbbd512b6f3a2fd6771545e429d5e6ca1e4b57d600f3da262013e85ce1c",
+      "width": 680,
+      "height": 650,
+      "bytes": 53482
+    },
+    {
+      "file": "main-en.jpg",
+      "sha256": "a46f93b21122f8658eec7e6e41312cb95f5ad0ee6f09fd7a993ae8d3ef84593e",
+      "width": 640,
+      "height": 468,
+      "bytes": 46943
+    },
+    {
+      "file": "main-ru.jpg",
+      "sha256": "51652bd3e741a8b438d879241cc3f50261a1b0cce9b899411d53ae6a09c77065",
+      "width": 640,
+      "height": 468,
+      "bytes": 51308
+    },
+    {
+      "file": "settings-en.jpg",
+      "sha256": "c5a734085fe4c80d09bdb703d27a3178bcd677accad6d8e42f724aa61fc0845c",
+      "width": 1528,
+      "height": 1576,
+      "bytes": 220382
+    },
+    {
+      "file": "settings-ru.jpg",
+      "sha256": "211c635e9ba971e8aafcdee192b63e8c9e070496c88cc238f338f6409a46eed5",
+      "width": 1528,
+      "height": 1576,
+      "bytes": 241390
+    }
+  ]
+}

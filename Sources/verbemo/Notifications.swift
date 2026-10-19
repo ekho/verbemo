@@ -1,0 +1,111 @@
+import AppKit
+import Foundation
+import UserNotifications
+
+/// Banners that belong to verbemo.
+///
+/// The old ones didn't. `osascript -e 'display notification'` posts under
+/// AppleScript's identity, so macOS drew them as Script Editor's, and clicking
+/// one opened Script Editor — an app the person never asked for, showing
+/// nothing about their meeting. It was the honest choice while verbemo was a
+/// bare binary, because `UNUserNotificationCenter` needs a bundle to belong to.
+///
+/// Inside `Verbemo.app` there is one, so the banner says verbemo, carries the
+/// recording it is about, and clicking it opens that folder. A bare build —
+/// `swift run`, a test — has no bundle to post under and stays silent, which
+/// is the right answer for something nobody installed.
+enum Notifications {
+    static var usesNotificationCenter: Bool { Runtime.isBundled }
+
+    private static let sessionKey = "name.ekho.verbemo.session"
+
+    @MainActor
+    private static var authorization: Task<Bool, Never>?
+    @MainActor
+    private static var delegate: Delegate?
+
+    /// Called once at startup so a click has somewhere to go. `onOpen` is
+    /// handed the session folder when the banner named one.
+    @MainActor
+    static func install(onOpen: @escaping @MainActor (URL?) -> Void) {
+        guard usesNotificationCenter else { return }
+        let delegate = Delegate(onOpen: onOpen)
+        Self.delegate = delegate
+        UNUserNotificationCenter.current().delegate = delegate
+    }
+
+    @MainActor
+    static func post(
+        title: String, body: String, opening session: URL?, replacing identifier: String? = nil
+    ) {
+        guard usesNotificationCenter else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        if let session { content.userInfo = [sessionKey: session.path] }
+
+        // Asked for once, lazily: a permission dialog on first launch, before
+        // anything has happened, is a question about nothing.
+        let request = authorization ?? Task { () -> Bool in
+            (try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound])) ?? false
+        }
+        authorization = request
+
+        Task {
+            guard await request.value else { return }
+            try? await UNUserNotificationCenter.current().add(
+                UNNotificationRequest(
+                    identifier: identifier ?? UUID().uuidString, content: content, trigger: nil))
+        }
+    }
+
+    /// The folder a banner was about, or nil when it named none.
+    static func session(in userInfo: [AnyHashable: Any]) -> URL? {
+        (userInfo[sessionKey] as? String).map { URL(fileURLWithPath: $0) }
+    }
+
+    @MainActor
+    private final class Delegate: NSObject, UNUserNotificationCenterDelegate {
+        private let onOpen: @MainActor (URL?) -> Void
+
+        init(onOpen: @escaping @MainActor (URL?) -> Void) {
+            self.onOpen = onOpen
+        }
+
+        /// Show the banner even when verbemo is the active app: the recording it
+        /// announces finished in the background, and the window it would
+        /// otherwise be hidden behind may be on another Space.
+        nonisolated func userNotificationCenter(
+            _ center: UNUserNotificationCenter,
+            willPresent notification: UNNotification
+        ) async -> UNNotificationPresentationOptions {
+            [.banner, .list]
+        }
+
+        nonisolated func userNotificationCenter(
+            _ center: UNUserNotificationCenter,
+            didReceive response: UNNotificationResponse
+        ) async {
+            let folder = Notifications.session(
+                in: response.notification.request.content.userInfo)
+            await MainActor.run {
+                NSApp.activate(ignoringOtherApps: true)
+                onOpen(folder)
+            }
+        }
+    }
+}
+
+/// Best-effort user-visible notification. A banner posted with the same
+/// `replacing` identifier as one still on screen takes its place instead of
+/// stacking under it — for a failure that repeats, the second banner says
+/// nothing the first did not.
+func notifyUser(
+    title: String, body: String, opening session: URL? = nil, replacing identifier: String? = nil
+) {
+    Task { @MainActor in
+        Notifications.post(title: title, body: body, opening: session, replacing: identifier)
+    }
+}

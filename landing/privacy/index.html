@@ -3,25 +3,24 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Privacy — Amanu</title>
-    <meta name="description" content="What Amanu records, what stays on your Mac, and what is sent when you choose cloud processing or analytics." />
-    <link rel="canonical" href="https://amanu.me/privacy/" />
-    <link rel="alternate" hreflang="en" href="https://amanu.me/privacy/" />
-    <link rel="alternate" hreflang="ru" href="https://amanu.me/ru/privacy/" />
-    <link rel="alternate" hreflang="x-default" href="https://amanu.me/privacy/" />
+    <title>Privacy — Verbemo</title>
+    <meta name="description" content="What Verbemo records, what stays on your Mac, and what is sent when you choose cloud processing or analytics." />
+    <link rel="alternate" hreflang="en" href="/privacy/" />
+    <link rel="alternate" hreflang="ru" href="/ru/privacy/" />
+    <link rel="alternate" hreflang="x-default" href="/privacy/" />
     <link rel="stylesheet" href="/style.css" />
     <link rel="icon" href="/assets/icon-180.png" />
 </head>
 <body>
     <header class="masthead">
-        <a class="brand" href="/" aria-label="Amanu — home">
-            <img src="/assets/icon.png" width="40" height="40" alt="Amanu icon: a cream quill on a dark graphite background." />
-            <span class="brand-name">Amanu</span>
+        <a class="brand" href="/" aria-label="Verbemo — home">
+            <img src="/assets/icon.png" width="40" height="40" alt="Verbemo icon: a cream quill on a dark graphite background." />
+            <span class="brand-name">Verbemo</span>
         </a>
     </header>
     <main class="legal">
         <h1>Privacy</h1>
-        <p>Amanu has no account and no hosted meeting library. Recordings and the files made from them live in the recordings folder on your computer.</p>
+        <p>Verbemo has no account and no hosted meeting library. Recordings and the files made from them live in the recordings folder on your computer.</p>
         <h2>Meeting content</h2>
         <ul>
             <li>Recording, Parakeet, Whisper and GigaAM transcription, and the optional live transcript run locally. Ollama summaries stay on your computer when its Base URL is localhost/loopback; another host receives the summary input.</li>
@@ -30,13 +29,11 @@
             <li>API keys stay on your computer and are sent only to the provider they authenticate.</li>
         </ul>
         <p>Calendar access is optional on macOS; Windows has no calendar integration. Calendar context stays local unless it is included in a request to a cloud or CLI model as described above.</p>
-        <h2>Product analytics</h2>
-        <p>Anonymous usage reporting is on by default and can be disabled in Setup or Settings on both platforms, or with <code>amanu analytics off</code> on macOS. It never includes meeting content, names, paths, keys, or error text. <a href="https://github.com/gsamat/amanu/blob/master/docs/analytics.md">See the complete event list, retention, and deletion instructions.</a></p>
-        <h2>Website analytics</h2>
-        <p>This site sends a first-party request to <code>amanu.me/m</code> for a page view, and an aggregate <code>download_clicked</code> event when a release link is clicked. Page views contain the page path and title, screen dimensions, and referrer when supplied; the download event contains its fixed name and current page path. The server also receives ordinary HTTP metadata such as IP address and user agent. The site sets no analytics identifier, does not connect website activity to the app installation ID, and loads no third-party analytics script.</p>
-        <p>Questions or deletion requests: <a href="mailto:s@samat.me">s@samat.me</a>.</p>
+        <h2>Analytics disabled</h2>
+        <p>The app and site do not collect usage statistics. There is no installation identifier, event queue or analytics server. Cloud meeting processors you select receive the data needed for that processing.</p>
+        <p><a href="https://github.com/ekho/verbemo/issues">Verbemo support</a> · <a href="https://github.com/ekho/verbemo/blob/master/docs/analytics.md">Details</a></p>
     </main>
-    <footer><p><a href="/">Amanu</a> · <a href="/ru/privacy/" lang="ru" hreflang="ru">Русский</a></p></footer>
+    <footer><p><a href="/">Verbemo</a> · <a href="/ru/privacy/" lang="ru" hreflang="ru">Русский</a></p></footer>
     <script src="/script.js" defer></script>
 </body>
 </html>

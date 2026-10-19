@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Verbemo.App/Verbemo.App.csproj" />
+    <Project Path="src/Verbemo.Core/Verbemo.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Verbemo.Core.Tests/Verbemo.Core.Tests.csproj" />
+    <Project Path="tests/Verbemo.Live.Tests/Verbemo.Live.Tests.csproj" />
+  </Folder>
+</Solution>
