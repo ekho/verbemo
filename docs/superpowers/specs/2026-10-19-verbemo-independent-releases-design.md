@@ -260,3 +260,20 @@ Amanu. Убрать активные конфиги деплоя на домен
 - [Velopack: SimpleWebSource и источники обновлений](https://docs.velopack.io/integrating/update-sources).
 - [Velopack: размещение nupkg и release feed вместе](https://docs.velopack.io/distributing/overview).
 - [GitHub: постоянные ссылки на assets последнего релиза](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases).
+
+## Поправка пользователя — 2026-10-19: приоритет macOS
+
+Эта поправка меняет приоритет исполнения Windows-пунктов текущего прохода:
+
+- Продолжать macOS-сборку и проверку приложения. Windows-сборки и фактическая
+  Windows-приёмка сейчас не в приоритете; новые попытки не запускать.
+- Конкретные обнаруженные Windows-проблемы фиксировать в GitHub issues
+  `ekho/verbemo`; затронутый Windows-пункт пропускать с явной отметкой
+  `skipped/deferred`, причиной и ссылкой на issue. Уже полученные результаты
+  сохранять с их точной revision, не выдавая их за финальную приёмку.
+- Сохранить Windows-исходники, подготовку пакетов/подписи/обновлений и общий
+  release workflow. Требование полного подписанного комплекта обеих платформ
+  из одного source commit/version/build для публичной публикации не ослабляется.
+- В отчёте честно перечислить отложенные Windows-проверки; проверки macOS,
+  fixtures или предварительного приложения не заменяют Windows acceptance.
+  Отсрочка не означает, что двухплатформенный публичный релиз готов.
