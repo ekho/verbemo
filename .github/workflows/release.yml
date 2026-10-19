@@ -1,0 +1,257 @@
+name: Verbemo release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Source ref (resolved once; ignored for resume)
+        required: true
+        default: master
+      version:
+        description: Stable version matching VERSION
+        required: true
+      operation:
+        description: Prepare artifacts, publish, or verify and resume published latest
+        type: choice
+        options: [prepare, publish, resume]
+        default: prepare
+        required: true
+
+permissions:
+  contents: read
+
+# Every publisher must share this repository-wide group. The REST API has no
+# atomic conditional latest update; external publishers must also coordinate.
+concurrency:
+  group: verbemo-release
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: inputs.operation != 'resume'
+    runs-on: ubuntu-latest
+    outputs:
+      source_commit: ${{ steps.source.outputs.source_commit }}
+      version: ${{ steps.source.outputs.version }}
+      build_number: ${{ steps.source.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: source
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python3 scripts/release.py preflight --ref HEAD --version "$RELEASE_VERSION" > "$RUNNER_TEMP/source.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads((Path(os.environ['RUNNER_TEMP']) / 'source.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              for key, value in data.items():
+                  print(f'{key}={value}', file=stream)
+          PY
+
+  macos:
+    needs: resolve
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test source without signing credentials
+        run: |
+          make verify-localvqe
+          VERBEMO_REQUIRE_LOCALVQE=1 swift test --no-parallel
+          python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
+      - name: Build signed macOS artifacts with temporary own credentials
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+          VERBEMO_MACOS_CERTIFICATE_BASE64: ${{ secrets.VERBEMO_MACOS_CERTIFICATE_BASE64 }}
+          VERBEMO_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.VERBEMO_MACOS_CERTIFICATE_PASSWORD }}
+          VERBEMO_NOTARY_KEY_BASE64: ${{ secrets.VERBEMO_NOTARY_KEY_BASE64 }}
+          VERBEMO_SPARKLE_PRIVATE_KEY_BASE64: ${{ secrets.VERBEMO_SPARKLE_PRIVATE_KEY_BASE64 }}
+          VERBEMO_SIGN_ID: ${{ vars.VERBEMO_SIGN_ID }}
+          VERBEMO_SPARKLE_PUBLIC_KEY: ${{ vars.VERBEMO_SPARKLE_PUBLIC_KEY }}
+          VERBEMO_NOTARY_KEY_ID: ${{ vars.VERBEMO_NOTARY_KEY_ID }}
+          VERBEMO_NOTARY_ISSUER_ID: ${{ vars.VERBEMO_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          KEY_DIR=$(mktemp -d "$RUNNER_TEMP/verbemo-keys.XXXXXX")
+          KEYCHAIN="$KEY_DIR/release.keychain-db"
+          cleanup() {
+            security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
+            rm -rf "$KEY_DIR"
+          }
+          trap cleanup EXIT
+          export KEY_DIR
+          export VERBEMO_NOTARY_KEY_FILE="$KEY_DIR/notary.p8"
+          export VERBEMO_SPARKLE_PRIVATE_KEY_FILE="$KEY_DIR/sparkle.key"
+          python3 - <<'PY'
+          import base64, os, sys
+          from pathlib import Path
+          names = {'VERBEMO_MACOS_CERTIFICATE_BASE64': 'certificate.p12',
+                   'VERBEMO_NOTARY_KEY_BASE64': 'notary.p8',
+                   'VERBEMO_SPARKLE_PRIVATE_KEY_BASE64': 'sparkle.key'}
+          for key, name in names.items():
+              try:
+                  raw = base64.b64decode(os.environ[key], validate=True)
+                  if not raw:
+                      raise ValueError()
+              except (KeyError, ValueError):
+                  sys.exit(f'Missing or invalid {key}; signed releases require your own credentials')
+              (Path(os.environ['KEY_DIR']) / name).write_bytes(raw)
+          PY
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null 2>&1
+          security set-keychain-settings -lut 7200 "$KEYCHAIN" >/dev/null 2>&1
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null 2>&1
+          security import "$KEY_DIR/certificate.p12" -P "$VERBEMO_MACOS_CERTIFICATE_PASSWORD" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null 2>&1
+          security list-keychains -d user -s "$KEYCHAIN" >/dev/null 2>&1
+          bash scripts/build-macos-release.sh --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --output "$RUNNER_TEMP/macos-artifacts"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: platform-macos
+          path: ${{ runner.temp }}/macos-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    needs: resolve
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Test release metadata without signing credentials
+        shell: pwsh
+        run: |
+          & windows/tests/Test-ReleaseInstallerName.ps1
+          & windows/tests/Test-ReleaseArtifacts.ps1
+      - name: Build signed Windows artifacts with temporary own credentials
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+          VERBEMO_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.VERBEMO_WINDOWS_CERTIFICATE_BASE64 }}
+          VERBEMO_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.VERBEMO_WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $keyDir = Join-Path $env:RUNNER_TEMP "verbemo-keys-$([Guid]::NewGuid())"
+          try {
+            [void][IO.Directory]::CreateDirectory($keyDir)
+            $acl = [Security.AccessControl.DirectorySecurity]::new()
+            $acl.SetAccessRuleProtection($true, $false)
+            $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+            $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+            Set-Acl -LiteralPath $keyDir -AclObject $acl
+            if ([string]::IsNullOrWhiteSpace($env:VERBEMO_WINDOWS_CERTIFICATE_BASE64)) {
+              throw 'Signed releases require your own VERBEMO_WINDOWS_CERTIFICATE_BASE64'
+            }
+            $pfx = Join-Path $keyDir 'certificate.pfx'
+            try { $bytes = [Convert]::FromBase64String($env:VERBEMO_WINDOWS_CERTIFICATE_BASE64) }
+            catch { throw 'Invalid own certificate encoding.' }
+            [IO.File]::WriteAllBytes($pfx, $bytes)
+            & windows/scripts/Build-Release.ps1 -Version $env:RELEASE_VERSION -SourceCommit $env:SOURCE_COMMIT -OutputDirectory (Join-Path $env:RUNNER_TEMP 'windows-artifacts') -CertificatePath $pfx -CertificatePassword $env:VERBEMO_WINDOWS_CERTIFICATE_PASSWORD
+          } finally {
+            if (Test-Path -LiteralPath $keyDir) { Remove-Item -LiteralPath $keyDir -Recurse -Force }
+          }
+      - uses: actions/upload-artifact@v5
+        with:
+          name: platform-windows
+          path: ${{ runner.temp }}/windows-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    needs: [resolve, macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: platform-*
+          path: ${{ runner.temp }}/platforms
+      - name: Combine without filename collisions and validate the complete set
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+          BUILD_NUMBER: ${{ needs.resolve.outputs.build_number }}
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          target = root / 'release-artifacts'
+          target.mkdir()
+          for platform in ('platform-macos', 'platform-windows'):
+              for path in (root / 'platforms' / platform).iterdir():
+                  if not path.is_file() or path.is_symlink():
+                      raise ValueError('unsafe platform artifact')
+                  with (target / path.name).open('xb') as stream, path.open('rb') as source:
+                      shutil.copyfileobj(source, stream)
+          PY
+          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/release-artifacts" --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --build-number "$BUILD_NUMBER"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-artifacts
+          path: ${{ runner.temp }}/release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: inputs.operation == 'publish'
+    needs: [resolve, aggregate]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-artifacts
+          path: ${{ runner.temp }}/release-artifacts
+      - name: Publish and verify before promoting latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py publish --artifacts "$RUNNER_TEMP/release-artifacts"
+
+  resume:
+    if: inputs.operation == 'resume'
+    # Intentionally no needs, builds, artifact upload or signing credentials.
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Verify published bytes and resume latest promotion
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py resume --tag "verbemo-v$RELEASE_VERSION"

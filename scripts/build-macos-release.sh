@@ -73,7 +73,7 @@ python3 scripts/release_manifest.py appcast --version "$VERSION_ARG" --source-co
     "$WORK/appcast.xml" >"$WORK/sign-output" 2>&1 || die 'appcast signature verification failed'
 python3 scripts/release_manifest.py receipt --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
     --build-number "$BUILD" --output "$WORK"
-python3 scripts/release_manifest.py validate --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
+python3 scripts/release_manifest.py validate-macos --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
     --build-number "$BUILD" --output "$WORK"
 # Ensure the source did not change during the long build/notarization operation.
 python3 scripts/release_manifest.py preflight --root "$ROOT" --version "$VERSION_ARG" \

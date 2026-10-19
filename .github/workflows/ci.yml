@@ -19,10 +19,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: README points at both current public installers
-        run: python3 scripts/update-readme-downloads.py --check --verify-downloads
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Build and verify LocalVQE assets
         run: make verify-localvqe
       - name: Swift tests
@@ -34,9 +33,61 @@ jobs:
           # them run here whether or not they are found: a missing asset is
           # a failure on CI rather than the skip it is on a fresh checkout.
           VERBEMO_REQUIRE_LOCALVQE: "1"
-      - name: Universal release build
-        run: make build
+      - name: Universal development build without release credentials
+        run: make app SIGN_ID=-
       - name: Landing checks
         run: python3 landing/tests/check.py
       - name: Release-script tests
         run: python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
+      - name: Workflow tests
+        run: |
+          python3 -m pip install PyYAML==6.0.3
+          python3 -m unittest discover -s windows/tests -p 'test_*.py'
+      - name: Full independent product guard
+        run: python3 Tests/scripts/test_independent_product.py --all
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Installer metadata and release preflight tests
+        shell: pwsh
+        run: |
+          & windows/tests/Test-ReleaseInstallerName.ps1
+          & windows/tests/Test-ReleaseArtifacts.ps1
+      - name: Build and test Windows without release credentials
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $commit = (git rev-parse HEAD).Trim()
+          & windows/scripts/Build-Release.ps1 -Version $version -SourceCommit $commit -OutputDirectory (Join-Path $env:RUNNER_TEMP 'verbemo-development') -Development
+      - name: Verify packaged native CPU and Unicode paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content VERSION -Raw).Trim()
+          $portable = Join-Path $env:RUNNER_TEMP "verbemo-development/Verbemo-$version-windows-x64-Portable.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "verbemo-native-check-$([Guid]::NewGuid())"
+          try {
+            [IO.Compression.ZipFile]::ExtractToDirectory($portable, $extract)
+            # Velopack 1.2.0 portable payload contract, also enforced by Test-ReleaseSignatures.ps1.
+            $runtime = Join-Path $extract 'current/local-runtime'
+            & windows/scripts/Test-NativeCpu.ps1 -RuntimeDirectory $runtime
+            & windows/tests/Test-NativeUnicodePaths.ps1 -RuntimeDirectory $runtime
+          } finally {
+            if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
+          }
+      - name: Retain checked unsigned development packages for Windows acceptance
+        uses: actions/upload-artifact@v5
+        with:
+          name: Verbemo-windows-development-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verbemo-development/*
+          if-no-files-found: error
+          retention-days: 7

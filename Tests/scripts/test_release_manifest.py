@@ -30,14 +30,14 @@ class ReleaseManifestTests(unittest.TestCase):
             signature = 'c' * 86 + '=='
             self.module.write_appcast(root, version, build, signature, '14.2')
             self.module.write_macos_receipt(root, version, commit, build)
-            result = self.module.validate_release(root, version, commit, build)
+            result = self.module.validate_macos_release(root, version, commit, build)
             self.assertEqual(result['source_commit'], commit)
-            checksum = self.module.write_checksums(root)
+            checksum = self.module.write_checksums(root, [p.name for p in root.iterdir()])
             self.assertIn('macos-build.json', checksum.read_text())
             self.assertNotIn('SHA256SUMS', checksum.read_text())
             dmg.write_bytes(b'tampered')
             with self.assertRaises(ValueError):
-                self.module.validate_release(root, version, commit, build)
+                self.module.validate_macos_release(root, version, commit, build)
 
     def test_receipt_rejects_mismatched_metadata_and_unsafe_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -47,13 +47,13 @@ class ReleaseManifestTests(unittest.TestCase):
             self.module.write_macos_receipt(root, '0.1.0', 'a' * 40, 12)
             for version, commit, build in [('0.2.0', 'a' * 40, 12), ('0.1.0', 'b' * 40, 12), ('0.1.0', 'a' * 40, 13)]:
                 with self.assertRaises(ValueError):
-                    self.module.validate_release(root, version, commit, build)
+                    self.module.validate_macos_release(root, version, commit, build)
             receipt = root / 'macos-build.json'
             data = json.loads(receipt.read_text())
             data['files'][0]['name'] = '../outside'
             receipt.write_text(json.dumps(data))
             with self.assertRaises(ValueError):
-                self.module.validate_release(root, '0.1.0', 'a' * 40, 12)
+                self.module.validate_macos_release(root, '0.1.0', 'a' * 40, 12)
 
 
 class WindowsManifestTests(unittest.TestCase):

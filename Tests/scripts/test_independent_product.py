@@ -1,9 +1,10 @@
-"""Independence guard. Unit discovery enforces Task 4's migrated scope.
+"""Independence guard. Unit discovery enforces the migrated Tasks 4–7 scope.
 
 Run `python3 Tests/scripts/test_independent_product.py --all` for the final
-runtime/build/release/site gate. It intentionally fails until Tasks 5–8 migrate
-updaters, packaging/CI, About, and the site. Those owners must expand MIGRATED
-or make the full gate mandatory before final review; no finding is waived.
+runtime/build/release/site gate. The full gate is mandatory in CI and remains
+red until Task 8 migrates About, README/download helpers and its verification
+workflow, docs and the site.
+Task 8 must expand MIGRATED; no finding is waived.
 Historical/provenance docs, licenses and dependency sources are outside active
 product scope. User-selected paths and third-party dependency names are allowed.
 """
@@ -17,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 ACTIVE = ("Sources", "windows/src", "windows/scripts", "scripts", ".github",
           "landing", "Packaging", "Makefile", "Package.swift", "README.md",
           "docs/releasing.md")
-MIGRATED = ("windows/src/Verbemo.App/UpdateStartupAdmission.cs", "windows/src/Verbemo.App/UpdateService.cs", "windows/src/Verbemo.App/App.xaml.cs",
+MIGRATED = ("scripts/release.py", "scripts/release_github.py", "scripts/release.sh", ".github/workflows/ci.yml", ".github/workflows/release.yml",
+            "windows/src/Verbemo.App/UpdateStartupAdmission.cs", "windows/src/Verbemo.App/UpdateService.cs", "windows/src/Verbemo.App/App.xaml.cs",
             "windows/scripts/Build-Release.ps1", "windows/scripts/Set-ReleaseInstallerName.ps1",
             "windows/scripts/Test-ReleaseSignatures.ps1", "Sources/verbemo/Updates", "Packaging/Verbemo-Info.plist",
             "scripts/build-macos-release.sh", "scripts/build-macos-plist.py",
@@ -33,9 +35,7 @@ MIGRATED = ("windows/src/Verbemo.App/UpdateStartupAdmission.cs", "windows/src/Ve
             "windows/src/Verbemo.App/AnalyticsService.cs",
             "windows/src/Verbemo.App/SetupForm.cs", "windows/src/Verbemo.Core/Analytics",
             "windows/src/Verbemo.Core/Configuration")
-PENDING = {"Tasks 5/6": "updaters and Packaging/Verbemo-Info.plist",
-           "Task 7": "scripts, Makefile, .github, Windows release scripts",
-           "Task 8": "About/source links, README, docs/releasing.md, landing (including telemetry)"}
+PENDING = {"Task 8": "About/source links, README/download helpers and workflow, docs/releasing.md, landing (including telemetry)"}
 OLD_KEY = "/AxdBBPOFIca/y7RYwvi83FE6WqnIAjkVV0nTkRq9/c="
 
 

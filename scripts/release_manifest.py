@@ -125,10 +125,10 @@ def write_macos_receipt(directory: Path, version: str, source_commit: str, build
     return path
 
 
-def validate_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
-    """Validate macOS receipt/feed. The common release stage adds Windows checks."""
+def validate_macos_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
+    """Validate the standalone macOS receipt and feed."""
     validate_version(version)
-    if not re.fullmatch(r'[0-9a-f]{40}', source_commit) or build_number < 1:
+    if not re.fullmatch(r'[0-9a-f]{40}', source_commit) or type(build_number) is not int or build_number < 1:
         raise ValueError('invalid source commit or build number')
     receipt = json.loads((directory / 'macos-build.json').read_text())
     for key, value in {'platform': 'macos', 'version': version, 'source_commit': source_commit,
@@ -146,11 +146,13 @@ def validate_release(directory: Path, version: str, source_commit: str, build_nu
                 'gatekeeper': 'accepted', 'sparkle_dmg': 'verified', 'sparkle_appcast': 'verified'}
     if receipt.get('signature') != required:
         raise ValueError('macOS signature validation missing')
-    channel = ET.parse(directory / 'appcast.xml').getroot().find('channel')
-    if channel is None or channel.findtext('link') != FEED_URL or len(channel.findall('item')) != 1:
+    rss = ET.parse(directory / 'appcast.xml').getroot()
+    channel = rss.find('channel')
+    if (rss.tag != 'rss' or len(rss.findall('channel')) != 1 or len(rss.findall('.//enclosure')) != 1
+            or channel is None or channel.findtext('link') != FEED_URL or len(channel.findall('item')) != 1):
         raise ValueError('appcast channel mismatch')
     enclosure = channel.find('item/enclosure')
-    if enclosure is None:
+    if enclosure is None or len(channel.findall('.//enclosure')) != 1:
         raise ValueError('appcast enclosure missing')
     for key, value in {'url': f'https://github.com/ekho/verbemo/releases/download/verbemo-v{version}/{dmg_name(version)}',
                        f'{{{SPARKLE}}}version': str(build_number),
@@ -170,7 +172,7 @@ def validate_release(directory: Path, version: str, source_commit: str, build_nu
 def validate_windows_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
     """Validate the Windows receipt without weakening the macOS-only API."""
     validate_version(version)
-    if not re.fullmatch(r'[0-9a-f]{40}', source_commit) or build_number < 1:
+    if not re.fullmatch(r'[0-9a-f]{40}', source_commit) or type(build_number) is not int or build_number < 1:
         raise ValueError('invalid source commit or build number')
     receipt = json.loads((directory / 'windows-build.json').read_text())
     for key, value in {'platform': 'windows', 'version': version, 'source_commit': source_commit,
@@ -213,17 +215,39 @@ def validate_windows_release(directory: Path, version: str, source_commit: str, 
     return receipt
 
 
-def write_checksums(directory: Path) -> Path:
-    files = sorted(p for p in directory.iterdir() if p.name != 'SHA256SUMS' and p.is_file())
-    lines = [f'{file_record(path)["sha256"]}  {path.name}\n' for path in files]
+def validate_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
+    """The common set is closed: no unvalidated sidecars or extra platforms."""
+    receipts = [validate_macos_release(directory, version, source_commit, build_number),
+                validate_windows_release(directory, version, source_commit, build_number)]
+    names = [item['name'] for receipt in receipts for item in receipt['files']]
+    names += ['macos-build.json', 'windows-build.json']
+    if len(names) != len(set(names)):
+        raise ValueError('duplicate release filename')
+    if {p.name for p in directory.iterdir()} - set(names) - {'release-manifest.json', 'SHA256SUMS'}:
+        raise ValueError('unexpected release files')
+    return {'schema': 1, 'repository': 'ekho/verbemo', 'tag': f'verbemo-v{version}',
+            'version': version, 'source_commit': source_commit, 'build_number': build_number,
+            'files': [file_record(directory / name) for name in sorted(names)]}
+
+
+def checksum_bytes(directory: Path, names) -> bytes:
+    names = list(names)
+    if len(names) != len(set(names)) or any(not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', n)
+                                          or '..' in n or n == 'SHA256SUMS' for n in names):
+        raise ValueError('unsafe or duplicate checksum filename')
+    return ''.join(f'{file_record(directory / name)["sha256"]}  {name}\n'
+                   for name in sorted(names)).encode()
+
+
+def write_checksums(directory: Path, names) -> Path:
     target = directory / 'SHA256SUMS'
-    target.write_text(''.join(lines))
+    target.write_bytes(checksum_bytes(directory, names))
     return target
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('preflight', 'appcast', 'receipt', 'validate'))
+    parser.add_argument('command', choices=('preflight', 'appcast', 'receipt', 'validate', 'validate-macos'))
     parser.add_argument('--root', type=Path, default=Path.cwd())
     parser.add_argument('--version', required=True)
     parser.add_argument('--source-commit', required=True)
@@ -244,6 +268,8 @@ def main():
             write_appcast(args.output, args.version, args.build_number, args.signature, args.minimum)
         elif args.command == 'receipt':
             write_macos_receipt(args.output, args.version, args.source_commit, args.build_number)
+        elif args.command == 'validate-macos':
+            validate_macos_release(args.output, args.version, args.source_commit, args.build_number)
         else:
             validate_release(args.output, args.version, args.source_commit, args.build_number)
     except (ValueError, OSError, ET.ParseError) as error:
