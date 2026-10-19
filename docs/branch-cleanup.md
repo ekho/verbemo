@@ -106,3 +106,47 @@ partial failures, and complete empty-repository restoration.
 Live cleanup status and exact names/SHA are recorded in the Task 10 report and
 `.git/migration/task-10/` evidence. Source changes and fixtures do not themselves
 establish that any live branch was deleted.
+
+## Verified cleanup — 2026-10-19
+
+After independent implementation review and its scoped correction review, the
+coordinator explicitly selected these ten completed merged topic refs as
+unneeded. The reviewed script at `a11aaa9c596c9e60f18037a989f989a1f39c6d0f`
+deleted exactly their checked remote heads:
+
+| Branch | Deleted head SHA |
+|---|---|
+| `codex/analytics-delivery` | `258e1b5c4704fac2cf35fdb36dfba2851537cf2a` |
+| `codex/api-providers-0.6.4` | `4bf973e983e0c5ed02725bfd33e3cc8bd51c200e` |
+| `codex/autorecord-setup-macos` | `fa74e85ab801623a5943d22a7ed45c7a130397f1` |
+| `codex/local-speaker-diarization` | `6df610ac6dd83d21305e3ffa8d5cc3174df2d304` |
+| `codex/macos-0.6.0` | `1e298c9922297a6a71c0935eb15141bc6275f5ee` |
+| `codex/macos-ready-0.6.3` | `a7d1e8f2ef2b2ff8c038f387738efa009cbdda7d` |
+| `codex/stable-localvqe-source-digests` | `8bef7922f53eb20ab8105b1d7dca1407b40a4609` |
+| `codex/windows-downloads-0.6.4` | `48b5ffc071b362dc79cf0c8edf9afafafe78fa5a` |
+| `codex/windows-downloads-0.6.5` | `77b29905a65c2166c46645ab07a12a3529afc4e8` |
+| `codex/windows-release-routing` | `d91d02e9caa97fea9c4a4b0e7f25561ba0511825` |
+
+The preserved master is `3acf63317ee26bab51c6b71ad7375f05d04e69be`;
+every deleted head is its ancestor. No corresponding local topic heads existed,
+so the actual changes were ten remote-head deletions and ten origin-tracking
+ref removals; zero local-head deletions. The batch completed without failures.
+
+The fresh before snapshot is `.git/migration/task-10/fix1-before.json`.
+Backup `.git/migration/task-10/fix1-before.bundle` is 10,637,876 bytes, SHA-256
+`77b140f1b90329a9ac84463b5c6fd01fcd6cdeed49bf8d9ab08bd7af48489fe4`.
+Verification before and after application restored all 127 original refs into
+empty bare repositories and passed `git fsck --full --no-reflogs`.
+
+Actual events are in `fix1-before.json.result.json`; a separate fresh
+`after-apply.json` and `after-apply-proof.json` establish 27 remaining remote
+heads, all 25 unmerged heads at their original names/SHA, and all 46 remote tags
+unchanged. Every remaining local ref matches its before SHA (117 refs); local
+tags and amanu/upstream tracking refs are unchanged. The needed baseline and
+current worktree/open-PR branch remain. Deleted history remains reachable from
+preserved master and from the verified backup. These files and
+`after-apply-bundle-restore.log` are under `.git/migration/task-10/`.
+
+The after comparison finished before the documentation-result commit moved the
+active local feature head. No public release, site publication or merge was
+part of this cleanup.
