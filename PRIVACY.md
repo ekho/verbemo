@@ -1,6 +1,6 @@
 # Privacy
 
-Amanu has no account and no hosted meeting library. Recordings and the files
+Verbemo has no account and no hosted meeting library. Recordings and the files
 made from them live in the recordings folder on your computer. What leaves the
 computer depends on the transcription, speaker-naming, and summary backends you
 choose.
@@ -21,10 +21,10 @@ choose.
   Deleting the meeting deletes these artifacts too. It does not create a
   voice-identity database or recognize people across meetings. Cloud naming
   and summaries still follow the backend choices described below.
-- If you enable AssemblyAI, OpenAI, or ElevenLabs transcription, Amanu uploads
+- If you enable AssemblyAI, OpenAI, or ElevenLabs transcription, Verbemo uploads
   the meeting audio to that provider.
 - If you select Claude Code, Codex, Anthropic, or OpenAI for summaries or
-  speaker naming, Amanu gives that backend the transcript and the available
+  speaker naming, Verbemo gives that backend the transcript and the available
   meeting context: title, call application, and, on macOS, calendar participants.
   Those CLI tools or APIs may send the material to their provider under the
   terms of the account you use.
@@ -32,43 +32,30 @@ choose.
   no model at all and fills in only your own name, unless
   `speaker_names.backend` names a backend for it.
 - API keys stay on your computer and are sent only to the provider they
-  authenticate. macOS Settings stores keys under `~/.config/amanu/keys/`;
-  Windows uses Windows Credential Manager (`Amanu/…`).
+  authenticate. macOS Settings stores keys under `~/.config/verbemo/keys/`;
+  Windows uses Windows Credential Manager (`Verbemo/…`).
 
-Calendar access is optional on macOS; Windows has no calendar integration. Amanu
+Calendar access is optional on macOS; Windows has no calendar integration. Verbemo
 reads events to identify a meeting, name its recording, and optionally start it
 at the scheduled time. Calendar context stays local unless it is included in a
 request to a cloud or CLI model as described above.
 
-## Product analytics
+## Product and website analytics
 
-Product-usage reporting is enabled by default and can be disabled in first-run
-setup or Settings on both platforms, or with `amanu analytics off` on macOS. It
-sends a small closed set of events with a random installation identifier to
-`stats.amanu.me`. It never includes recordings, transcripts, summaries, calendar
-contents, names, paths, keys, or error text. The complete event and field list,
-retention period, and deletion instructions are in [What Amanu sends](docs/analytics.md).
+Verbemo does not collect or send usage statistics. There is no installation
+identifier, event queue or analytics backend. Legacy analytics fields cannot
+enable reporting. The website sends no page-view or download-click events.
+See [analytics behavior](docs/analytics.md).
 
 ## Updates and model downloads
 
-On macOS, Sparkle checks `amanu.me/appcast.xml` for updates and downloads a
-selected release from GitHub. Installed Windows copies check the separate stable
-Velopack feed on GitHub; portable copies do not update themselves. Local model
-setup downloads model files from their hosting services, including Hugging Face.
-These requests expose ordinary network metadata such as the IP address and user
-agent to the destination; they do not include meeting content. The
-product-analytics switch controls usage reporting separately from updates and
-model downloads.
+macOS Sparkle uses `https://github.com/ekho/verbemo/releases/latest/download/appcast.xml`.
+Installed Windows copies use `https://github.com/ekho/verbemo/releases/latest/download/`
+on the stable channel. Pending Windows updates install only at the next normal
+primary startup, before recording or processing starts. Portable copies do not
+self-update. Models download from their hosting services, including Hugging Face.
+These requests expose normal network metadata to the destination and do not
+include meeting content. No own public release is established by these source URLs.
 
-## Website analytics
-
-The website sends a first-party request to `amanu.me/m` when a page is viewed,
-and another aggregate event if a release download link is clicked. A page view
-contains the page path and title, screen dimensions, and the referring page when
-the browser supplies one. The download event contains only the fixed name
-`download_clicked` and current page path. As with any web request, the server
-also receives ordinary request metadata such as the IP address and user agent.
-The site sets no analytics identifier, does not connect this activity to the app
-installation identifier, and loads no third-party analytics script.
-
-Questions or deletion requests can be sent to [s@samat.me](mailto:s@samat.me).
+Use [Verbemo issues](https://github.com/ekho/verbemo/issues) for support; do not
+post private meeting content or credentials there.

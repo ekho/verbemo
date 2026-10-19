@@ -1,9 +1,11 @@
 # Security
 
-Security fixes are made for the latest released version of Amanu.
+Report Verbemo issues in [ekho/verbemo](https://github.com/ekho/verbemo).
+Do not post exploit details, recordings, transcripts, API keys or other private
+data in a public issue. If private vulnerability reporting is available in the
+repository's Security tab, use it. Otherwise, open an issue asking for a private
+reporting channel without disclosing the vulnerability or sensitive data.
 
-Please do not open a public issue for a vulnerability or include recordings,
-transcripts, API keys, or other private data in a report. Send the details to
-[s@samat.me](mailto:s@samat.me), including the Amanu version and macOS version
-or Windows build, and the smallest safe reproduction you can provide. You should
-receive an acknowledgement within seven days.
+Include the exact Verbemo source/build or package version, macOS/Windows build
+and a safe minimal reproduction when a private channel is established.
+No response-time commitment or private contact address is claimed here.

@@ -262,16 +262,16 @@ struct SetupOfferTests {
     }
 
     /// The window itself: three links, and each going where it says.
-    @Test("The About window names its author and links to the source and the studio")
+    @Test("The About window links to Verbemo source, support and origin")
     @MainActor
     func aboutWindowOffersThreeLinks() {
         let about = AboutWindow()
         #expect(about.offeredLinks.map(\.title)
-            == ["Samat Galimov ↗", "Source code on GitHub ↗", "Order custom development ↗"])
+            == ["Source code on GitHub ↗", "Support ↗", "Origin and licenses ↗"])
         #expect(about.offeredLinks.map(\.url) == [
-            "https://samat.me",
-            "https://github.com/gsamat/amanu",
-            "https://fans.dev",
+            "https://github.com/ekho/verbemo",
+            "https://github.com/ekho/verbemo/issues",
+            "https://github.com/ekho/verbemo/blob/master/docs/origin.md",
         ])
     }
 

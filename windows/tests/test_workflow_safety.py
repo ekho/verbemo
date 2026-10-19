@@ -98,6 +98,19 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn('release.py publish', str(job))
         self.assertNotIn('secrets.', str(job))
 
+    def test_readme_downloads_use_read_only_own_public_manifest_policy(self):
+        data = workflow('readme-downloads.yml')
+        self.assertEqual(data['permissions'], {'contents': 'read'})
+        self.assertNotIn('workflow_run', data['on'])
+        steps = data['jobs']['verify']['steps']
+        checkout = next(step for step in steps if step.get('uses', '').startswith('actions/checkout@'))
+        self.assertEqual(checkout['with']['ref'], 'master')
+        self.assertEqual(checkout['with']['persist-credentials'], 'false')
+        self.assertEqual([step['run'] for step in steps if 'run' in step],
+                         ['python3 scripts/update-readme-downloads.py --check --public'])
+        self.assertNotIn('secrets.', str(data))
+        self.assertNotIn('contents: write', str(data))
+
 
 if __name__ == '__main__':
     unittest.main()

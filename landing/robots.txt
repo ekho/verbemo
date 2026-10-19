@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
-
-Sitemap: https://amanu.me/sitemap.xml
+# No public site domain has been configured.

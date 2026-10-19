@@ -6,7 +6,7 @@
 - In the Verbemo checkout, `origin` points to `git@github.com:ekho/verbemo.git`, `upstream` to `git@github.com:gsamat/amanu.git`, and `amanu` to `git@github.com:ekho/amanu.git`.
 - Keep `ekho/amanu` as the upstream-facing fork. Prepare focused upstream contributions there from `upstream/master`.
 - Verbemo's initial `master` includes the local speaker diarization work from `codex/local-speaker-diarization`. `codex/amanu-baseline` preserves the original fork's `master`.
-- Existing application identifiers, signing, update feeds and release destinations still belong to the imported Amanu baseline. Prepare Verbemo's own release route before publishing; do not use the inherited upstream publication destinations for Verbemo.
+- Verbemo uses its own application identity and common release route. Publish only to `ekho/verbemo` using `docs/releasing.md`; imported historical destinations are not release targets.
 - Preserve the original copyright notices and license files.
 
 ## Shared platform source and release route
@@ -15,7 +15,7 @@
   source commit and exact import scope are recorded in `docs/windows-source-import.md`.
   Develop both platforms from the prepared Verbemo branch; a separate historical
   Windows release branch is no longer required.
-- The independent release route is being prepared according to
+- The independent release route is implemented according to
   `docs/superpowers/specs/2026-10-19-verbemo-independent-releases-design.md` and
   `docs/superpowers/plans/2026-10-19-verbemo-independent-releases.md`.
   Both platforms must use one source commit, the root `VERSION`, one
@@ -23,10 +23,9 @@
 - Windows installers must use `Verbemo-<VERSION>-windows-x64-Setup.exe`; portable
   archives use `Verbemo-<VERSION>-windows-x64-Portable.zip`. The Velopack channel
   can remain `stable`. Preserve already published assets and tags.
-- Imported scripts and publication guidance still contain inherited Amanu
-  destinations until the following implementation stages replace them. Do not
-  publish Verbemo through those routes. Follow the adapted `docs/releasing.md`
-  once the common Verbemo release route is implemented and verified.
+- Follow `docs/releasing.md` for the common release CLI and its validation
+  limits. No own public release is established by source changes or local builds.
+  Historical manifests under `docs/history/` are provenance, not active routes.
 - Apple Developer Program membership is deferred. Continue local macOS ad-hoc
   builds and testing; retain signed-release preparation. Actual Developer ID
   signing and notarization await the user's own credentials.

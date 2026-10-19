@@ -1,170 +1,75 @@
 # Verbemo for Windows
 
-Development commands use Verbemo. Historical Amanu download and distribution
-references below are retained from the imported baseline; do not use them to
-publish or install Verbemo. Its independent release route is still in preparation.
+Windows and macOS share this source tree, root `VERSION`, source commit and
+common release. See [source provenance](../docs/windows-source-import.md) and
+[release runbook](../docs/releasing.md). [Downloads](https://github.com/ekho/verbemo/releases)
+point to Verbemo's own Releases until a complete own release is verified.
+There is no current claim of a signed public Verbemo installer or catalog entry.
 
-The public Windows release is **0.6.6**, for Windows 11 24H2 or later on x64. It uses a native
-C#/.NET 10 and WPF application, a separate core library, WASAPI capture, and
-Velopack packaging. The installer and application are signed as **Fands
-Software LLC** through Microsoft Artifact Signing.
+## Build and test on Windows
 
-[Installer](https://github.com/gsamat/amanu/releases/download/windows-v0.6.6/Amanu-0.6.6-Setup.exe) ·
-[Portable ZIP](https://github.com/gsamat/amanu/releases/download/windows-v0.6.6/Amanu-stable-Portable.zip) ·
-[Release notes](https://github.com/gsamat/amanu/releases/tag/windows-v0.6.6)
-
-The [main README](../README.md) covers installation, requirements, and
-configuration. The [hardware checklist](https://github.com/gsamat/amanu/blob/windows-v0.6.6/windows/BETA.md) covers manual testing.
-The original [design](https://github.com/gsamat/amanu/blob/windows-v0.6.6/docs/specs/2026-09-20-windows-app-design.md) records the
-architecture decisions; its beta distribution gates describe the original
-plan, rather than the current signed release.
-
-## Get the source
-
-Windows currently has a separate development branch. The repository's default
-branch does not yet contain the released Windows implementation. To reproduce
-0.6.6, use the release tag:
+Install Git, .NET 10 SDK, CMake, Visual Studio C++ Build Tools with Desktop
+Development with C++, and a Windows 11 SDK. Native packaging needs the MSVC
+compiler; a managed build alone cannot validate local transcription.
+From the repository root in developer PowerShell:
 
 ```powershell
-git clone --branch windows-v0.6.6 https://github.com/gsamat/amanu.git amanu-windows
-cd amanu-windows\windows
+dotnet restore windows/Verbemo.Windows.slnx
+dotnet build windows/Verbemo.Windows.slnx -c Release --no-restore
+dotnet test windows/tests/Verbemo.Core.Tests/Verbemo.Core.Tests.csproj -c Release --no-restore
+dotnet test windows/tests/Verbemo.Live.Tests/Verbemo.Live.Tests.csproj -c Release --no-restore
+dotnet run --project windows/src/Verbemo.App/Verbemo.App.csproj -c Release
 ```
 
-The commands below run from that `windows` directory. They describe the public
-release source, which is newer than the earlier beta tree in some checkouts.
-
-## Build and test
-
-Install Git, the .NET 10 SDK, CMake, and Visual Studio 2022 C++ Build Tools with
-Desktop development with C++ and a Windows 11 SDK. Use a developer PowerShell
-with CMake and the MSVC toolchain available.
-
-For managed-code development:
+To build complete unsigned development packages from a clean committed checkout:
 
 ```powershell
-dotnet restore Verbemo.Windows.slnx
-dotnet build Verbemo.Windows.slnx -c Release --no-restore
-dotnet test tests\Verbemo.Core.Tests\Verbemo.Core.Tests.csproj -c Release --no-restore
-dotnet test tests\Verbemo.Live.Tests\Verbemo.Live.Tests.csproj -c Release --no-restore
-dotnet run --project src\Verbemo.App\Verbemo.App.csproj -c Release
+$version = (Get-Content VERSION -Raw).Trim()
+$commit = (git rev-parse HEAD).Trim()
+& windows/scripts/Build-Release.ps1 -Version $version -SourceCommit $commit -OutputDirectory "$env:TEMP/verbemo-development-$commit" -Development
 ```
 
-A managed build alone does not bundle the native transcription runtimes. To
-exercise local and live recognition and create a complete package, run:
+The output directory must be new. The script restores/tests managed code,
+builds native final/live runtimes, publishes the app and packages Setup, Portable
+and stable-channel update files. It verifies unsigned metadata with
+`publishable: false`; those files cannot pass the signed common release gate.
+A native CPU smoke test or successful packaging does not establish audio,
+model quality, graphical flow, install/uninstall or two-version update acceptance.
+Use a connected Windows host and record exactly what ran there. Follow the
+[acceptance checklist](BETA.md) and [live-transcript procedure](LIVE_TRANSCRIPTION.md).
 
-```powershell
-.\scripts\Build-Release.ps1
-.\artifacts\publish\Verbemo.exe
-```
+## Running and troubleshooting
 
-The release script restores packages, runs both test projects, publishes a
-self-contained x64 app, builds the pinned final-transcript CLI and streaming
-runtime, and packages the installer, portable ZIP, and stable update feed in
-`artifacts\release`. Users of the finished package need no .NET SDK, CMake,
-Python, or separate native runtime installation. Models download from Settings.
+Windows requires Windows 11 24H2 or later on x64. Download the selected final
+transcription model and the separate live model in Settings. Local summaries
+need a running local Ollama server. Cloud processing and subscription CLIs send
+meeting input to the selected provider; a desktop login may not sign in its CLI.
+Windows has no public Verbemo CLI and no calendar integration.
 
-Both native builds use portable CPU variants rather than the build computer's
-CPU features. The final-transcript build runs a CPU discovery/startup check.
-It also runs `tests/Test-NativeUnicodePaths.ps1`: the CLI, model, WAV and batch
-list are exercised on paths containing Cyrillic, CJK, accented characters,
-spaces and emoji. This smoke test uses a generated WAV and deliberately short
-model file, so no model download or inference is required. It can also run
-against an existing `local-runtime` directory with `-RuntimeDirectory`.
-Live recognition uses a separate local Nemotron streaming model; see
-[Windows live transcription](https://github.com/gsamat/amanu/blob/windows-v0.6.6/windows/LIVE_TRANSCRIPTION.md)
-for the real-time audio harness and CPU/memory behavior.
+Settings, models, logs and keys live under `%LOCALAPPDATA%\Verbemo Data`;
+recordings default to `%USERPROFILE%\Verbemo Recordings`. Verbemo does not
+modify Amanu's files or migrate them automatically. Choose an existing recordings
+directory explicitly if needed. See [Support](../SUPPORT.md) and [Privacy](../PRIVACY.md).
+App usage reporting is disabled and cannot be enabled by an old config field.
 
-Builds, tests, and audio/device checks must run on Windows. Cross-compiling on
-macOS or a green CI build does not replace testing the actual Windows recording
-flow. The release notes record the checks performed for each shipped version.
+Closing a window leaves the app in the tray; Quit stops it normally. Installed
+copies download stable updates while idle and install pending packages at the
+next normal **primary** startup, before runtime/recording begins. Checking or
+downloading does not apply, exit or restart. A second launch cannot autoapply
+against a live primary instance. Portable copies do not self-update.
 
-## Signing and release packaging
+## Signing and packaging
 
-Local builds are unsigned by default. `Build-Release.ps1` accepts
-the shared version from `VERSION`. After Velopack packaging, both the local
-script and the release workflow run `Set-ReleaseInstallerName.ps1` to produce
-`Amanu-<version>-Setup.exe`, update `assets.stable.json`, and generate
-`SHA256SUMS` for the final filenames. Renaming preserves the installer's signed
-bytes. Use a clean release output directory for a new build; an existing
-versioned installer is never overwritten. The published 0.6.3 installer retains
-its original filename; future releases use the versioned name.
+Public artifacts are `Verbemo-<VERSION>-windows-x64-Setup.exe` and
+`Verbemo-<VERSION>-windows-x64-Portable.zip`, in the same release/tag as macOS.
+Signed builds require your own PFX and password and a verified timestamp; the
+[common workflow](../.github/workflows/release.yml) scopes credentials to the
+signing step and cleans temporary key files. Local signed invocation uses the
+actual `-CertificatePath` and `-CertificatePassword` parameters of
+`Build-Release.ps1`; do not expose secrets in shell history, process arguments or logs.
+Use the workflow for release signing rather than putting a password in a command.
 
-`Build-Release.ps1` also accepts
-`-CertificatePath` and `-CertificatePassword` for local certificate signing.
-Do not put signing credentials in the repository or public logs.
-
-The **Windows release** GitHub Actions workflow (`windows-beta.yml`, retaining
-its historical filename) signs through Azure Artifact Signing with OIDC and
-the `windows-signing` GitHub Environment. Its configuration uses
-`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_ARTIFACT_SIGNING_ENDPOINT`,
-`AZURE_ARTIFACT_SIGNING_ACCOUNT`, and `AZURE_ARTIFACT_SIGNING_PROFILE`.
-The Azure login is tenant-only (`allow-no-subscriptions: true`); the signing
-identity needs the Certificate Profile Signer role on the profile.
-
-The workflow signs first-party payloads and the generated launcher/updater,
-then verifies signatures, publisher, and timestamp for Setup and files
-extracted from the update package and portable ZIP. Third-party DLLs retain
-their original signatures. Downloadable workflow artifacts require Azure
-signing. An optional PFX configuration remains available through
-`WINDOWS_BETA_CERTIFICATE_BASE64` and `WINDOWS_BETA_CERTIFICATE_PASSWORD`.
-See the [released workflow](https://github.com/gsamat/amanu/blob/windows-v0.6.6/.github/workflows/windows-beta.yml)
-for the exact gates.
-
-For a signed test build, select the Windows branch and package version in
-Actions. Keep `publish_release` disabled and `upload_artifact` enabled. This
-produces a downloadable signed artifact without publishing an automatic update.
-Enabling `publish_release` creates a Windows GitHub release with the complete
-stable Velopack feed. Windows tags use `windows-v<version>`; macOS uses the same version number;
-its Sparkle feed remains separate.
-
-## Command-line components
-
-Windows has no public Amanu CLI. Recording, import, retry, retranscription,
-speaker renaming, and Settings are available in the app and system tray.
-`transcribe-cli.exe` and the streaming worker are internal components bundled
-with Amanu.
-
-Claude Code and Codex are optional summary backends. Settings detects supported
-standalone and desktop-bundled installations, including Claude Desktop from
-the Microsoft Store. Use Settings to install or sign in to the selected CLI;
-its subscription login can be separate from the desktop chat app's login.
-These backends receive transcripts for cloud processing.
-
-## Scoop package
-
-The repository includes a [Scoop manifest](packaging/scoop/amanu.json) for the
-public portable ZIP. Save it as `amanu.json` and, with Scoop already installed,
-run from the folder containing that file:
-
-```powershell
-scoop install .\amanu.json
-```
-
-This installs Windows 0.6.6 with a pinned SHA-256 and Start menu shortcut.
-It has no built-in updater. When preparing a newer manifest, update both the
-version-specific URL and SHA-256 from the new release's `SHA256SUMS`; validate
-the archive layout and the launcher's signature on Windows. To upgrade, quit Amanu, run
-`scoop uninstall amanu`, then install the updated manifest. Its recordings, models, credentials, and settings are outside the
-Scoop package directory.
-
-The Scoop manifest has not been submitted to Scoop Extras.
-
-## WinGet package
-
-Windows 0.6.6 is submitted in [draft PR #447426](https://github.com/microsoft/winget-pkgs/pull/447426).
-Its manifest and signed public installer were verified on Windows. Isolated installation,
-upgrade and uninstall were not tested for this version; catalog validation remains pending.
-
-`FandsSoftware.Amanu` 0.6.1 is submitted in
-[Microsoft's package repository PR](https://github.com/microsoft/winget-pkgs/pull/445053).
-Microsoft's validation checks have passed; it is awaiting review. A public
-`winget install` command is not available yet. The
-[manifest set and maintenance instructions](packaging/winget/README.md)
-are kept here for subsequent Windows releases. Amanu has no published
-Chocolatey package yet.
-
-The signed 0.6.5 installer is submitted in [PR #445793](https://github.com/microsoft/winget-pkgs/pull/445793).
-Local manifest validation and all Microsoft validation checks passed. Clean installation,
-native upgrade from 0.6.4, and uninstall were verified in a temporary Windows profile.
-The PR is ready for review;
-WinGet availability will be confirmed after the catalog PR is merged.
+[Package metadata preparation](packaging/README.md) consumes verified real
+artifacts. Historical manifests are retained in [docs/history](../docs/history/amanu-packaging/README.md),
+with their publisher and hashes unchanged. No Verbemo Scoop or WinGet installation
+command is advertised before actual catalog publication and install validation.

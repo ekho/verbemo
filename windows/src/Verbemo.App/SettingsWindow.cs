@@ -164,11 +164,13 @@ internal sealed class AboutWindow : Window
         about.Margin = new Thickness(0, 12, 0, 0);
         stack.Children.Add(about);
         var links = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
-        links.Children.Add(Ui.Link("amanu.me", "https://amanu.me"));
-        var privacy = Ui.Link(T("Privacy", "Приватность"), "https://github.com/gsamat/amanu/blob/master/PRIVACY.md");
-        privacy.Margin = new Thickness(16, 0, 0, 0);
-        links.Children.Add(privacy);
+        links.Children.Add(Ui.Link(T("Source", "Исходный код"), "https://github.com/ekho/verbemo"));
+        var support = Ui.Link(T("Support", "Поддержка"), "https://github.com/ekho/verbemo/issues");
+        support.Margin = new Thickness(16, 0, 0, 0);
+        links.Children.Add(support);
         stack.Children.Add(links);
+        stack.Children.Add(Ui.Detail(T("Based on Amanu by Samat Galimov (MIT).", "На основе Amanu Самата Галимова (MIT).")));
+        stack.Children.Add(Ui.Link(T("Origin and licenses", "Происхождение и лицензии"), "https://github.com/ekho/verbemo/blob/master/docs/origin.md"));
         Content = stack;
     }
 }

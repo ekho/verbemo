@@ -1,29 +1,9 @@
-# Setup window: manual verification
+# Setup window manual checklist
 
-Last run 19 August 2026, against `Amanu.app` 0.2.0; the settings-window
-section below was added when the form moved into Settings, and the language
-section at the end when the interface learned Russian — neither has been run
-against a build yet. Most of it can be driven
-without hands — a real click at a screen point plus `~/.config/amanu/config.json`
-answers nearly every question here — and that is how it was run. The items that
-genuinely need a person are marked **by hand**; they are the ones involving
-speech, sound coming out of the Mac, a permission that has to be denied, or a
-CLI that has to be missing.
-
-That run found one real defect: the **Summaries** switch had no target and no
-action. It slid under the finger, wrote nothing, disabled nothing, and every
-meeting was summarised by a model the person had just switched off. Fixed. It
-is the reason to actually run this list rather than file it.
-
-Run it only after the current meeting and recording have ended. Replacing the
-installed application closes the copy that is running, so it doesn't belong in
-the middle of a recording.
-
-`docs/testing/window-shots.md` is the other half of this: it renders both
-windows to PNG files and lists every view's frame, which answers the questions
-about spacing, borders and appearance without a person squinting at a screen.
-Take the shots first — several items below are quicker to settle from a picture
-than from the running application.
+Procedure adapted for Verbemo; no current-build acceptance is claimed here.
+The [original dated checklist](../history/amanu-setup-window-manual-checklist.md)
+preserves imported observations. Use a disposable validation profile and record
+source SHA, bundle hash, language, permissions and actual results.
 
 ## Before installing
 
@@ -39,30 +19,31 @@ than from the running application.
 
 ## Install and first launch
 
-1. Install the signed build and start it:
+1. For local testing, build ad-hoc and launch the bundle. Use a separate
+   validation profile and confirm no recording is active before replacement:
 
    ```sh
-   make app
-   rm -rf /Applications/Amanu.app && cp -R .build/Amanu.app /Applications/
-   open /Applications/Amanu.app
+   make app SIGN_ID=-
+   rm -rf /Applications/Verbemo.app && cp -R .build/Verbemo.app /Applications/
+   open /Applications/Verbemo.app
    ```
 
-   Quit the running copy first (`osascript -e 'tell application "Amanu" to quit'`).
+   Quit the running copy first (`osascript -e 'tell application "Verbemo" to quit'`).
    Deleting the bundle out from under a running process does not stop it, and
    the survivor answers the doorbell that the new copy is trying to ring.
 
 2. Confirm there is one copy, not two:
 
    ```sh
-   pgrep -fl Amanu.app
+   pgrep -fl Verbemo.app
    ```
 
 3. Confirm Setup opens automatically and the ordinary status window does not
    open in front of it. Setup only opens when it is pending, so to see this
-   again, quit, remove `completed_at` from `~/.config/amanu/setup.json`, and
-   relaunch. On a pending launch `amanu setup` should be the only window there.
+   again, quit, remove `completed_at` from `~/.config/verbemo/setup.json`, and
+   relaunch. On a pending launch `verbemo setup` should be the only window there.
 4. Confirm **Start at login** is the first Access row and is green, and that
-   System Settings → General → Login Items lists Amanu.
+   System Settings → General → Login Items lists Verbemo.
 
 ## The window scrolls
 
@@ -72,8 +53,8 @@ below the fold, and someone who does not scroll will conclude they were
 deleted. Scrolling from a script:
 
 ```sh
-osascript -e 'tell application "System Events" to tell process "Amanu" \
-  to set value of scroll bar 1 of scroll area 1 of window "amanu setup" to 1.0'
+osascript -e 'tell application "System Events" to tell process "Verbemo" \
+  to set value of scroll bar 1 of scroll area 1 of window "verbemo setup" to 1.0'
 ```
 
 ## Access
@@ -88,7 +69,7 @@ The section is four rows: Start at login, Microphone, System audio, Calendar.
 - Microphone: click **Allow**, accept the macOS prompt, and confirm the row
   turns green. **By hand** if it was previously denied: confirm the button
   opens the right System Settings pane, grant it there, click back into
-  amanu, and confirm the row turns green without closing the window. The
+  verbemo, and confirm the row turns green without closing the window. The
   same for **Start at login** allowed in Login Items.
 - System audio: click **Allow and test**, accept the prompt, hear the short
   tone, and confirm the row says it heard it — it reads `heard the tone · <date>`
@@ -98,7 +79,7 @@ The section is four rows: Start at login, Microphone, System audio, Calendar.
   recording is running. Stop the recording and confirm the test works again.
 - Calendar: verify both Allow and Open Settings paths. Calendar is optional,
   must not block **Done**, and while it is the only thing ungranted the footer
-  still reads *Everything amanu needs is granted*.
+  still reads *Everything verbemo needs is granted*.
 - Close Setup with the red window button once and confirm this behaves like
   **Later**: the window closes, the app keeps running, `pgrep` still shows one.
 
@@ -121,7 +102,7 @@ The section is four rows: Start at login, Microphone, System audio, Calendar.
   `recordings_dir` (with `~` when the folder is under the home directory).
 - With nothing recording, choose a new folder and open **Recordings**: it
   lists the new folder at once, and the next recording lands there without
-  restarting amanu. Choose one again *during* a recording: the line under
+  restarting verbemo. Choose one again *during* a recording: the line under
   the path says the recording in progress stays in the old folder, it does,
   and the one after it goes to the new one.
 - **By hand:** confirm a folder chosen inside Documents or Desktop still
@@ -149,8 +130,8 @@ for it any more.
   needed. A switch that reads "on" while every transcript fails with HTTP 401
   is the defect this behaviour exists to prevent.
 - Paste a working key and confirm the switch turns itself on, the card says
-  **key works**, and the key lands in `~/.config/amanu/keys/` with mode 0600 —
-  never in `config.json`. amanu never writes to the shared
+  **key works**, and the key lands in `~/.config/verbemo/keys/` with mode 0600 —
+  never in `config.json`. verbemo never writes to the shared
   `~/.config/assemblyai/token`, though it still reads it.
 - Paste a *wrong* key over a working one and confirm the saved key is
   untouched and the status says so.
@@ -179,7 +160,7 @@ for it any more.
   `Whisper` or `GigaAM`, not parakeet whatever was chosen — and the button
   must offer **Download local model**. Both switches on writes no engine to the config at
   all, so a window that reads the engine name rather than the switch goes
-  quiet here and promises that everything amanu needs is granted.
+  quiet here and promises that everything verbemo needs is granted.
 - **By hand, Intel:** confirm **On this Mac** is visible but disabled and says
   it needs Apple Silicon, rather than being missing.
 - Open the **Meetings are mostly in** menu. Confirm it opens on **Detect
@@ -253,7 +234,7 @@ for it any more.
   other yes/no in the window, and its symbol sits in the same column as the
   folder above it.
 
-## Where amanu shows up
+## Where verbemo shows up
 
 The two switches that can leave the program with nothing to click, so the
 whole point of the check is that both of them undo.
@@ -262,15 +243,15 @@ whole point of the check is that both of them undo.
   once, with no gap where it was, and that nothing opens when its old place is
   clicked. Turn it back on and confirm the icon returns and its menu still
   works — the same menu, with every item still doing what it did.
-- Turn **In the Dock** off. Confirm the Dock icon goes at once and amanu
+- Turn **In the Dock** off. Confirm the Dock icon goes at once and verbemo
   leaves ⌘-Tab, while the window you are looking at stays open and usable.
   Turn it on again and confirm the icon comes back.
-- Turn both off. Confirm the line under the box appears, saying amanu keeps
-  recording and how to bring the window back. Close every amanu window, then
-  open Amanu from Spotlight and confirm the status window comes back and
-  `pgrep amanu` still shows the one copy that was already running.
+- Turn both off. Confirm the line under the box appears, saying verbemo keeps
+  recording and how to bring the window back. Close every verbemo window, then
+  open Verbemo from Spotlight and confirm the status window comes back and
+  `pgrep verbemo` still shows the one copy that was already running.
 - With both still off, start a recording from the window, quit and relaunch,
-  and confirm amanu comes up with no icon anywhere and the setting still off.
+  and confirm verbemo comes up with no icon anywhere and the setting still off.
   Then put both back on from Settings.
 
 **By hand** from here down — all of it needs a microphone, sound coming out of
@@ -282,7 +263,7 @@ the Mac, and a few minutes of waiting.
    - `transcript.json`, `transcript.md`, and the summary remain;
    - mic, system, and mixed audio files are gone;
    - `meta.json` contains `"audio_discarded": true`;
-   - **Re-transcribe** is disabled for that session, and `amanu process` on it
+   - **Re-transcribe** is disabled for that session, and `verbemo process` on it
      refuses with a reason rather than reporting `transcript: pending` and
      doing nothing.
 3. Turn **Keep audio** on and make another short recording. After transcription,
@@ -293,7 +274,7 @@ the Mac, and a few minutes of waiting.
    - your microphone is audible only in the left channel and Mac playback only
      in the right channel;
    - **Re-transcribe** is enabled and successfully produces a new transcript
-     from the archived channels, and `amanu process --again` does the same
+     from the archived channels, and `verbemo process --again` does the same
      thing from the command line.
 4. Optional failure-path check: temporarily switch **On this Mac** off and put
    an unusable key in place of the working one, record a few seconds, and
@@ -344,7 +325,7 @@ checking by hand is only the seam between them.
 
 ### Models on disk
 
-At the bottom of **Advanced**, and the only place amanu deletes anything a
+At the bottom of **Advanced**, and the only place verbemo deletes anything a
 download brought in. The measuring can be read off a picture; the deleting is
 **by hand**, because it ends with half a gigabyte gone.
 
@@ -376,12 +357,12 @@ read once at startup, which is what the row under it says.
 - On a Mac set to Russian, confirm every window comes up in Russian without
   anything being set. On an English Mac, in English. This is the whole of what
   most people will ever do about it.
-- Set **Advanced → Интерфейс → Язык окон amanu** to `ru`. Confirm the notice
-  under the tab says it applies the next time amanu starts, that the open
+- Set **Advanced → Интерфейс → Язык окон verbemo** to `ru`. Confirm the notice
+  under the tab says it applies the next time verbemo starts, that the open
   windows do **not** change under you, and that after a restart every window,
   both menus, and the next banner a recording posts are Russian.
 - Confirm the three settings with "language" in the name stay apart: **Язык
-  окон amanu** (Interface) is amanu's own, **Язык встреч** (Transcription) is
+  окон verbemo** (Interface) is verbemo's own, **Язык встреч** (Transcription) is
   what meetings are held in, **Язык саммари** (Summaries) is what summaries
   are written in. Changing any one must leave the other two alone in
   `config.json`.
@@ -391,9 +372,9 @@ read once at startup, which is what the row under it says.
   states — empty for English, the promise about English meetings for anything
   else, and the note about short or noisy meetings for **Определять
   автоматически**.
-- Confirm `amanu doctor`, `amanu sessions` and `--help` stay English whatever
+- Confirm `verbemo doctor`, `verbemo sessions` and `--help` stay English whatever
   `interface_language` says.
-- Put a language amanu does not have into the file — `"interface_language":
+- Put a language verbemo does not have into the file — `"interface_language":
   "kz"` — start it from a terminal, and confirm it says so on stderr and falls
   back to the Mac's own language rather than refusing to start or showing
   empty labels.
@@ -405,15 +386,15 @@ read once at startup, which is what the row under it says.
   one of them looks finished.
 - Confirm **Settings…** is still in both, and that its **Setup** tab shows the
   same form: this is where the permissions live now.
-- Run `amanu setup`. Confirm the wizard opens *and* that **Setup…** is back in
+- Run `verbemo setup`. Confirm the wizard opens *and* that **Setup…** is back in
   both menus while it is open — the command resets the marker, and the item
   follows the marker.
 - Click **Done**, then open both menus again: the item is gone, without
   restarting the app.
-- Remove `completed_at` and `version` from `~/.config/amanu/setup.json` and
+- Remove `completed_at` and `version` from `~/.config/verbemo/setup.json` and
   relaunch: the wizard opens by itself and the item is in both menus again.
 - Look at the line under the Setup tab, below the hairline. With everything
-  granted it reads *Everything amanu needs is granted* — the half of it that
+  granted it reads *Everything verbemo needs is granted* — the half of it that
   matters when somebody opened the tab to be reassured rather than to repair
   anything. It is the wizard's own sentence, from the same form.
 - Make something outstanding while the tab is open — deny a permission in
@@ -444,25 +425,25 @@ read once at startup, which is what the row under it says.
   its row changes from pending to done without the window being closed, and
   **Finish processing** answers for the finished session, not the stale one.
 - Select a session that is being transcribed and click **Delete**: the window
-  says amanu is working on it and moves nothing to the Trash.
+  says verbemo is working on it and moves nothing to the Trash.
 - Drop a large file to import, press **Cancel** in the import status, and
   immediately drop another: the second one is imported once the first has
   stopped, and is not silently forgotten.
 
 ## Reopening and restart behavior
 
-- While the app is running, execute `amanu setup`. Confirm the existing app
+- While the app is running, execute `verbemo setup`. Confirm the existing app
   opens Setup, the command exits, and `pgrep` still shows one copy.
 - Click **Later** or **Done**, quit and reopen the app, and confirm Setup does
   not open automatically again.
 - Reopen Setup from both the menu-bar menu and the app menu. Both also carry
   **Check for updates…**, which is present only in a real bundle, and **About
-  Amanu**, which is first in the app menu and last but one in the other.
-- Open **About Amanu** and confirm it names the version this build actually
+  Verbemo**, which is first in the app menu and last but one in the other.
+- Open **About Verbemo** and confirm it names the version this build actually
   is — that line comes from the bundle's `Info.plist` and is the one thing in
   the window a bare `swift run` cannot show. Click all three links and confirm
-  each opens the page it names, the third going to `fansdev.ru` in a Russian
-  interface and `fans.dev` in an English one.
+  each opens the Verbemo source, support or origin/licenses page. Confirm
+  the Amanu/Samat Galimov MIT attribution is visible in both languages.
 - **By hand:** make one final ordinary meeting test and verify auto-record,
   transcription, speaker naming, summary generation, and the recordings list
   still work.

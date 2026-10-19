@@ -1,6 +1,6 @@
 import AppKit
 
-/// The small window behind **About verbemo**: whose program this is, where its
+/// The small window behind **About Verbemo**: whose program this is, where its
 /// source is, and how to ask for one like it.
 ///
 /// Every Mac application has this window and it is always in the same place,
@@ -30,7 +30,7 @@ final class AboutWindow: NSObject {
         )
         super.init()
 
-        panel.title = localised("About verbemo", "О программе verbemo")
+        panel.title = localised("About Verbemo", "О программе Verbemo")
         panel.isReleasedWhenClosed = false
 
         let icon = NSImageView()
@@ -39,7 +39,7 @@ final class AboutWindow: NSObject {
         // having to know which it is.
         icon.image = FeatherIcon.image(size: 72, color: nil)
 
-        let name = NSTextField(labelWithString: "verbemo")
+        let name = NSTextField(labelWithString: "Verbemo")
         name.font = .systemFont(ofSize: 22, weight: .semibold)
 
         let version = NSTextField(labelWithString: Self.versionLine ?? "")
@@ -50,8 +50,8 @@ final class AboutWindow: NSObject {
         version.isHidden = Self.versionLine == nil
 
         let tagline = NSTextField(labelWithString: localised(
-            "Records your meetings and keeps them on this Mac.",
-            "Записывает встречи и держит их на этом Маке."))
+            "Records your meetings and keeps them on this Mac. Based on Amanu by Samat Galimov (MIT).",
+            "Записывает встречи и держит их на этом Маке. На основе Amanu Самата Галимова (MIT)."))
         tagline.font = .systemFont(ofSize: 12)
         tagline.textColor = .secondaryLabelColor
         tagline.alignment = .center
@@ -60,13 +60,9 @@ final class AboutWindow: NSObject {
         tagline.preferredMaxLayoutWidth = 260
 
         linkButtons = [
-            // A name is usually left exactly as it is; a name is also how a
-            // person is called, and in Russian this one is called this.
-            link(localised("Samat Galimov", "Самат Галимов"), Self.authorPage),
-            link(localised("Source code on GitHub", "Исходный код на GitHub"),
-                 Self.sourceRepository),
-            link(localised("Order custom development", "Заказать разработку"),
-                 Self.developmentStudio),
+            link(localised("Source code on GitHub", "Исходный код на GitHub"), Self.sourceRepository),
+            link(localised("Support", "Поддержка"), Self.supportPage),
+            link(localised("Origin and licenses", "Происхождение и лицензии"), Self.originPage),
         ]
         let links = NSStackView(views: linkButtons)
         links.orientation = .vertical
@@ -123,16 +119,9 @@ final class AboutWindow: NSObject {
     /// and no wider: nothing in here is a paragraph.
     private static let width: CGFloat = 340
 
-    static let authorPage = "https://samat.me"
-    static let sourceRepository = "https://github.com/gsamat/amanu"
-
-    /// The studio's site exists in each of verbemo's two languages, and the one
-    /// to open is the one the person reading this window can read. Which is
-    /// why an address goes through `localised` here, where addresses usually
-    /// stay as they are: these two are one page written twice, not a name.
-    static var developmentStudio: String {
-        localised("https://fans.dev", "https://fansdev.ru")
-    }
+    static let sourceRepository = "https://github.com/ekho/verbemo"
+    static let supportPage = "https://github.com/ekho/verbemo/issues"
+    static let originPage = "https://github.com/ekho/verbemo/blob/master/docs/origin.md"
 
     /// The version, as the bundle knows it. Nil for a bare build, which has
     /// no `Info.plist` to have been stamped by `make app`.

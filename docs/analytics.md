@@ -14,5 +14,6 @@ may receive meeting data to transcribe or summarize it. Product analytics being
 disabled does not change those integrations or their privacy controls.
 
 Historical analytics designs describe the imported Amanu baseline, not current
-Verbemo behavior. Site analytics removal is tracked in the independent-release
-site stage; this page describes the application.
+Verbemo behavior. The static website also sends no page-view or download-click events and has no
+analytics endpoint. A hosting provider can still receive ordinary HTTP metadata
+when serving files; no public hosting domain is configured in this source.

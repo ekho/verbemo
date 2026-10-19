@@ -1,12 +1,7 @@
-"""Independence guard. Unit discovery enforces the migrated Tasks 4–7 scope.
+"""Guard all finished active product/runtime/release/site/documentation surfaces.
 
-Run `python3 Tests/scripts/test_independent_product.py --all` for the final
-runtime/build/release/site gate. The full gate is mandatory in CI and remains
-red until Task 8 migrates About, README/download helpers and its verification
-workflow, docs and the site.
-Task 8 must expand MIGRATED; no finding is waived.
-Historical/provenance docs, licenses and dependency sources are outside active
-product scope. User-selected paths and third-party dependency names are allowed.
+History, origin/license attribution and third-party dependency sources remain
+outside active service scope. No active inherited route is waived.
 """
 import re
 import sys
@@ -17,25 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ACTIVE = ("Sources", "windows/src", "windows/scripts", "scripts", ".github",
           "landing", "Packaging", "Makefile", "Package.swift", "README.md",
-          "docs/releasing.md")
-MIGRATED = ("scripts/release.py", "scripts/release_github.py", "scripts/release.sh", ".github/workflows/ci.yml", ".github/workflows/release.yml",
-            "windows/src/Verbemo.App/UpdateStartupAdmission.cs", "windows/src/Verbemo.App/UpdateService.cs", "windows/src/Verbemo.App/App.xaml.cs",
-            "windows/scripts/Build-Release.ps1", "windows/scripts/Set-ReleaseInstallerName.ps1",
-            "windows/scripts/Test-ReleaseSignatures.ps1", "Sources/verbemo/Updates", "Packaging/Verbemo-Info.plist",
-            "scripts/build-macos-release.sh", "scripts/build-macos-plist.py",
-            "scripts/release_manifest.py", "scripts/verify-sparkle-signature.swift", "Makefile",
-            "Sources/verbemo/Analytics", "Sources/verbemo/Settings",
-            "Sources/verbemo/Home.swift", "Sources/verbemo/UI/SetupForm.swift",
-            "Sources/verbemo/UI/ConfigWatch.swift", "Sources/verbemo/Verbemo.swift",
-            "Sources/verbemo/Config.swift", "Sources/verbemo/App", "Sources/verbemo/Setup",
-            "Sources/verbemo/Sessions", "Sources/verbemo/Summary", "Sources/verbemo/Transcription",
-            "Sources/verbemo/RecordingSession.swift", "Sources/verbemo/UI/RecordingsWindow.swift",
-            "Sources/verbemo/UI/SetupWindow.swift", "Sources/verbemo/UI/SettingsWindow.swift",
-            "windows/src/Verbemo.App/VerbemoRuntime.cs", "windows/src/Verbemo.App/ProcessingCoordinator.cs",
-            "windows/src/Verbemo.App/AnalyticsService.cs",
-            "windows/src/Verbemo.App/SetupForm.cs", "windows/src/Verbemo.Core/Analytics",
-            "windows/src/Verbemo.Core/Configuration")
-PENDING = {"Task 8": "About/source links, README/download helpers and workflow, docs/releasing.md, landing (including telemetry)"}
+          "SUPPORT.md", "CLAUDE.md", "PRIVACY.md", "SECURITY.md", "docs/old-macs.md", "docs/releasing.md",
+          "docs/pitfalls.md", "docs/analytics.md", "docs/configuration.md", "docs/testing",
+          "windows/README.md", "windows/BETA.md", "windows/LIVE_TRANSCRIPTION.md", "windows/packaging")
+MIGRATED = ACTIVE
 OLD_KEY = "/AxdBBPOFIca/y7RYwvi83FE6WqnIAjkVV0nTkRq9/c="
 
 
@@ -48,6 +28,7 @@ def violations(path, text):
         return []
     rules = {
         "author-domain": r"(?:[\w-]+\.)?amanu\.me\b|samat\.me/amanu\b",
+        "author-development": r"(?:samat\.me|fans\.dev|fansdev\.ru)\b",
         "author-repository": r"(?:gsamat|ekho)/amanu(?:\b|/)",
         "author-sparkle-key": re.escape(OLD_KEY),
         "author-publisher": r"Fands Software LLC",
@@ -92,6 +73,7 @@ class IndependenceDetectorTests(unittest.TestCase):
             ("Sources/verbemo/Updater.swift", 'URL(string: "https://amanu.me/appcast.xml")', "author-domain"),
             ("windows/src/App/Updates.cs", 'new GithubSource("https://github.com/gsamat/amanu")', "author-repository"),
             ("scripts/release.sh", 'REPO="gsamat/amanu"', "author-repository"),
+            ("Sources/verbemo/UI/AboutWindow.swift", '"https://fans.dev"', "author-development"),
             ("Packaging/Verbemo-Info.plist", "/AxdBBPOFIca/y7RYwvi83FE6WqnIAjkVV0nTkRq9/c=", "author-sparkle-key"),
             ("windows/scripts/sign.ps1", "CN=Fands Software LLC", "author-publisher"),
             ("Sources/verbemo/Home.swift", 'env["AMANU_HOME"]', "inherited-environment"),

@@ -211,17 +211,13 @@ struct InterfaceLanguageTests {
                 "still English in a Russian window: \(Self.untranslated(english, russian))")
     }
 
-    /// The one link in verbemo whose address depends on the language: the
-    /// studio has a site in each, and an English window sending a person to
-    /// the Russian one would be sending them to a page they cannot read. The
-    /// other two are one page each and stay where they are.
-    @Test("«Order custom development» goes to the site in the window's language")
+    @Test("About links stay on Verbemo source, support and origin in both languages")
     @MainActor
-    func theStudioLinkFollowsTheLanguage() {
-        #expect(Self.inLanguage(.english) { AboutWindow().offeredLinks.map(\.url) }
-            == ["https://samat.me", "https://github.com/gsamat/amanu", "https://fans.dev"])
-        #expect(Self.inLanguage(.russian) { AboutWindow().offeredLinks.map(\.url) }
-            == ["https://samat.me", "https://github.com/gsamat/amanu", "https://fansdev.ru"])
+    func aboutLinksAreIndependentInBothLanguages() {
+        let expected = ["https://github.com/ekho/verbemo", "https://github.com/ekho/verbemo/issues",
+                        "https://github.com/ekho/verbemo/blob/master/docs/origin.md"]
+        #expect(Self.inLanguage(.english) { AboutWindow().offeredLinks.map(\.url) } == expected)
+        #expect(Self.inLanguage(.russian) { AboutWindow().offeredLinks.map(\.url) } == expected)
     }
 
     /// And the same question of the Advanced tab, which is written from
@@ -589,7 +585,7 @@ struct InterfaceLanguageTests {
         // Names of things, and the shape of a key nobody translates.
         let names = [
             "AssemblyAI", "OpenAI", "OpenAI-compatible", "ElevenLabs", "Anthropic", "Claude Code", "Codex", "Ollama",
-            "sk-ant-…", "sk-…", "verbemo",
+            "sk-ant-…", "sk-…", "verbemo", "Verbemo",
             // The models, named the way their release notes name them.
             "parakeet v3", "parakeet v2", "NVIDIA nemotron",
             "Parakeet", "Parakeet v3", "Whisper large-v3-turbo", "GigaAM v3",

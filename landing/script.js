@@ -1,47 +1,4 @@
-// First-party analytics shared with the podcast site and CTOdaily. No
-// third-party script: just a tracking-pixel request to this site's /m route.
-(function () {
-    var url = new URL('/m', location.origin);
-    url.searchParams.set('p', location.pathname);
-    url.searchParams.set('t', document.title);
-    url.searchParams.set('s', [screen.width, screen.height, devicePixelRatio].join(','));
-    if (document.referrer) url.searchParams.set('r', document.referrer);
-    new Image().src = url;
-})();
-
-// Count release downloads as an aggregate site event. The request stays on
-// the same first-party /m endpoint and does not share the app installation ID.
-(function () {
-    document.querySelectorAll('a[href*="/releases/download/"]').forEach(function (link) {
-        link.addEventListener('click', function () {
-            var url = new URL('/m', location.origin);
-            url.searchParams.set('p', 'download_clicked');
-            url.searchParams.set('t', 'Amanu download');
-            url.searchParams.set('e', '1');
-            url.searchParams.set('r', location.pathname);
-            new Image().src = url;
-        });
-    });
-})();
-
-// Windows visitors see the Windows app. Mac, iPhone, and other devices retain
-// the default macOS screenshots. No platform information is sent to analytics.
-(function () {
-    if (!/Windows/i.test(navigator.userAgent)) return;
-    document.querySelectorAll('picture').forEach(function (picture) {
-        picture.querySelectorAll('source[data-windows-srcset]').forEach(function (source) {
-            source.srcset = source.dataset.windowsSrcset;
-        });
-        var img = picture.querySelector('img[data-windows-src]');
-        if (img) {
-            img.src = img.dataset.windowsSrc;
-            if (img.dataset.windowsAlt) img.alt = img.dataset.windowsAlt;
-            if (img.dataset.windowsWidth) img.width = Number(img.dataset.windowsWidth);
-            if (img.dataset.windowsHeight) img.height = Number(img.dataset.windowsHeight);
-        }
-    });
-})();
-
+// This static site has no usage reporting or network script.
 // Decorative recording timer. It stays still when reduced motion is enabled.
 (function () {
     var el = document.getElementById('rec-time');
