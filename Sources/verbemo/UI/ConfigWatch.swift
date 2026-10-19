@@ -19,7 +19,9 @@ enum ConfigWatch {
     /// the returned token for as long as the redrawing is wanted; dropping it
     /// stops the observation.
     static func observe(_ redraw: @escaping @MainActor () -> Void) -> Token {
-        Token(NotificationCenter.default.addObserver(
+        // Notifications can arrive from work scoped to another home.
+        let home = Home.current
+        return Token(NotificationCenter.default.addObserver(
             forName: Config.didChange, object: nil, queue: nil
         ) { _ in
             // Delivered on whichever thread wrote — which today is always the
@@ -27,15 +29,15 @@ enum ConfigWatch {
             // check is here because "today" is not a guarantee, and AppKit
             // from a background thread is a crash rather than a glitch.
             if Thread.isMainThread {
-                MainActor.assumeIsolated { redraw() }
+                MainActor.assumeIsolated { Home.$scoped.withValue(home) { redraw() } }
             } else {
-                DispatchQueue.main.async { redraw() }
+                DispatchQueue.main.async { Home.$scoped.withValue(home) { redraw() } }
             }
         })
     }
 
     /// Announces an edit made to the file by anyone other than this program —
-    /// an editor, `verbemo analytics off` from a terminal, a sync tool.
+    /// an editor, a terminal script, a sync tool.
     ///
     /// `didChange` only ever came from `Config.update`, which was enough while
     /// every window was the only writer. It stopped being enough the day a
