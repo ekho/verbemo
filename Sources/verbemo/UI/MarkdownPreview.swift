@@ -22,15 +22,25 @@ enum MarkdownPreview {
             var font = baseFont
             var prefix = ""
             var isCode = false
-            for component in components {
+            let depth = components.filter {
+                if case .listItem = $0.kind { return true }
+                return false
+            }.count
+            var listed = false
+            for (index, component) in components.enumerated() {
                 switch component.kind {
                 case .header(let level):
                     font = .systemFont(ofSize: max(14, 24 - CGFloat(level) * 2), weight: .semibold)
                     paragraph.paragraphSpacingBefore = 8
                 case .listItem(let ordinal):
-                    let ordered = components.contains { $0.kind == .orderedList }
+                    // Intents run from the innermost block outwards; outer items must not overwrite it.
+                    guard !listed else { break }
+                    listed = true
+                    let ordered = components.indices.contains(index + 1)
+                        && components[index + 1].kind == .orderedList
                     prefix = ordered ? "\(ordinal). " : "• "
-                    paragraph.headIndent = 20
+                    paragraph.firstLineHeadIndent = CGFloat(depth - 1) * 20
+                    paragraph.headIndent = CGFloat(depth) * 20
                     paragraph.paragraphSpacing = 4
                 case .blockQuote:
                     paragraph.firstLineHeadIndent = 16

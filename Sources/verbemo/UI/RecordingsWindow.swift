@@ -31,6 +31,7 @@ final class RecordingsWindow: NSObject {
     var onSkipDiarization: ((URL) async throws -> Void)?
     private var root: URL
     private let panel: NSWindow
+    private let pasteboard: NSPasteboard
     private let table = NSTableView()
     private let scroll = NSScrollView()
 
@@ -43,6 +44,8 @@ final class RecordingsWindow: NSObject {
     private let finishButton = NSButton()
     private let retranscribeButton = NSButton()
     private let openTranscriptButton = NSButton()
+    private let copySummaryButton = NSButton()
+    private var copyReset: Task<Void, Never>?
     private let openFolderButton = NSButton()
     private let deleteButton = NSButton()
     private let importButton = NSButton()
@@ -80,8 +83,9 @@ final class RecordingsWindow: NSObject {
     var isProcessing: Bool { working }
     private var working = false { didSet { onActivityChange?() } }
 
-    init(root: URL) {
+    init(root: URL, pasteboard: NSPasteboard = .general) {
         self.root = root
+        self.pasteboard = pasteboard
         panel = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -222,6 +226,8 @@ final class RecordingsWindow: NSObject {
              localised("Re-transcribe", "Расшифровать заново"), #selector(retranscribeClicked)),
             (openTranscriptButton,
              localised("Open transcript", "Открыть расшифровку"), #selector(openTranscriptClicked)),
+            (copySummaryButton,
+             localised("Copy summary", "Скопировать саммари"), #selector(copySummaryClicked)),
             (openFolderButton, localised("Open folder", "Открыть папку"), #selector(openFolderClicked)),
             (deleteButton, localised("Delete", "Удалить"), #selector(deleteClicked)),
         ] as [(NSButton, String, Selector)] {
@@ -232,6 +238,10 @@ final class RecordingsWindow: NSObject {
         }
         importButton.identifier = NSUserInterfaceItemIdentifier("choose-media-import")
         openTranscriptButton.identifier = NSUserInterfaceItemIdentifier("open-transcript")
+        copySummaryButton.identifier = .init("copy-summary")
+        copySummaryButton.keyEquivalent = "c"
+        copySummaryButton.keyEquivalentModifierMask = [.command, .shift]
+        copySummaryButton.toolTip = localised("Copy summary (⇧⌘C)", "Скопировать саммари (⇧⌘C)")
         openRootButton.identifier = NSUserInterfaceItemIdentifier("open-recordings-folder")
         rootPath.stringValue = root.path
         rootPath.font = .systemFont(ofSize: 11)
@@ -304,11 +314,14 @@ final class RecordingsWindow: NSObject {
         versionSelector.target = self
         versionSelector.action = #selector(versionSelected(_:))
         versionSelector.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let versionActions = NSStackView(views: [versionSelector, NSView(), copySummaryButton])
+        versionActions.orientation = .horizontal
+        versionActions.spacing = 8
         let diarizationActions = NSStackView(views: [retryDiarizationButton, skipDiarizationButton])
         diarizationActions.orientation = .horizontal
         diarizationActions.spacing = 8
         let detail = NSStackView(views: [detailTitle, diarizationLabel, diarizationActions,
-                                         versionSelector, detailTabs, processingButtons, busyLabel])
+                                         versionActions, detailTabs, processingButtons, busyLabel])
         detail.orientation = .vertical
         detail.distribution = .fill
         detail.alignment = .leading
@@ -318,6 +331,7 @@ final class RecordingsWindow: NSObject {
             detailTitle.widthAnchor.constraint(equalTo: detail.widthAnchor),
             diarizationLabel.widthAnchor.constraint(equalTo: detail.widthAnchor),
             detailTabs.widthAnchor.constraint(equalTo: detail.widthAnchor),
+            versionActions.widthAnchor.constraint(equalTo: detail.widthAnchor),
             versionSelector.widthAnchor.constraint(lessThanOrEqualTo: detail.widthAnchor),
             detail.heightAnchor.constraint(greaterThanOrEqualToConstant: 260),
         ])
@@ -460,6 +474,8 @@ final class RecordingsWindow: NSObject {
     }
 
     private func showDetail() {
+        copyReset?.cancel()
+        copySummaryButton.title = localised("Copy summary", "Скопировать саммари")
         if versionSession != selected?.dir {
             versionSession = selected?.dir
             versionKey = nil
@@ -606,6 +622,7 @@ final class RecordingsWindow: NSObject {
             PostProcessor.readTranscript($0) != nil || FileManager.default.fileExists(
                 atPath: $0.appendingPathComponent("transcript.md").path)
         } ?? false)
+        copySummaryButton.isEnabled = summaryToCopy != nil
         openFolderButton.isEnabled = item != nil
         deleteButton.isEnabled = !working && item != nil
         let state = item.flatMap { DiarizationState.read($0.dir) }
@@ -947,6 +964,50 @@ final class RecordingsWindow: NSObject {
                     }
                 }
             })
+    }
+
+    private var summaryToCopy: String? {
+        guard selectedVersion?.isRequest != true, let dir = artifactDirectory,
+              let text = try? String(contentsOf: dir.appendingPathComponent("summary.md"), encoding: .utf8),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return text
+    }
+
+    @objc private func copySummaryClicked() {
+        guard let summary = summaryToCopy else {
+            updateButtons()
+            return
+        }
+        guard Self.copy(summary: summary, to: pasteboard) else { return }
+        copyReset?.cancel()
+        let title = localised("Copy summary", "Скопировать саммари")
+        copySummaryButton.title = localised("Copied", "Скопировано")
+        copyReset = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            self?.copySummaryButton.title = title
+        }
+    }
+
+    @discardableResult
+    static func copy(
+        summary: String, to pasteboard: NSPasteboard,
+        rtf: (NSAttributedString) throws -> Data = { rendered in
+            try rendered.data(from: NSRange(location: 0, length: rendered.length),
+                              documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+        }
+    ) -> Bool {
+        let rendered = NSMutableAttributedString(attributedString: MarkdownPreview.render(summary))
+        let range = NSRange(location: 0, length: rendered.length)
+        // Normalize paragraph boundaries as NSTextStorage does for the preview.
+        rendered.fixAttributes(in: range)
+        // A preview's dynamic label colour becomes fixed in RTF, including white from a dark window.
+        rendered.removeAttribute(.foregroundColor, range: range)
+        let data = try? rtf(rendered)
+        pasteboard.declareTypes(data == nil ? [.string] : [.string, .rtf], owner: nil)
+        guard pasteboard.setString(summary, forType: .string) else { return false }
+        if let data { pasteboard.setData(data, forType: .rtf) }
+        return true
     }
 
     static func readableTranscript(in dir: URL) -> URL? {
