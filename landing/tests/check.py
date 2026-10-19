@@ -139,8 +139,36 @@ def resolves_locally(page_path, url):
     return (page_path.parent / path).resolve().is_file()
 
 
-def main():
+def valid_download_policy(pages):
+    """Both languages use Releases, or one exact own common-release asset set.
+
+    The updater verifies release evidence before writing; this offline gate
+    checks the resulting public URL policy without making network requests.
+    """
     releases = "https://github.com/ekho/verbemo/releases"
+    if len(pages) != 2:
+        return False
+    marked_pages = [[anchor for anchor in page.anchors if "data-download" in anchor] for page in pages]
+    if any(len(anchors) != 4 or any(sum(anchor.get("data-download") == platform for anchor in anchors) != 2
+                                  for platform in ("macOS", "Windows")) for anchors in marked_pages):
+        return False
+    first = next(anchor.get("href", "") for anchor in marked_pages[0] if anchor["data-download"] == "macOS")
+    expected = dict.fromkeys(("macOS", "Windows"), releases)
+    if first != releases:
+        component = r"(?:0|[1-9][0-9]*)"
+        version = rf"({component}\.{component}\.{component})"
+        match = re.fullmatch(re.escape(releases) + rf"/download/verbemo-v{version}/Verbemo-\1-macos-universal\.dmg", first)
+        if not match:
+            return False
+        version = match[1]
+        base = f"{releases}/download/verbemo-v{version}/Verbemo-{version}-"
+        expected = {"macOS": base + "macos-universal.dmg", "Windows": base + "windows-x64-Setup.exe"}
+    return all(anchor.get("href") == expected[anchor["data-download"]]
+               for anchors in marked_pages for anchor in anchors)
+
+
+def main():
+    download_pages = []
     for relative, language, alternate in (("index.html", "en", "/ru/"), ("ru/index.html", "ru", "/"),
                                            ("privacy/index.html", "en", "/ru/privacy/"), ("ru/privacy/index.html", "ru", "/privacy/")):
         path = LANDING / relative
@@ -157,8 +185,9 @@ def main():
         check(f"{relative}: shared local script", page.script_srcs == ["/script.js"])
         check(f"{relative}: no inherited signing claims", not re.search(r"Signed by Apple|подписан Apple|apps are signed", html, re.I))
         if "privacy" not in relative:
-            check(f"{relative}: pending releases for both platforms", all(len([a for a in page.anchors if a.get("data-download") == platform and a.get("href") == releases]) == 2 for platform in ("macOS", "Windows")))
+            download_pages.append(page)
             check(f"{relative}: no historical screenshots", not any("/shots/" in url for _, url in page.resources) and "data-windows-" not in html)
+    check("EN/RU: consistent own Releases or common versioned platform assets", valid_download_policy(download_pages))
     css = (LANDING / "style.css").read_text()
     check("CSS preserves motion and color preferences", "prefers-reduced-motion" in css and "prefers-color-scheme: dark" in css)
     check("CSS has no external imports", not re.search(r"url\(\s*['\"]?(https?:)?//|@import\s+['\"]?(https?:)?//", css))
