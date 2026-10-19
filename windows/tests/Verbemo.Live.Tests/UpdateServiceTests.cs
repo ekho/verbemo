@@ -233,7 +233,7 @@ public sealed class UpdateServiceTests : IDisposable
             {
                 using (var manifest = new StreamWriter(zip.CreateEntry("Verbemo.nuspec").Open()))
                     manifest.Write("<package><metadata><id>Verbemo</id><version>0.2.0</version><authors>Verbemo</authors><description>local fixture</description></metadata></package>");
-                using var updater = zip.CreateEntry("lib/net45/Squirrel.exe").Open();
+                using var updater = zip.CreateEntry("lib/app/Squirrel.exe").Open();
                 updater.Write([1, 2, 3]);
             }
             Package = memory.ToArray();

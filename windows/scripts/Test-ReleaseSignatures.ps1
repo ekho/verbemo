@@ -49,7 +49,7 @@ foreach ($name in $archives) {
     try {
         [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $ReleaseDirectory $name), $extractPath)
         if ($name.EndsWith('.nupkg')) {
-            $payload = Join-Path $extractPath 'lib/net45'
+            $payload = Join-Path $extractPath 'lib/app'
             Assert-Payload $payload
             Assert-OwnSignature (Join-Path $payload 'Squirrel.exe')
             Assert-OwnSignature (Join-Path $payload 'Verbemo_ExecutionStub.exe')

@@ -52,8 +52,10 @@ try {
     foreach ($name in @('Verbemo.exe', 'Update.exe')) { [IO.File]::WriteAllText((Join-Path $portable $name), 'fixture') }
     $package = Join-Path $fixture 'package'
     [void][IO.Directory]::CreateDirectory((Join-Path $package 'lib'))
-    Copy-Item -LiteralPath $publish -Destination (Join-Path $package 'lib/net45') -Recurse
-    foreach ($name in @('Squirrel.exe', 'Verbemo_ExecutionStub.exe')) { [IO.File]::WriteAllText((Join-Path $package "lib/net45/$name"), 'fixture') }
+    # Producer contract: Velopack 1.2.0 f2edcbcafb81da5b3c884aaea330e225ad91d8b6,
+    # src/vpk/Velopack.Packaging/PackageBuilder.cs:290 creates lib/app (not a framework folder).
+    Copy-Item -LiteralPath $publish -Destination (Join-Path $package 'lib/app') -Recurse
+    foreach ($name in @('Squirrel.exe', 'Verbemo_ExecutionStub.exe')) { [IO.File]::WriteAllText((Join-Path $package "lib/app/$name"), 'fixture') }
     [IO.Compression.ZipFile]::CreateFromDirectory($portable, (Join-Path $release "Verbemo-$version-windows-x64-Portable.zip"))
     [IO.Compression.ZipFile]::CreateFromDirectory($package, (Join-Path $release "Verbemo-$version-stable-full.nupkg"))
     [IO.File]::WriteAllText((Join-Path $release "Verbemo-$version-windows-x64-Setup.exe"), 'fixture')
@@ -75,12 +77,31 @@ try {
     $global:VerbemoToolExit = 2
     Assert-Rejected { & $verify @parameters } 'chain/timestamp'
     $global:VerbemoToolExit = 0
+    $development = & $verify -PublishDirectory $publish -ReleaseDirectory $release -Version $version -Development
+    if ($development.authenticode -ne 'unsigned-development') { throw 'Correct producer layout must also pass Development verification.' }
+    # Reject a complete payload placed in the inherited framework-shaped folder, in both modes.
+    $packagePath = Join-Path $release "Verbemo-$version-stable-full.nupkg"
+    Move-Item -LiteralPath (Join-Path $package 'lib/app') -Destination (Join-Path $package 'lib/net45')
+    Remove-Item -LiteralPath $packagePath
+    [IO.Compression.ZipFile]::CreateFromDirectory($package, $packagePath)
+    Assert-Rejected { & $verify @parameters } 'Required signed payload is missing'
+    Assert-Rejected { & $verify -PublishDirectory $publish -ReleaseDirectory $release -Version $version -Development } 'Required signed payload is missing'
+    Move-Item -LiteralPath (Join-Path $package 'lib/net45') -Destination (Join-Path $package 'lib/app')
+    # The right folder alone is insufficient: every required first-party payload must exist.
+    Remove-Item -LiteralPath (Join-Path $package 'lib/app/Verbemo.Core.dll')
+    Remove-Item -LiteralPath $packagePath
+    [IO.Compression.ZipFile]::CreateFromDirectory($package, $packagePath)
+    Assert-Rejected { & $verify @parameters } 'Required signed payload is missing'
+    Assert-Rejected { & $verify -PublishDirectory $publish -ReleaseDirectory $release -Version $version -Development } 'Required signed payload is missing'
+    Copy-Item -LiteralPath (Join-Path $publish 'Verbemo.Core.dll') -Destination (Join-Path $package 'lib/app/Verbemo.Core.dll')
+    Remove-Item -LiteralPath $packagePath
+    [IO.Compression.ZipFile]::CreateFromDirectory($package, $packagePath)
     # Corrupting a license in a final archive must fail even for unsigned local builds.
     [IO.File]::WriteAllText((Join-Path $portable 'current/Licenses/Markdig.txt'), 'changed')
     Remove-Item (Join-Path $release "Verbemo-$version-windows-x64-Portable.zip")
     [IO.Compression.ZipFile]::CreateFromDirectory($portable, (Join-Path $release "Verbemo-$version-windows-x64-Portable.zip"))
     Assert-Rejected { & $verify -PublishDirectory $publish -ReleaseDirectory $release -Version $version -Development } 'License bytes changed'
-    Write-Host '5 synthetic archive/signature policy tests passed.'
+    Write-Host '10 synthetic archive/signature policy tests passed.'
 } finally {
     if (Test-Path $fixture) { Remove-Item $fixture -Recurse -Force }
     Remove-Item Function:Get-AuthenticodeSignature
