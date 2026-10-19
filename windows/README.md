@@ -1,4 +1,8 @@
-# Amanu for Windows
+# Verbemo for Windows
+
+Development commands use Verbemo. Historical Amanu download and distribution
+references below are retained from the imported baseline; do not use them to
+publish or install Verbemo. Its independent release route is still in preparation.
 
 The public Windows release is **0.6.6**, for Windows 11 24H2 or later on x64. It uses a native
 C#/.NET 10 and WPF application, a separate core library, WASAPI capture, and
@@ -38,19 +42,19 @@ with CMake and the MSVC toolchain available.
 For managed-code development:
 
 ```powershell
-dotnet restore Amanu.Windows.slnx
-dotnet build Amanu.Windows.slnx -c Release --no-restore
-dotnet test tests\Amanu.Core.Tests\Amanu.Core.Tests.csproj -c Release --no-restore
-dotnet test tests\Amanu.Live.Tests\Amanu.Live.Tests.csproj -c Release --no-restore
-dotnet run --project src\Amanu.App\Amanu.App.csproj -c Release
+dotnet restore Verbemo.Windows.slnx
+dotnet build Verbemo.Windows.slnx -c Release --no-restore
+dotnet test tests\Verbemo.Core.Tests\Verbemo.Core.Tests.csproj -c Release --no-restore
+dotnet test tests\Verbemo.Live.Tests\Verbemo.Live.Tests.csproj -c Release --no-restore
+dotnet run --project src\Verbemo.App\Verbemo.App.csproj -c Release
 ```
 
 A managed build alone does not bundle the native transcription runtimes. To
 exercise local and live recognition and create a complete package, run:
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 0.6.6
-.\artifacts\publish\Amanu.exe
+.\scripts\Build-Release.ps1
+.\artifacts\publish\Verbemo.exe
 ```
 
 The release script restores packages, runs both test projects, publishes a

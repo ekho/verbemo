@@ -21,11 +21,11 @@ function Assert-CompanySignature([string] $Path) {
     Write-Host "Verified ${Path}: $($signature.SignerCertificate.Subject), timestamp present"
 }
 
-$payloadPaths = @('Amanu.exe', 'Amanu.dll', 'Amanu.Core.dll', 'local-runtime/transcribe-cli.exe')
+$payloadPaths = @('Verbemo.exe', 'Verbemo.dll', 'Verbemo.Core.dll', 'local-runtime/transcribe-cli.exe')
 foreach ($relativePath in $payloadPaths) {
     Assert-CompanySignature (Join-Path $PublishDirectory $relativePath)
 }
-Assert-CompanySignature (Join-Path $ReleaseDirectory "Amanu-$Version-Setup.exe")
+Assert-CompanySignature (Join-Path $ReleaseDirectory "Verbemo-$Version-windows-x64-Setup.exe")
 
 $packages = @(Get-ChildItem -LiteralPath $ReleaseDirectory -File | Where-Object {
     $_.Name -like '*-full.nupkg' -or $_.Name -like '*-Portable.zip'
@@ -35,11 +35,11 @@ if ($packages.Count -ne 2) {
 }
 
 foreach ($package in $packages) {
-    $extractPath = Join-Path $env:RUNNER_TEMP "amanu-signature-check-$($package.Name)"
+    $extractPath = Join-Path $env:RUNNER_TEMP "verbemo-signature-check-$($package.Name)"
     [IO.Compression.ZipFile]::ExtractToDirectory($package.FullName, $extractPath)
-    $requiredNames = @('Amanu.exe', 'Amanu.dll', 'Amanu.Core.dll', 'transcribe-cli.exe')
+    $requiredNames = @('Verbemo.exe', 'Verbemo.dll', 'Verbemo.Core.dll', 'transcribe-cli.exe')
     if ($package.Extension -eq '.nupkg') {
-        $requiredNames += @('Squirrel.exe', 'Amanu_ExecutionStub.exe')
+        $requiredNames += @('Squirrel.exe', 'Verbemo_ExecutionStub.exe')
     } else {
         $requiredNames += 'Update.exe'
     }

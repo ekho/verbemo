@@ -8,7 +8,7 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
     throw "Building the local runtime requires CMake and the MSVC C++ build tools on Windows."
 }
 $sourceCommit = "a94e021ef658dc7c788837341a13f6acea3baf3c"
-$workDirectory = Join-Path ([IO.Path]::GetTempPath()) ("amanu-transcribe-" + [Guid]::NewGuid().ToString("N"))
+$workDirectory = Join-Path ([IO.Path]::GetTempPath()) ("verbemo-transcribe-" + [Guid]::NewGuid().ToString("N"))
 $sourceDirectory = Join-Path $workDirectory "source"
 $buildDirectory = Join-Path $workDirectory "build"
 $destinationDirectory = Join-Path $PublishDirectory "local-runtime"

@@ -5,7 +5,7 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
     throw "Building the live runtime requires CMake and the MSVC C++ build tools on Windows."
 }
 $sourceCommit = "4807edaf210d0d7e8a6f7fb2a44b65966a2797f0"
-$workDirectory = Join-Path ([IO.Path]::GetTempPath()) ("amanu-live-" + [Guid]::NewGuid().ToString("N"))
+$workDirectory = Join-Path ([IO.Path]::GetTempPath()) ("verbemo-live-" + [Guid]::NewGuid().ToString("N"))
 $sourceDirectory = Join-Path $workDirectory "source"
 $buildDirectory = Join-Path $workDirectory "build"
 $destinationDirectory = Join-Path $PublishDirectory "live-runtime"

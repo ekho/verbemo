@@ -13,9 +13,9 @@ $assets = @(Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json)
 $installers = @($assets | Where-Object Type -eq 'Installer')
 if ($installers.Count -ne 1) { throw 'Expected exactly one installer in assets.stable.json.' }
 
-$installerName = "Amanu-$Version-Setup.exe"
+$installerName = "Verbemo-$Version-windows-x64-Setup.exe"
 $sourceName = $installers[0].RelativeFileName
-if ($sourceName -notin @('Amanu-stable-Setup.exe', $installerName)) {
+if ($sourceName -notin @('Verbemo-stable-Setup.exe', $installerName)) {
     throw "Unexpected installer filename in assets.stable.json: $sourceName"
 }
 $sourcePath = Join-Path $ReleaseDirectory $sourceName

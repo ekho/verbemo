@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $runtime = [IO.Path]::GetFullPath($RuntimeDirectory)
 $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-$scratch = Join-Path $temporaryRoot ('amanu-unicode-' + [Guid]::NewGuid().ToString('N'))
+$scratch = Join-Path $temporaryRoot ('verbemo-unicode-' + [Guid]::NewGuid().ToString('N'))
 $unicode = Join-Path $scratch 'Сотрудник 模型 café 😀'
 $results = [Collections.Generic.List[object]]::new()
 $failures = [Collections.Generic.List[string]]::new()

@@ -20,13 +20,13 @@ $toolDirectory = Join-Path $windowsRoot ".tools"
 
 & (Join-Path $windowsRoot 'tests/Test-ReleaseInstallerName.ps1')
 
-dotnet restore (Join-Path $windowsRoot "Amanu.Windows.slnx")
+dotnet restore (Join-Path $windowsRoot "Verbemo.Windows.slnx")
 if ($LASTEXITCODE -ne 0) { throw "Could not restore the Windows solution." }
-dotnet test (Join-Path $windowsRoot "tests\Amanu.Core.Tests\Amanu.Core.Tests.csproj") --configuration Release --no-restore
+dotnet test (Join-Path $windowsRoot "tests\Verbemo.Core.Tests\Verbemo.Core.Tests.csproj") --configuration Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw "Core tests failed." }
-dotnet test (Join-Path $windowsRoot "tests\Amanu.Live.Tests\Amanu.Live.Tests.csproj") --configuration Release --no-restore
+dotnet test (Join-Path $windowsRoot "tests\Verbemo.Live.Tests\Verbemo.Live.Tests.csproj") --configuration Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw "Windows live tests failed." }
-dotnet publish (Join-Path $windowsRoot "src\Amanu.App\Amanu.App.csproj") `
+dotnet publish (Join-Path $windowsRoot "src\Verbemo.App\Verbemo.App.csproj") `
     --configuration Release `
     --runtime win-x64 `
     --self-contained true `
@@ -42,13 +42,13 @@ if (-not (Test-Path (Join-Path $toolDirectory "vpk.exe"))) {
 
 $arguments = @(
     "pack",
-    "--packId", "Amanu",
+    "--packId", "Verbemo",
     "--packVersion", $Version,
     "--packDir", $publishDirectory,
-    "--mainExe", "Amanu.exe",
-    "--packTitle", "Amanu",
-    "--packAuthors", "Amanu",
-    "--icon", (Join-Path $windowsRoot "src\Amanu.App\Assets\Amanu.ico"),
+    "--mainExe", "Verbemo.exe",
+    "--packTitle", "Verbemo",
+    "--packAuthors", "Verbemo",
+    "--icon", (Join-Path $windowsRoot "src\Verbemo.App\Assets\Verbemo.ico"),
     "--channel", "stable",
     "--runtime", "win-x64",
     "--releaseNotes", (Join-Path $windowsRoot "RELEASE_NOTES.md"),
@@ -67,5 +67,5 @@ if ($CertificatePath) {
 if ($LASTEXITCODE -ne 0) { throw "Could not package the Windows installer." }
 $installerPath = & (Join-Path $PSScriptRoot 'Set-ReleaseInstallerName.ps1') `
     -ReleaseDirectory $releaseDirectory -Version $Version
-Write-Host "Amanu installer: $installerPath"
-Write-Host "Amanu release artifacts: $releaseDirectory"
+Write-Host "Verbemo installer: $installerPath"
+Write-Host "Verbemo release artifacts: $releaseDirectory"
