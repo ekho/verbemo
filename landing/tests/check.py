@@ -7,6 +7,7 @@ resources stay local, and accessibility plus colour/motion preferences hold.
 """
 
 import hashlib
+import json
 import re
 import sys
 from html.parser import HTMLParser
@@ -19,6 +20,7 @@ EN_INDEX = LANDING / "index.html"
 RU_INDEX = LANDING / "ru" / "index.html"
 EN_PRIVACY = LANDING / "privacy" / "index.html"
 RU_PRIVACY = LANDING / "ru" / "privacy" / "index.html"
+SCREENSHOTS = LANDING / "assets/screenshots/macos/0.1.0-476"
 failures = []
 
 
@@ -168,6 +170,16 @@ def valid_download_policy(pages):
 
 
 def main():
+    try:
+        provenance = json.loads((SCREENSHOTS / "provenance.json").read_text())
+        shots = provenance["screenshots"]
+        expected = {f"{window}-{language}.jpg" for window in ("main", "settings", "about") for language in ("en", "ru")}
+        verified = ({shot["file"] for shot in shots} == expected and len(shots) == len(expected)
+                    and all((SCREENSHOTS / shot["file"]).stat().st_size == shot["bytes"]
+                            and hashlib.sha256((SCREENSHOTS / shot["file"]).read_bytes()).hexdigest() == shot["sha256"] for shot in shots))
+    except (OSError, ValueError, KeyError, TypeError):
+        verified = False
+    check("macOS screenshots match recorded original capture hashes", verified)
     download_pages = []
     for relative, language, alternate in (("index.html", "en", "/ru/"), ("ru/index.html", "ru", "/"),
                                            ("privacy/index.html", "en", "/ru/privacy/"), ("ru/privacy/index.html", "ru", "/privacy/")):
@@ -187,6 +199,10 @@ def main():
         if "privacy" not in relative:
             download_pages.append(page)
             check(f"{relative}: no historical screenshots", not any("/shots/" in url for _, url in page.resources) and "data-windows-" not in html)
+            screenshots = [img for img in page.imgs if "data-verified-screenshot" in img]
+            check(f"{relative}: actual macOS screenshot in page language", len(screenshots) == 1 and screenshots[0].get("data-verified-screenshot") == "macos"
+                  and screenshots[0].get("src") == f"/assets/screenshots/macos/0.1.0-476/main-{language}.jpg"
+                  and screenshots[0].get("width") == "640" and screenshots[0].get("height") == "468")
     check("EN/RU: consistent own Releases or common versioned platform assets", valid_download_policy(download_pages))
     css = (LANDING / "style.css").read_text()
     check("CSS preserves motion and color preferences", "prefers-reduced-motion" in css and "prefers-color-scheme: dark" in css)

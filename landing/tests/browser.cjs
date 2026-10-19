@@ -56,7 +56,11 @@ function downloadPhase(anchors) {
                 }
                 await page.waitForTimeout(100);
                 assert.deepEqual(telemetry, [], `${language}: no telemetry on page view or clicks`);
-                assert.equal(await page.locator('picture, img[data-windows-src]').count(), 0, 'old screenshots stay inactive until final capture');
+                assert.equal(await page.locator('picture, img[data-windows-src], img[src*="/shots/"]').count(), 0, 'historical Windows and macOS screenshots stay inactive');
+                const screenshot = page.locator('img[data-verified-screenshot="macos"]');
+                assert.equal(await screenshot.count(), 1, 'one actual macOS capture per page');
+                assert.equal(await screenshot.getAttribute('src'), `/assets/screenshots/macos/0.1.0-476/main-${language}.jpg`);
+                assert.deepEqual(await screenshot.evaluate(img => [img.naturalWidth, img.naturalHeight]), [640, 468]);
                 assert.equal(await page.locator('img').evaluateAll(images => images.every(img => img.complete && img.naturalWidth > 0)), true);
                 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true,
                     `${language}/${platform}: no horizontal page overflow`);

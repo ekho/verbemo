@@ -39,6 +39,10 @@ Download local models before offline use. Ollama summaries stay local only when
 its configured server is local. CLI subscriptions may need their own sign-in,
 even when the corresponding desktop chat app is signed in.
 
+![Verbemo on macOS, ready to record](landing/assets/screenshots/macos/0.1.0-476/main-en.jpg)
+
+[macOS EN/RU screenshots and acceptance evidence](docs/testing/verbemo-independent-releases-acceptance.md).
+
 ## Data and privacy
 
 Recordings default to `~/Verbemo Recordings` (`%USERPROFILE%\Verbemo Recordings`
@@ -104,5 +108,6 @@ app again. Portable copies do not self-update.
 release CLI, dry runs and recovery. [Package preparation](windows/packaging/README.md)
 requires real release artifacts; no Verbemo Scoop/WinGet catalog publication or
 install command is claimed. The [static site](landing/README.md) runs locally
-without nginx, SSH or an analytics server. Final branded screenshots are pending
-verification of the final build; imported app screenshots are not active here.
+without nginx, SSH or an analytics server. The current macOS screenshots show
+the verified local development build; imported app screenshots remain inactive.
+Windows screenshots and actual platform acceptance are deferred.
