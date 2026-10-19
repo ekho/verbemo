@@ -9,11 +9,12 @@ public sealed class DisabledAnalyticsSettingsTests
     [InlineData("{}")]
     [InlineData("{\"analytics\":true}")]
     [InlineData("{\"analytics\":false}")]
-    public void Legacy_settings_cannot_enable_product_analytics(string json)
+    public void Legacy_settings_stay_disabled_and_are_omitted_when_saved(string json)
     {
         var settings = JsonSerializer.Deserialize<AppSettings>(json)!;
         settings.Analytics = true;
         Assert.False(settings.Analytics);
         Assert.Null(SettingsSchema.Find("analytics"));
+        Assert.False(SettingsDocument.ToNode(settings).ContainsKey("analytics"));
     }
 }

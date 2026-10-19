@@ -27,6 +27,7 @@ public sealed class AppSettings
     public bool KeepAudio { get; set; }
 
     [JsonPropertyName("analytics")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     // Accept the legacy field without allowing it to enable collection.
     public bool Analytics { get => false; set { } }
 
