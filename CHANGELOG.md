@@ -6,6 +6,7 @@
 * **ci:** automate SemVer releases after merges ([8fd4ce9](https://github.com/ekho/verbemo/commit/8fd4ce9ffcf35287f00ee3571e311af5fbf270c4))
 * **macos:** copy selected summaries and fix nested lists ([3d7e887](https://github.com/ekho/verbemo/commit/3d7e8874c25b572f33bad25a490fdc89ed564987))
 * **macos:** copy summaries and preserve nested lists ([#13](https://github.com/ekho/verbemo/issues/13)) ([bdae823](https://github.com/ekho/verbemo/commit/bdae823301490d36c3301995323b6d4fa634c70b))
+* **release:** publish unsigned previews without certificates ([6f7672b](https://github.com/ekho/verbemo/commit/6f7672b7e59d8934651c69da640f748620bc219f))
 
 ### Bug Fixes
 
