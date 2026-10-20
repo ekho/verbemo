@@ -40,7 +40,11 @@ jobs:
       - name: Swift tests
         # UI suites share NSApplication windows and configuration state.
         # A suite's .serialized trait does not serialize it against other suites.
-        run: swift test --no-parallel
+        run: |
+          set -o pipefail
+          swift test --no-parallel 2>&1 | tee "$RUNNER_TEMP/swift-tests.log"
+          # A stopped AppKit run loop can make Swift exit 0 before the suite finishes.
+          grep -Eq '^✔ Test run with [0-9]+ tests? (in [0-9]+ suites? )?passed after ' "$RUNNER_TEMP/swift-tests.log"
         env:
           # The assets were built in the step above, so the tests that use
           # them run here whether or not they are found: a missing asset is

@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -13,6 +14,15 @@ def workflow(name):
 
 
 class CommonReleaseWorkflowTests(unittest.TestCase):
+    def test_windows_packaging_file_inputs_exist(self):
+        builder = (ROOT / 'windows/scripts/Build-Release.ps1').read_text()
+        arguments = builder.split('$arguments = @(', 1)[1].split('$signatureTool =', 1)[0]
+        files = re.findall(r"'--(?:icon|releaseNotes)', \(Join-Path \$windowsRoot '([^']+)'\)", arguments)
+        self.assertTrue(files, 'Expected checked-in packaging file inputs')
+        for name in files:
+            with self.subTest(file=name):
+                self.assertTrue((ROOT / 'windows' / name).is_file(), f'Missing packaging input: {name}')
+
     def test_ci_checks_out_and_asserts_exact_event_head_with_full_history(self):
         for name, job in workflow('ci.yml')['jobs'].items():
             with self.subTest(job=name):
