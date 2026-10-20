@@ -392,6 +392,8 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public Task TogglePauseAsync() => coordinator.TogglePauseAsync();
 
+    public Task RenameRecordingAsync(string title) => coordinator.RenameAsync(title);
+
     public async Task StopForExitAsync()
     {
         if (State.IsRecording) await coordinator.StopAsync(DateTimeOffset.Now, "quit");

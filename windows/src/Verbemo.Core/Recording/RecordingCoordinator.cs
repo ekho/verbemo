@@ -56,6 +56,18 @@ public sealed class RecordingCoordinator(
     /// <summary>An automatic start failed; the argument is how long until the next try.</summary>
     public event EventHandler<(Exception Error, TimeSpan RetryIn)>? AutomaticStartFailed;
 
+    public async Task RenameAsync(string title, CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (current is null) throw new InvalidOperationException("There is no recording in progress.");
+            current = sessions.Rename(current, title);
+            StateChanged?.Invoke(this, State);
+        }
+        finally { gate.Release(); }
+    }
+
     public void SetSessionsRoot(string rootDirectory) => sessions.RootDirectory = rootDirectory;
 
     public async Task StartManualAsync(DateTimeOffset now, CancellationToken cancellationToken = default)

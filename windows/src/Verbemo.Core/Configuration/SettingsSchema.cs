@@ -256,6 +256,8 @@ public static class SettingsSchema
 
         new(T("Interface", "Интерфейс"),
         [
+            new("interface_theme", T("Theme", "Тема"), T("System follows Windows appearance.", "Системная тема следует оформлению Windows."),
+                SettingKind.Choice, Options: ["system", "light", "dark"]),
             new("interface_language",
                 T("Language of Verbemo's own windows", "Язык окон Verbemo"),
                 T("auto follows Windows. Not the language of your meetings, and not the one summaries are written in — those are settings of their own.",

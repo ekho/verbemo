@@ -92,6 +92,23 @@ internal sealed class SetupForm
     private readonly TextBlock autoRecordDetail = Ui.Detail("");
 
     public StackPanel View { get; } = new() { Margin = new Thickness(Ui.Gutter, 20, Ui.Gutter, 8) };
+    private Dictionary<ApplicationDestination, StackPanel>? settingsPages;
+
+    public Dictionary<ApplicationDestination, StackPanel> ExtractSettingsPages()
+    {
+        if (settingsPages is not null) return settingsPages;
+        var sections = View.Children.Cast<UIElement>().ToArray();
+        View.Children.Clear();
+        settingsPages = new[] { ApplicationDestination.General, ApplicationDestination.Recording, ApplicationDestination.Transcription,
+            ApplicationDestination.Summary, ApplicationDestination.Storage }.ToDictionary(d => d, _ => new StackPanel { Margin = new Thickness(24,16,24,24) });
+        settingsPages[ApplicationDestination.General].Children.Add(sections[1]);
+        settingsPages[ApplicationDestination.General].Children.Add(sections[5]);
+        settingsPages[ApplicationDestination.Recording].Children.Add(sections[6]);
+        settingsPages[ApplicationDestination.Transcription].Children.Add(sections[2]);
+        settingsPages[ApplicationDestination.Storage].Children.Add(sections[3]);
+        settingsPages[ApplicationDestination.Summary].Children.Add(sections[4]);
+        return settingsPages;
+    }
 
     /// <summary>Anything a host shows about the form may have changed — what is left to do.</summary>
     public event EventHandler? StateChanged;
@@ -176,7 +193,7 @@ internal sealed class SetupForm
 
     private void OnSettingsChanged(object? sender, EventArgs e) => View.Dispatcher.InvokeAsync(Refresh);
 
-    private Window? Owner => Ui.OwnerOf(View);
+    private Window? Owner => Ui.OwnerOf(View) ?? settingsPages?.Values.Select(Ui.OwnerOf).FirstOrDefault(window => window is not null);
 
     // MARK: building
 

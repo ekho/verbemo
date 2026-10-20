@@ -16,10 +16,9 @@ internal sealed class ApplicationWindow : Window
     private readonly VerbemoRuntime runtime;
     private readonly StatusWindow status;
     private readonly RecordingsWindow recordings;
-    private readonly SettingsWindow settings;
+    private readonly SettingsContentView settings;
     private readonly ContentControl host = new();
     private readonly FrameworkElement library;
-    private readonly FrameworkElement settingsView;
     private readonly FrameworkElement live;
     private readonly FrameworkElement about;
     private readonly DockPanel toolbar = new() { Margin = new Thickness(18, 10, 18, 10) };
@@ -45,9 +44,8 @@ internal sealed class ApplicationWindow : Window
         MinHeight = 520;
         Ui.FitToWorkArea(this, 1120, 780);
         recordings = new RecordingsWindow(runtime);
-        settings = new SettingsWindow(runtime);
+        settings = new SettingsContentView(runtime);
         library = TakeContent(recordings);
-        settingsView = TakeContent(settings);
         live = TakeContent(status);
         about = AboutWindow.CreateView();
         status.RevealAction = Reveal;
@@ -133,7 +131,7 @@ internal sealed class ApplicationWindow : Window
         timer.Start();
         runtime.SettingsChanged += SettingsChanged;
         runtime.StateChanged += RecordingChanged;
-        Closed += (_, _) => { timer.Stop(); runtime.SettingsChanged -= SettingsChanged; runtime.StateChanged -= RecordingChanged; recordings.Close(); settings.Close(); };
+        Closed += (_, _) => { timer.Stop(); runtime.SettingsChanged -= SettingsChanged; runtime.StateChanged -= RecordingChanged; recordings.Close(); settings.Detach(); };
         PreviewKeyDown += (_, e) => { if (e.Key == Key.OemComma && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) { ShowDestination(ApplicationDestination.General); e.Handled = true; } };
         AllowDrop = true;
         Drop += async (_, e) =>
@@ -173,7 +171,7 @@ internal sealed class ApplicationWindow : Window
         {
             ApplicationDestination.About => about,
             ApplicationDestination.Live => live,
-            >= ApplicationDestination.General and <= ApplicationDestination.Storage => settingsView,
+            >= ApplicationDestination.General and <= ApplicationDestination.Storage => settings.Pages[destination],
             _ => library,
         };
     }
@@ -189,6 +187,10 @@ internal sealed class ApplicationWindow : Window
     private void RecordingChanged(object? sender, RecordingState e) => Dispatcher.InvokeAsync(Refresh);
     private void Refresh()
     {
+#pragma warning disable WPF0001
+        if (System.Windows.Application.Current is { } app) app.ThemeMode = runtime.Settings.InterfaceTheme switch
+        { "light" => ThemeMode.Light, "dark" => ThemeMode.Dark, _ => ThemeMode.System };
+#pragma warning restore WPF0001
         ShowInTaskbar = runtime.Settings.TaskbarIcon;
         var state = runtime.State;
         recordingBar.Visibility = state.IsRecording ? Visibility.Visible : Visibility.Collapsed;

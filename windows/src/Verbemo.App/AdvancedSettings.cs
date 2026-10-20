@@ -32,15 +32,15 @@ internal sealed class AdvancedSettings
 
     public StackPanel View { get; } = new() { Margin = new Thickness(Ui.Gutter, 20, Ui.Gutter, 16), MaxWidth = 860, HorizontalAlignment = HorizontalAlignment.Left };
 
-    public AdvancedSettings(VerbemoRuntime runtime)
+    public AdvancedSettings(VerbemoRuntime runtime, IEnumerable<SettingEntry>? entries = null)
     {
         this.runtime = runtime;
-        foreach (var section in SettingsSchema.AdvancedSections)
+        foreach (var section in entries is null ? SettingsSchema.AdvancedSections : new[] { new SettingSection("", entries.ToArray()) })
         {
             var heading = Ui.Heading(section.Title);
             heading.FontSize = 16;
             heading.Margin = new Thickness(0, View.Children.Count == 0 ? 0 : 20, 0, 4);
-            View.Children.Add(heading);
+            if (section.Title.Length > 0) View.Children.Add(heading);
             foreach (var entry in section.Entries) View.Children.Add(Row(entry));
         }
         runtime.SettingsChanged += OnSettingsChanged;
@@ -61,8 +61,8 @@ internal sealed class AdvancedSettings
     private Grid Row(SettingEntry entry)
     {
         var grid = new Grid { Margin = new Thickness(0, 12, 0, 0) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 240 });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.RowDefinitions.Add(new RowDefinition());
         grid.RowDefinitions.Add(new RowDefinition());
         grid.RowDefinitions.Add(new RowDefinition());
 
@@ -72,7 +72,7 @@ internal sealed class AdvancedSettings
 
         var control = Control(entry);
         if (entry.Kind is SettingKind.Toggle or SettingKind.Choice) control.HorizontalAlignment = HorizontalAlignment.Left;
-        Grid.SetColumn(control, 1);
+        Grid.SetRow(control, 1);
         grid.Children.Add(control);
 
         var help = Ui.Detail(entry.NeedsRestart
@@ -81,8 +81,7 @@ internal sealed class AdvancedSettings
         help.MaxWidth = 600;
         help.HorizontalAlignment = HorizontalAlignment.Left;
         help.Margin = new Thickness(0, 4, 0, 0);
-        Grid.SetRow(help, 1);
-        Grid.SetColumnSpan(help, 2);
+        Grid.SetRow(help, 2);
         grid.Children.Add(help);
         return grid;
     }

@@ -74,6 +74,14 @@ public sealed partial class SessionStore(string rootDirectory, int processId)
         File.Delete(Path.Combine(session.Directory, MarkerName));
     }
 
+    public SessionHandle Rename(SessionHandle session, string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A meeting needs a title.", nameof(title));
+        var renamed = session with { Title = title.Trim() };
+        WriteJsonAtomically(Path.Combine(session.Directory, MarkerName), Marker(renamed));
+        return renamed;
+    }
+
     /// <summary>
     /// Removes a session that should never have been one: a start that captured
     /// nothing, or an automatic recording too short to have been a meeting.
