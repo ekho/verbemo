@@ -113,6 +113,8 @@ jobs:
     needs: resolve
     runs-on: macos-26
     timeout-minutes: 120
+    outputs:
+      artifact_id: ${{ steps.artifacts.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -190,7 +192,8 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null 2>&1
           security list-keychains -d user -s "$KEYCHAIN" >/dev/null 2>&1
           bash scripts/build-macos-release.sh --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --output "$RUNNER_TEMP/macos-artifacts"
-      - uses: actions/upload-artifact@v5
+      - id: artifacts
+        uses: actions/upload-artifact@v5
         with:
           name: platform-macos
           path: ${{ runner.temp }}/macos-artifacts/*
@@ -272,28 +275,15 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v5
         with:
-          pattern: platform-macos
-          path: ${{ runner.temp }}/platforms
-      - name: Combine without filename collisions and validate the complete set
+          artifact-ids: ${{ needs.macos.outputs.artifact_id }}
+          path: ${{ runner.temp }}/release-artifacts
+      - name: Validate the complete macOS-only set
         env:
           RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
           SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
           BUILD_NUMBER: ${{ needs.resolve.outputs.build_number }}
           PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
         run: |
-          python3 - <<'PY'
-          import os, shutil
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP'])
-          target = root / 'release-artifacts'
-          target.mkdir()
-          for platform in ('platform-macos',):
-              for path in (root / 'platforms' / platform).iterdir():
-                  if not path.is_file() or path.is_symlink():
-                      raise ValueError('unsafe platform artifact')
-                  with (target / path.name).open('xb') as stream, path.open('rb') as source:
-                      shutil.copyfileobj(source, stream)
-          PY
           arguments=()
           if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease --macos-only); fi
           python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/release-artifacts" --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --build-number "$BUILD_NUMBER" "${arguments[@]}"

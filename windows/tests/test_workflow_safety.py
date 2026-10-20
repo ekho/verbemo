@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import re
 import json
+import importlib.util
 import subprocess
 import tempfile
 import unittest
@@ -49,8 +50,14 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(set(release['jobs']['aggregate']['needs']), {'resolve', 'macos'})
         for job in (ci['jobs']['preview'], release['jobs']['aggregate']):
             download = next(s for s in job['steps'] if s.get('uses', '').startswith('actions/download-artifact@'))
-            self.assertIn('macos', download['with']['pattern'])
+            self.assertIn('artifact-ids', download['with'])
             self.assertIn('--macos-only', '\n'.join(s.get('run', '') for s in job['steps']))
+        for data, source, consumer in ((ci, 'test', 'preview'), (release, 'macos', 'aggregate')):
+            self.assertEqual(data['jobs'][source]['outputs']['artifact_id'], '${{ steps.artifacts.outputs.artifact-id }}')
+            upload = next(s for s in data['jobs'][source]['steps'] if s.get('id') == 'artifacts')
+            self.assertTrue(upload['uses'].startswith('actions/upload-artifact@'))
+            download = next(s for s in data['jobs'][consumer]['steps'] if s.get('uses', '').startswith('actions/download-artifact@'))
+            self.assertEqual(download['with']['artifact-ids'], '${{ needs.' + source + '.outputs.artifact_id }}')
         step = next(s for s in release['jobs']['resolve']['steps'] if s.get('id') == 'distribution')
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'output'
@@ -64,6 +71,31 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('issues/19', result.stdout + result.stderr)
             self.assertFalse(output.exists())
+
+    def test_single_macos_artifact_is_validated_from_its_flat_download_directory(self):
+        spec = importlib.util.spec_from_file_location('workflow_manifest', ROOT / 'scripts/release_manifest.py')
+        manifest = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(manifest)
+        version = (ROOT / 'VERSION').read_text().strip()
+        source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+        build = int(subprocess.check_output(['git', 'rev-list', '--count', 'HEAD'], cwd=ROOT, text=True))
+        for filename, job_name, writes_metadata in (('ci.yml', 'preview', False), ('release.yml', 'aggregate', True)):
+            with self.subTest(workflow=filename), tempfile.TemporaryDirectory() as directory:
+                job = workflow(filename)['jobs'][job_name]
+                download = next(s for s in job['steps'] if s.get('uses', '').startswith('actions/download-artifact@'))
+                artifacts = Path(download['with']['path'].replace('${{ runner.temp }}', directory))
+                artifacts.mkdir()
+                (artifacts / manifest.dmg_name(version)).write_bytes(b'ad-hoc preview DMG')
+                manifest.write_macos_receipt(artifacts, version, source, build, prerelease=True)
+                step = next(s for s in job['steps'] if 'release.py prepare' in s.get('run', ''))
+                env = {**os.environ, 'RUNNER_TEMP': directory, 'RELEASE_VERSION': version,
+                       'SOURCE_COMMIT': source, 'BUILD_NUMBER': str(build), 'PRERELEASE': 'true'}
+                result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=ROOT,
+                                        env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)['platforms'], ['macos'])
+                self.assertEqual((artifacts / 'release-manifest.json').exists(), writes_metadata)
+                self.assertEqual((artifacts / 'SHA256SUMS').exists(), writes_metadata)
 
     def test_automatic_release_uses_the_version_commit_and_gates_macos(self):
         data = workflow('release.yml')
