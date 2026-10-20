@@ -33,6 +33,13 @@ The LocalVQE build uses a small Amanu macOS packaging patch to produce one
 self-contained Intel dylib instead of runtime-loaded CPU-variant libraries.
 The inference implementation and model are otherwise the pinned upstream work.
 
+## Idle sleep policy
+
+Verbemo's macOS activity policy adapts Dmitry Pimenov's
+[Amanu PR #50](https://github.com/gsamat/amanu/pull/50), commit
+`799ebf87caf786b7e7e160620af2ef4c4d9e4a9f`, under Amanu's MIT license.
+The original copyright and license notices remain in [LICENSE](LICENSE).
+
 ## Optional local diarization weights
 
 The separate download from
