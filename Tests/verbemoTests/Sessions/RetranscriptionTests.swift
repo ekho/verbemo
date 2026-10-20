@@ -558,7 +558,7 @@ struct RetranscriptionTests {
         let russian = InterfaceLanguage.$scoped.withValue(.russian) {
             RecordingsWindow.nothingDoneLine(for: dir)
         }
-        #expect(russian != busy && russian.contains("саммари"))
+        #expect(russian != busy && russian.contains("сводку"))
         try FileManager.default.removeItem(at: claim)
 
         try Home.current.writeConfig(text: #"{ "keep_audio": "#)

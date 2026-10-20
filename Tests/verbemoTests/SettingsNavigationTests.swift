@@ -19,6 +19,32 @@ struct SettingsNavigationTests {
         #expect(transcription.allDescendants.contains { $0.identifier?.rawValue == "transcription.local-diarization" })
         #expect(!general.allDescendants.contains { $0 is NSTabView })
     }
+    @Test(.freshHome) func everySummaryBackendHasAnHonestSelectionAndNoneCanBeEnabledAgain() throws {
+        Config.update(path: ["summary", "backend"], value: "none")
+        let form = SetupForm(forSettings: true)
+        let page = try #require(form.settingsPages[.summary])
+        let cards = page.allDescendants.compactMap { $0 as? ChoiceCard }
+        #expect(cards.first { $0.id == "none" }?.isSelected == true)
+        let toggle = try #require(page.allDescendants.first { $0.identifier?.rawValue == "summary.enabled" } as? NSSwitch)
+        #expect(toggle.state == .off)
+        toggle.state = .on
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        #expect(Config.summary().backend == "auto")
+        #expect(PostProcessor.Policy.configured.summary)
+    }
+    @Test(.freshHome) func themeChangePreservesAnActiveSettingsEdit() throws {
+        let host = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        let settings = SettingsWindow(hostWindow: host)
+        host.contentView = settings.content(for: .summary)
+        let field = try #require(settings.renderedControls.first { $0.identifier?.rawValue == "summary.template" } as? NSTextField)
+        #expect(host.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        editor.string = "UNSAVED TEMPLATE"
+        Config.update(path: ["interface_theme"], value: "dark")
+        #expect(editor.string == "UNSAVED TEMPLATE")
+        #expect(host.firstResponder === editor)
+    }
+
 }
 
 @Suite(.serialized) @MainActor

@@ -20,7 +20,7 @@ final class SidebarView: NSVisualEffectView {
         let meetings = group(localised("MEETINGS", "ВСТРЕЧИ"), destinations: [.allMeetings, .processing, .attention])
         let settings = group(localised("SETTINGS", "НАСТРОЙКИ"), destinations: [.general, .recording, .transcription, .summary, .storage, .about])
         automatic.title = localised("Auto-recording is on", "Автозапись включена")
-        automatic.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil)
+        automatic.image = NSImage(systemSymbolName: "arrow.clockwise.circle", accessibilityDescription: nil)
         automatic.imagePosition = .imageLeading
         automatic.isBordered = false
         automatic.alignment = .left
@@ -31,17 +31,27 @@ final class SidebarView: NSVisualEffectView {
         automatic.setAccessibilityLabel(localised("Open automatic recording settings", "Открыть настройки автоматической записи"))
         let spring = NSView()
         spring.setContentHuggingPriority(.defaultLow, for: .vertical)
-        let stack = NSStackView(views: [identity, meetings, spring, settings, automatic])
+        let stack = FlippedStackView(views: [identity, meetings, spring, settings, automatic])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 22
         stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = stack
+        addSubview(scroll)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 22),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
+            scroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            scroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            scroll.topAnchor.constraint(equalTo: topAnchor, constant: 22),
+            scroll.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
+            stack.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
             meetings.widthAnchor.constraint(equalTo: stack.widthAnchor),
             settings.widthAnchor.constraint(equalTo: stack.widthAnchor),
             automatic.widthAnchor.constraint(equalTo: stack.widthAnchor),

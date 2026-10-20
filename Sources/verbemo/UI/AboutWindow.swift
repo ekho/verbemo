@@ -60,7 +60,7 @@ final class AboutWindow: NSObject {
             "Записывает звук с микрофона и из приложений звонков, расшифровывает речь в реальном времени и после встречи. Разделяет реплики по говорящим и готовит сводку с решениями и задачами. Хранит записи и результаты на компьютере. Для обработки можно выбрать локальные модели или облачные сервисы."))
         tagline.font = .systemFont(ofSize: 12)
         tagline.textColor = .secondaryLabelColor
-        tagline.alignment = .center
+        tagline.alignment = hostWindow == nil ? .center : .left
         tagline.lineBreakMode = .byWordWrapping
         tagline.maximumNumberOfLines = 0
         tagline.preferredMaxLayoutWidth = hostWindow == nil ? 260 : 620
@@ -72,17 +72,24 @@ final class AboutWindow: NSObject {
         ]
         let links = NSStackView(views: linkButtons)
         links.orientation = .vertical
-        links.alignment = .centerX
-        links.spacing = 4
+        links.alignment = hostWindow == nil ? .centerX : .leading
+        links.spacing = hostWindow == nil ? 4 : 18
 
-        let stack = NSStackView(views: [icon, name, version, tagline, links])
+        let identity = NSStackView(views: [name, version])
+        identity.orientation = .vertical
+        identity.alignment = .leading
+        identity.spacing = 6
+        let heading = NSStackView(views: [icon, identity])
+        heading.spacing = 24
+        heading.alignment = .centerY
+        let stack = NSStackView(views: hostWindow == nil ? [icon, name, version, tagline, links] : [heading, tagline, links])
         stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 10
+        stack.alignment = hostWindow == nil ? .centerX : .leading
+        stack.spacing = hostWindow == nil ? 10 : 24
         // The links are a group of their own, and the gap above them is what
         // says so.
         stack.setCustomSpacing(18, after: tagline)
-        stack.setCustomSpacing(4, after: name)
+        if hostWindow == nil { stack.setCustomSpacing(4, after: name) }
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let content = NSView()

@@ -24,7 +24,7 @@ extension Config {
             case .unreadable:
                 return localised(
                     "config.json can't be read — transcription and summaries are waiting",
-                    "config.json не читается — расшифровка и саммари ждут")
+                    "config.json не читается — расшифровка и сводка ждут")
             case .unusable:
                 return localised(
                     "config.json has a setting verbemo can't use — see Settings",
@@ -46,7 +46,7 @@ extension Config {
                     "config.json не читается (\(reason)). Пока файл не исправлен, verbemo держится "
                         + "настроек, прочитанных из него в последний раз (а если не смогла "
                         + "прочитать ни разу — настроек по умолчанию с выключенной автозаписью), "
-                        + "и продолжает записывать, но расшифровка и саммари ждут, статистика не "
+                        + "и продолжает записывать, но расшифровка и сводка ждут, статистика не "
                         + "отправляется, а изменённые настройки не сохраняются.")
             case .unusable(let key, let found, let expected):
                 return localised(

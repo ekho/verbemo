@@ -43,7 +43,8 @@ struct MeetingCalendarMetadata {
         }
     }
     static func read(from dir: URL) -> Self? {
-        (SessionState.read(dir)?["calendar"] as? [String: Any]).flatMap(Self.init)
+        let json = SessionState.read(dir) ?? (try? JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent(".recording.json")))) as? [String: Any]
+        return (json?["calendar"] as? [String: Any]).flatMap(Self.init)
     }
     static func modelAttendees(_ json: [String: Any]?) -> [String] {
         guard json?["association"] as? String != "candidate" else { return [] }

@@ -288,6 +288,7 @@ final class AppController {
     var recordingElapsed: TimeInterval? {
         session.map { Date().timeIntervalSince($0.startedAt) }
     }
+    private var liveRecordingStatus = LiveTranscriptionCoordinator.Status.idle
     private var ticker: Timer?
     private var recordingsBuilt = false
     private lazy var recordings: RecordingsWindow = makeRecordingsWindow()
@@ -297,6 +298,13 @@ final class AppController {
         let window = RecordingsWindow(root: root, hostWindow: self.window.panel)
         self.window.isProcessing = { [weak self] in self?.isBusyForUpdate == true }
         window.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
+        window.onOpenActiveRecording = { [weak self] in self?.window.showActiveRecording() }
+        window.onRenameActiveRecording = { [weak self] title in
+            guard let self, let session = self.session else { throw CocoaError(.fileNoSuchFile) }
+            try session.rename(to: title)
+            self.window.recordingTitle = title
+            self.updateActiveRecording()
+        }
         window.onRetranscribe = { [weak self] _ in self?.catchUp() }
         window.onImportFiles = { [weak self] files in self?.importFiles(files) }
         window.onCancelImport = { [weak self] in self?.cancelImport() }
@@ -991,6 +999,8 @@ final class AppController {
     }
 
     private func showLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {
+        liveRecordingStatus = snapshot.status
+        updateActiveRecording()
         window.updateLive(snapshot)
         switch snapshot.status {
         case .overloaded, .error:
@@ -1070,7 +1080,15 @@ final class AppController {
         menuBar.update(state: state, elapsed: elapsed)
         window.recordingTitle = session?.title ?? localised("New meeting", "Новая встреча")
         window.update(state: state, elapsed: elapsed)
+        updateActiveRecording()
         DockPresentation.update(state: state, elapsed: elapsed)
+    }
+
+    private func updateActiveRecording() {
+        guard recordingsBuilt else { return }
+        recordings.setActiveRecording(session.map {
+            MeetingPresentation.ActiveRecording(dir: $0.dir, title: $0.title ?? localised("New meeting", "Новая встреча"), started: $0.startedAt, paused: $0.isPaused, liveStatus: liveRecordingStatus)
+        })
     }
 
     private func tick() {

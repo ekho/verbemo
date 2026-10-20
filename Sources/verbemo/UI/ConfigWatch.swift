@@ -117,9 +117,13 @@ enum ConfigWatch {
     /// Keeps one observation alive, and ends it when it goes.
     final class Token {
         private let observer: NSObjectProtocol
+        private let center: NotificationCenter
 
-        init(_ observer: NSObjectProtocol) { self.observer = observer }
+        init(_ observer: NSObjectProtocol, center: NotificationCenter = .default) {
+            self.observer = observer
+            self.center = center
+        }
 
-        deinit { NotificationCenter.default.removeObserver(observer) }
+        deinit { center.removeObserver(observer) }
     }
 }

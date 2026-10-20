@@ -380,9 +380,9 @@ enum SettingsSchema {
                   .text, describedAs: "~/.config/verbemo/keys/elevenlabs"),
         ]),
 
-        Section(title: localised("Summaries", "Саммари"), entries: [
+        Section(title: localised("Summaries", "Сводка"), entries: [
             Entry(["summary", "enabled"],
-                  localised("Write a summary", "Писать саммари"),
+                  localised("Write a summary", "Создавать сводку"),
                   localised(
                       "Topic, key points, decisions, action items, open questions.",
                       "Тема, главное, решения, задачи, открытые вопросы."),
@@ -392,7 +392,7 @@ enum SettingsSchema {
                   localised(
                       "auto walks the chain: claude CLI, Anthropic API, codex CLI, OpenAI API, ollama — subscriptions before metered keys. none skips summarizing without turning off the rest.",
                       "auto идёт по цепочке: claude CLI, Anthropic API, codex CLI, OpenAI API, "
-                          + "ollama — сначала подписки, потом платные ключи. none пропускает саммари, "
+                          + "ollama — сначала подписки, потом платные ключи. none пропускает создание сводки, "
                           + "не выключая всего остального."),
                   .choice(["auto", "claude-cli", "anthropic-api", "codex-cli", "openai-api", "ollama", "none"]),
                   default: "auto"),
@@ -433,13 +433,13 @@ enum SettingsSchema {
                           + "должен быть https — простой http принимается только на этом маке."),
                   .text, default: "http://127.0.0.1:11434"),
             Entry(["summary", "language"],
-                  localised("Summary language", "Язык саммари"),
+                  localised("Summary language", "Язык сводки"),
                   localised(
                       "Leave empty to write in whichever language the meeting was held in.",
-                      "Пусто — саммари пишется на языке самой встречи."),
+                      "Пусто — сводка создаётся на языке самой встречи."),
                   .text, describedAs: localised("the language of the meeting", "язык встречи")),
             Entry(["summary", "template"],
-                  localised("Summary template", "Шаблон саммари"),
+                  localised("Summary template", "Шаблон сводки"),
                   localised(
                       "Instructions sent to the model. Clear the field to restore the built-in template.",
                       "Инструкции для модели. Очистите поле, чтобы вернуть встроенный шаблон."),
@@ -497,7 +497,7 @@ enum SettingsSchema {
                   localised("Which model to ask", "У какой модели спрашивать"),
                   localised(
                       "summary sends the transcript wherever summaries go, and nowhere when they are off — only your own name is filled in then. Anything else is a choice for naming alone; none asks no model.",
-                      "summary отправляет расшифровку туда же, куда и саммари, а если саммари выключены — "
+                      "summary отправляет расшифровку туда же, куда и сводку, а если сводка выключена — "
                           + "никуда, и подставляется только ваше имя. Любой другой вариант — выбор только "
                           + "для имён; none — не спрашивать никакую модель."),
                   .choice([
@@ -509,8 +509,8 @@ enum SettingsSchema {
                   localised("Anthropic model for naming", "Модель Anthropic для имён"),
                   localised(
                       "Naming is an easier job than summarizing; empty uses the summary's model.",
-                      "Имена — работа проще саммари; пусто — та же модель, что у саммари."),
-                  .text, describedAs: localised("the summary's model", "модель саммари")),
+                      "Имена — работа проще создания сводки; пусто — та же модель, что у сводки."),
+                  .text, describedAs: localised("the summary's model", "модель сводки")),
         ]),
 
         Section(title: localised("Interface", "Интерфейс"), entries: [
@@ -526,7 +526,7 @@ enum SettingsSchema {
                   localised(
                       "auto follows the Mac. Not the language of your meetings, and not the one "
                           + "summaries are written in — those are settings of their own.",
-                      "auto — как на маке. Это не язык встреч и не язык саммари: у тех есть "
+                      "auto — как на маке. Это не язык встреч и не язык сводки: у тех есть "
                           + "собственные настройки."),
                   .choice(InterfaceLanguage.configuredValues),
                   default: InterfaceLanguage.automatic, needsRestart: true),
@@ -556,7 +556,7 @@ enum SettingsSchema {
                   localised(
                       "A shell command, given the session folder as its argument, after the transcript and summary are written.",
                       "Команда оболочки; получает папку встречи аргументом после того, как записаны "
-                          + "расшифровка и саммари."),
+                          + "расшифровка и сводка."),
                   .text, describedAs: localised("nothing", "ничего")),
         ]),
     ] }

@@ -331,7 +331,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             content: SetupLayout.box([folderRow(), keepAudioRow()])))
 
         form.addArrangedSubview(SetupLayout.section(
-            localised("Summaries", "Саммари"),
+            localised("Summaries", "Сводка"),
             leading: summariesOn,
             content: summaryChoices()))
 
@@ -415,6 +415,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         gigaAMDownloadTask?.cancel()
         localDownloadProgress["gigaam"]?.cancelling()
     }
+    private func choiceCards(_ cards: [NSView]) -> NSView {
+        forSettings ? SetupLayout.group(cards, spacing: SetupLayout.cardGap) : SetupLayout.cards(cards)
+    }
+
     // MARK: - building
 
     /// The two questions this section actually asks: may audio leave this
@@ -485,7 +489,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 lines: 2, width: 440),
             trailing: [])
 
-        let localOptions = NSStackView(views: [SetupLayout.cards(localEngineCards.cards)])
+        let localOptions = NSStackView(views: [choiceCards(localEngineCards.cards)])
         localOptions.orientation = .vertical
         localOptions.alignment = .leading
         localOptions.spacing = 9
@@ -525,7 +529,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: "OpenAI",
             detail: localised(
                 "$0.36 an hour. Same key as summaries.",
-                "$0,36 за час. Тот же ключ, что и для саммари."),
+                "$0,36 за час. Тот же ключ, что и для сводки."),
             accessories: [link(
                 localised("Get a key", "Получить ключ"),
                 "https://platform.openai.com/api-keys")])
@@ -557,7 +561,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         keyLine.spacing = 10
         keyLine.setViews([cloudKey, cloudKeyStatus, NSView()], in: .leading)
 
-        let stack = NSStackView(views: [SetupLayout.cards(providerCards.cards), keyLine])
+        let stack = NSStackView(views: [choiceCards(providerCards.cards), keyLine])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
@@ -680,7 +684,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised(
                 "Separate speakers", "Разделять говорящих")),
             detail: diarizationDetail)
-        let options = NSStackView(views: [SetupLayout.cards(diarizationCards.cards)])
+        let options = NSStackView(views: [choiceCards(diarizationCards.cards)])
         options.orientation = .vertical
         options.alignment = .leading
         options.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
@@ -958,7 +962,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         let automatic = ChoiceCard(id: "auto", title: localised("Automatic", "Автоматически"),
             detail: localised("Use the available summary services in the configured fallback order.", "Использовать доступные сервисы по порядку резервирования."))
-        summaryCards.adopt(forSettings ? [automatic, claude, codex, key, ollama] : [claude, codex, key, ollama])
+        let none = ChoiceCard(id: "none", title: localised("Do not create a summary", "Не создавать сводку"),
+            detail: localised("The summary service is off. Transcription is configured separately.", "Сервис сводки отключён. Расшифровка настраивается отдельно."))
+        summaryCards.adopt(forSettings ? [automatic, claude, codex, key, ollama, none] : [claude, codex, key, ollama])
         summaryCards.onChange = { [weak self] id in
             guard let self else { return }
             let backend = self.forSettings && id == "claude-cli" ? "claude-cli"
@@ -973,7 +979,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             lines: 2,
             width: 520)
         return SetupLayout.group(
-            [SetupLayout.cards(forSettings ? [automatic, claude, codex, key] : [claude, codex, key]), ollama, disclosure],
+            [choiceCards(forSettings ? [automatic, claude, codex, key] : [claude, codex, key]), ollama] + (forSettings ? [none] : []) + [disclosure],
             spacing: SetupLayout.cardGap)
     }
 
@@ -1263,7 +1269,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     }
 
     @objc private func summariesToggled() {
-        Config.update(path: ["summary", "enabled"], value: summariesOn.state == .on ? nil : false)
+        let enabled = summariesOn.state == .on
+        if enabled && Config.summary().backend == "none" { Config.update(path: ["summary", "backend"], value: nil) }
+        Config.update(path: ["summary", "enabled"], value: enabled ? nil : false)
         refresh()
     }
 
@@ -1937,19 +1945,20 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             Config.resolveRoot(cliOverride: nil).path)
 
         let summary = Config.summary()
-        summariesOn.state = summary.enabled ? .on : .off
+        let summariesEnabled = summary.enabled && summary.backend != "none"
+        summariesOn.state = summariesEnabled ? .on : .off
         let backendIsKey = summary.backend == "anthropic-api" || summary.backend == "openai-api"
         summaryCards.select(forSettings && summary.backend == "auto" ? "auto" : SetupSelection.summaryChoice(backend: summary.backend))
         if backendIsKey {
             keyProvider.selectedSegment = summary.backend == "anthropic-api" ? 1
                 : (summary.openAICompatible ? 2 : 0)
         }
-        summaryOpenAIBaseURL.stringValue = summary.openAIBaseURL
-        summaryOpenAIModel.stringValue = summary.openAIModel
-        summaryOllamaBaseURL.stringValue = summary.ollamaBaseURL
-        summaryOllamaModel.stringValue = summary.ollamaModel
+        if summaryOpenAIBaseURL.currentEditor() == nil { summaryOpenAIBaseURL.stringValue = summary.openAIBaseURL }
+        if summaryOpenAIModel.currentEditor() == nil { summaryOpenAIModel.stringValue = summary.openAIModel }
+        if summaryOllamaBaseURL.currentEditor() == nil { summaryOllamaBaseURL.stringValue = summary.ollamaBaseURL }
+        if summaryOllamaModel.currentEditor() == nil { summaryOllamaModel.stringValue = summary.ollamaModel }
         showKeyProvider()
-        for card in summaryCards.cards { card.isEnabled = summary.enabled }
+        for card in summaryCards.cards { card.isEnabled = summariesEnabled }
 
         menuBarIcon.state = Config.menuBarIcon() ? .on : .off
         dockIcon.state = Config.dockIcon() ? .on : .off

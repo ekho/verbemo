@@ -37,6 +37,15 @@ final class RecordingsWindow: NSObject {
     private(set) var contentView = NSView()
     private let pasteboard: NSPasteboard
     private let table = MeetingTableView()
+    private var activeRecording: MeetingPresentation.ActiveRecording?
+    var onOpenActiveRecording: (() -> Void)?
+    var onRenameActiveRecording: ((String) throws -> Void)?
+    private let openActiveButton = NSButton()
+    func setActiveRecording(_ value: MeetingPresentation.ActiveRecording?) {
+        guard activeRecording != value else { return }
+        activeRecording = value
+        show(allItems)
+    }
     private var allItems: [SessionInventory.Item] = []
     private var meetingFilter: ApplicationNavigationState.Destination = .allMeetings
     private let search = NSSearchField()
@@ -57,6 +66,7 @@ final class RecordingsWindow: NSObject {
     private var showsMeetingDetail = false
     var onDetailVisibilityChange: ((Bool) -> Void)?
     private let scroll = NSScrollView()
+    private var displayChanges: ConfigWatch.Token?
 
     private let calendarView = MeetingCalendarView()
     private let meetingTranscript = MeetingTranscriptView()
@@ -135,6 +145,9 @@ final class RecordingsWindow: NSObject {
 
         }
         buildTable()
+        displayChanges = ConfigWatch.Token(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.table.reloadData() } }, center: NSWorkspace.shared.notificationCenter)
         contentView = buildLayout()
         if !embedded {
             panel.contentView = contentView
@@ -182,7 +195,7 @@ final class RecordingsWindow: NSObject {
             ("meeting", localised("Meeting", "Встреча"), 250),
             ("transcript", localised("Transcript", "Расшифровка"), 150),
             ("names", localised("Names", "Имена"), 110),
-            ("summary", localised("Summary", "Саммари"), 90),
+            ("summary", localised("Summary", "Сводка"), 90),
         ]
         for (id, title, width) in columns {
             let column = NSTableColumn(identifier: .init(id))
@@ -283,7 +296,7 @@ final class RecordingsWindow: NSObject {
             (openTranscriptButton,
              localised("Open transcript", "Открыть расшифровку"), #selector(openTranscriptClicked)),
             (copySummaryButton,
-             localised("Copy summary", "Скопировать саммари"), #selector(copySummaryClicked)),
+             localised("Copy summary", "Скопировать сводку"), #selector(copySummaryClicked)),
             (openFolderButton, localised("Open folder", "Открыть папку"), #selector(openFolderClicked)),
             (deleteButton, localised("Delete", "Удалить"), #selector(deleteClicked)),
         ] as [(NSButton, String, Selector)] {
@@ -297,7 +310,7 @@ final class RecordingsWindow: NSObject {
         copySummaryButton.identifier = .init("copy-summary")
         copySummaryButton.keyEquivalent = "c"
         copySummaryButton.keyEquivalentModifierMask = [.command, .shift]
-        copySummaryButton.toolTip = localised("Copy summary (⇧⌘C)", "Скопировать саммари (⇧⌘C)")
+        copySummaryButton.toolTip = localised("Copy summary (⇧⌘C)", "Скопировать сводку (⇧⌘C)")
         openRootButton.identifier = NSUserInterfaceItemIdentifier("open-recordings-folder")
         rootPath.stringValue = root.path
         rootPath.font = .systemFont(ofSize: 11)
@@ -356,7 +369,7 @@ final class RecordingsWindow: NSObject {
             speakersContent.bottomAnchor.constraint(equalTo: speakersPane.bottomAnchor),
         ])
         for (id, label, view) in [
-            ("summary", localised("Summary", "Саммари"), previewScroll(summaryText)),
+            ("summary", localised("Summary", "Сводка"), previewScroll(summaryText)),
             ("transcript", localised("Transcript", "Расшифровка"), embedded ? transcriptContent() : previewScroll(transcriptText)),
             ("speakers", localised("Speakers", "Участники"), speakersPane),
         ] as [(String, String, NSView)] {
@@ -394,8 +407,12 @@ final class RecordingsWindow: NSObject {
         audioRow.addArrangedSubview(audioSelector)
         audioRow.addArrangedSubview(audioPlayer)
         audioRow.spacing = 8
+        openActiveButton.title = localised("Open current recording", "Открыть текущую запись")
+        openActiveButton.target = self
+        openActiveButton.action = #selector(openActiveRecording)
+        openActiveButton.isHidden = true
         let detail = NSStackView(views: embedded
-            ? [titleRow, detailMeta, calendarView, audioRow, diarizationLabel, diarizationActions, versionActions, detailTabs, openTranscriptButton, busyLabel]
+            ? [titleRow, detailMeta, calendarView, audioRow, openActiveButton, diarizationLabel, diarizationActions, versionActions, detailTabs, openTranscriptButton, busyLabel]
             : [detailTitle, diarizationLabel, diarizationActions, versionActions, detailTabs, processingButtons, busyLabel])
         detail.orientation = .vertical
         detail.distribution = .fill
@@ -408,6 +425,8 @@ final class RecordingsWindow: NSObject {
             detailMeta.textColor = .secondaryLabelColor
             detailMeta.font = .systemFont(ofSize: 12)
             detailTitle.font = .systemFont(ofSize: 23, weight: .semibold)
+            detailTitle.maximumNumberOfLines = 0
+            detailTitle.lineBreakMode = .byWordWrapping
         }
         NSLayoutConstraint.activate([
             detailTitle.widthAnchor.constraint(lessThanOrEqualTo: detail.widthAnchor),
@@ -523,7 +542,7 @@ final class RecordingsWindow: NSObject {
         let ready = selectedVersion?.isRequest != true && dir.flatMap(PostProcessor.readTranscript) != nil
             && (dir.map { DiarizationState.persisted(in: $0).isFinal } ?? false)
         var state = MeetingActionState(transcriptReady: ready, summaryReady: summaryToCopy != nil,
-            hasAudio: item?.hasAudio == true, isRecording: false,
+            hasAudio: item?.hasAudio == true, isRecording: activeRecording?.dir == item?.dir && activeRecording != nil,
             isBusy: working || (item.map { SessionClaim.isHeld($0.dir) } ?? false),
             configReadable: !Config.settingsUnknown, transcriptionEnabled: Config.transcriptionEnabled(),
             summaryEnabled: PostProcessor.Policy.configured.summary)
@@ -545,7 +564,11 @@ final class RecordingsWindow: NSObject {
         onDetailVisibilityChange?(showsMeetingDetail)
     }
     @objc private func searchChanged() { show(allItems) }
-    @objc private func meetingClicked() { showsMeetingDetail = selected != nil; updateCompactLayout() }
+    @objc private func meetingClicked() {
+        if let selected, selected.dir == activeRecording?.dir { onOpenActiveRecording?(); return }
+        showsMeetingDetail = selected != nil; updateCompactLayout()
+    }
+    @objc private func openActiveRecording() { onOpenActiveRecording?() }
     @objc private func moreClicked(_ sender: NSButton) {
         menuWillOpen(meetingMenu)
         meetingMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
@@ -634,7 +657,11 @@ final class RecordingsWindow: NSObject {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let title = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { NSSound.beep(); return }
-        do { try SessionState.amend(item.dir, with: ["title": title]); reload() }
+        do {
+            if item.dir == activeRecording?.dir { try onRenameActiveRecording?(title) }
+            else { try SessionState.amend(item.dir, with: ["title": title]) }
+            reload()
+        }
         catch { NSAlert(error: error).beginSheetModal(for: panel) }
     }
     @objc private func copyContentClicked(_ sender: NSButton) { copyMeetingContent(transcript: sender.tag >= 2, plainText: sender.tag % 2 == 0) }
@@ -737,8 +764,9 @@ final class RecordingsWindow: NSObject {
 
     private func show(_ found: [SessionInventory.Item]) {
         let previous = selected?.dir
-        allItems = found
-        items = found.filter { !deletion.isPending($0.dir) && (!embedded || MeetingPresentation.matches($0, filter: meetingFilter, query: search.stringValue)) }
+        allItems = found.filter { $0.dir != activeRecording?.dir }
+        let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
+        items = inventory.filter { !deletion.isPending($0.dir) && (!embedded || MeetingPresentation.matches($0, filter: meetingFilter, query: search.stringValue, active: activeRecording)) }
         table.reloadData()
         if let previous, let row = items.firstIndex(where: { $0.dir == previous }) {
             table.selectRowIndexes([row], byExtendingSelection: false)
@@ -761,6 +789,28 @@ final class RecordingsWindow: NSObject {
     }
 
     private func showDetail() {
+        openActiveButton.isHidden = true
+        detailTabs.isHidden = false
+        if let activeRecording, selected?.dir == activeRecording.dir {
+            showCalendar(for: selected)
+            detailTitle.stringValue = activeRecording.title
+            moreButton.isEnabled = true
+            versions = []
+            versionSelector.removeAllItems()
+            versionSelector.isHidden = true
+            audioRow.isHidden = true
+            detailTabs.isHidden = true
+            diarizationLabel.isHidden = true
+            retryDiarizationButton.isHidden = true
+            skipDiarizationButton.isHidden = true
+            openTranscriptButton.isHidden = true
+            summaryText.string = ""
+            transcriptText.string = ""
+            openActiveButton.isHidden = false
+            busyLabel.stringValue = activeRecording.paused ? localised("Recording paused", "Запись приостановлена") : localised("Recording in progress", "Идёт запись")
+            return
+        }
+        openTranscriptButton.isHidden = false
         if embedded {
             showCalendar(for: selected)
             meetingTranscript.isHidden = true
@@ -778,7 +828,7 @@ final class RecordingsWindow: NSObject {
             audioRow.isHidden = files.isEmpty
         }
         copyReset?.cancel()
-        copySummaryButton.title = localised("Copy summary", "Скопировать саммари")
+        copySummaryButton.title = localised("Copy summary", "Скопировать сводку")
         if versionSession != selected?.dir {
             versionSession = selected?.dir
             versionKey = nil
@@ -831,13 +881,13 @@ final class RecordingsWindow: NSObject {
         }
         let summary = try? String(contentsOf: dir.appendingPathComponent("summary.md"), encoding: .utf8)
         var summaryPreview = summary ?? (item.summary == .off
-            ? localised("Summaries are off.", "Саммари выключены.")
-            : localised("No summary yet.", "Саммари пока нет."))
+            ? localised("Summaries are off.", "Создание сводки выключено.")
+            : localised("No summary yet.", "Сводка не создавалась."))
         summaryText.identifier = summary == nil ? nil : .init("meeting-words")
         if summary != nil && !PostProcessor.hasCurrentSummary(dir) {
             summaryPreview = localised(
                 "This summary belongs to the previous transcript.\n\n",
-                "Это саммари предыдущей расшифровки.\n\n") + summaryPreview
+                "Это сводка предыдущей расшифровки.\n\n") + summaryPreview
         }
         summaryText.textStorage?.setAttributedString(MarkdownPreview.render(summaryPreview))
         let transcript = PostProcessor.readTranscript(dir)
@@ -937,6 +987,7 @@ final class RecordingsWindow: NSObject {
 
     private func updateButtons() {
         let item = selected
+        moreButton.isEnabled = item != nil
         finishButton.isEnabled = !working && (selectedVersion?.isRequest == true
             ? item?.transcript.isOutstanding ?? false
             : artifactDirectory.map { !PostProcessor.outstanding($0).isEmpty } ?? item?.isOutstanding ?? false)
@@ -1231,7 +1282,7 @@ final class RecordingsWindow: NSObject {
             """,
             """
             Из звука будет сделана новая расшифровка. Нынешняя расшифровка, имена \
-            участников и саммари сохранятся отдельным вариантом.
+            участников и сводка сохранятся отдельным вариантом.
             """)
         alert.addButton(withTitle: localised("Transcribe again", "Расшифровать заново"))
         alert.addButton(withTitle: localised("Cancel", "Отмена"))
@@ -1327,7 +1378,7 @@ final class RecordingsWindow: NSObject {
         }
         guard Self.copy(summary: summary, to: pasteboard) else { return }
         copyReset?.cancel()
-        let title = localised("Copy summary", "Скопировать саммари")
+        let title = localised("Copy summary", "Скопировать сводку")
         copySummaryButton.title = localised("Copied", "Скопировано")
         copyReset = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.5))
@@ -1442,7 +1493,7 @@ final class RecordingsWindow: NSObject {
         return localised(
             "verbemo is working on this recording right now — transcribing or summarising it. "
                 + "Delete it once that has finished.",
-            "verbemo сейчас работает с этой записью — расшифровывает её или пишет саммари. "
+            "verbemo сейчас работает с этой записью — расшифровывает её или создаёт сводку. "
                 + "Удалите её, когда это закончится.")
     }
 
@@ -1481,7 +1532,7 @@ extension RecordingsWindow: NSTableViewDataSource, NSTableViewDelegate, NSMenuDe
     ) -> NSView? {
         guard row < items.count, let column = tableColumn?.identifier.rawValue else { return nil }
         let item = items[row]
-        if embedded { return MeetingListView(item: item) }
+        if embedded { return MeetingListView(item: item, active: activeRecording) }
         let label = NSTextField(labelWithString: Self.cell(item, column: column) ?? "")
         label.lineBreakMode = .byTruncatingTail
 

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Testing
 @testable import verbemo
 
@@ -24,6 +25,13 @@ struct ApplicationNavigationTests {
 @Suite(.serialized)
 @MainActor
 struct ApplicationWindowTests {
+    @Test(.freshHome) func currentRecordingCanReturnThroughTheMainHeading() throws {
+        let app = ApplicationWindow()
+        app.update(state: .recording, elapsed: "01:00")
+        app.showActiveRecording()
+        let heading = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.font?.pointSize == 22 })
+        #expect(heading.isEnabled)
+    }
     @Test(.freshHome) func destinationsShareOneWindowAndAboutHasNoToolbar() {
         let app = ApplicationWindow()
         let panel = app.panel

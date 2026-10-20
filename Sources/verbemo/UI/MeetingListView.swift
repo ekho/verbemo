@@ -5,7 +5,7 @@ import QuartzCore
 final class MeetingListView: NSTableCellView {
     private var hover = false
     private var tracking: NSTrackingArea?
-    init(item: SessionInventory.Item) {
+    init(item: SessionInventory.Item, active: MeetingPresentation.ActiveRecording? = nil) {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 8
@@ -13,12 +13,13 @@ final class MeetingListView: NSTableCellView {
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.lineBreakMode = .byTruncatingTail
         let duration = item.duration.map { " · \(max(1, Int($0 / 60))) " + localised("min", "мин") } ?? ""
-        let people = item.namedSpeakers.map { localised(" · Speakers: \($0.total)", " · Участников: \($0.total)") } ?? ""
+        let invited = MeetingCalendarMetadata.read(from: item.dir)
+        let people = invited?.isConfirmed == true ? localised(" · Invited: \(invited!.participants.count)", " · Приглашены: \(invited!.participants.count)") : item.namedSpeakers.map { localised(" · Speakers: \($0.total)", " · Участников: \($0.total)") } ?? ""
         let meta = NSTextField(labelWithString: MeetingPresentation.date(item.started) + duration + people)
         meta.font = .systemFont(ofSize: 11)
         meta.textColor = .secondaryLabelColor
         meta.lineBreakMode = .byTruncatingTail
-        let stages = NSStackView(views: MeetingPresentation.stages(item).map { Self.icon($0) })
+        let stages = NSStackView(views: MeetingPresentation.stages(item, active: active).map { Self.icon($0) })
         stages.spacing = 9
         let stack = NSStackView(views: [title, meta, stages])
         stack.orientation = .vertical
@@ -58,6 +59,8 @@ final class MeetingListView: NSTableCellView {
         }
         if stage.diarized { badge("person.2.fill", left: true) }
         if stage.state == .done && stage.symbol != "calendar" { badge("checkmark", left: false) }
+        if stage.state == .paused { badge("pause.fill", left: false) }
+        if stage.state == .pending { badge("clock", left: false) }
         if stage.state == .failed { badge("exclamationmark.circle", left: false) }
         if stage.state == .active && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             image.wantsLayer = true

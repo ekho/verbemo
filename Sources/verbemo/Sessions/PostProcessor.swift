@@ -356,7 +356,7 @@ enum PostProcessor {
                     "config.json can't be read (\(reason)), and until it can, transcription "
                         + "and summaries wait. Nothing in this recording has been touched.",
                     "config.json не читается (\(reason)), и пока это так, расшифровка и "
-                        + "саммари ждут. В этой записи ничего не тронуто.")
+                        + "сводка ждут. В этой записи ничего не тронуто.")
             case .transcriptionOff:
                 return localised(
                     "Transcription is off in the settings, so there is nothing to "

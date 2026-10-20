@@ -186,7 +186,7 @@ struct RecordingsCopySummaryTests {
             let button = try #require(window.view?.allDescendants.compactMap { $0 as? NSButton }.first {
                 $0.identifier?.rawValue == "copy-summary"
             })
-            #expect(button.title == (language == .english ? "Copy summary" : "Скопировать саммари"))
+            #expect(button.title == (language == .english ? "Copy summary" : "Скопировать сводку"))
             #expect(button.sendAction(button.action, to: button.target))
             #expect(button.title == (language == .english ? "Copied" : "Скопировано"))
             withExtendedLifetime(window) {}

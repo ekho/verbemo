@@ -10,8 +10,14 @@ import Foundation
 /// double-clicking it in /Applications — so the second copy asks the first to
 /// come forward and then gets out of the way.
 enum SingleInstance {
-    private static let ping = Notification.Name("name.ekho.verbemo.activate")
-    private static let pong = Notification.Name("name.ekho.verbemo.activate-ack")
+    static func notifications(for bundleIdentifier: String) -> (Notification.Name, Notification.Name) {
+        (Notification.Name(bundleIdentifier + ".activate"), Notification.Name(bundleIdentifier + ".activate-ack"))
+    }
+    private static var names: (Notification.Name, Notification.Name) {
+        notifications(for: Runtime.appBundle?.bundleIdentifier ?? "name.ekho.verbemo")
+    }
+    private static var ping: Notification.Name { names.0 }
+    private static var pong: Notification.Name { names.1 }
 
     @MainActor
     private final class Reply {

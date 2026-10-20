@@ -803,6 +803,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     private func refresh() {
         let config = Config.raw()
         for row in rows {
+            if (row.control as? NSTextField)?.currentEditor() != nil { continue }
             let stored = value(at: row.entry.path, in: config)
             switch row.entry.kind {
             case .toggle:

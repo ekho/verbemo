@@ -158,7 +158,7 @@ struct SettingsSchemaTests {
     @Test("The summary template is an editable multi-line Advanced setting")
     func summaryTemplateAppearsInAdvanced() throws {
         let summaries = try #require(
-            SettingsSchema.sections.first { $0.title == localised("Summaries", "Саммари") })
+            SettingsSchema.sections.first { $0.title == localised("Summaries", "Сводка") })
         let template = try #require(
             summaries.entries.first { $0.path == ["summary", "template"] })
         guard case .multilineText = template.kind else {

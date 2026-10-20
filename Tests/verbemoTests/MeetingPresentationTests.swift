@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import AppKit
 import Testing
 @testable import verbemo
 
@@ -50,5 +51,28 @@ struct MeetingMenuTests {
         #expect(pasteboard.string(forType: .string)?.contains("##") == false)
         #expect(RecordingsWindow.copyContent(markdown, plainText: false, to: pasteboard))
         #expect(pasteboard.string(forType: .string) == markdown)
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct ActiveMeetingPresentationTests {
+    @Test(.freshHome) func liveRecordingAndPauseHaveRealStageStatesAndCannotBeDeleted() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("active-meeting-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var active = MeetingPresentation.ActiveRecording(dir: root.appendingPathComponent("meeting"), title: "Live meeting", started: Date(), paused: false, liveStatus: .live)
+        let stages = MeetingPresentation.stages(active.item, active: active)
+        #expect(stages.first { $0.symbol == "mic" }?.state == .active)
+        #expect(stages.first { $0.symbol == "doc.text" }?.state == .active)
+        active.paused = true
+        let paused = MeetingPresentation.stages(active.item, active: active)
+        #expect(paused.first { $0.symbol == "mic" }?.state == .paused)
+        #expect(paused.first { $0.symbol == "doc.text" }?.state == .paused)
+        let host = NSWindow()
+        let library = RecordingsWindow(root: root, hostWindow: host)
+        library.setActiveRecording(active)
+        #expect(library.currentActions.isRecording)
+        #expect(library.currentActions.reason(for: .delete) != nil)
+        library.setActiveRecording(nil)
+        #expect(!library.currentActions.isRecording)
     }
 }

@@ -128,14 +128,14 @@ final class ApplicationWindow: NSObject {
         sidebar.select(destination)
         toolbar.isHidden = destination == .about
         title.title = destination.title
-        title.isEnabled = destination.isMeetings
+        title.isEnabled = destination.isMeetings && destination != .allMeetings
         actions.isHidden = destination != .allMeetings
         let content: NSView
         if destination.isMeetings, let library = libraryProvider?() {
             library.applyFilter(destination)
             library.onDetailVisibilityChange = { [weak self] visible in
                 guard let self, self.navigation.destination.isMeetings else { return }
-                self.title.isEnabled = visible || self.navigation.destination != .allMeetings
+                self.title.isEnabled = self.showingLive || visible || self.navigation.destination != .allMeetings
             }
             content = library.contentView
         } else if destination == .about {
@@ -165,6 +165,7 @@ final class ApplicationWindow: NSObject {
         navigation.resultTab = "transcript"
         toolbar.isHidden = false
         title.title = ApplicationNavigationState.Destination.allMeetings.title
+        title.isEnabled = true
         actions.isHidden = false
         sidebar.select(.allMeetings)
         mount(liveView)
