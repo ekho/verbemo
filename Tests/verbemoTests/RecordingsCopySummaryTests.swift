@@ -51,13 +51,14 @@ struct RecordingsCopySummaryTests {
         #expect(button.isEnabled)
         #expect(button.keyEquivalent == "c")
         #expect(button.keyEquivalentModifierMask == [.command, .shift])
-        button.performClick(nil)
+        // performClick's animation can stop the async Swift Testing runner's main run loop.
+        #expect(button.sendAction(button.action, to: button.target))
         #expect(pasteboard.string(forType: .string) == "## Current\n\n- New result\n")
         #expect(button.title == "Copied")
         selector.selectItem(at: 0)
         selector.sendAction(selector.action, to: selector.target)
         #expect(button.title == "Copy summary")
-        button.performClick(nil)
+        #expect(button.sendAction(button.action, to: button.target))
         #expect(pasteboard.string(forType: .string) == "## Archived\n\n- Old result\n")
         window.show()
         await window.settled()
@@ -71,7 +72,7 @@ struct RecordingsCopySummaryTests {
         selector.selectItem(at: 0)
         selector.sendAction(selector.action, to: selector.target)
         try FileManager.default.removeItem(at: archive.appendingPathComponent("summary.md"))
-        button.performClick(nil)
+        #expect(button.sendAction(button.action, to: button.target))
         #expect(!button.isEnabled)
         #expect(pasteboard.string(forType: .string) == "## Archived\n\n- Old result\n")
         window.show()
@@ -186,7 +187,7 @@ struct RecordingsCopySummaryTests {
                 $0.identifier?.rawValue == "copy-summary"
             })
             #expect(button.title == (language == .english ? "Copy summary" : "Скопировать саммари"))
-            button.performClick(nil)
+            #expect(button.sendAction(button.action, to: button.target))
             #expect(button.title == (language == .english ? "Copied" : "Скопировано"))
             withExtendedLifetime(window) {}
         }
