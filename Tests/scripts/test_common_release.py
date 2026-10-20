@@ -302,6 +302,12 @@ class ReleaseStateTests(unittest.TestCase):
         self.assertFalse(any(e[0] in ('POST', 'PATCH', 'upload') for e in self.api.events))
 
 class TransportTests(unittest.TestCase):
+    def test_repository_identity_accepts_app_metadata_without_user_permissions(self):
+        from release_github import GitHub
+        api = GitHub(token='fixture')
+        api.api = lambda path: {'full_name': 'ekho/verbemo'}
+        api.require_repository()
+
     def test_public_download_has_no_authorization_and_redirect_strips_token(self):
         from release_github import GitHub, SafeRedirect
         from urllib.request import Request

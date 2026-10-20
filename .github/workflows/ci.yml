@@ -35,6 +35,19 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Verify publisher repository identity with the Actions token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          sys.path.insert(0, 'scripts')
+          from release_github import GitHub
+          api = GitHub()
+          repo = api.api('')
+          print(json.dumps({'repository': repo.get('full_name'), 'permissions': repo.get('permissions')}), flush=True)
+          api.require_repository()
+          PY
       - name: Build and verify LocalVQE assets
         run: make verify-localvqe
       - name: Swift tests
