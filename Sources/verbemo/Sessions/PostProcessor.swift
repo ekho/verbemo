@@ -90,6 +90,55 @@ enum PostProcessor {
         return meta[SessionState.Key.summaryStale] as? Bool != true
     }
 
+    enum SummaryRegenerationError: LocalizedError {
+        case unavailable(String)
+        var errorDescription: String? {
+            switch self { case .unavailable(let reason): return reason }
+        }
+    }
+
+    /// Regenerate just this version's summary; keep the previous bytes on failure.
+    static func regenerateSummary(_ dir: URL, policy: Policy = .configured) async throws {
+        let parent = dir.deletingLastPathComponent()
+        let root = parent.lastPathComponent == "transcripts" ? parent.deletingLastPathComponent() : dir
+        if root != dir {
+            guard TranscriptVersions.read(root).contains(where: { $0.dir.standardizedFileURL == dir.standardizedFileURL && !$0.isRequest }) else {
+                throw SummaryRegenerationError.unavailable(localised("This transcript version is unavailable.", "Эта версия расшифровки недоступна."))
+            }
+        }
+        func validate() throws -> Transcript {
+            if let reason = Config.unreadableReason {
+                throw Refusal.configUnreadable(reason)
+            }
+            guard policy.summary else {
+                throw SummaryRegenerationError.unavailable(localised("Summary generation is off.", "Создание сводки выключено."))
+            }
+            guard !FileManager.default.fileExists(atPath: root.appendingPathComponent(".recording.json").path),
+                  !TranscriptVersions.isRequested(root), !TranscriptVersions.isRequested(dir), DiarizationState.persisted(in: dir).isFinal,
+                  let transcript = readTranscript(dir), !transcript.segments.isEmpty else {
+                throw SummaryRegenerationError.unavailable(localised("A finished transcript is required.", "Сначала нужна готовая расшифровка."))
+            }
+            return transcript
+        }
+        _ = try validate()
+        try SessionClaim.acquire(root, stage: .finish)
+        defer { SessionClaim.release(root) }
+        let transcript = try validate()
+        let meta = SessionState.read(root) ?? [:]
+        let calendar = meta["calendar"] as? [String: Any]
+        let title = (meta["title"] as? String) ?? (calendar?["title"] as? String) ?? root.lastPathComponent
+        var context = ["Meeting: \(title)"]
+        if let attendees = calendar?["attendees"] as? [String], !attendees.isEmpty {
+            context.append("Participants: " + attendees.joined(separator: ", "))
+        }
+        let names = SpeakerNames.read(from: dir)
+        guard await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir) != nil else {
+            throw SummaryRegenerationError.unavailable(localised(
+                "The summary could not be regenerated. The previous summary is preserved; see the session log.",
+                "Не удалось перегенерировать сводку. Предыдущая сводка сохранена; подробности в журнале встречи."))
+        }
+    }
+
     /// Run whatever is outstanding for one session. Returns what it did.
     ///
     /// Order matters and is the whole point: names first, so the summary is
@@ -274,7 +323,7 @@ enum PostProcessor {
     /// process` prints, `described` is what the recordings window puts in an
     /// alert, and the two are a line apart so that a reason cannot be added
     /// to one surface alone.
-    enum Refusal: Equatable, CustomStringConvertible {
+    enum Refusal: Error, Equatable, CustomStringConvertible {
         /// The config file cannot be read, carrying the parser's reason. Every
         /// plan waits on it: which engine, whether to summarize and where to,
         /// and the hook are all answers in the file.

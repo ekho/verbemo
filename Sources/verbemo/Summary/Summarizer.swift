@@ -66,11 +66,13 @@ enum Summarizer {
         // will send the contract" instead of "them will send the contract".
         let header = context.isEmpty ? "" : context.joined(separator: "\n") + "\n"
         for backend in backends {
+            guard !Task.isCancelled else { return nil }
             do {
                 log("summarizing with \(backend.name)")
                 let markdown = try await produce(
                     body: body, header: header, settings: settings, backend: backend
                 )
+                try Task.checkCancellation()
                 let text = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { throw LLMError.emptyResponse(backend.name) }
                 try Data((text + "\n").utf8).write(
