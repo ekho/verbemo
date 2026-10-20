@@ -34,6 +34,8 @@ public sealed class SummaryRegenerationTests
     [InlineData("empty-object")]
     [InlineData("empty-segments")]
     [InlineData("empty-text")]
+    [InlineData("empty-null-segment")]
+    [InlineData("empty-null-text")]
     public async Task Invalid_state_never_reaches_model(string state)
     {
         await using var fixture = await Fixture.Create();
@@ -44,6 +46,8 @@ public sealed class SummaryRegenerationTests
         {
             "empty-object" => "{}",
             "empty-segments" => "{\"segments\":[]}",
+            "empty-null-segment" => "{\"segments\":[null]}",
+            "empty-null-text" => "{\"segments\":[{\"text\":\"Words\"},{\"text\":null}]}",
             _ => "{\"segments\":[{\"text\":\"  \"}]}"
         });
         else File.WriteAllText(Path.Combine(fixture.Directory, state), "pending");

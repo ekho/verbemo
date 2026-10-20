@@ -307,7 +307,8 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
                 Has(root, TranscriptVersions.RequestFile));
             if (state.Reason(MeetingAction.RegenerateSummary) is { } reason) throw new InvalidOperationException(reason);
             var document = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
-            if (document.Segments is not { Count: > 0 } || !document.Segments.Any(s => !string.IsNullOrWhiteSpace(s.Text)))
+            if (document.Segments is not { Count: > 0 } || document.Segments.Any(s => s is null || s.Text is null)
+                || !document.Segments.Any(s => !string.IsNullOrWhiteSpace(s.Text)))
                 throw new InvalidOperationException(T("A finished transcript is required.", "Сначала нужна готовая расшифровка."));
             var names = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
             var markdown = TranscriptWriter.RenderMarkdown(await ReadTitleAsync(root, cancellationToken), document, names.Names);

@@ -7,16 +7,19 @@ The approved HTML remains the interaction reference, not a shipped web surface.
 
 - macOS full suite with required LocalVQE: **940 tests / 137 suites** passed;
   universal LocalVQE and Nemotron helpers verified. Debug build passed.
-- Actual Windows11 in Parallels, .NET10.0.402: **Core157/157, Live/WPF86/86**
+- Actual Windows11 in Parallels, .NET10.0.402: **Core157/157, Live/WPF88/88**
   passed; Debug build had zero warnings/errors.
 - Release-script114, workflow17 and automatic-version24 tests passed before
   the review fixes; release tooling was unchanged by those fixes.
+- Corrupt Windows transcript entries (`null` segment or text) are rejected
+  before model access; focused tests failed with NullReferenceException first,
+  then the full Windows suites passed with the guard. Previous summary survives.
 - One independent whole-branch review: no Critical and twelve Important
   findings. All Important findings fixed with focused RED→GREEN checks, then
   full platform suites. No second review cycle.
 - Native macOS CUA smoke in a separately identified app with isolated HOME and
   synthetic meetings: same-window navigation, compact library/detail return,
-  shared menu availability, participant selector persistence, dark theme,
+  shared menu availability, participant selector persistence, deletion Undo, dark theme,
   narrow settings/About and model descriptions. The installed app was untouched.
 - Actual Windows isolated preview displayed the fixture library/calendar and
   absent-summary state. General navigation was physically confirmed by the user.
