@@ -17,6 +17,8 @@ jobs:
   test:
     runs-on: macos-26
     timeout-minutes: 30
+    outputs:
+      artifact_id: ${{ steps.artifacts.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -67,6 +69,7 @@ jobs:
         run: |
           bash scripts/build-macos-preview.sh --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/verbemo-macos-preview"
       - name: Retain checked ad-hoc macOS packages for acceptance
+        id: artifacts
         uses: actions/upload-artifact@v5
         with:
           name: Verbemo-macos-preview-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -93,6 +96,8 @@ jobs:
         run: python3 Tests/scripts/test_independent_product.py --all
 
   windows:
+    # Restore this job and preview dependency after https://github.com/ekho/verbemo/issues/19.
+    if: ${{ false }}
     runs-on: windows-2025
     timeout-minutes: 120
     steps:
@@ -155,7 +160,7 @@ jobs:
           retention-days: 7
 
   preview:
-    needs: [test, windows]
+    needs: [test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -175,24 +180,8 @@ jobs:
           test "$shallow" = false
       - uses: actions/download-artifact@v5
         with:
-          pattern: Verbemo-*
-          path: ${{ runner.temp }}/preview-platforms
-      - name: Validate both unsigned preview platform sets
+          artifact-ids: ${{ needs.test.outputs.artifact_id }}
+          path: ${{ runner.temp }}/preview-artifacts
+      - name: Validate the macOS-only unsigned preview set
         run: |
-          python3 - <<'PY'
-          import os, shutil
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP'])
-          platforms = list((root / 'preview-platforms').iterdir())
-          if len(platforms) != 2:
-              raise ValueError('both platform artifact sets are required')
-          target = root / 'preview-artifacts'
-          target.mkdir()
-          for platform in platforms:
-              for path in platform.iterdir():
-                  if not path.is_file() or path.is_symlink():
-                      raise ValueError('unsafe platform artifact')
-                  with (target / path.name).open('xb') as stream, path.open('rb') as source:
-                      shutil.copyfileobj(source, stream)
-          PY
-          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/preview-artifacts" --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --build-number "$(git rev-list --count HEAD)" --prerelease --dry-run
+          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/preview-artifacts" --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --build-number "$(git rev-list --count HEAD)" --prerelease --macos-only --dry-run

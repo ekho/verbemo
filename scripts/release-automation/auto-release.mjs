@@ -8,7 +8,8 @@ import semver from 'semver';
 
 const repository = 'https://github.com/ekho/verbemo';
 
-export async function prepareRelease(root, releases, prerelease = false) {
+export async function prepareRelease(root, releases, prerelease = false, macosOnly = false) {
+  if (macosOnly && !prerelease) throw new Error('macOS-only releases require prerelease mode');
   const git = (...args) => execFileSync('git', args, {
     cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
@@ -56,7 +57,7 @@ export async function prepareRelease(root, releases, prerelease = false) {
   if (git('merge-base', candidate.hash, versions[0].hash) !== versions[0].hash) candidate = versions[0];
   const versionCommit = candidate.hash;
   const message = candidate.message.trim();
-  const channel = prerelease ? 'preview' : 'signed';
+  const channel = macosOnly ? 'preview-macos' : prerelease ? 'preview' : 'signed';
   let migrating = false;
   if (version !== lastVersion && message.split('\n')[0] === `chore(release): ${version}`) {
     const parent = git('rev-parse', `${versionCommit}^`);
@@ -67,7 +68,8 @@ export async function prepareRelease(root, releases, prerelease = false) {
     }
     if (tagExists(tag)) throw new Error('pending version already has a tag; inspect publication before retrying');
     if (lastVersion && !semver.gt(version, lastVersion)) throw new Error('pending VERSION is behind the published version');
-    const previousChannel = message.split('\n').includes('Release-Channel: preview') ? 'preview' : 'signed';
+    const previousChannel = message.split('\n').includes('Release-Channel: preview-macos') ? 'preview-macos'
+      : message.split('\n').includes('Release-Channel: preview') ? 'preview' : 'signed';
     if (channel === previousChannel) return { release: true, created: false, version, source_commit: versionCommit };
     migrating = true;
   }
@@ -111,7 +113,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   try {
     const releases = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp',
       'repos/ekho/verbemo/releases?per_page=100'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })).flat();
-    const plan = await prepareRelease(process.cwd(), releases, process.argv.includes('--prerelease'));
+    const plan = await prepareRelease(process.cwd(), releases, process.argv.includes('--prerelease'),
+      process.argv.includes('--macos-only'));
     if (process.env.GITHUB_OUTPUT) {
       appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(plan).map(([key, value]) => `${key}=${value}\n`).join(''));
     }

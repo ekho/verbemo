@@ -237,3 +237,32 @@ test('does not ignore a manually changed VERSION in favor of an older pending co
   f.commit('chore: revert manual version');
   await assert.rejects(prepareRelease(f.root, releases, true), /VERSION/);
 });
+
+test('migrates pending preview source when pausing and restoring Windows without another bump', async t => {
+  const f = fixture(t);
+  const releases = [f.published('0.1.0')];
+  f.commit('fix: audio');
+  const full = await prepareRelease(f.root, releases, true);
+  const pause = f.commit('fix(ci): pause Windows');
+  const mac = await prepareRelease(f.root, releases, true, true);
+  assert.equal(mac.version, '0.1.1');
+  assert.equal(mac.created, true);
+  assert.notEqual(mac.source_commit, full.source_commit);
+  assert.equal(f.git('rev-parse', 'HEAD^'), pause);
+  assert.ok(f.git('show', '-s', '--format=%B', 'HEAD').includes('Release-Channel: preview-macos'));
+  assert.deepEqual(await prepareRelease(f.root, releases, true, true), { ...mac, created: false });
+  const restore = f.commit('fix(ci): restore Windows');
+  const restored = await prepareRelease(f.root, releases, true);
+  assert.equal(restored.version, '0.1.1');
+  assert.equal(restored.created, true);
+  assert.equal(f.git('rev-parse', 'HEAD^'), restore);
+  assert.ok(f.git('show', '-s', '--format=%B', 'HEAD').split('\n').includes('Release-Channel: preview'));
+});
+
+test('macOS-only version preparation refuses signed mode before changing the repository', async t => {
+  const f = fixture(t);
+  const before = f.commit('fix: audio');
+  await assert.rejects(prepareRelease(f.root, [], false, true), /prerelease/);
+  assert.equal(f.git('rev-parse', 'HEAD'), before);
+  assert.equal(readFileSync(join(f.root, 'VERSION'), 'utf8'), '0.1.0\n');
+});

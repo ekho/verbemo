@@ -223,14 +223,19 @@ def validate_windows_release(directory: Path, version: str, source_commit: str, 
     return receipt
 
 
-def validate_release(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False) -> dict:
+def validate_release(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False, macos_only=False) -> dict:
     """The common set is closed: no unvalidated sidecars or extra platforms."""
     if type(prerelease) is not bool:
         raise ValueError('prerelease must be a boolean')
-    receipts = [validate_macos_release(directory, version, source_commit, build_number, prerelease),
-                validate_windows_release(directory, version, source_commit, build_number, prerelease)]
+    if type(macos_only) is not bool:
+        raise ValueError('macos_only must be a boolean')
+    if macos_only and not prerelease:
+        raise ValueError('macOS-only releases require prerelease mode')
+    receipts = [validate_macos_release(directory, version, source_commit, build_number, prerelease)]
+    if not macos_only:
+        receipts.append(validate_windows_release(directory, version, source_commit, build_number, prerelease))
     names = [item['name'] for receipt in receipts for item in receipt['files']]
-    names += ['macos-build.json', 'windows-build.json']
+    names += [f'{receipt["platform"]}-build.json' for receipt in receipts]
     if len(names) != len(set(names)):
         raise ValueError('duplicate release filename')
     if {p.name for p in directory.iterdir()} - set(names) - {'release-manifest.json', 'SHA256SUMS'}:
@@ -240,6 +245,8 @@ def validate_release(directory: Path, version: str, source_commit: str, build_nu
             'files': [file_record(directory / name) for name in sorted(names)]}
     if prerelease:
         result['prerelease'] = True
+    if macos_only:
+        result['platforms'] = ['macos']
     return result
 
 
@@ -269,6 +276,7 @@ def main():
     parser.add_argument('--signature')
     parser.add_argument('--minimum', default='14.2')
     parser.add_argument('--prerelease', action='store_true')
+    parser.add_argument('--macos-only', action='store_true')
     args = parser.parse_args()
     try:
         if args.command == 'preflight':
@@ -286,7 +294,7 @@ def main():
         elif args.command == 'validate-macos':
             validate_macos_release(args.output, args.version, args.source_commit, args.build_number, args.prerelease)
         else:
-            validate_release(args.output, args.version, args.source_commit, args.build_number, args.prerelease)
+            validate_release(args.output, args.version, args.source_commit, args.build_number, args.prerelease, args.macos_only)
     except (ValueError, OSError, ET.ParseError) as error:
         parser.exit(1, f'release: {error}\n')
 

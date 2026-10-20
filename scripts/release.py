@@ -15,8 +15,8 @@ MANIFEST = 'release-manifest.json'
 CHECKSUMS = 'SHA256SUMS'
 
 
-def prepare(directory, version, source_commit, build_number, dry_run=False, prerelease=False):
-    data = manifest.validate_release(directory, version, source_commit, build_number, prerelease)
+def prepare(directory, version, source_commit, build_number, dry_run=False, prerelease=False, macos_only=False):
+    data = manifest.validate_release(directory, version, source_commit, build_number, prerelease, macos_only)
     content = (json.dumps(data, indent=2, sort_keys=True) + '\n').encode()
     names = [x['name'] for x in data['files']] + [MANIFEST]
     records = data['files'] + [{'name': MANIFEST, 'size': len(content),
@@ -37,7 +37,7 @@ def prepare(directory, version, source_commit, build_number, dry_run=False, prer
 def prepared(directory):
     data = json.loads((directory / MANIFEST).read_bytes())
     checked = manifest.validate_release(directory, data['version'], data['source_commit'], data['build_number'],
-                                        data.get('prerelease', False))
+                                        data.get('prerelease', False), data.get('platforms') == ['macos'])
     if data != checked:
         raise ValueError('manifest differs from validated platform receipts')
     expected = manifest.checksum_bytes(directory, [x['name'] for x in data['files']] + [MANIFEST])
@@ -154,7 +154,10 @@ def publish(directory, api, notes=None):
     else:
         prerelease = data.get('prerelease', False)
         if prerelease:
-            notice = ('**Unsigned preview:** macOS is ad-hoc signed and not notarized; Windows is unsigned. '
+            platforms = ('this release contains macOS only. Windows builds are temporarily paused '
+                         '([#19](https://github.com/ekho/verbemo/issues/19)). '
+                         if data.get('platforms') == ['macos'] else 'Windows is unsigned. ')
+            notice = ('**Unsigned preview:** macOS is ad-hoc signed and not notarized; ' + platforms +
                       'These files are not delivered through stable automatic updates.\n\n')
             notes = notice + (notes or '')
         payload = {'tag_name': data['tag'],
@@ -240,6 +243,7 @@ def main():
     prep.add_argument('--build-number', type=int, required=True)
     prep.add_argument('--dry-run', action='store_true')
     prep.add_argument('--prerelease', action='store_true')
+    prep.add_argument('--macos-only', action='store_true')
     pub = commands.add_parser('publish')
     pub.add_argument('--artifacts', type=Path, required=True)
     pub.add_argument('--notes-file', type=Path)
@@ -250,7 +254,7 @@ def main():
             print(json.dumps(preflight(args.root, args.ref, args.version)))
         elif args.operation == 'prepare':
             print(json.dumps(prepare(args.artifacts, args.version, args.source_commit, args.build_number,
-                                     args.dry_run, args.prerelease)))
+                                     args.dry_run, args.prerelease, args.macos_only)))
         elif args.operation == 'publish':
             notes = args.notes_file.read_text() if args.notes_file else None
             publish(args.artifacts, GitHub(), notes=notes)

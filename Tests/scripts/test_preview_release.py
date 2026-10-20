@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
+import sys
 
 from test_common_release import FakeGitHub
 import test_release_manifest
@@ -11,9 +13,11 @@ import release_manifest as manifest
 import download_metadata
 
 
-def preview_fixture(root):
+def preview_fixture(root, macos_only=False):
     (root / manifest.dmg_name('0.1.0')).write_bytes(b'ad-hoc app disk image')
     manifest.write_macos_receipt(root, '0.1.0', 'a' * 40, 12, prerelease=True)
+    if macos_only:
+        return
     helper = test_release_manifest.WindowsManifestTests()
     helper.module = manifest
     receipt = helper.fixture(root)
@@ -143,6 +147,94 @@ class PreviewReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'stable'):
                 module.generate(self.root, output)
             self.assertFalse(output.exists())
+
+
+class MacOnlyPreviewTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        preview_fixture(self.root, macos_only=True)
+        self.api = FakeGitHub()
+
+    def prepare(self):
+        return release.prepare(self.root, '0.1.0', 'a' * 40, 12, prerelease=True, macos_only=True)
+
+    def test_cli_dry_run_validates_mac_only_without_writing_metadata(self):
+        script = Path(__file__).resolve().parents[2] / 'scripts/release.py'
+        result = subprocess.run([sys.executable, str(script), 'prepare', '--artifacts', str(self.root),
+                                 '--version', '0.1.0', '--source-commit', 'a' * 40, '--build-number', '12',
+                                 '--prerelease', '--macos-only', '--dry-run'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['platforms'], ['macos'])
+        self.assertFalse((self.root / release.MANIFEST).exists())
+        self.assertFalse((self.root / release.CHECKSUMS).exists())
+
+    def test_mac_only_scope_is_explicit_and_never_allowed_for_stable(self):
+        with self.assertRaises((ValueError, OSError)):
+            release.prepare(self.root, '0.1.0', 'a' * 40, 12, prerelease=True)
+        with self.assertRaisesRegex(ValueError, 'prerelease'):
+            release.prepare(self.root, '0.1.0', 'a' * 40, 12, macos_only=True)
+        data = self.prepare()
+        self.assertEqual(data['platforms'], ['macos'])
+        self.assertIs(data['prerelease'], True)
+        self.assertEqual({x['name'] for x in data['files']},
+                         {'Verbemo-0.1.0-macos-universal.dmg', 'macos-build.json'})
+        self.assertEqual(len(release.prepared(self.root)[1]), 4)
+
+    def test_publish_and_resume_a_mac_only_prerelease_without_latest(self):
+        self.prepare()
+        release.publish(self.root, self.api)
+        published = self.api.items[0]
+        self.assertTrue(published['prerelease'])
+        self.assertFalse(published['draft'])
+        self.assertIn('macOS only', published['body'])
+        self.assertIn('Windows builds are temporarily paused', published['body'])
+        self.assertNotIn('Windows is unsigned', published['body'])
+        self.assertEqual(len(self.api.assets(published)), 4)
+        self.assertIsNone(self.api.latest_id)
+        self.api.events.clear()
+        release.resume('verbemo-v0.1.0', self.api)
+        self.assertFalse(any(event[0] in ('POST', 'PATCH', 'upload') for event in self.api.events))
+        self.assertIsNone(self.api.latest_id)
+
+    def test_extra_windows_files_and_invalid_macos_evidence_still_fail(self):
+        for mutation in ('windows', 'hash', 'source', 'build', 'signature'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                preview_fixture(root, macos_only=True)
+                if mutation == 'windows':
+                    (root / 'windows-build.json').write_text('{}')
+                elif mutation == 'hash':
+                    (root / manifest.dmg_name('0.1.0')).write_bytes(b'changed')
+                else:
+                    path = root / 'macos-build.json'
+                    data = json.loads(path.read_text())
+                    key = {'source': 'source_commit', 'build': 'build_number', 'signature': 'signature'}[mutation]
+                    data[key] = {'source': 'b' * 40, 'build': 13, 'signature': {}}[mutation]
+                    path.write_text(json.dumps(data))
+                with self.assertRaises(ValueError):
+                    release.prepare(root, '0.1.0', 'a' * 40, 12, prerelease=True, macos_only=True)
+
+    def test_manifest_scope_tampering_is_rejected_before_network(self):
+        self.prepare()
+        path = self.root / release.MANIFEST
+        original = json.loads(path.read_text())
+        for scope in (None, [], ['windows'], ['macos', 'windows']):
+            data = dict(original)
+            if scope is None:
+                del data['platforms']
+            else:
+                data['platforms'] = scope
+            path.write_text(json.dumps(data))
+            with self.subTest(scope=scope), self.assertRaises((ValueError, OSError)):
+                release.publish(self.root, self.api)
+            self.assertEqual(self.api.events, [])
+
+    def test_mac_only_preview_cannot_supply_stable_download_links(self):
+        self.prepare()
+        with self.assertRaisesRegex(ValueError, 'stable'):
+            download_metadata.downloads(self.root)
 
 
 if __name__ == '__main__':
