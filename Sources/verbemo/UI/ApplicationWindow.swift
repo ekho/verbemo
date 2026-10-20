@@ -11,7 +11,18 @@ final class ApplicationWindow: NSObject {
     private let actions = NSStackView()
     private let start = NSButton()
     private let contentHost = NSView()
+    private var showingLive = false
     private lazy var live = StatusWindow(hostWindow: panel)
+    private lazy var liveView: LiveTranscriptView = {
+        let view = LiveTranscriptView(content: live.contentView)
+        view.onRename = { [weak self] name in
+            guard let self, let rename = self.onRenameRecording else { throw CocoaError(.fileNoSuchFile) }
+            try rename(name)
+            self.recordingTitle = name
+        }
+        return view
+    }()
+    var onRenameRecording: ((String) throws -> Void)?
     lazy var settings: SettingsWindow = {
         let settings = SettingsWindow(hostWindow: panel)
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
@@ -33,7 +44,7 @@ final class ApplicationWindow: NSObject {
     var onCancelImport: (() -> Void)? { didSet { live.onCancelImport = onCancelImport } }
     var recordingTitle: String {
         get { recordingBar.title }
-        set { recordingBar.title = newValue }
+        set { recordingBar.title = newValue; liveView.title = newValue }
     }
     var toolbarIsHidden: Bool { toolbar.isHidden }
     var primaryActionsAreVisible: Bool { !actions.isHidden }
@@ -49,8 +60,8 @@ final class ApplicationWindow: NSObject {
         panel.autorecalculatesKeyViewLoop = true
         sidebar.onNavigate = { [weak self] in self?.navigate($0) }
         recordingBar.onOpen = { [weak self] in self?.showActiveRecording() }
-        recordingBar.onPause = { [weak self] in self?.onTogglePause?() }
-        recordingBar.onStop = { [weak self] in self?.onToggle?() }
+        recordingBar.onPause = { [weak self] in self?.pauseRecording() }
+        recordingBar.onStop = { [weak self] in self?.stopRecording() }
         title.isBordered = false
         title.alignment = .left
         title.font = .systemFont(ofSize: 22, weight: .semibold)
@@ -108,6 +119,7 @@ final class ApplicationWindow: NSObject {
         navigate(.allMeetings)
     }
     func navigate(_ destination: ApplicationNavigationState.Destination) {
+        showingLive = false
         navigation.navigate(destination)
         sidebar.select(destination)
         toolbar.isHidden = destination == .about
@@ -137,19 +149,24 @@ final class ApplicationWindow: NSObject {
         ])
     }
     func showActiveRecording() {
+        guard recordingBarIsVisible else { return }
+        showingLive = true
+        navigation.navigate(.allMeetings)
         navigation.showsDetail = true
         navigation.resultTab = "transcript"
         toolbar.isHidden = false
         title.title = ApplicationNavigationState.Destination.allMeetings.title
         actions.isHidden = false
         sidebar.select(.allMeetings)
-        mount(live.contentView)
+        mount(liveView)
     }
     func show() { panel.orderFront(nil) }
     func bringToFront() { NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) }
     func hide() { panel.orderOut(nil) }
     func update(state: MenuBarController.State, elapsed: String?) {
+        let wasRecording = recordingBarIsVisible
         recordingBar.update(state: state, elapsed: elapsed)
+        if wasRecording && state == .idle && showingLive { navigate(.allMeetings) }
         start.isEnabled = state == .idle
         live.update(state: state, elapsed: elapsed)
     }
@@ -161,9 +178,16 @@ final class ApplicationWindow: NSObject {
     func updateLivePreference(enabled: Bool) { live.updateLivePreference(enabled: enabled) }
     func updateConfigProblem(_ headline: String?) { live.updateConfigProblem(headline) }
     func updateTranscription(_ text: String?) { live.updateTranscription(text) }
-    func updateImport(_ update: MediaImportCoordinator.Update) { bringToFront() }
-    func finishImport(_ result: MediaImportCoordinator.Result) {}
+    func updateImport(_ update: MediaImportCoordinator.Update) { navigate(.allMeetings); bringToFront() }
+    func finishImport(_ result: MediaImportCoordinator.Result) { libraryProvider?()?.sessionsChanged() }
+    func startRecording() {
+        guard !recordingBarIsVisible else { return }
+        onToggle?()
+        if recordingBarIsVisible { showActiveRecording() }
+    }
+    func pauseRecording() { if recordingBarIsVisible { onTogglePause?() } }
+    func stopRecording() { if recordingBarIsVisible { onToggle?() } }
     @objc private func showAll() { navigation.showAllMeetings(); navigate(.allMeetings) }
     @objc private func importClicked() { onChooseImport?() }
-    @objc private func startClicked() { onToggle?(); showActiveRecording() }
+    @objc private func startClicked() { startRecording() }
 }

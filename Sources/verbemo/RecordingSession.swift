@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// A session that is being recorded, as far as the filesystem can tell: the
 /// folder, the process that claimed it, and when it started. `ownerIsAlive`
@@ -54,7 +55,20 @@ final class RecordingSession {
     let context: MeetingContext
     let trigger: Trigger
 
-    var title: String? { context.title }
+    private var editedTitle: String?
+    var title: String? { editedTitle ?? context.title }
+
+    func rename(to title: String) throws {
+        let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { throw CocoaError(.validationMissingMandatoryProperty) }
+        let marker = dir.appendingPathComponent(Self.manifestFile)
+        guard var manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: marker)) as? [String: Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        manifest["title"] = cleaned
+        try writeFile(Self.json(manifest), marker)
+        editedTitle = cleaned
+    }
 
     private let mic: MicTrackRecorder
     private let system: SystemTrackRecorder
@@ -645,7 +659,7 @@ final class RecordingSession {
                 try? handle.close()
                 throw error
             }
-            guard rename(temporary.path, url.path) == 0 else {
+            guard Darwin.rename(temporary.path, url.path) == 0 else {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
         } catch {

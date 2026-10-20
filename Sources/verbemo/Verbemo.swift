@@ -385,6 +385,10 @@ final class AppController {
         menuBar.updatesAvailable(updates.isAvailable)
 
         window.libraryProvider = { [weak self] in self?.recordings }
+        window.onRenameRecording = { [weak self] name in
+            guard let session = self?.session else { throw CocoaError(.fileNoSuchFile) }
+            try session.rename(to: name)
+        }
         window.onToggle = { [weak self] in self?.toggle() }
         window.onTogglePause = { [weak self] in self?.togglePause() }
         window.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
