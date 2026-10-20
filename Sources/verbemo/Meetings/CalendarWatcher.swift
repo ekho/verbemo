@@ -23,6 +23,10 @@ final class CalendarWatcher {
         /// True when the event has other people or a conference link — the
         /// difference between a meeting and "dentist, 15:00".
         let looksLikeCall: Bool
+        var calendarTitle: String? = nil
+        var agenda: String? = nil
+        var participants: [CalendarParticipant] = []
+        var hasPersistentID = true
     }
 
     private static let matchWindow: TimeInterval = 8 * 60
@@ -110,8 +114,7 @@ final class CalendarWatcher {
             event.hasNotes ? (event.notes ?? "") : "",
         ].joined(separator: " ").lowercased()
 
-        // The link is worth keeping verbatim; the notes are not — they are as
-        // often a wall of boilerplate or something private as they are useful.
+        // Notes are a local snapshot; only the existing attendee names enter model context.
         let link = [event.url?.absoluteString, event.location]
             .compactMap { $0 }
             .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -125,7 +128,16 @@ final class CalendarWatcher {
             link: link,
             // Self counts as an attendee, so "other people" means more than one.
             looksLikeCall: attendees.count > 1
-                || Self.conferenceMarkers.contains { haystack.contains($0) }
+                || Self.conferenceMarkers.contains { haystack.contains($0) },
+            calendarTitle: event.calendar.title,
+            agenda: event.notes,
+            participants: (event.attendees ?? []).map { participant in
+                CalendarParticipant(id: participant.url.absoluteString,
+                    name: participant.name ?? participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: ""),
+                    email: participant.url.scheme == "mailto" ? participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "") : nil,
+                    organizer: participant.url == event.organizer?.url)
+            },
+            hasPersistentID: event.eventIdentifier?.isEmpty == false
         )
     }
 

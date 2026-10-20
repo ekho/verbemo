@@ -50,19 +50,25 @@ struct SpeakerNames: Codable {
         /// person reviewing a name can check it without re-reading the meeting.
         var quote: String?
         var at_ms: Int?
+        var participantID: String?
+        var manualName: String?
 
         init(
             name: String?,
             source: Source,
             confidence: String? = nil,
             quote: String? = nil,
-            at_ms: Int? = nil
+            at_ms: Int? = nil,
+            participantID: String? = nil,
+            manualName: String? = nil
         ) {
             self.name = name
             self.source = source
             self.confidence = confidence
             self.quote = quote
             self.at_ms = at_ms
+            self.participantID = participantID
+            self.manualName = manualName
         }
     }
 

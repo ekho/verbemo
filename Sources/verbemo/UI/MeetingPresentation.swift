@@ -23,7 +23,7 @@ enum MeetingPresentation {
         if filter == .processing && !busy && !steps.contains(where: \.isOutstanding) { return false }
         if filter == .attention && !item.unreadableDiarization && item.diarization?.status != .failed
             && !steps.contains(where: { if case .failed = $0 { return true }; return false }) { return false }
-        return query.isEmpty || [item.title ?? item.name, item.name, date(item.started)]
+        return query.isEmpty || ([item.title ?? item.name, item.name, date(item.started)] + (MeetingCalendarMetadata.read(from: item.dir)?.participants.map(\.name) ?? []))
             .contains { $0.localizedCaseInsensitiveContains(query) }
     }
     static func audioFiles(_ dir: URL) -> [URL] {
@@ -36,8 +36,7 @@ enum MeetingPresentation {
         }
     }
     static func calendarLinked(_ dir: URL) -> Bool {
-        let calendar = SessionState.read(dir)?["calendar"] as? [String: Any]
-        return calendar?["association"] as? String == "confirmed"
+        MeetingCalendarMetadata.read(from: dir)?.isConfirmed == true
     }
     static func stages(_ item: SessionInventory.Item) -> [Stage] {
         let busy = SessionClaim.isHeld(item.dir)

@@ -29,6 +29,11 @@ struct MeetingContext {
     var link: String?
     var scheduledStart: Date?
     var scheduledEnd: Date?
+    var calendarEventID: String?
+    var calendarAssociation: String?
+    var calendarTitle: String?
+    var agenda: String?
+    var participants: [CalendarParticipant] = []
 
     static let empty = MeetingContext()
 
@@ -50,7 +55,7 @@ struct MeetingContext {
         self.scheduledEnd = scheduledEnd
     }
 
-    init(meeting: CalendarWatcher.Meeting?, app: String?, appFamilies: [String] = []) {
+    init(meeting: CalendarWatcher.Meeting?, app: String?, appFamilies: [String] = [], confirmed: Bool = false) {
         self.init(
             title: meeting?.title,
             // An unnameable process is better left out than turned into
@@ -62,6 +67,13 @@ struct MeetingContext {
             scheduledStart: meeting?.start,
             scheduledEnd: meeting?.end
         )
+        if let meeting {
+            calendarEventID = meeting.hasPersistentID ? meeting.id : ""
+            calendarAssociation = confirmed && meeting.hasPersistentID ? "confirmed" : "candidate"
+            calendarTitle = meeting.calendarTitle
+            agenda = meeting.agenda
+            participants = meeting.participants
+        }
     }
 
     /// The part of a session folder's name that follows the timestamp, or nil
@@ -86,6 +98,15 @@ struct MeetingContext {
         if let app { fields["app"] = app }
 
         var calendar: [String: Any] = [:]
+        if let calendarEventID {
+            calendar["schema_version"] = 2
+            calendar["event_id"] = calendarEventID
+            calendar["association"] = calendarAssociation
+        }
+        if let calendarTitle { calendar["calendar_title"] = calendarTitle }
+        if let agenda { calendar["agenda"] = agenda }
+        if !participants.isEmpty, let data = try? JSONEncoder().encode(participants),
+           let values = try? JSONSerialization.jsonObject(with: data) { calendar["participants"] = values }
         if let title { calendar["title"] = title }
         if !attendees.isEmpty { calendar["attendees"] = attendees }
         if let link { calendar["link"] = link }

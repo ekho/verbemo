@@ -58,6 +58,10 @@ final class RecordingsWindow: NSObject {
     var onDetailVisibilityChange: ((Bool) -> Void)?
     private let scroll = NSScrollView()
 
+    private let calendarView = MeetingCalendarView()
+    private let meetingTranscript = MeetingTranscriptView()
+    private var plainTranscriptScroll: NSView?
+    private let detailMeta = NSTextField(labelWithString: "")
     private let detailTitle = NSTextField(labelWithString: "")
     private let diarizationLabel = NSTextField(labelWithString: "")
     private let retryDiarizationButton = NSButton()
@@ -353,7 +357,7 @@ final class RecordingsWindow: NSObject {
         ])
         for (id, label, view) in [
             ("summary", localised("Summary", "Саммари"), previewScroll(summaryText)),
-            ("transcript", localised("Transcript", "Расшифровка"), previewScroll(transcriptText)),
+            ("transcript", localised("Transcript", "Расшифровка"), embedded ? transcriptContent() : previewScroll(transcriptText)),
             ("speakers", localised("Speakers", "Участники"), speakersPane),
         ] as [(String, String, NSView)] {
             let tab = NSTabViewItem(identifier: id)
@@ -391,7 +395,7 @@ final class RecordingsWindow: NSObject {
         audioRow.addArrangedSubview(audioPlayer)
         audioRow.spacing = 8
         let detail = NSStackView(views: embedded
-            ? [titleRow, audioRow, diarizationLabel, diarizationActions, versionActions, detailTabs, openTranscriptButton, busyLabel]
+            ? [titleRow, detailMeta, calendarView, audioRow, diarizationLabel, diarizationActions, versionActions, detailTabs, openTranscriptButton, busyLabel]
             : [detailTitle, diarizationLabel, diarizationActions, versionActions, detailTabs, processingButtons, busyLabel])
         detail.orientation = .vertical
         detail.distribution = .fill
@@ -400,6 +404,9 @@ final class RecordingsWindow: NSObject {
         detail.edgeInsets = NSEdgeInsets(top: 10, left: 0, bottom: 0, right: 0)
         if embedded {
             titleRow.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
+            calendarView.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
+            detailMeta.textColor = .secondaryLabelColor
+            detailMeta.font = .systemFont(ofSize: 12)
             detailTitle.font = .systemFont(ofSize: 23, weight: .semibold)
         }
         NSLayoutConstraint.activate([
@@ -475,6 +482,39 @@ final class RecordingsWindow: NSObject {
         ])
         if !embedded { toolbar.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28).isActive = true }
         return container
+    }
+
+    private func transcriptContent() -> NSView {
+        let host = NSView()
+        let plain = previewScroll(transcriptText)
+        plainTranscriptScroll = plain
+        for view in [plain, meetingTranscript] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            host.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: host.leadingAnchor), view.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+                view.topAnchor.constraint(equalTo: host.topAnchor), view.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+            ])
+        }
+        meetingTranscript.isHidden = true
+        return host
+    }
+    private func showCalendar(for item: SessionInventory.Item?) {
+        let metadata = item.flatMap { MeetingCalendarMetadata.read(from: $0.dir) }
+        calendarView.update(metadata)
+        guard let item else { detailMeta.stringValue = ""; return }
+        let duration = item.duration.map { localised("\(Int($0 / 60)) min", "\(Int($0 / 60)) мин") }
+        let invited = metadata?.isConfirmed == true ? metadata.map { localised("Invited: \($0.participants.count)", "Приглашены: \($0.participants.count)") } : nil
+        detailMeta.stringValue = [MeetingPresentation.date(item.started), duration, invited].compactMap { $0 }.joined(separator: " · ")
+        calendarView.onConfirm = { [weak self] in
+            try MeetingCalendarMetadata.confirm(in: item.dir)
+            self?.reload()
+        }
+        calendarView.onOpen = {
+            guard let metadata, let reason = CalendarEventOpener.open(metadata) else { return }
+            let alert = NSAlert(); alert.messageText = reason; alert.runModal()
+        }
+        calendarView.onParticipants = { [weak self] in self?.detailTabs.selectTabViewItem(withIdentifier: "speakers") }
     }
 
     var currentActions: MeetingActionState {
@@ -722,6 +762,11 @@ final class RecordingsWindow: NSObject {
 
     private func showDetail() {
         if embedded {
+            showCalendar(for: selected)
+            meetingTranscript.isHidden = true
+            plainTranscriptScroll?.isHidden = false
+        }
+        if embedded {
             let files = selected.map { MeetingPresentation.audioFiles($0.dir) } ?? []
             if files != audioFiles {
                 audioPlayer.player?.pause()
@@ -814,6 +859,26 @@ final class RecordingsWindow: NSObject {
         }
 
         let names = SpeakerNames.read(from: dir)
+        if embedded, let calendar = MeetingCalendarMetadata.read(from: item.dir), calendar.isConfirmed {
+            let invited = NSTextField(wrappingLabelWithString: localised("Invited from Calendar — attendance is not confirmed", "Приглашённые из календаря — присутствие не подтверждено"))
+            invited.font = .systemFont(ofSize: 13, weight: .semibold)
+            speakersStack.addArrangedSubview(invited)
+            for person in calendar.participants {
+                let label = NSTextField(wrappingLabelWithString: person.name + (person.email.map { " · " + $0 } ?? "") + (person.organizer == true ? localised(" · Organizer", " · Организатор") : ""))
+                label.isSelectable = true
+                speakersStack.addArrangedSubview(label)
+            }
+            let diarized = DiarizationState.read(dir).map { $0.status == .completed } ?? (!Config.localEngines.contains(transcript.engine) || Set(transcript.segments.map(\.speaker)).count > 2)
+            if diarized {
+                meetingTranscript.update(transcript: transcript, names: names, participants: calendar.participants, canEdit: !working && !SessionClaim.isHeld(item.dir) && DiarizationState.persisted(in: dir).isFinal)
+                meetingTranscript.onMap = { [weak self] speaker, participant in
+                    try PostProcessor.setSpeakerParticipant(speaker, participant: participant, in: dir)
+                    self?.showDetail()
+                }
+                meetingTranscript.isHidden = false
+                plainTranscriptScroll?.isHidden = true
+            }
+        }
         openingLabel.stringValue = SessionInventory.opening(of: transcript, names: names)
             .replacingOccurrences(of: "\n", with: " · ")
         for sample in SessionInventory.samples(transcript: transcript, names: names) {

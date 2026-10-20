@@ -99,13 +99,7 @@ enum PostProcessor {
 
     /// Regenerate just this version's summary; keep the previous bytes on failure.
     static func regenerateSummary(_ dir: URL, policy: Policy = .configured) async throws {
-        let parent = dir.deletingLastPathComponent()
-        let root = parent.lastPathComponent == "transcripts" ? parent.deletingLastPathComponent() : dir
-        if root != dir {
-            guard TranscriptVersions.read(root).contains(where: { $0.dir.standardizedFileURL == dir.standardizedFileURL && !$0.isRequest }) else {
-                throw SummaryRegenerationError.unavailable(localised("This transcript version is unavailable.", "Эта версия расшифровки недоступна."))
-            }
-        }
+        let root = try validatedSessionRoot(for: dir)
         func validate() throws -> Transcript {
             if let reason = Config.unreadableReason {
                 throw Refusal.configUnreadable(reason)
@@ -128,7 +122,8 @@ enum PostProcessor {
         let calendar = meta["calendar"] as? [String: Any]
         let title = (meta["title"] as? String) ?? (calendar?["title"] as? String) ?? root.lastPathComponent
         var context = ["Meeting: \(title)"]
-        if let attendees = calendar?["attendees"] as? [String], !attendees.isEmpty {
+        let attendees = MeetingCalendarMetadata.modelAttendees(calendar)
+        if !attendees.isEmpty {
             context.append("Participants: " + attendees.joined(separator: ", "))
         }
         let names = SpeakerNames.read(from: dir)
@@ -183,7 +178,7 @@ enum PostProcessor {
         let meta = SessionState.read(dir) ?? [:]
         let calendar = meta["calendar"] as? [String: Any]
         let title = (meta["title"] as? String) ?? (calendar?["title"] as? String)
-        let attendees = calendar?["attendees"] as? [String] ?? []
+        let attendees = MeetingCalendarMetadata.modelAttendees(calendar)
         let app = meta["app"] as? String
 
         var names = SpeakerNames.read(from: dir)
@@ -450,6 +445,40 @@ enum PostProcessor {
     /// The read, the change and the write are one step under the session's
     /// lock, the same one a naming run merges its answer under, so the two
     /// cannot write each other's work away.
+    private static func validatedSessionRoot(for dir: URL) throws -> URL {
+        let parent = dir.deletingLastPathComponent()
+        guard parent.lastPathComponent == "transcripts" else { return dir }
+        let root = parent.deletingLastPathComponent()
+        guard dir.resolvingSymlinksInPath().deletingLastPathComponent().path == root.resolvingSymlinksInPath().appendingPathComponent("transcripts").path,
+              TranscriptVersions.read(root).contains(where: { $0.dir.standardizedFileURL.path == dir.standardizedFileURL.path && !$0.isRequest }) else {
+            throw SummaryRegenerationError.unavailable(localised("This transcript version is unavailable.", "Эта версия расшифровки недоступна."))
+        }
+        return root
+    }
+
+    static func setSpeakerParticipant(_ speakerID: String, participant: CalendarParticipant?, in dir: URL) throws {
+        let root = try validatedSessionRoot(for: dir)
+        guard let transcript = readTranscript(dir), transcript.segments.contains(where: { $0.speaker == speakerID }),
+              DiarizationState.persisted(in: dir).isFinal else { throw CocoaError(.fileReadUnknown) }
+        let calendar = MeetingCalendarMetadata.read(from: root)
+        if let participant, !(calendar?.isConfirmed == true && calendar?.participants.contains(where: { $0.id == participant.id }) == true) {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        guard !FileManager.default.fileExists(atPath: root.appendingPathComponent(".recording.json").path) else { throw CocoaError(.fileLocking) }
+        try SessionClaim.acquire(root, stage: .finish)
+        defer { SessionClaim.release(root) }
+        try SessionLock.withLock(dir) {
+            var names = SpeakerNames.read(from: dir) ?? SpeakerNames()
+            let previous = names.speakers[speakerID]
+            let manual = previous?.participantID == nil && previous?.source == .manual ? previous?.name : previous?.manualName
+            let known = participant.flatMap { person in calendar?.participants.first { $0.id == person.id } }
+            names.speakers[speakerID] = SpeakerNames.Entry(name: known?.name ?? manual, source: .manual,
+                participantID: known?.id, manualName: manual)
+            try names.write(to: dir)
+            try transcript.writeMarkdown(to: dir, names: names)
+        }
+    }
+
     static func rename(_ label: String, to name: String?, in dir: URL) {
         let cleaned = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
