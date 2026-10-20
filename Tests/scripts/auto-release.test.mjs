@@ -174,3 +174,66 @@ test('does not follow a broken changelog symlink outside the checkout', async t 
   await assert.rejects(prepareRelease(f.root, []), /unsafe release path/);
   assert.equal(existsSync(outside), false);
 });
+
+test('counts published previews as a version floor instead of reusing their version', async t => {
+  const f = fixture(t);
+  const releases = [f.published('0.1.0')];
+  f.commit('feat: feature');
+  const pending = await prepareRelease(f.root, releases);
+  releases.push({ ...f.published(pending.version), prerelease: true });
+  f.commit('fix: preserve audio');
+  const plan = await prepareRelease(f.root, releases, true);
+  assert.equal(plan.version, '0.2.1');
+});
+
+test('switches an unpublished signed candidate to a preview at a source supporting the new mode', async t => {
+  const f = fixture(t);
+  const releases = [f.published('0.1.0')];
+  f.commit('feat: import audio');
+  const signed = await prepareRelease(f.root, releases);
+  const change = f.commit('feat(ci): add unsigned previews');
+  const preview = await prepareRelease(f.root, releases, true);
+  assert.equal(preview.version, '0.2.0');
+  assert.equal(preview.created, true);
+  assert.notEqual(preview.source_commit, signed.source_commit);
+  assert.equal(f.git('rev-parse', 'HEAD^'), change);
+  assert.ok(f.git('show', '-s', '--format=%B', 'HEAD').includes('Release-Channel: preview'));
+  assert.ok(readFileSync(join(f.root, 'CHANGELOG.md'), 'utf8').includes('import audio'));
+  f.commit('fix: queued later');
+  assert.deepEqual(await prepareRelease(f.root, releases, true), { ...preview, created: false });
+});
+
+test('channel migration also preserves the unpublished version before the first own release', async t => {
+  const f = fixture(t);
+  f.commit('feat: own feature');
+  await prepareRelease(f.root, []);
+  const change = f.commit('feat(ci): unsigned previews');
+  const preview = await prepareRelease(f.root, [], true);
+  assert.equal(preview.version, '0.2.0');
+  assert.equal(f.git('rev-parse', `${preview.source_commit}^`), change);
+  assert.ok(readFileSync(join(f.root, 'CHANGELOG.md'), 'utf8').includes('own feature'));
+});
+
+test('does not change channel or source after a draft has reserved the version', async t => {
+  const f = fixture(t);
+  const releases = [f.published('0.1.0')];
+  f.commit('feat: feature');
+  const signed = await prepareRelease(f.root, releases);
+  releases.push({ tag_name: 'verbemo-v0.2.0', draft: true, prerelease: true });
+  const current = f.commit('feat(ci): unsigned previews');
+  await assert.rejects(prepareRelease(f.root, releases, true), /retained artifacts/);
+  assert.equal(f.git('rev-parse', 'HEAD'), current);
+  assert.equal(signed.version, '0.2.0');
+});
+
+test('does not ignore a manually changed VERSION in favor of an older pending commit', async t => {
+  const f = fixture(t);
+  const releases = [f.published('0.1.0')];
+  f.commit('feat: feature');
+  await prepareRelease(f.root, releases);
+  writeFileSync(join(f.root, 'VERSION'), '0.5.0\n');
+  f.commit('chore: manual version');
+  writeFileSync(join(f.root, 'VERSION'), '0.2.0\n');
+  f.commit('chore: revert manual version');
+  await assert.rejects(prepareRelease(f.root, releases, true), /VERSION/);
+});

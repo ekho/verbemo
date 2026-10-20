@@ -3,8 +3,8 @@
 Both platforms come from one clean full-history checkout and exact source SHA,
 root `VERSION`, build number (`git rev-list --count`), GitHub release named
 `Verbemo <VERSION>` and tag `verbemo-v<VERSION>` in `ekho/verbemo`.
-The source version is currently `0.1.0`; this does not mean an own public release
-exists. No site, domain, SSH server or analytics backend is needed.
+Read the source version from `VERSION`; a committed version does not establish
+a public release. No site, domain, SSH server or analytics backend is needed.
 
 ## Local development and signed prerequisites
 
@@ -16,7 +16,27 @@ Ad-hoc builds cannot satisfy the signed release gate.
 On Windows, `windows/scripts/Build-Release.ps1 -Development` accepts the required
 version, full current SHA and new output directory described in
 [Windows build instructions](../windows/README.md). It produces an unsigned,
-`publishable: false` receipt and is for local tests only.
+`publishable: false` receipt, accepted only for local tests and explicit unsigned
+previews. Signed stable publication still rejects that receipt.
+
+`distribution=preview` is the default workflow mode. macOS uses ad-hoc signing,
+without notarization or a Sparkle key; Windows uses `-Development`. The publisher
+marks the common GitHub release as a prerelease, attaches an unsigned-build
+notice, verifies all public files and never promotes it to `latest`. These
+packages require manual installation; Gatekeeper/SmartScreen can warn or block
+them. Ad-hoc macOS identity can also change between builds, prompting for
+permissions again. Existing stable updates, README/site direct download links
+and catalog metadata remain restricted to signed stable release evidence.
+
+`distribution=signed` retains Developer ID/notarization/Sparkle and Windows
+Authenticode requirements. No missing credential silently changes that mode.
+
+To package a local macOS preview from a clean committed checkout:
+
+```sh
+bash scripts/build-macos-preview.sh --version "$(cat VERSION)" \
+  --source-commit "$(git rev-parse HEAD)" --output /tmp/verbemo-preview-artifacts
+```
 
 Signed macOS builds require these own values, never the imported author's keys:
 
@@ -43,25 +63,28 @@ securely; changing Sparkle trust keys requires a separately planned migration.
 The only common workflow is [.github/workflows/release.yml](../.github/workflows/release.yml).
 It runs automatically after a push/merge to `master`. The accepted automatic
 release policy supersedes the original manual-only policy in the October 19
-design: merging a releasable change authorizes its signed public release.
+design. The user-approved October 20 preview policy now makes merging a
+releasable change authorize an unsigned public **prerelease** by default.
 
 The automatic path is:
 
-1. Read the full history and published stable **own** releases (`verbemo-v*`).
+1. Read the full history and published **own** releases (`verbemo-v*`), including
+   previews: a published preview reserves its version and exact source tag.
 2. Analyze commits since the last own release with the Conventional Commits
    preset: `fix`/`perf` -> PATCH, `feat` -> MINOR, `!`/`BREAKING CHANGE` -> MAJOR.
    Choose the largest change. Other types alone produce no release. Breaking
    changes also bump MAJOR before 1.0; they are not silently downgraded to MINOR.
 3. Commit `VERSION`, `CHANGELOG.md` and `docs/release-notes-verbemo-v<VERSION>.md`
-   as `chore(release): <VERSION>` with the exact parent in `Release-Source`.
+   as `chore(release): <VERSION>` with the exact parent in `Release-Source` and
+   the selected `Release-Channel` (`preview` or `signed`).
    Push normally to `master`; a concurrent merge rejects the push without
    overwriting anyone's work. The newer merge's run (or a manual `auto` run)
    recalculates from the current branch.
-4. Test/build/sign both platforms at that exact version commit, then aggregate
+4. Test/build both platforms at that exact version commit, then aggregate
    and validate their complete artifact set.
 5. Use the existing publisher to create the tag/draft after successful builds,
-   attach the generated release notes and all files, verify, publish and promote
-   latest. A failed platform prevents publication.
+   attach the generated release notes and all files, verify and publish. Only a
+   signed stable release can promote `latest`. A failed platform prevents publication.
 
 Before the first own release, use the most recent `VERSION` adoption commit as
 the history boundary and the current root version as the version floor. This
@@ -80,13 +103,15 @@ The bot needs Actions write permissions enabled for `GITHUB_TOKEN`, with
 `contents: write` for the version commit and publisher, and `actions: write`
 only for the publisher's follow-up dispatch. Branch rules must permit the
 version commit; the workflow never force-pushes or bypasses protection. All
-signing requirements above remain mandatory. Missing credentials stop the
-signed build; unsigned/ad-hoc artifacts are never published as releases.
+signing requirements above remain mandatory for `distribution=signed`. Missing
+credentials stop that build; only explicit previews accept unsigned/ad-hoc receipts.
 
 The version commit uses `GITHUB_TOKEN`, whose push does not start another CI
 run. The release workflow therefore tests the exact version commit itself,
 including a complete Swift test report, script/workflow tests, landing checks
 and the product-independence guard. PR CI also tests the version tooling.
+It builds unsigned packages on both platforms and validates their combined
+preview receipts, source identity and file hashes without publishing.
 Use Conventional Commit messages in the final history: with squash merges,
 make the PR title the intended final commit message.
 
@@ -102,12 +127,13 @@ scripts run. Tests use isolated local Git repositories and never publish:
 npm --prefix scripts/release-automation test
 ```
 
-Manual workflow `ref`, `version`, `operation` inputs resolve a source ref once and check out
+Manual workflow `ref`, `version`, `operation`, `distribution` inputs resolve a source ref once and check out
 the exact SHA on both platforms. `prepare` is the default: it builds/tests both
-signed platform sets, combines them without collisions, validates them and
+platform sets in the selected distribution mode, combines them without collisions, validates them and
 retains `release-artifacts`. It does not create a public release.
 `publish` performs the same preparation before publication. `resume` verifies
-an already published release and only finishes latest promotion; it does not build.
+an already published release; it only finishes latest promotion for signed
+stable releases and never promotes previews. It does not build.
 `auto` ignores the version input and reads current `master`, using the same
 version/release policy as an ordinary merge. Manual `prepare`, `publish` and
 `resume` still require an explicit version.
@@ -116,6 +142,10 @@ version/release policy as an ordinary merge. Manual `prepare`, `publish` and
 gh workflow run release.yml --repo ekho/verbemo --ref master -f operation=auto
 ```
 
+The same dispatch can explicitly select `-f distribution=signed` when own
+credentials are configured. A signed release uses a new version after any
+published preview; it cannot replace or promote that preview in place.
+
 From a clean committed source checkout, inspect the resolved identity:
 
 ```sh
@@ -123,8 +153,8 @@ version=$(cat VERSION)
 source_commit=$(git rev-parse HEAD)
 build_number=$(git rev-list --count HEAD)
 python3 scripts/release.py preflight --ref "$source_commit" --version "$version"
-gh workflow run release.yml --repo ekho/verbemo --ref "$source_commit" \
-  -f ref="$source_commit" -f version="$version" -f operation=prepare
+gh workflow run release.yml --repo ekho/verbemo --ref master \
+  -f ref="$source_commit" -f version="$version" -f operation=prepare -f distribution=preview
 ```
 
 Running the signed workflow needs the credentials above. Download its actual
@@ -139,13 +169,17 @@ python3 scripts/release.py prepare --artifacts "$VERBEMO_RELEASE_ARTIFACTS" \
   --version "$version" --source-commit "$source_commit" --build-number "$build_number"
 ```
 
+For preview artifacts, add `--prerelease` to each `prepare` command (including
+`--dry-run`). The stable default rejects unsigned artifacts. The prepared
+manifest records `prerelease: true`, which publication and resume validate.
+
 `--dry-run` validates both receipts and prospective metadata without writing
 `release-manifest.json` or `SHA256SUMS`. Ordinary `prepare` writes/checks these
 files and refuses conflicting existing metadata. Neither mode signs, notarizes,
 builds or publishes. `make release` / `make release-dry` are retired guidance
 entry points, intentionally exiting with status 2; use the explicit common CLI.
 
-The exact common set is:
+The exact signed common set is:
 
 - `Verbemo-<VERSION>-macos-universal.dmg`, `appcast.xml`, `macos-build.json`.
 - `Verbemo-<VERSION>-windows-x64-Setup.exe`,
@@ -154,9 +188,15 @@ The exact common set is:
   `releases.stable.json`, `windows-build.json`.
 - `release-manifest.json` and one `SHA256SUMS` covering all other files.
 
+The preview set has the same names except that it omits `appcast.xml`. Its
+macOS receipt explicitly records ad-hoc signing and no notarization/Sparkle;
+its Windows receipt records unsigned Development output. Windows packaging
+keeps the `stable` channel file names, but those files are confined to the
+prerelease and never become the stable update source through `latest`.
+
 Both receipts must match source/version/build and every byte hash/size. Extra
-files, missing platforms, unsigned Development receipts, feed/package mismatch
-or incomplete signature validation block publication. Put generated package
+files, missing platforms, feed/package mismatch or incomplete validation block
+publication. Signed mode also rejects unsigned Development receipts. Put generated package
 catalog metadata outside this closed artifact directory.
 
 ## Publish and verify
@@ -172,7 +212,8 @@ python3 scripts/release.py publish --artifacts "$VERBEMO_RELEASE_ARTIFACTS"
 The publisher checks repository identity, stable version/build floor and exact
 tag commit, creates or resumes a matching draft, uploads missing assets without
 clobbering and verifies bytes. It publishes with latest disabled, verifies the
-public asset URLs and downloads, then promotes latest after a fresh floor check.
+public asset URLs and downloads, then promotes latest after a fresh floor check
+only for a signed stable release. Preview publication never mutates latest.
 No platform-specific tag/release or separate update repository is used.
 
 The workflow serializes publishers in concurrency group `verbemo-release`.
@@ -206,6 +247,7 @@ malformed existing release evidence fails rather than advertising an installer.
 `--artifacts` uses a locally verified complete set for preparation, but does not
 establish public availability. Review/commit the resulting local files through
 the normal source workflow. No site deployment is performed.
+Local preview artifacts are rejected by these helpers and by catalog preparation.
 
 The **Published README downloads** workflow checks trusted `master` code against
 that same public evidence and has read-only permissions. `GITHUB_TOKEN` release
@@ -230,6 +272,14 @@ use the existing manual CLI with the exact downloaded set. After publication,
 use `resume` as below. Retention remains seven days; do not delete or move tags
 to retry a failed release.
 
+A distribution-mode change is the exception before any tag/draft exists: the
+planner creates a new candidate at current source with a `Release-Channel`
+marker, regenerating notes from the last published release (or own VERSION
+adoption). It keeps the pending number unless new changes require a higher
+SemVer bump. This lets the initial unsigned mode replace the unbuilt signed
+0.2.0 candidate with source that actually supports previews. Once a tag or
+draft reserves that version, mode/source changes are refused.
+
 After publication, do not rebuild, overwrite assets or move the tag. Resume
 verification/promotion only:
 
@@ -238,8 +288,9 @@ python3 scripts/release.py resume --tag "verbemo-v$version"
 ```
 
 `resume` requires exactly one published release, downloads its public complete
-set, verifies receipts/checksums/source tag and checks the stable floor before
-promoting latest. A newer version/build blocks rollback. If public bytes or
+set and verifies receipts/checksums/source tag. Signed stable releases also
+check the stable floor before promoting latest; previews never promote it.
+A newer stable version/build blocks rollback. If public bytes or
 identity conflict, stop and investigate; ship a new version rather than repair
 an immutable published package. A README/site failure is fixed by the local
 link helpers and a reviewed documentation commit, not by replacing release bytes.

@@ -15,8 +15,8 @@ MANIFEST = 'release-manifest.json'
 CHECKSUMS = 'SHA256SUMS'
 
 
-def prepare(directory, version, source_commit, build_number, dry_run=False):
-    data = manifest.validate_release(directory, version, source_commit, build_number)
+def prepare(directory, version, source_commit, build_number, dry_run=False, prerelease=False):
+    data = manifest.validate_release(directory, version, source_commit, build_number, prerelease)
     content = (json.dumps(data, indent=2, sort_keys=True) + '\n').encode()
     names = [x['name'] for x in data['files']] + [MANIFEST]
     records = data['files'] + [{'name': MANIFEST, 'size': len(content),
@@ -36,7 +36,8 @@ def prepare(directory, version, source_commit, build_number, dry_run=False):
 
 def prepared(directory):
     data = json.loads((directory / MANIFEST).read_bytes())
-    checked = manifest.validate_release(directory, data['version'], data['source_commit'], data['build_number'])
+    checked = manifest.validate_release(directory, data['version'], data['source_commit'], data['build_number'],
+                                        data.get('prerelease', False))
     if data != checked:
         raise ValueError('manifest differs from validated platform receipts')
     expected = manifest.checksum_bytes(directory, [x['name'] for x in data['files']] + [MANIFEST])
@@ -48,7 +49,7 @@ def prepared(directory):
 
 def identity(release, data):
     if (release.get('tag_name') != data['tag'] or release.get('name') != f'Verbemo {data["version"]}'
-            or release.get('prerelease') is not False):
+            or release.get('prerelease') is not data.get('prerelease', False)):
         raise ValueError('release identity mismatch')
 
 
@@ -123,6 +124,8 @@ def check_tag(api, data, required=False):
 
 
 def promote(api, release, data, records):
+    if data.get('prerelease', False):
+        raise ValueError('prerelease cannot be promoted to latest')
     check_tag(api, data, required=True)
     verify_assets(api, release, records, public=True)
     latest = floor(api, data)  # Fresh check immediately before latest mutation.
@@ -149,9 +152,14 @@ def publish(directory, api, notes=None):
         if api.tag_commit(data['tag']) is None and release.get('target_commitish') != data['source_commit']:
             raise ValueError('existing draft has no matching tag or exact target commit')
     else:
+        prerelease = data.get('prerelease', False)
+        if prerelease:
+            notice = ('**Unsigned preview:** macOS is ad-hoc signed and not notarized; Windows is unsigned. '
+                      'These files are not delivered through stable automatic updates.\n\n')
+            notes = notice + (notes or '')
         payload = {'tag_name': data['tag'],
             'target_commitish': data['source_commit'], 'name': f'Verbemo {data["version"]}',
-            'draft': True, 'prerelease': False, 'make_latest': 'false'}
+            'draft': True, 'prerelease': prerelease, 'make_latest': 'false'}
         if notes is not None:
             payload['body'] = notes
         release = api.api('/releases', 'POST', payload)
@@ -170,7 +178,11 @@ def publish(directory, api, notes=None):
     identity(release, data)
     if release['draft']:
         raise ValueError('release publication not confirmed')
-    promote(api, release, data, records)
+    if data.get('prerelease', False):
+        check_tag(api, data, required=True)
+        verify_assets(api, release, records, public=True)
+    else:
+        promote(api, release, data, records)
 
 
 def resume(tag, api):
@@ -198,7 +210,8 @@ def resume(tag, api):
         actual, records = prepared(directory)
         if actual != data:
             raise ValueError('public manifest differs from authenticated manifest')
-        promote(api, release, data, records)
+        if not data.get('prerelease', False):
+            promote(api, release, data, records)
 
 
 def preflight(root, ref, version):
@@ -226,6 +239,7 @@ def main():
     prep.add_argument('--source-commit', required=True)
     prep.add_argument('--build-number', type=int, required=True)
     prep.add_argument('--dry-run', action='store_true')
+    prep.add_argument('--prerelease', action='store_true')
     pub = commands.add_parser('publish')
     pub.add_argument('--artifacts', type=Path, required=True)
     pub.add_argument('--notes-file', type=Path)
@@ -235,7 +249,8 @@ def main():
         if args.operation == 'preflight':
             print(json.dumps(preflight(args.root, args.ref, args.version)))
         elif args.operation == 'prepare':
-            print(json.dumps(prepare(args.artifacts, args.version, args.source_commit, args.build_number, args.dry_run)))
+            print(json.dumps(prepare(args.artifacts, args.version, args.source_commit, args.build_number,
+                                     args.dry_run, args.prerelease)))
         elif args.operation == 'publish':
             notes = args.notes_file.read_text() if args.notes_file else None
             publish(args.artifacts, GitHub(), notes=notes)

@@ -13,6 +13,8 @@ def downloads(artifacts=None):
     if artifacts is None:
         return None, {'macOS': RELEASES, 'Windows': RELEASES}
     data, _ = prepared(Path(artifacts))
+    if data.get('prerelease', False):
+        raise ValueError('stable download links require a signed release')
     return _links(data)
 
 

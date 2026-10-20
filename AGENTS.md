@@ -28,7 +28,9 @@
   Historical manifests under `docs/history/` are provenance, not active routes.
 - Merges to `master` automatically prepare a version from Conventional Commits,
   build/test both platforms at the version commit, and publish the complete
-  signed release. Keep the manual prepare/publish/resume recovery route.
+  unsigned preview as a GitHub prerelease. Previews must never become `latest`
+  or feed stable automatic updates. Keep explicit signed stable publication and
+  the manual prepare/publish/resume recovery route.
 - Apple Developer Program membership is deferred. Continue local macOS ad-hoc
   builds and testing; retain signed-release preparation. Actual Developer ID
   signing and notarization await the user's own credentials.

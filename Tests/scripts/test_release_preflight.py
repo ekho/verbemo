@@ -48,6 +48,34 @@ class ReleasePreflightTests(unittest.TestCase):
     def test_missing_credentials_stop_before_build_or_network(self):
         self.run_builder('VERBEMO_SIGN_ID')
 
+    def test_preview_preflight_checks_source_without_requiring_certificates(self):
+        command = [sys.executable, '-B', str(self.root / 'scripts/release_manifest.py'), 'preflight',
+                   '--root', str(self.root), '--version', '0.1.0', '--source-commit', self.sha,
+                   '--output', str(self.root / 'dist'), '--prerelease']
+        env = {key: value for key, value in os.environ.items() if not key.startswith('VERBEMO_')}
+        result = subprocess.run(command, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '1')
+        self.assertFalse((self.root / 'dist').exists())
+        self.git('remote', 'set-url', 'origin', 'https://github.com/other/repo.git')
+        result = subprocess.run(command, env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('origin', result.stderr)
+
+    def test_preview_builder_stops_before_building_from_the_wrong_repository(self):
+        script = self.root / 'scripts/build-macos-preview.sh'
+        shutil.copyfile(ROOT / 'scripts/build-macos-preview.sh', script)
+        self.git('add', '.')
+        self.git('commit', '-qm', 'preview builder')
+        sha = self.git('rev-parse', 'HEAD')
+        self.git('remote', 'set-url', 'origin', 'https://github.com/other/repo.git')
+        result = subprocess.run(['bash', str(script), '--version', '0.1.0', '--source-commit', sha,
+                                 '--output', str(self.root / 'dist')], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('origin', result.stderr)
+        self.assertFalse((self.root / '.build').exists())
+        self.assertFalse((self.root / 'dist').exists())
+
     def test_historical_tags_do_not_impose_a_version_floor(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location('fixture_manifest', self.root / 'scripts/release_manifest.py')
