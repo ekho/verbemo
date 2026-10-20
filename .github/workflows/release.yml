@@ -13,7 +13,7 @@ on:
         description: Stable version matching VERSION (ignored for auto)
         required: false
       distribution:
-        description: Unsigned macOS preview (signed builds paused for issue 19; resume reads the manifest)
+        description: Unsigned cross-platform preview or signed stable release (resume reads the manifest)
         type: choice
         options: [preview, signed]
         default: preview
@@ -53,9 +53,7 @@ jobs:
         run: |
           case "$DISTRIBUTION" in
             preview) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
-            signed)
-              echo '::error::Signed builds are paused until Windows is restored: https://github.com/ekho/verbemo/issues/19'
-              exit 1 ;;
+            signed) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
             *) exit 1 ;;
           esac
       - uses: actions/checkout@v6
@@ -80,7 +78,7 @@ jobs:
           PRERELEASE: ${{ steps.distribution.outputs.prerelease }}
         run: |
           arguments=()
-          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease --macos-only); fi
+          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease); fi
           node scripts/release-automation/auto-release.mjs "${arguments[@]}"
       - name: Persist the version and select the exact build source
         if: steps.version.outputs.release == 'true'
@@ -201,8 +199,9 @@ jobs:
           retention-days: 7
 
   windows:
-    # Restore this job and common aggregate after https://github.com/ekho/verbemo/issues/19.
-    if: ${{ false }}
+    outputs:
+      artifact_id: ${{ steps.artifacts.outputs.artifact-id }}
+    if: needs.resolve.outputs.release != 'false'
     needs: resolve
     runs-on: windows-2025
     timeout-minutes: 120
@@ -257,7 +256,8 @@ jobs:
           } finally {
             if (Test-Path -LiteralPath $keyDir) { Remove-Item -LiteralPath $keyDir -Recurse -Force }
           }
-      - uses: actions/upload-artifact@v5
+      - id: artifacts
+        uses: actions/upload-artifact@v5
         with:
           name: platform-windows
           path: ${{ runner.temp }}/windows-artifacts/*
@@ -265,7 +265,7 @@ jobs:
           retention-days: 7
 
   aggregate:
-    needs: [resolve, macos]
+    needs: [resolve, macos, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -275,9 +275,10 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v5
         with:
-          artifact-ids: ${{ needs.macos.outputs.artifact_id }}
+          artifact-ids: ${{ needs.macos.outputs.artifact_id }},${{ needs.windows.outputs.artifact_id }}
+          merge-multiple: true
           path: ${{ runner.temp }}/release-artifacts
-      - name: Validate the complete macOS-only set
+      - name: Validate the complete cross-platform set
         env:
           RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
           SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
@@ -285,7 +286,7 @@ jobs:
           PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
         run: |
           arguments=()
-          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease --macos-only); fi
+          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease); fi
           python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/release-artifacts" --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --build-number "$BUILD_NUMBER" "${arguments[@]}"
       - uses: actions/upload-artifact@v5
         with:

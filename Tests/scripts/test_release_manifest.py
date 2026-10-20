@@ -59,20 +59,20 @@ class ReleaseManifestTests(unittest.TestCase):
 class WindowsManifestTests(unittest.TestCase):
     setUpClass = classmethod(ReleaseManifestTests.setUpClass.__func__)
 
-    def fixture(self, root):
-        names = ['Verbemo-0.1.0-windows-x64-Setup.exe', 'Verbemo-0.1.0-windows-x64-Portable.zip',
-                 'Verbemo-0.1.0-stable-full.nupkg', 'assets.stable.json', 'releases.stable.json']
+    def fixture(self, root, version='0.1.0', commit='a' * 40, build=12):
+        names = [f'Verbemo-{version}-windows-x64-Setup.exe', f'Verbemo-{version}-windows-x64-Portable.zip',
+                 f'Verbemo-{version}-stable-full.nupkg', 'assets.stable.json', 'releases.stable.json']
         for name in names:
             (root / name).write_bytes(b'fixture final bytes')
         package = self.module.file_record(root / names[2])
         (root / 'releases.stable.json').write_text(json.dumps({'Assets': [{
-            'PackageId': 'Verbemo', 'Version': '0.1.0', 'Type': 'Full', 'FileName': names[2],
+            'PackageId': 'Verbemo', 'Version': version, 'Type': 'Full', 'FileName': names[2],
             'SHA256': package['sha256'], 'Size': package['size']}]}))
         (root / 'assets.stable.json').write_text(json.dumps([
             {'RelativeFileName': name, 'Type': kind}
             for name, kind in zip(names, ['Installer', 'Portable', 'Full'])]))
-        receipt = {'platform': 'windows', 'version': '0.1.0', 'source_commit': 'a' * 40,
-                   'build_number': 12, 'publishable': True,
+        receipt = {'platform': 'windows', 'version': version, 'source_commit': commit,
+                   'build_number': build, 'publishable': True,
                    'signature': {'authenticode': 'verified', 'timestamp': 'verified',
                                  'certificate_thumbprint': 'A' * 40},
                    'files': [self.module.file_record(root / name) for name in names]}

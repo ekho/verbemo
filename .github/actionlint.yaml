@@ -1,9 +1,0 @@
-# Literal false intentionally pauses Windows jobs until https://github.com/ekho/verbemo/issues/19.
-# Remove these exceptions when restoring the jobs.
-paths:
-  .github/workflows/ci.yml:
-    ignore:
-      - '^constant expression "false" in condition\. remove the if: section$'
-  .github/workflows/release.yml:
-    ignore:
-      - '^constant expression "false" in condition\. remove the if: section$'
