@@ -118,7 +118,16 @@ public sealed class ProcessingHookTests(ITestOutputHelper output)
             }
             if (cleanupErrors.Count > 0)
                 throw new AggregateException("Hook cleanup failed; release markers retained", cleanupErrors);
-            Directory.Delete(root, recursive: true);
+            // A session directory can remain locked briefly after the hook exits.
+            for (var attempt = 0; ; attempt++)
+            {
+                try { Directory.Delete(root, recursive: true); break; }
+                catch (IOException exception) when (attempt < 20)
+                {
+                    output.WriteLine("Directory release pending at {0:O}: {1}", DateTimeOffset.UtcNow, exception.Message);
+                    await Task.Delay(100);
+                }
+            }
         }
     }
 
