@@ -163,7 +163,7 @@ internal sealed class RecordingsWindow : Window
         EventHandler changed = (_, _) => Dispatcher.InvokeAsync(ReloadAsync);
         runtime.SessionsChanged += changed;
         Closed += (_, _) => runtime.SessionsChanged -= changed;
-        Loaded += async (_, _) => await ReloadAsync();
+        layout.Loaded += async (_, _) => await ReloadAsync();
         runtime.TrackArtifact("recordings_window");
     }
 

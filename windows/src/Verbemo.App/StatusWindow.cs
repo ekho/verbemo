@@ -62,7 +62,9 @@ internal sealed class StatusWindow : Window
     private bool allowClose;
     private readonly Dictionary<long, (Paragraph Paragraph, Run Text)> liveParagraphs = [];
 
-    public StatusWindow(VerbemoRuntime runtime)
+    public Action? RevealAction { get; set; }
+
+    public StatusWindow(VerbemoRuntime runtime, bool embedded = false)
     {
         this.runtime = runtime;
         Title = "Verbemo";
@@ -137,6 +139,18 @@ internal sealed class StatusWindow : Window
         livePanel.Children.Add(livePlaceholder);
         stack.Children.Add(livePanel);
         Content = stack;
+        if (embedded)
+        {
+            stack.Children.Remove(livePanel);
+            stack.Children.Remove(liveStatus);
+            stack.Children.Clear();
+            stack.Children.Add(Ui.Heading(T("Live transcript", "Расшифровка в реальном времени")));
+            stack.Children.Add(liveStatus);
+            stack.Children.Add(livePanel);
+            liveText.Height = double.NaN;
+            liveText.MinHeight = 300;
+            livePanel.Visibility = Visibility.Visible;
+        }
 
         autoRecord.Click += (_, _) =>
         {
@@ -181,6 +195,7 @@ internal sealed class StatusWindow : Window
 
     public void Reveal()
     {
+        if (RevealAction is { } reveal) { reveal(); return; }
         Show();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
