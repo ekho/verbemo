@@ -302,6 +302,30 @@ class ReleaseStateTests(unittest.TestCase):
         self.assertFalse(any(e[0] in ('POST', 'PATCH', 'upload') for e in self.api.events))
 
 class TransportTests(unittest.TestCase):
+    def test_repository_identity_accepts_app_metadata_without_user_permissions(self):
+        from release_github import GitHub
+        for repo in ({'full_name': 'ekho/verbemo'},
+                     {'full_name': 'ekho/verbemo', 'permissions':
+                      {'admin': False, 'maintain': False, 'push': False, 'triage': False, 'pull': False}}):
+            with self.subTest(repo=repo):
+                api = GitHub(token='fixture')
+                api.api = lambda path: repo
+                api.require_repository()
+
+    def test_release_write_denial_from_github_is_not_suppressed_or_retried(self):
+        from release_github import ApiError, GitHub
+        from urllib.error import HTTPError
+        attempts = []
+        class Opener:
+            def open(self, req, timeout):
+                attempts.append(req)
+                raise HTTPError(req.full_url, 403, 'Forbidden', {}, None)
+        api = GitHub(token='fixture', opener=Opener(), sleep=lambda _: None)
+        with self.assertRaises(ApiError) as denied:
+            api.api('/releases', 'POST', {'tag_name': 'verbemo-v0.1.0'})
+        self.assertEqual(denied.exception.status, 403)
+        self.assertEqual(len(attempts), 1)
+
     def test_public_download_has_no_authorization_and_redirect_strips_token(self):
         from release_github import GitHub, SafeRedirect
         from urllib.request import Request

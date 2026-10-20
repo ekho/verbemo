@@ -127,5 +127,6 @@ class GitHub:
 
     def require_repository(self):
         repo = self.api('')
-        if repo.get('full_name') != REPOSITORY or not repo.get('permissions', {}).get('push'):
-            raise ValueError('cannot establish ekho/verbemo write visibility')
+        # User permission flags do not describe installation tokens; GitHub authorizes each write.
+        if repo.get('full_name') != REPOSITORY:
+            raise ValueError('GitHub repository identity mismatch')

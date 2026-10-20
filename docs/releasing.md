@@ -262,6 +262,19 @@ Keep exact validated artifacts, receipts and logs. Before publication, rerun
 missing matching assets and refuses conflicting bytes or identity. An ambiguous
 network error stops the invocation; inspect remote state before another attempt.
 
+The repository guard checks the exact repository identity. GitHub's user
+`permissions` flags do not describe the Actions installation token's access;
+GitHub enforces token permissions on each write. A real HTTP 403 stops publication
+without retrying. Keep `contents: write` on the publisher job.
+
+If the publisher itself needs a fix, rerunning an old job still checks out its
+original source and broken publisher. Use the reviewed fixed common CLI with
+that run's original downloaded `release-artifacts` directory instead. Validate
+it with `prepare --dry-run` (and `--prerelease` for previews), then use `publish`
+without rebuilding or changing the manifest source. Before resuming automatic
+releases, confirm publication of the pending version; otherwise the planner
+will keep selecting that same pending source.
+
 If an automatic build failed before draft creation, a new `auto` run reuses the
 unpublished version commit and its source SHA, even if newer commits have since
 arrived. It does not bump again. After that version is successfully published,
