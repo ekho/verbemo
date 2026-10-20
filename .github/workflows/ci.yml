@@ -54,6 +54,13 @@ jobs:
         run: make app SIGN_ID=-
       - name: Landing checks
         run: python3 landing/tests/check.py
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Automatic version and changelog tests
+        run: |
+          npm --prefix scripts/release-automation ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+          npm --prefix scripts/release-automation test
       - name: Release-script tests
         run: python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
       - name: Workflow tests

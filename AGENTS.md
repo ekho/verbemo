@@ -26,6 +26,9 @@
 - Follow `docs/releasing.md` for the common release CLI and its validation
   limits. No own public release is established by source changes or local builds.
   Historical manifests under `docs/history/` are provenance, not active routes.
+- Merges to `master` automatically prepare a version from Conventional Commits,
+  build/test both platforms at the version commit, and publish the complete
+  signed release. Keep the manual prepare/publish/resume recovery route.
 - Apple Developer Program membership is deferred. Continue local macOS ad-hoc
   builds and testing; retain signed-release preparation. Actual Developer ID
   signing and notarization await the user's own credentials.

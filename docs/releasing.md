@@ -41,12 +41,80 @@ securely; changing Sparkle trust keys requires a separately planned migration.
 ## Prepare and dry-run
 
 The only common workflow is [.github/workflows/release.yml](../.github/workflows/release.yml).
-Its `ref`, `version`, `operation` inputs resolve a source ref once and check out
+It runs automatically after a push/merge to `master`. The accepted automatic
+release policy supersedes the original manual-only policy in the October 19
+design: merging a releasable change authorizes its signed public release.
+
+The automatic path is:
+
+1. Read the full history and published stable **own** releases (`verbemo-v*`).
+2. Analyze commits since the last own release with the Conventional Commits
+   preset: `fix`/`perf` -> PATCH, `feat` -> MINOR, `!`/`BREAKING CHANGE` -> MAJOR.
+   Choose the largest change. Other types alone produce no release. Breaking
+   changes also bump MAJOR before 1.0; they are not silently downgraded to MINOR.
+3. Commit `VERSION`, `CHANGELOG.md` and `docs/release-notes-verbemo-v<VERSION>.md`
+   as `chore(release): <VERSION>` with the exact parent in `Release-Source`.
+   Push normally to `master`; a concurrent merge rejects the push without
+   overwriting anyone's work. The newer merge's run (or a manual `auto` run)
+   recalculates from the current branch.
+4. Test/build/sign both platforms at that exact version commit, then aggregate
+   and validate their complete artifact set.
+5. Use the existing publisher to create the tag/draft after successful builds,
+   attach the generated release notes and all files, verify, publish and promote
+   latest. A failed platform prevents publication.
+
+Before the first own release, use the most recent `VERSION` adoption commit as
+the history boundary and the current root version as the version floor. This
+excludes inherited Amanu history and tags. For example, a feature since the own
+`0.1.0` adoption produces `0.2.0`, not a version derived from legacy `v*` or
+`windows-v*` tags. A manually changed version after an own release requires
+explicit reconciliation instead of guessing the intended number.
+
+Version preparation and publication share the `verbemo-release` concurrency
+group. When changes arrive during a build, successful publication explicitly
+dispatches another `auto` run to process the newer `master`. GitHub may replace
+an older pending run with a newer one; the next run reads current `master` and
+includes all changes since the last release. Only one release runs at a time.
+
+The bot needs Actions write permissions enabled for `GITHUB_TOKEN`, with
+`contents: write` for the version commit and publisher, and `actions: write`
+only for the publisher's follow-up dispatch. Branch rules must permit the
+version commit; the workflow never force-pushes or bypasses protection. All
+signing requirements above remain mandatory. Missing credentials stop the
+signed build; unsigned/ad-hoc artifacts are never published as releases.
+
+The version commit uses `GITHUB_TOKEN`, whose push does not start another CI
+run. The release workflow therefore tests the exact version commit itself,
+including a complete Swift test report, script/workflow tests, landing checks
+and the product-independence guard. PR CI also tests the version tooling.
+Use Conventional Commit messages in the final history: with squash merges,
+make the PR title the intended final commit message.
+
+The analyzer and notes generator are pinned semantic-release plugins; their
+orchestrator is intentionally omitted because the existing publisher owns
+release state. Install their lockfile with Node 24 and
+`npm --prefix scripts/release-automation ci --legacy-peer-deps --ignore-scripts`.
+The Conventional Commits preset is pinned to 9.3.1: preset 10 requires a newer
+writer than release-notes-generator 14 currently uses. No package lifecycle
+scripts run. Tests use isolated local Git repositories and never publish:
+
+```sh
+npm --prefix scripts/release-automation test
+```
+
+Manual workflow `ref`, `version`, `operation` inputs resolve a source ref once and check out
 the exact SHA on both platforms. `prepare` is the default: it builds/tests both
 signed platform sets, combines them without collisions, validates them and
 retains `release-artifacts`. It does not create a public release.
 `publish` performs the same preparation before publication. `resume` verifies
 an already published release and only finishes latest promotion; it does not build.
+`auto` ignores the version input and reads current `master`, using the same
+version/release policy as an ordinary merge. Manual `prepare`, `publish` and
+`resume` still require an explicit version.
+
+```sh
+gh workflow run release.yml --repo ekho/verbemo --ref master -f operation=auto
+```
 
 From a clean committed source checkout, inspect the resolved identity:
 
@@ -93,8 +161,9 @@ catalog metadata outside this closed artifact directory.
 
 ## Publish and verify
 
-Publication is an explicit consequential action. Use the prepared directory
-only after release approval, with `GH_TOKEN` supplied securely:
+Automatic publication follows the merge policy above. For a manual publication,
+use the prepared directory only after release approval, with `GH_TOKEN` supplied
+securely:
 
 ```sh
 python3 scripts/release.py publish --artifacts "$VERBEMO_RELEASE_ARTIFACTS"
@@ -150,6 +219,16 @@ Keep exact validated artifacts, receipts and logs. Before publication, rerun
 `publish` with that same directory: it reads existing draft bytes, uploads only
 missing matching assets and refuses conflicting bytes or identity. An ambiguous
 network error stops the invocation; inspect remote state before another attempt.
+
+If an automatic build failed before draft creation, a new `auto` run reuses the
+unpublished version commit and its source SHA, even if newer commits have since
+arrived. It does not bump again. After that version is successfully published,
+the follow-up run includes the queued changes. If a draft already exists, the
+automatic planner stops rather than rebuilding potentially different signed
+bytes: rerun the failed publication job with that run's retained artifacts, or
+use the existing manual CLI with the exact downloaded set. After publication,
+use `resume` as below. Retention remains seven days; do not delete or move tags
+to retry a failed release.
 
 After publication, do not rebuild, overwrite assets or move the tag. Resume
 verification/promotion only:

@@ -3,6 +3,7 @@
 .claude/
 .superpowers/
 __pycache__/
+node_modules/
 dist/
 .env.asc
 **/bin/

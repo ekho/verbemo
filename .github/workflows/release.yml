@@ -1,6 +1,8 @@
 name: Verbemo release
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       ref:
@@ -8,12 +10,12 @@ on:
         required: true
         default: master
       version:
-        description: Stable version matching VERSION
-        required: true
+        description: Stable version matching VERSION (ignored for auto)
+        required: false
       operation:
-        description: Prepare artifacts, publish, or verify and resume published latest
+        description: Automatic version and release, prepare, publish, or resume latest
         type: choice
-        options: [prepare, publish, resume]
+        options: [auto, prepare, publish, resume]
         default: prepare
         required: true
 
@@ -29,20 +31,50 @@ concurrency:
 jobs:
   resolve:
     if: inputs.operation != 'resume'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     outputs:
       source_commit: ${{ steps.source.outputs.source_commit }}
       version: ${{ steps.source.outputs.version }}
       build_number: ${{ steps.source.outputs.build_number }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ (github.event_name == 'push' || inputs.operation == 'auto') && 'master' || inputs.ref }}
           fetch-depth: 0
-          persist-credentials: false
-      - id: source
+          persist-credentials: ${{ github.event_name == 'push' || inputs.operation == 'auto' }}
+      - uses: actions/setup-node@v6
+        if: github.event_name == 'push' || inputs.operation == 'auto'
+        with:
+          node-version: '24'
+      - name: Install and test version tooling without lifecycle scripts
+        if: github.event_name == 'push' || inputs.operation == 'auto'
+        run: |
+          npm --prefix scripts/release-automation ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+          npm --prefix scripts/release-automation test
+      - name: Prepare or reuse the unpublished version commit
+        id: version
+        if: github.event_name == 'push' || inputs.operation == 'auto'
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-automation/auto-release.mjs
+      - name: Persist the version and select the exact build source
+        if: steps.version.outputs.release == 'true'
+        env:
+          CREATED: ${{ steps.version.outputs.created }}
+          SOURCE_COMMIT: ${{ steps.version.outputs.source_commit }}
+        run: |
+          if [ "$CREATED" = true ]; then
+            # A concurrent merge rejects this ordinary fast-forward push; never force it.
+            git push origin HEAD:refs/heads/master
+          fi
+          git checkout --detach "$SOURCE_COMMIT"
+      - id: source
+        if: steps.version.outputs.release != 'false'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version || inputs.version }}
         run: |
           python3 scripts/release.py preflight --ref HEAD --version "$RELEASE_VERSION" > "$RUNNER_TEMP/source.json"
           python3 - <<'PY'
@@ -55,6 +87,7 @@ jobs:
           PY
 
   macos:
+    if: needs.resolve.outputs.release != 'false'
     needs: resolve
     runs-on: macos-26
     timeout-minutes: 120
@@ -64,11 +97,20 @@ jobs:
           ref: ${{ needs.resolve.outputs.source_commit }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Test source without signing credentials
         run: |
           make verify-localvqe
-          VERBEMO_REQUIRE_LOCALVQE=1 swift test --no-parallel
+          set -o pipefail
+          VERBEMO_REQUIRE_LOCALVQE=1 swift test --no-parallel 2>&1 | tee "$RUNNER_TEMP/swift-tests.log"
+          grep -Eq '^✔ Test run with [0-9]+ tests? (in [0-9]+ suites? )?passed after ' "$RUNNER_TEMP/swift-tests.log"
           python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
+          python3 -m pip install PyYAML==6.0.3
+          python3 -m unittest discover -s windows/tests -p 'test_*.py'
+          python3 landing/tests/check.py
+          python3 Tests/scripts/test_independent_product.py --all
       - name: Build signed macOS artifacts with temporary own credentials
         shell: bash
         env:
@@ -127,6 +169,7 @@ jobs:
           retention-days: 7
 
   windows:
+    if: needs.resolve.outputs.release != 'false'
     needs: resolve
     runs-on: windows-2025
     timeout-minutes: 120
@@ -220,10 +263,13 @@ jobs:
           retention-days: 7
 
   publish:
-    if: inputs.operation == 'publish'
+    if: >-
+      (github.event_name == 'push' || inputs.operation == 'auto' || inputs.operation == 'publish') &&
+      needs.resolve.outputs.release != 'false'
     needs: [resolve, aggregate]
     permissions:
       contents: write
+      actions: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -238,7 +284,22 @@ jobs:
       - name: Publish and verify before promoting latest
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/release.py publish --artifacts "$RUNNER_TEMP/release-artifacts"
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          notes="docs/release-notes-verbemo-v$RELEASE_VERSION.md"
+          arguments=()
+          if [ -f "$notes" ]; then arguments+=(--notes-file "$notes"); fi
+          python3 scripts/release.py publish --artifacts "$RUNNER_TEMP/release-artifacts" "${arguments[@]}"
+      - name: Release changes merged during this build
+        if: github.event_name == 'push' || inputs.operation == 'auto'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+        run: |
+          current=$(gh api repos/ekho/verbemo/git/ref/heads/master --jq .object.sha)
+          if [ "$current" != "$SOURCE_COMMIT" ]; then
+            gh workflow run release.yml --repo ekho/verbemo --ref master -f ref=master -f operation=auto
+          fi
 
   resume:
     if: inputs.operation == 'resume'
