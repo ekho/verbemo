@@ -176,6 +176,11 @@ class ReleaseStateTests(unittest.TestCase):
         self.assertEqual(len([e for e in events if e[0] == 'POST']), 1)
         self.assertEqual(self.api.latest_id, 1)
 
+    def test_release_notes_are_attached_to_the_validated_draft(self):
+        self.prepare()
+        release.publish(self.root, self.api, notes='## 0.1.0\n\nFix audio preservation.\n')
+        self.assertEqual(self.api.items[0]['body'], '## 0.1.0\n\nFix audio preservation.\n')
+
     def test_public_failure_preserves_latest_and_resume_only_verifies_promotes(self):
         self.prepare()
         self.api.break_public = True

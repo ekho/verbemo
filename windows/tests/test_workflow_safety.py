@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import re
+import json
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +15,85 @@ def workflow(name):
 
 
 class CommonReleaseWorkflowTests(unittest.TestCase):
+    def test_automatic_release_uses_the_version_commit_and_gates_both_platforms(self):
+        data = workflow('release.yml')
+        self.assertEqual(data['on'].get('push', {}).get('branches'), ['master'])
+        self.assertIn('auto', data['on']['workflow_dispatch']['inputs']['operation']['options'])
+        jobs = data['jobs']
+        self.assertEqual(jobs['resolve']['outputs']['release'], '${{ steps.version.outputs.release }}')
+        for name in ('macos', 'windows'):
+            self.assertEqual(jobs[name]['if'], "needs.resolve.outputs.release != 'false'")
+        self.assertIn("needs.resolve.outputs.release != 'false'", jobs['publish']['if'])
+        self.assertEqual(jobs['publish']['permissions'], {'contents': 'write', 'actions': 'write'})
+        continuation = next(s for s in jobs['publish']['steps'] if s.get('name') == 'Release changes merged during this build')
+        self.assertEqual(continuation['env']['SOURCE_COMMIT'], '${{ needs.resolve.outputs.source_commit }}')
+        self.assertIn("inputs.operation == 'auto'", continuation['if'])
+
+    def test_version_push_refuses_a_concurrent_merge_and_reuses_pending_source(self):
+        step = next(s for s in workflow('release.yml')['jobs']['resolve']['steps']
+                    if s.get('name') == 'Persist the version and select the exact build source')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            remote, local = root / 'remote.git', root / 'local'
+            def git(*args):
+                return subprocess.check_output(['git', *args], text=True, stderr=subprocess.PIPE).strip()
+            git('init', '--bare', '-q', str(remote))
+            git('init', '-q', '-b', 'master', str(local))
+            git('-C', str(local), 'remote', 'add', 'origin', str(remote))
+            def commit(message):
+                git('-C', str(local), '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                    'commit', '--allow-empty', '-qm', message)
+                return git('-C', str(local), 'rev-parse', 'HEAD')
+            candidate = commit('candidate')
+            git('-C', str(local), 'push', '-q', 'origin', 'HEAD:master')
+            newer = commit('concurrent merge')
+            git('-C', str(local), 'push', '-q', 'origin', 'HEAD:master')
+            git('-C', str(local), 'checkout', '--detach', '-q', candidate)
+            env = {**os.environ, 'SOURCE_COMMIT': candidate, 'CREATED': 'true'}
+            result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=local,
+                                    env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(git('--git-dir', str(remote), 'rev-parse', 'master'), newer)
+            env['CREATED'] = 'false'
+            result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=local,
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(git('-C', str(local), 'rev-parse', 'HEAD'), candidate)
+            self.assertEqual(git('--git-dir', str(remote), 'rev-parse', 'master'), newer)
+
+    def test_only_newer_master_dispatches_another_automatic_release(self):
+        step = next(s for s in workflow('release.yml')['jobs']['publish']['steps']
+                    if s.get('name') == 'Release changes merged during this build')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gh, trace = root / 'gh', root / 'dispatch.json'
+            gh.write_text('''#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+if sys.argv[1:] == ['api', 'repos/ekho/verbemo/git/ref/heads/master', '--jq', '.object.sha']:
+    if os.environ.get('API_FAIL'): sys.exit(1)
+    print(os.environ['REMOTE_HEAD'])
+else:
+    Path(os.environ['TRACE']).write_text(json.dumps(sys.argv[1:]))
+''')
+            gh.chmod(0o755)
+            env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                   'SOURCE_COMMIT': 'a' * 40, 'TRACE': str(trace)}
+            for head, fails, dispatches in [('a' * 40, False, False), ('b' * 40, False, True),
+                                           ('b' * 40, True, False)]:
+                with self.subTest(head=head, api_fails=fails):
+                    trace.unlink(missing_ok=True)
+                    env['REMOTE_HEAD'] = head
+                    env['API_FAIL'] = '1' if fails else ''
+                    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']],
+                                            env=env, capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, not fails, result.stderr)
+                    self.assertEqual(trace.exists(), dispatches)
+                    if dispatches:
+                        self.assertEqual(json.loads(trace.read_text()), ['workflow', 'run', 'release.yml',
+                                         '--repo', 'ekho/verbemo', '--ref', 'master', '-f', 'ref=master',
+                                         '-f', 'operation=auto'])
+
     def test_windows_packaging_file_inputs_exist(self):
         builder = (ROOT / 'windows/scripts/Build-Release.ps1').read_text()
         arguments = builder.split('$arguments = @(', 1)[1].split('$signatureTool =', 1)[0]
@@ -66,13 +146,13 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
                     self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
                     self.assertIn(sha, result.stdout)
 
-    def test_prepare_default_and_only_publish_resume_have_write_permission(self):
+    def test_prepare_default_and_only_version_publish_resume_have_write_permission(self):
         data = workflow('release.yml')
         self.assertEqual(data['on']['workflow_dispatch']['inputs']['operation']['default'], 'prepare')
         self.assertEqual(data['permissions'], {'contents': 'read'})
         self.assertEqual(data['concurrency'], {'group': 'verbemo-release', 'cancel-in-progress': 'false'})
         writers = {name for name, job in data['jobs'].items() if job.get('permissions', {}).get('contents') == 'write'}
-        self.assertEqual(writers, {'publish', 'resume'})
+        self.assertEqual(writers, {'resolve', 'publish', 'resume'})
         self.assertFalse((ROOT / '.github/workflows/windows-beta.yml').exists())
 
     def test_both_builds_use_one_resolved_commit_with_full_history(self):

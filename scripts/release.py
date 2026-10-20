@@ -133,7 +133,7 @@ def promote(api, release, data, records):
         raise ValueError('latest promotion not confirmed; inspect and resume')
 
 
-def publish(directory, api):
+def publish(directory, api, notes=None):
     data, records = prepared(directory)  # No network until complete local validation.
     api.require_repository()
     floor(api, data)
@@ -149,9 +149,12 @@ def publish(directory, api):
         if api.tag_commit(data['tag']) is None and release.get('target_commitish') != data['source_commit']:
             raise ValueError('existing draft has no matching tag or exact target commit')
     else:
-        release = api.api('/releases', 'POST', {'tag_name': data['tag'],
+        payload = {'tag_name': data['tag'],
             'target_commitish': data['source_commit'], 'name': f'Verbemo {data["version"]}',
-            'draft': True, 'prerelease': False, 'make_latest': 'false'})
+            'draft': True, 'prerelease': False, 'make_latest': 'false'}
+        if notes is not None:
+            payload['body'] = notes
+        release = api.api('/releases', 'POST', payload)
         identity(release, data)
     assets = verify_assets(api, release, records, allow_missing=True)
     for name in sorted(set(records) - set(assets)):
@@ -223,7 +226,9 @@ def main():
     prep.add_argument('--source-commit', required=True)
     prep.add_argument('--build-number', type=int, required=True)
     prep.add_argument('--dry-run', action='store_true')
-    commands.add_parser('publish').add_argument('--artifacts', type=Path, required=True)
+    pub = commands.add_parser('publish')
+    pub.add_argument('--artifacts', type=Path, required=True)
+    pub.add_argument('--notes-file', type=Path)
     commands.add_parser('resume').add_argument('--tag', required=True)
     args = parser.parse_args()
     try:
@@ -232,7 +237,8 @@ def main():
         elif args.operation == 'prepare':
             print(json.dumps(prepare(args.artifacts, args.version, args.source_commit, args.build_number, args.dry_run)))
         elif args.operation == 'publish':
-            publish(args.artifacts, GitHub())
+            notes = args.notes_file.read_text() if args.notes_file else None
+            publish(args.artifacts, GitHub(), notes=notes)
         else:
             resume(args.tag, GitHub())
     except (ValueError, OSError, KeyError, TypeError) as error:

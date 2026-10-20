@@ -57,7 +57,7 @@ def scan(root, scopes):
         target = root / scope
         files = target.rglob("*") if target.is_dir() else [target]
         for path in sorted(files):
-            if not path.is_file():
+            if 'node_modules' in path.relative_to(root).parts or not path.is_file():
                 continue
             try:
                 content = path.read_text(encoding="utf-8")
@@ -103,6 +103,14 @@ class IndependenceDetectorTests(unittest.TestCase):
             source.parent.mkdir(parents=True)
             source.write_text('let endpoint = "https://stats.amanu.me/api/batch"')
             self.assertTrue(scan(root, MIGRATED))
+
+    def test_installed_release_tool_dependencies_are_outside_product_service_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dependency = root / 'scripts/release-automation/node_modules/vendor/example.md'
+            dependency.parent.mkdir(parents=True)
+            dependency.write_text('Example https://github.com/gsamat/amanu')
+            self.assertEqual(scan(root, MIGRATED), [])
 
     def test_migrated_repository_surfaces_have_no_inherited_services(self):
         for scope in MIGRATED:
