@@ -235,7 +235,7 @@ final class FakeCalendar: MeetingCalendar {
     }
 
     func bestMatch(for date: Date) -> CalendarWatcher.Meeting? {
-        meetings.first { $0.start <= date && $0.end >= date }
+        CalendarWatcher.bestMatch(for: date, among: meetings)
     }
 
     static func meeting(id: String, start: Date, minutes: Double = 30) -> CalendarWatcher.Meeting {
@@ -468,6 +468,60 @@ struct AutoRecordLoopTests {
         calendar.meetings = [FakeCalendar.meeting(id: "weekly", start: h.now.addingTimeInterval(5))]
         h.run(for: 30)
         #expect(h.starts == [.calendar, .calendar])
+    }
+
+    @Test("Stopping a recording does not suppress the next calendar meeting",
+          arguments: [false, true])
+    func manualStopDoesNotConsumeNextEvent(manual: Bool) {
+        let calendar = FakeCalendar()
+        let h = AutoRecordHarness(calendar: calendar) {
+            $0.calendar = true
+            $0.micActivity = false
+        }
+        let firstStart = h.now.addingTimeInterval(5)
+        calendar.meetings = [
+            FakeCalendar.meeting(id: "first", start: firstStart),
+            FakeCalendar.meeting(id: "next", start: firstStart.addingTimeInterval(30 * 60)),
+        ]
+        if manual {
+            h.controller.noteManualStart()
+            h.session = FakeAutoSession(startedAt: h.now, trigger: .manual)
+        } else {
+            h.run(for: 5)
+            #expect(h.starts == [.calendar])
+        }
+
+        h.now = firstStart.addingTimeInterval(28 * 60)
+        h.controller.noteManualStop()
+        h.session = nil
+        h.run(for: 2 * 60 + 30)
+
+        #expect(h.starts == (manual ? [.calendar] : [.calendar, .calendar]))
+    }
+
+    @Test("Stopping an early recording still suppresses that same calendar meeting",
+          arguments: [false, true])
+    func manualStopKeepsEarlyEventHandled(manual: Bool) {
+        let calendar = FakeCalendar()
+        let h = AutoRecordHarness(calendar: calendar) { $0.calendar = true }
+        calendar.meetings = [
+            FakeCalendar.meeting(id: "early", start: h.now.addingTimeInterval(2 * 60)),
+        ]
+        if manual {
+            h.controller.noteManualStart()
+            h.session = FakeAutoSession(startedAt: h.now, trigger: .manual)
+        } else {
+            h.micActive = true
+            h.run(for: 20)
+            #expect(h.starts == [.micActivity])
+        }
+
+        h.controller.noteManualStop()
+        h.session = nil
+        h.micActive = false
+        h.run(for: 3 * 60)
+
+        #expect(h.starts == (manual ? [] : [.micActivity]))
     }
 
     /// A refused start used to be retried on the next tick, every five

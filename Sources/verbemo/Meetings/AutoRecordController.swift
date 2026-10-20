@@ -109,7 +109,7 @@ final class AutoRecordController {
     /// skipped a weekly meeting from its second week until verbemo restarted.
     private var handledOccurrences: [String: Date] = [:]
     private var lastCalendarCheck = Date.distantPast
-    private var currentEventEnd: Date?
+    private var currentEvent: CalendarWatcher.Meeting?
     /// Refused starts in the current held-mic episode. Reset by a start that
     /// works, or by the mic being let go for `stopDelay`.
     private var startFailures = 0
@@ -228,7 +228,7 @@ final class AutoRecordController {
 
     /// The user started a recording by hand — don't treat it as ours.
     func noteManualStart() {
-        currentEventEnd = nil
+        currentEvent = calendar?.bestMatch(for: now())
         phase = .watching
     }
 
@@ -238,10 +238,10 @@ final class AutoRecordController {
     func noteManualStop() {
         phase = .standingDown(.manualStop)
         micActiveSince = nil
-        currentEventEnd = nil
-        if let event = calendar?.bestMatch(for: now()) {
+        if let event = currentEvent {
             markHandled(event)
         }
+        currentEvent = nil
     }
 
     /// The Mac is going to sleep. Whatever held the microphone before it has
@@ -369,7 +369,7 @@ final class AutoRecordController {
                     meeting: event, app: mic.names.first, appFamilies: mic.families)
                 if attemptStart(.calendar, context, now: now) {
                     markHandled(event)
-                    currentEventEnd = event.end
+                    currentEvent = event
                     lastDecision =
                         localised("started from calendar: ", "начала по календарю: ") + event.title
                 }
@@ -400,7 +400,7 @@ final class AutoRecordController {
         let event = calendar?.bestMatch(for: now)
         let context = MeetingContext(meeting: event, app: mic.names.first, appFamilies: mic.families)
         if attemptStart(.micActivity, context, now: now) {
-            currentEventEnd = event?.end
+            currentEvent = event
             lastDecision = localised(
                 "started from mic activity (\(mic.names.first ?? "call app"))",
                 "начала по микрофону (\(mic.names.first ?? "приложение звонка"))")
@@ -487,7 +487,7 @@ final class AutoRecordController {
         // The scheduled meeting is over, the mic is free, and the far end has
         // gone quiet: three agreeing signals, stop without waiting out the
         // full idle delay.
-        if let end = currentEventEnd, now > end.addingTimeInterval(120),
+        if let end = currentEvent?.end, now > end.addingTimeInterval(120),
            !mic.active, farEndQuietFor > Self.calendarEndQuiet {
             lastDecision = localised(
                 "stopped — calendar event ended", "остановила — событие календаря кончилось")
@@ -526,7 +526,7 @@ final class AutoRecordController {
     private func stop(_ reason: String) {
         stopRecording?(reason)
         observedSession = nil
-        currentEventEnd = nil
+        currentEvent = nil
         micActiveSince = nil
         phase = Self.backstopReasons.contains(reason)
             ? .standingDown(.backstop(reason))

@@ -25,6 +25,7 @@ final class CalendarWatcher {
         let looksLikeCall: Bool
     }
 
+    private static let matchWindow: TimeInterval = 8 * 60
     private let store = EKEventStore()
     private(set) var authorized = false
 
@@ -61,10 +62,23 @@ final class CalendarWatcher {
 
     /// The event that best describes a recording started at `date` — used to
     /// name the session folder even when the recording began some other way.
-    /// Prefers something with other people in it over a solo block.
+    /// Prefers calls over solo blocks, then the closest start among ongoing
+    /// meetings and those starting within eight minutes. Ended events cannot match.
     func bestMatch(for date: Date) -> Meeting? {
-        let candidates = meetings(around: date, slack: 8 * 60)
-        return candidates.first { $0.looksLikeCall } ?? candidates.first
+        let candidates = meetings(around: date, slack: Self.matchWindow)
+        return Self.bestMatch(for: date, among: candidates)
+    }
+
+    static func bestMatch(for date: Date, among candidates: [Meeting]) -> Meeting? {
+        candidates.filter {
+            $0.end > date && $0.start.timeIntervalSince(date) <= matchWindow
+        }.min {
+            if $0.looksLikeCall != $1.looksLikeCall { return $0.looksLikeCall }
+            let firstDistance = abs($0.start.timeIntervalSince(date))
+            let secondDistance = abs($1.start.timeIntervalSince(date))
+            if firstDistance != secondDistance { return firstDistance < secondDistance }
+            return $0.start > $1.start
+        }
     }
 
     // MARK: -
