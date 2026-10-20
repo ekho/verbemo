@@ -1,23 +1,18 @@
 import AppKit
 
-/// The feather, drawn from an inlined SVG so the executable still needs no
-/// resource bundle next to it. Shared by the menu bar, the status window and
-/// the Dock tile so all three show the same state in the same colour.
-enum FeatherIcon {
-    // Lucide feather.
+/// A simplified wave for small status icons, without the app tile's shading.
+enum WaveIcon {
     private static let svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"
     stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12.67 19a2 2 0 0 0 1.416-.588l6.154-6.172a6 6 0 0 0-8.49-8.49L5.586 9.914A2 2 0 0 0 5 11.328V18a1 1 0 0 0 1 1z"/>
-    <path d="M16 8 2 22"/>
-    <path d="M17.5 15H9"/>
+    <path d="M3 13 C5.3 13 5 7.5 7.5 7.5 S9.5 16.5 12 16.5 S14 7.5 16.5 7.5 S18.7 13 21 13"/>
     </svg>
     """
 
     private static let source: NSImage? = NSImage(data: Data(svg.utf8))
 
-    /// The feather at `size`. With a colour it is painted in that colour and
+    /// The wave at `size`. With a colour it is painted in that colour and
     /// marked non-template; without one it is a template image the system
     /// renders to match its surroundings.
     ///

@@ -21,7 +21,7 @@ final class MenuBarController {
     /// Nil while the icon is switched off.
     private var statusItem: NSStatusItem?
     /// What the icon would be showing if it were here, so that one put back
-    /// mid-meeting shows the meeting rather than an idle feather.
+    /// mid-meeting shows the meeting rather than an idle wave.
     private var state: State = .idle
     private var elapsed: String?
     private let stateLabel: NSMenuItem
@@ -278,7 +278,7 @@ final class MenuBarController {
     /// The icon is redrawn rather than tinted. A template image asks the system
     /// to render it in the menu bar's own foreground colour, and
     /// `contentTintColor` doesn't reliably win that argument — over a dark
-    /// wallpaper the "red" feather comes out near-black on near-black and the
+    /// wallpaper the "red" icon comes out near-black on near-black and the
     /// icon effectively vanishes while recording, which is the one state that
     /// must never be invisible (upstream issue #15). Drawing the colour into a
     /// non-template image takes the system out of the decision.
@@ -340,7 +340,7 @@ final class MenuBarController {
 
     /// Menu-bar status icons are nominally 18pt tall; 16 leaves a little air.
     private static func icon(color: NSColor?) -> NSImage? {
-        FeatherIcon.image(size: 16, color: color)
+        WaveIcon.image(size: 16, color: color)
     }
 
     @objc private func toggleClicked() { onToggle?() }

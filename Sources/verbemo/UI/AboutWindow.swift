@@ -34,10 +34,13 @@ final class AboutWindow: NSObject {
         panel.isReleasedWhenClosed = false
 
         let icon = NSImageView()
-        // The same feather as the Dock icon, drawn as a template so it is
-        // black on a light Mac and white on a dark one without this window
-        // having to know which it is.
-        icon.image = FeatherIcon.image(size: 72, color: nil)
+        icon.image = NSApp.applicationIconImage
+        icon.setAccessibilityLabel("Verbemo")
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant: 72),
+            icon.heightAnchor.constraint(equalToConstant: 72),
+        ])
 
         let name = NSTextField(labelWithString: "Verbemo")
         name.font = .systemFont(ofSize: 22, weight: .semibold)

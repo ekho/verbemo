@@ -335,7 +335,7 @@ final class AppController {
     /// App Nap throttles timers, network and IPC for an app nobody is looking
     /// at — which is verbemo's normal condition and exactly when it must not be
     /// slow. A recorder that answers a request three seconds late has already
-    /// missed the beginning of the meeting.
+    /// missed the beginning of the meeting. Idle sleep is allowed between meetings.
     private var awake: NSObjectProtocol?
     /// Held only while recording: the Mac may sleep between meetings, but not
     /// in the middle of one.
@@ -430,7 +430,7 @@ final class AppController {
         }
 
         awake = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiated, .suddenTerminationDisabled, .automaticTerminationDisabled],
+            options: Wakefulness.lifetime,
             reason: "verbemo watches for meetings and answers its command line")
 
         offerSetup()
@@ -817,7 +817,7 @@ final class AppController {
         }
 
         recordingActivity = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiated, .idleSystemSleepDisabled],
+            options: Wakefulness.recording,
             reason: "verbemo is recording a meeting")
 
         guard let newSession = session else { return true }
