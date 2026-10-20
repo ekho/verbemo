@@ -1,3 +1,9 @@
+## [0.2.1](https://github.com/ekho/verbemo/compare/verbemo-v0.2.0...verbemo-v0.2.1) (2026-10-20)
+
+### Bug Fixes
+
+* **release:** accept GitHub Actions repository metadata ([54c58d5](https://github.com/ekho/verbemo/commit/54c58d50841cd93995efa53287cddfb84ebc78f7))
+
 ## [0.2.0](https://github.com/ekho/verbemo/compare/1e8ed82d9a83cbd5686c145c4ca61d4f7ee9a701...verbemo-v0.2.0) (2026-10-20)
 
 ### Features
