@@ -76,7 +76,7 @@ try {
     $arguments = @('--skip-updates', 'pack', '--packId', 'Verbemo', '--packVersion', $Version, '--packDir', $publishDirectory,
         '--mainExe', 'Verbemo.exe', '--packTitle', 'Verbemo', '--packAuthors', 'Verbemo',
         '--icon', (Join-Path $windowsRoot 'src/Verbemo.App/Assets/Verbemo.ico'), '--channel', 'stable',
-        '--runtime', 'win-x64', '--delta', 'None', '--releaseNotes', (Join-Path $windowsRoot 'RELEASE_NOTES.md'), '--outputDir', $releaseDirectory)
+        '--runtime', 'win-x64', '--delta', 'None', '--outputDir', $releaseDirectory)
     $signatureTool = $null
     if (-not $Development) {
         $signatureTools = @(Get-ChildItem -LiteralPath $toolDirectory -Recurse -Filter signtool.exe -File)
