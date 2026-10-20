@@ -44,6 +44,8 @@ internal sealed class ApplicationWindow : Window
         MinHeight = 520;
         Ui.FitToWorkArea(this, 1120, 780);
         recordings = new RecordingsWindow(runtime);
+        recordings.Navigation = Navigation;
+        recordings.ActiveMeetingRequested += (_, _) => ShowDestination(ApplicationDestination.Live);
         settings = new SettingsContentView(runtime);
         library = TakeContent(recordings);
         live = TakeContent(status);
@@ -163,6 +165,8 @@ internal sealed class ApplicationWindow : Window
     public void ShowDestination(ApplicationDestination destination)
     {
         Navigation.Destination = destination;
+        if (destination <= ApplicationDestination.Attention) recordings.SetFilter(destination switch
+        { ApplicationDestination.Processing => Verbemo.Core.Processing.MeetingFilter.Processing, ApplicationDestination.Attention => Verbemo.Core.Processing.MeetingFilter.Attention, _ => Verbemo.Core.Processing.MeetingFilter.All });
         toolbar.Visibility = destination == ApplicationDestination.About ? Visibility.Collapsed : Visibility.Visible;
         heading.Content = destination == ApplicationDestination.Live ? Label(ApplicationDestination.AllMeetings) : Label(destination);
         heading.IsEnabled = destination is ApplicationDestination.AllMeetings or ApplicationDestination.Processing or ApplicationDestination.Attention or ApplicationDestination.Live;
@@ -180,6 +184,7 @@ internal sealed class ApplicationWindow : Window
     {
         Navigation.Query = "";
         Navigation.SessionDirectory = null;
+        recordings.ShowList();
         ShowDestination(ApplicationDestination.AllMeetings);
     }
 

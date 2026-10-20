@@ -23,15 +23,20 @@ namespace Verbemo.App;
 internal sealed class RecordingsWindow : Window
 {
     private readonly VerbemoRuntime runtime;
-    private readonly DataGrid grid = new()
-    {
-        AutoGenerateColumns = false,
-        IsReadOnly = true,
-        SelectionMode = DataGridSelectionMode.Single,
-        HeadersVisibility = DataGridHeadersVisibility.Column,
-        GridLinesVisibility = DataGridGridLinesVisibility.None,
-        CanUserResizeRows = false,
-    };
+    private readonly System.Windows.Controls.ListBox grid = new() { BorderThickness = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly Grid layout = new();
+    private readonly DockPanel listPanel = new();
+    private readonly TextBox search = new();
+    private readonly System.Windows.Controls.Button regenerate;
+    private readonly System.Windows.Controls.Button textCopy;
+    private readonly System.Windows.Controls.Button markdownCopy;
+    private readonly TextBlock reprocessHint = Ui.Status();
+    private MeetingFilter filter;
+    private List<Row> allRows = [];
+    private bool detailOpen;
+    private ApplicationNavigationState? navigation;
+    public event EventHandler? ActiveMeetingRequested;
+    public ApplicationNavigationState? Navigation { set => navigation = value; }
     private readonly TextBlock title = Ui.Title("");
     private readonly TextBlock problem = Ui.Status("", Ui.Caution);
     private readonly MarkdownPreview summary = new();
@@ -63,17 +68,29 @@ internal sealed class RecordingsWindow : Window
         Ui.FitToWorkArea(this, 1040, 760);
         Icon = App.WindowIcon;
 
-        grid.Columns.Add(Column(T("When", "Когда"), nameof(Row.When), 140));
-        grid.Columns.Add(Column(T("Meeting", "Встреча"), nameof(Row.Meeting), 0));
-        var transcriptColumn = Column(T("Transcripts", "Расшифровки"), nameof(Row.TranscriptText), 260);
-        transcriptColumn.ElementStyle = new Style(typeof(TextBlock));
-        transcriptColumn.ElementStyle.Setters.Add(new Setter(TextBlock.TextWrappingProperty, TextWrapping.Wrap));
-        grid.Columns.Add(transcriptColumn);
-        grid.Columns.Add(Column(T("Names", "Имена"), nameof(Row.NamesText), 90));
-        grid.Columns.Add(Column(T("Summary", "Саммари"), nameof(Row.SummaryText), 130));
-        grid.SelectionChanged += async (_, _) => await ShowSelectedAsync();
-        grid.MouseDoubleClick += (_, _) => { if (Selected is { } row) OpenFolder(row); };
-
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetBinding(ContentPresenter.ContentProperty, new System.Windows.Data.Binding(nameof(Row.View)));
+        grid.ItemTemplate = new DataTemplate { VisualTree = presenter };
+        grid.SetResourceReference(ItemsControl.ItemContainerStyleProperty, "MeetingCard");
+        grid.SelectionChanged += async (_, _) =>
+        {
+            if (navigation is not null) navigation.SessionDirectory = Selected?.Item.Directory;
+            await ShowSelectedAsync();
+        };
+        grid.PreviewMouseRightButtonDown += (_, e) =>
+        {
+            var hit = ItemsControl.ContainerFromElement(grid, e.OriginalSource as DependencyObject) as System.Windows.Controls.ListBoxItem;
+            if (hit is not null) hit.IsSelected = true;
+        };
+        grid.ContextMenuOpening += (_, e) => { e.Handled = true; OpenMeetingMenu(grid); };
+        grid.ContextMenu = new ContextMenu();
+        grid.PreviewKeyDown += (_, e) => { if (e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) { OpenMeetingMenu(grid); e.Handled = true; } };
+        grid.PreviewMouseLeftButtonUp += (_, _) =>
+        {
+            if (Selected?.Item.Transcript == ProcessingStep.Recording) { ActiveMeetingRequested?.Invoke(this, EventArgs.Empty); return; }
+            detailOpen = Selected is not null;
+            UpdateLayoutMode();
+        };
         finish = Ui.Button(T("Finish", "Доделать"), () => { if (Selected is { } row) runtime.FinishProcessing(row.Item.Directory); });
         finish.ToolTip = T("Try again whatever gave up or is waiting, keeping the transcript and every name typed by hand.",
             "Ещё раз попробовать то, что не получилось или ждёт, — расшифровка и имена, введённые вручную, остаются.");
@@ -82,21 +99,10 @@ internal sealed class RecordingsWindow : Window
         folder = Ui.Button(T("Open folder", "Открыть папку"), () => { if (Selected is { } row) OpenFolder(row); });
         delete = Ui.Button(T("Delete", "Удалить"), () => { if (Selected is { } row) Delete(row); });
 
-        var toolbar = new DockPanel { Margin = new Thickness(16, 12, 16, 8) };
-        var import = Ui.Button(T("Import…", "Импортировать…"), () => _ = App.ImportAsync(this));
-        var openRoot = Ui.Button(T("Open recordings folder", "Открыть папку записей"), () =>
-        {
-            runtime.TrackArtifact("recordings_root");
-            VerbemoRuntime.Open(runtime.Settings.RecordingsDirectory);
-        });
-        openRoot.Margin = new Thickness(8, 0, 0, 0);
-        toolbar.Children.Add(import);
-        toolbar.Children.Add(openRoot);
-        var rootPath = Ui.Status(runtime.Settings.RecordingsDirectory);
-        rootPath.HorizontalAlignment = HorizontalAlignment.Right;
-        rootPath.TextTrimming = TextTrimming.CharacterEllipsis;
-        toolbar.Children.Add(rootPath);
-
+        regenerate = Ui.Button(T("Regenerate summary", "Перегенерировать сводку"), () => _ = PerformAsync(MeetingAction.RegenerateSummary));
+        textCopy = Ui.Button(T("Text", "Текст"), () => _ = CopyAsync(markdown: false));
+        markdownCopy = Ui.Button("Markdown", () => _ = CopyAsync(markdown: true));
+        tabs.SelectionChanged += (_, e) => { if (e.Source == tabs) { if (navigation is not null) navigation.Tab = tabs.SelectedIndex; UpdateContentActions(); } };
         tabs.Items.Add(new TabItem { Header = T("Transcript", "Расшифровка"), Content = transcript });
         tabs.Items.Add(new TabItem { Header = T("Speakers", "Участники"), Content = Ui.Scroll(speakers) });
         tabs.Items.Add(new TabItem { Header = T("Summary", "Саммари"), Content = summary });
@@ -112,7 +118,7 @@ internal sealed class RecordingsWindow : Window
         transcriptPanel.Children.Add(tabs);
 
         var actions = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
-        foreach (var button in new[] { finish, retranscribe, listen, folder, delete })
+        foreach (var button in new[] { retranscribe, regenerate, textCopy, markdownCopy, listen })
         {
             ToolTipService.SetShowOnDisabled(button, true);
             button.Margin = new Thickness(0, 0, 8, 0);
@@ -126,7 +132,14 @@ internal sealed class RecordingsWindow : Window
         detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         title.FontSize = 18;
         title.FontWeight = FontWeights.SemiBold;
-        detail.Children.Add(title);
+        var titleRow = new DockPanel();
+        var more = Ui.Button("⋯", () => OpenMeetingMenu(title));
+        more.MinWidth = 36;
+        System.Windows.Automation.AutomationProperties.SetName(more, T("Meeting actions", "Действия со встречей"));
+        DockPanel.SetDock(more, Dock.Right);
+        titleRow.Children.Add(more);
+        titleRow.Children.Add(title);
+        detail.Children.Add(titleRow);
         Grid.SetRow(problem, 1);
         problem.Margin = new Thickness(0, 4, 0, 0);
         var statusPanel = new StackPanel();
@@ -137,29 +150,26 @@ internal sealed class RecordingsWindow : Window
         Grid.SetRow(transcriptPanel, 2);
         detail.Children.Add(transcriptPanel);
         Grid.SetRow(actions, 3);
-        detail.Children.Add(actions);
+        var operations = new StackPanel();
+        operations.Children.Add(actions);
+        reprocessHint.Margin = new Thickness(0, 8, 0, 0);
+        operations.Children.Add(reprocessHint);
+        Grid.SetRow(operations, 3);
+        detail.Children.Add(operations);
 
-        var layout = new Grid();
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2, GridUnitType.Star), MinHeight = 140 });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(3, GridUnitType.Star), MinHeight = 200 });
-        layout.Children.Add(toolbar);
-        grid.Margin = new Thickness(16, 0, 16, 0);
-        Grid.SetRow(grid, 1);
-        layout.Children.Add(grid);
-        empty.Margin = new Thickness(32);
-        empty.HorizontalAlignment = HorizontalAlignment.Center;
-        empty.VerticalAlignment = VerticalAlignment.Center;
-        Grid.SetRow(empty, 1);
-        layout.Children.Add(empty);
-        var splitter = new GridSplitter { Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch, Background = System.Windows.Media.Brushes.Transparent };
-        Grid.SetRow(splitter, 2);
-        layout.Children.Add(splitter);
-        Grid.SetRow(detail, 3);
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(290) });
+        layout.ColumnDefinitions.Add(new ColumnDefinition());
+        search.Margin = new Thickness(12,8,12,10);
+        System.Windows.Automation.AutomationProperties.SetName(search, T("Find a meeting", "Найти встречу"));
+        search.TextChanged += (_, _) => { if (navigation is not null) navigation.Query = search.Text; ApplyFilter(); };
+        DockPanel.SetDock(search, Dock.Top);
+        listPanel.Children.Add(search);
+        listPanel.Children.Add(grid);
+        layout.Children.Add(listPanel);
+        Grid.SetColumn(detail, 1);
         layout.Children.Add(detail);
         Content = layout;
-
+        layout.SizeChanged += (_, _) => UpdateLayoutMode();
         EventHandler changed = (_, _) => Dispatcher.InvokeAsync(ReloadAsync);
         runtime.SessionsChanged += changed;
         Closed += (_, _) => runtime.SessionsChanged -= changed;
@@ -169,12 +179,117 @@ internal sealed class RecordingsWindow : Window
 
     private Row? Selected => grid.SelectedItem as Row;
 
-    private static DataGridTextColumn Column(string header, string path, double width) => new()
+    private string? ArtifactDirectory => engineTabs.SelectedItem is TabItem { Tag: TranscriptChoice choice } && choice.Version.State == ProcessingStep.Done
+        ? choice.Version.Directory : Selected?.Item.Directory;
+    private MeetingActionState ActionState()
     {
-        Header = header,
-        Binding = new System.Windows.Data.Binding(path),
-        Width = width > 0 ? new DataGridLength(width) : new DataGridLength(1, DataGridLengthUnitType.Star),
-    };
+        var item = Selected?.Item;
+        var directory = ArtifactDirectory;
+        var ready = engineTabs.SelectedItem is TabItem { Tag: TranscriptChoice { Version.State: ProcessingStep.Done } }
+            || item?.Transcript == ProcessingStep.Done;
+        return new(ready && File.Exists(Path.Combine(directory ?? "", "transcript.json")),
+            ready && File.Exists(Path.Combine(directory ?? "", "summary.md")), item?.HasAudio == true,
+            item?.Transcript == ProcessingStep.Recording, item is not null && runtime.ProcessingStatusFor(item.Directory)?.IsBusy == true,
+            !runtime.ConfigUnreadable, runtime.Settings.Transcription.Enabled,
+            MeetingEgress.Route(EgressPurpose.Summary, runtime.Settings) is not null,
+            item is not null && File.Exists(Path.Combine(item.Directory, TranscriptVersions.RequestFile)));
+    }
+
+    private void UpdateContentActions()
+    {
+        if (regenerate is null) return;
+        var state = ActionState();
+        var summaryTab = tabs.SelectedIndex == 2;
+        regenerate.Visibility = summaryTab ? Visibility.Visible : Visibility.Collapsed;
+        retranscribe.Visibility = tabs.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
+        regenerate.IsEnabled = state.Reason(MeetingAction.RegenerateSummary) is null;
+        regenerate.ToolTip = state.Reason(MeetingAction.RegenerateSummary);
+        textCopy.Visibility = markdownCopy.Visibility = tabs.SelectedIndex == 1 ? Visibility.Collapsed : Visibility.Visible;
+        textCopy.IsEnabled = markdownCopy.IsEnabled = state.Reason(summaryTab ? MeetingAction.CopySummary : MeetingAction.CopyTranscript) is null;
+        reprocessHint.Text = summaryTab ? runtime.Settings.Summary.Backend : EngineResolver.DisplayName(runtime.Settings.Transcription.Engine);
+    }
+
+    private void OpenMeetingMenu(FrameworkElement anchor)
+    {
+        if (Selected is null) return;
+        var menu = MeetingActionsMenu.Create(ActionState(), action => _ = PerformAsync(action));
+        menu.PlacementTarget = anchor;
+        menu.IsOpen = true;
+    }
+
+    private async Task PerformAsync(MeetingAction action)
+    {
+        if (Selected is not { } row) return;
+        if (ActionState().Reason(action) is { } reason) { Ui.ShowError(Ui.OwnerOf(layout), "Verbemo", reason); return; }
+        try
+        {
+            switch (action)
+            {
+                case MeetingAction.CopyTranscript: await CopyArtifactAsync(ArtifactDirectory!, "transcript.md", false); break;
+                case MeetingAction.CopySummary: await CopyArtifactAsync(ArtifactDirectory!, "summary.md", false); break;
+                case MeetingAction.RegenerateSummary: await runtime.RegenerateSummaryAsync(ArtifactDirectory!); break;
+                case MeetingAction.Retranscribe: OpenRetranscribeMenu(); break;
+                case MeetingAction.OpenFolder: OpenFolder(row); break;
+                case MeetingAction.Delete: Delete(row); break;
+                case MeetingAction.Rename:
+                    var field = new TextBox { Text = row.Item.Title, Margin = new Thickness(16), MinWidth = 300 };
+                    var prompt = new Window { Title = T("Rename meeting", "Переименовать встречу"), Owner = Ui.OwnerOf(layout),
+                        SizeToContent = SizeToContent.WidthAndHeight, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize };
+                    var content = new StackPanel();
+                    content.Children.Add(field);
+                    var save = Ui.Button(T("Save", "Сохранить"), () => prompt.DialogResult = true);
+                    save.IsDefault = true;
+                    save.Margin = new Thickness(16,0,16,16);
+                    content.Children.Add(save);
+                    prompt.Content = content;
+                    prompt.Loaded += (_, _) => { field.SelectAll(); field.Focus(); };
+                    if (prompt.ShowDialog() == true) await runtime.RenameSessionAsync(row.Item.Directory, field.Text);
+                    break;
+            }
+            await ReloadAsync();
+        }
+        catch (Exception error) when (error is IOException or InvalidOperationException or UnauthorizedAccessException or JsonException)
+        { Ui.ShowError(Ui.OwnerOf(layout), "Verbemo", error.Message); await ReloadAsync(); }
+    }
+
+    private async Task CopyAsync(bool markdown)
+    {
+        var action = tabs.SelectedIndex == 2 ? MeetingAction.CopySummary : MeetingAction.CopyTranscript;
+        if (ActionState().Reason(action) is not null || ArtifactDirectory is not { } directory) return;
+        try { await CopyArtifactAsync(directory, action == MeetingAction.CopySummary ? "summary.md" : "transcript.md", markdown); }
+        catch (Exception error) when (error is IOException or System.Runtime.InteropServices.ExternalException) { Ui.ShowError(Ui.OwnerOf(layout), "Verbemo", error.Message); }
+    }
+    private static async Task CopyArtifactAsync(string directory, string artifact, bool markdown)
+    {
+        var content = await File.ReadAllTextAsync(Path.Combine(directory, artifact));
+        if (!markdown)
+        {
+            var preview = new MarkdownPreview();
+            preview.ShowMarkdown(content);
+            content = new System.Windows.Documents.TextRange(preview.Document.ContentStart, preview.Document.ContentEnd).Text;
+        }
+        System.Windows.Clipboard.SetText(content);
+    }
+
+    public void SetFilter(MeetingFilter value) { filter = value; ApplyFilter(); }
+    public void ShowList() { search.Text = ""; detailOpen = false; UpdateLayoutMode(); }
+    private void UpdateLayoutMode()
+    {
+        var compact = layout.ActualWidth < 730;
+        listPanel.Visibility = compact && detailOpen ? Visibility.Collapsed : Visibility.Visible;
+        detail.Visibility = Selected is null || compact && !detailOpen ? Visibility.Collapsed : Visibility.Visible;
+        layout.ColumnDefinitions[0].Width = compact ? new GridLength(1, GridUnitType.Star) : new GridLength(290);
+        layout.ColumnDefinitions[1].Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        Grid.SetColumn(detail, compact ? 0 : 1);
+    }
+    private void ApplyFilter()
+    {
+        var selected = Selected?.Item.Directory;
+        var rows = allRows.Where(row => MeetingPresentation.Matches(row.Item, filter, search.Text, row.Status?.IsBusy == true)).ToList();
+        grid.ItemsSource = rows;
+        grid.SelectedItem = rows.FirstOrDefault(row => row.Item.Directory == selected) ?? rows.FirstOrDefault();
+        UpdateLayoutMode();
+    }
 
     private async Task ReloadAsync()
     {
@@ -186,8 +301,9 @@ internal sealed class RecordingsWindow : Window
             var selectedTab = tabs.SelectedIndex;
             var items = await runtime.LoadSessionsAsync();
             var rows = items.Select(item => new Row(item, runtime.ProcessingStatusFor(item.Directory))).ToList();
-            grid.ItemsSource = rows;
-            grid.SelectedItem = rows.FirstOrDefault(row => row.Item.Directory == selected) ?? rows.FirstOrDefault();
+            allRows = rows;
+            ApplyFilter();
+            grid.SelectedItem = rows.FirstOrDefault(row => row.Item.Directory == selected && grid.Items.Contains(row)) ?? grid.SelectedItem;
             tabs.SelectedIndex = selectedTab;
             // Setting the selection shows it: the rows are new, so the selection changes.
             empty.Text = rows.Count == 0
@@ -195,7 +311,7 @@ internal sealed class RecordingsWindow : Window
                     "Записей пока нет. Здесь появится встреча, записанная вручную или сама, и файл, который вы импортируете.")
                 : "";
             empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            detail.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            UpdateLayoutMode();
         }
         finally
         {
@@ -264,6 +380,7 @@ internal sealed class RecordingsWindow : Window
         tabs.Margin = new Thickness(0, choices.Count > 1 ? 0 : 8, 0, 0);
         updatingChoices = false;
         await ShowTranscriptAsync();
+        UpdateContentActions();
     }
 
     private async Task ShowTranscriptAsync()
@@ -282,6 +399,7 @@ internal sealed class RecordingsWindow : Window
             return;
         }
         selectedTranscriptKey = choice.Key;
+        if (navigation is not null) navigation.VersionKey = choice.Key;
         var directory = choice.Version.Directory;
         if (choice.Version.State != ProcessingStep.Done)
         {
@@ -299,6 +417,7 @@ internal sealed class RecordingsWindow : Window
         transcript.ShowMarkdown(text);
         summary.ShowMarkdown(summaryText);
         await ShowSpeakersAsync(directory, item?.Title ?? "", version);
+        UpdateContentActions();
     }
 
     private sealed record TranscriptChoice(TranscriptVersion Version, string Label)
@@ -365,7 +484,7 @@ internal sealed class RecordingsWindow : Window
                 try { await runtime.SetSpeakerNameAsync(directory, label, stored, title: meetingTitle); }
                 catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
                 {
-                    Ui.ShowError(this, T("Couldn’t save the name", "Не удалось сохранить имя"), exception.Message);
+                    Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t save the name", "Не удалось сохранить имя"), exception.Message);
                 }
             }
             box.LostKeyboardFocus += async (_, _) => await CommitAsync();
@@ -393,7 +512,7 @@ internal sealed class RecordingsWindow : Window
                 }
                 catch (Exception exception) when (exception is InvalidOperationException or IOException)
                 {
-                    Ui.ShowError(this, T("Couldn’t transcribe again", "Не удалось расшифровать заново"), exception.Message);
+                    Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t transcribe again", "Не удалось расшифровать заново"), exception.Message);
                     await ReloadAsync();
                 }
             };
@@ -435,15 +554,24 @@ internal sealed class RecordingsWindow : Window
 
     private void Delete(Row row)
     {
-        var answer = System.Windows.MessageBox.Show(this,
-            T($"“{row.Item.Title}” will go to the Recycle Bin with its audio, transcript and summary.",
+        var answer = System.Windows.MessageBox.Show(Ui.OwnerOf(layout) ?? this,
+            T($"Delete “{row.Item.Title}” with its audio, transcript and summary?",
               $"«{row.Item.Title}» уйдёт в корзину вместе со звуком, расшифровкой и саммари."),
             T("Delete this recording?", "Удалить запись?"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
         if (answer != MessageBoxResult.OK) return;
-        try { runtime.DeleteSession(row.Item.Directory); }
+        try
+        {
+            runtime.ScheduleDeletion(row.Item.Directory);
+            var undo = Ui.Button(T("Undo deletion", "Отменить удаление"), () => runtime.Deletions.Undo(row.Item.Directory));
+            speakers.Children.Insert(0, undo);
+            // The notice stays outside the selected meeting while its row is hidden.
+            DockPanel.SetDock(undo, Dock.Bottom);
+            speakers.Children.Remove(undo);
+            listPanel.Children.Insert(0, undo);
+        }
         catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException)
         {
-            Ui.ShowError(this, T("Couldn’t delete the recording", "Не удалось удалить запись"), exception.Message);
+            Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t delete the recording", "Не удалось удалить запись"), exception.Message);
         }
     }
 
@@ -466,7 +594,8 @@ internal sealed class RecordingsWindow : Window
         public SessionListItem Item { get; } = item;
         public ProcessingStatus? Status { get; } = status;
 
-        public string When => Item.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", Culture);
+        public string When => MeetingPresentation.Date(Item);
+        public FrameworkElement View => MeetingListView.Card(Item, Status);
 
         public string Meeting => Item.DurationSeconds > 0
             ? $"{Item.Title} · {Math.Max(1, (int)Math.Round(Item.DurationSeconds / 60.0))} {T("min", "мин")}"

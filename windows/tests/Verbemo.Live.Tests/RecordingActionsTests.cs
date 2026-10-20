@@ -48,7 +48,7 @@ public sealed class RecordingActionsTests
     private static void Select(RecordingsWindow window, SessionListItem item, ProcessingStatus? status)
     {
         var row = Activator.CreateInstance(typeof(RecordingsWindow).GetNestedType("Row", BindingFlags.NonPublic)!, item, status)!;
-        var grid = Field<DataGrid>(window, "grid");
+        var grid = Field<ListBox>(window, "grid");
         grid.ItemsSource = new[] { row };
         grid.SelectedItem = row;
         ((Task)typeof(RecordingsWindow).GetMethod("ShowSelectedAsync", BindingFlags.Instance | BindingFlags.NonPublic)!

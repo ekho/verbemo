@@ -97,13 +97,26 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
     /// <summary>Reserve this session while an action changes its files; other sessions can still queue.</summary>
     internal bool TryUseIdleSession(string directory, Action action)
     {
+        using var reservation = TryReserveIdleSession(directory);
+        if (reservation is null) return false;
+        action();
+        return true;
+    }
+
+    internal IDisposable? TryReserveIdleSession(string directory)
+    {
         directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
         lock (queueLock)
         {
-            if (queued.Contains(directory) || !preparing.Add(directory)) return false;
+            if (queued.Contains(directory) || !preparing.Add(directory)) return null;
         }
-        try { action(); return true; }
-        finally { lock (queueLock) preparing.Remove(directory); }
+        return new Reservation(() => { lock(queueLock) preparing.Remove(directory); });
+    }
+
+    private sealed class Reservation(Action release) : IDisposable
+    {
+        private Action? action = release;
+        public void Dispose() => Interlocked.Exchange(ref action, null)?.Invoke();
     }
 
     public bool IsBusy
