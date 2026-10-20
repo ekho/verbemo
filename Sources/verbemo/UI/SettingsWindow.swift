@@ -47,6 +47,8 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     }
 
     private let panel: NSWindow
+    private let embedded: Bool
+    private(set) var contentView = NSView()
     private let setup = SetupForm()
     /// Redraws the Advanced tab when anything writes the config file. The
     /// Setup tab is a `SetupForm` and listens on its own.
@@ -81,8 +83,11 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         let control: NSControl
     }
 
-    override init() {
-        panel = NSWindow(
+    override convenience init() { self.init(hostWindow: nil) }
+
+    init(hostWindow: NSWindow?) {
+        embedded = hostWindow != nil
+        panel = hostWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
@@ -90,6 +95,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         )
         super.init()
 
+        if !embedded {
         panel.title = localised("verbemo settings", "Настройки verbemo")
         panel.level = .normal
         panel.hidesOnDeactivate = false
@@ -97,6 +103,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         // window — the program outlives its windows.
         panel.isReleasedWhenClosed = false
         panel.minSize = NSSize(width: 640, height: 460)
+        }
         // Rows and cards come and go as the form redraws; the Tab order has
         // to follow them, or a choice card that appeared after the window
         // opened could never be reached from the keyboard.
@@ -154,7 +161,8 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
             footer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
         ])
-        panel.contentView = content
+        contentView = content
+        if !embedded { panel.contentView = content }
 
         configWatch = ConfigWatch.observe { [weak self] in self?.refresh() }
         // Every redraw of the form ends here, whatever caused it — a grant
@@ -165,8 +173,10 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         setup.showsConfigProblems = false
         showOutstanding()
 
-        panel.setFrameAutosaveName("name.ekho.verbemo.settings")
-        if panel.frame.origin == .zero { panel.center() }
+        if !embedded {
+            panel.setFrameAutosaveName("name.ekho.verbemo.settings")
+            if panel.frame.origin == .zero { panel.center() }
+        }
         refresh()
     }
 
@@ -210,6 +220,8 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         }
         return found
     }
+
+    func content(for destination: ApplicationNavigationState.Destination) -> NSView { contentView }
 
     func hide() { panel.orderOut(nil) }
 

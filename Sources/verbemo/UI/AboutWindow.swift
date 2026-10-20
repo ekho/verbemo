@@ -17,10 +17,13 @@ import AppKit
 @MainActor
 final class AboutWindow: NSObject {
     private let panel: NSWindow
+    private(set) var contentView = NSView()
     private var linkButtons: [NSButton] = []
 
-    override init() {
-        panel = NSWindow(
+    override convenience init() { self.init(hostWindow: nil) }
+
+    init(hostWindow: NSWindow?) {
+        panel = hostWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 300),
             // No resize and no minimise: there is nothing in here that a
             // bigger window would show more of.
@@ -30,7 +33,7 @@ final class AboutWindow: NSObject {
         )
         super.init()
 
-        panel.title = localised("About Verbemo", "О программе Verbemo")
+        if hostWindow == nil { panel.title = localised("About Verbemo", "О программе Verbemo") }
         panel.isReleasedWhenClosed = false
 
         let icon = NSImageView()
@@ -90,14 +93,17 @@ final class AboutWindow: NSObject {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -24),
         ])
-        panel.contentView = content
+        contentView = content
+        if hostWindow == nil { panel.contentView = content }
         // The height is whatever the words come to. Russian runs a fifth
         // longer than English and the version line is missing from a bare
         // build, so a number written here would be the right one for one of
         // the four windows this can be.
+        if hostWindow == nil {
         content.layoutSubtreeIfNeeded()
         panel.setContentSize(NSSize(width: Self.width, height: content.fittingSize.height))
         panel.center()
+        }
     }
 
     func show() {
@@ -109,7 +115,7 @@ final class AboutWindow: NSObject {
     /// What the window says, for the walk that reads every window in both
     /// languages. The title is in here because it is a sentence like the
     /// others, and it is the one that is not inside the content view.
-    var view: NSView? { panel.contentView }
+    var view: NSView? { contentView }
     var title: String { panel.title }
 
     /// The three links, as they read and where they go. The window is

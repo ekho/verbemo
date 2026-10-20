@@ -226,17 +226,16 @@ final class AppController {
     /// one, waiting for that to finish.
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
-    private let window = StatusWindow()
+    private let window = ApplicationWindow()
     /// Built on first use. It is thirty-odd controls, and verbemo spends nearly
     /// all of its life recording rather than being configured.
     private lazy var settings: SettingsWindow = {
-        let window = SettingsWindow()
+        let window = self.window.settings
         window.isRecording = { [weak self] in self?.isRecording == true }
         return window
     }()
     /// Built on first use, like the others, and for a stronger reason: most
     /// copies of verbemo will never be asked who wrote them.
-    private lazy var aboutWindow = AboutWindow()
     private lazy var setupWindow: SetupWindow = {
         let setup = SetupWindow()
         setup.isRecording = { [weak self] in self?.isRecording == true }
@@ -295,8 +294,9 @@ final class AppController {
 
     private func makeRecordingsWindow() -> RecordingsWindow {
         recordingsBuilt = true
-        let window = RecordingsWindow(root: root)
+        let window = RecordingsWindow(root: root, hostWindow: self.window.panel)
         window.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
+        window.onRetranscribe = { [weak self] _ in self?.catchUp() }
         window.onImportFiles = { [weak self] files in self?.importFiles(files) }
         window.onCancelImport = { [weak self] in self?.cancelImport() }
         window.onChooseImport = { [weak self] in self?.chooseMediaToImport() }
@@ -384,6 +384,7 @@ final class AppController {
         menuBar.update(state: .idle, elapsed: nil)
         menuBar.updatesAvailable(updates.isAvailable)
 
+        window.libraryProvider = { [weak self] in self?.recordings }
         window.onToggle = { [weak self] in self?.toggle() }
         window.onTogglePause = { [weak self] in self?.togglePause() }
         window.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
@@ -1001,7 +1002,8 @@ final class AppController {
     /// have to click again before you can type in it is a small insult.
     func showSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        settings.show()
+        window.navigate(.general)
+        window.bringToFront()
     }
 
     /// About, from either menu. Activating for the same reason Settings
@@ -1010,7 +1012,8 @@ final class AppController {
     /// to go looking for.
     func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
-        aboutWindow.show()
+        window.navigate(.about)
+        window.bringToFront()
     }
 
     /// First-run setup: opened by the first launch, by the menu item while
@@ -1054,6 +1057,7 @@ final class AppController {
     /// never disagree about whether something is being recorded.
     private func present(_ state: MenuBarController.State, elapsed: String?) {
         menuBar.update(state: state, elapsed: elapsed)
+        window.recordingTitle = session?.title ?? localised("New meeting", "Новая встреча")
         window.update(state: state, elapsed: elapsed)
         DockPresentation.update(state: state, elapsed: elapsed)
     }
@@ -1084,7 +1088,8 @@ final class AppController {
             self?.catchUp()
         }
         NSApp.activate(ignoringOtherApps: true)
-        recordings.show()
+        window.navigate(.allMeetings)
+        window.bringToFront()
     }
 
     /// The elapsed time as the status window shows it. Not private and not

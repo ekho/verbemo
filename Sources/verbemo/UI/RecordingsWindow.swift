@@ -31,6 +31,8 @@ final class RecordingsWindow: NSObject {
     var onSkipDiarization: ((URL) async throws -> Void)?
     private var root: URL
     private let panel: NSWindow
+    private let embedded: Bool
+    private(set) var contentView = NSView()
     private let pasteboard: NSPasteboard
     private let table = NSTableView()
     private let scroll = NSScrollView()
@@ -83,10 +85,11 @@ final class RecordingsWindow: NSObject {
     var isProcessing: Bool { working }
     private var working = false { didSet { onActivityChange?() } }
 
-    init(root: URL, pasteboard: NSPasteboard = .general) {
+    init(root: URL, pasteboard: NSPasteboard = .general, hostWindow: NSWindow? = nil) {
         self.root = root
         self.pasteboard = pasteboard
-        panel = NSWindow(
+        embedded = hostWindow != nil
+        panel = hostWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
@@ -94,14 +97,19 @@ final class RecordingsWindow: NSObject {
         )
         super.init()
 
+        if !embedded {
         panel.title = localised("Recordings", "Записи")
         panel.isReleasedWhenClosed = false
         panel.setFrameAutosaveName("name.ekho.verbemo.recordings")
         panel.contentMinSize = NSSize(width: 860, height: 560)
 
+        }
         buildTable()
-        panel.contentView = buildLayout()
-        if panel.frame.origin == .zero { panel.center() }
+        contentView = buildLayout()
+        if !embedded {
+            panel.contentView = contentView
+            if panel.frame.origin == .zero { panel.center() }
+        }
         // The first list is read here, on the spot: the window is built once,
         // the first time somebody asks for it, and a window that opened empty
         // and filled in a moment later would be a first picture of it that
@@ -126,7 +134,7 @@ final class RecordingsWindow: NSObject {
     /// behind in one of them. The list needs its own way in: the table draws
     /// its cells from the data source rather than from views, so a walk of
     /// the window's subviews goes straight past every row in it.
-    var view: NSView? { panel.contentView }
+    var view: NSView? { contentView }
 
     var listLines: [String] {
         table.tableColumns.map(\.title) + items.flatMap { item in

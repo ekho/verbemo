@@ -24,6 +24,8 @@ final class StatusWindow {
     var onCancelImport: (() -> Void)?
 
     private let panel: NSWindow
+    private let embedded: Bool
+    private(set) var contentView = NSView()
     /// The rows, kept because the window's height is measured from them.
     private let rows = NSStackView()
     private let icon = NSImageView()
@@ -65,15 +67,16 @@ final class StatusWindow {
     private var heightBeforeLive: CGFloat?
     private var liveRevealedAfterStop = false
 
-    init() {
-        panel = NSWindow(
+    init(hostWindow: NSWindow? = nil) {
+        embedded = hostWindow != nil
+        panel = hostWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Self.compactSize.width,
                                 height: Self.compactSize.height),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        panel.title = "verbemo"
+        if !embedded { panel.title = "Verbemo" }
         // An ordinary window at the ordinary level: it goes behind whatever
         // you bring forward, like everything else. State that must be visible
         // without hunting for a window is the Dock icon's job — it turns red
@@ -83,7 +86,7 @@ final class StatusWindow {
         panel.hidesOnDeactivate = false
         // Closing must hide, not destroy: the Dock icon reopens this window.
         panel.isReleasedWhenClosed = false
-        panel.minSize = Self.compactSize
+        if !embedded { panel.minSize = Self.compactSize }
 
         stateLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium).tabularFigures
         transcriptionLabel.font = .systemFont(ofSize: 11)
@@ -223,7 +226,8 @@ final class StatusWindow {
         let container = MediaDropView()
         container.onFiles = { [weak self] urls in self?.onImportFiles?(urls) }
         container.addSubview(rows)
-        panel.contentView = container
+        contentView = container
+        if !embedded { panel.contentView = container }
 
         // Buttons and the one-line statuses stretch to the window's width; a
         // long "why isn't it recording" line then truncates instead of
@@ -253,6 +257,9 @@ final class StatusWindow {
             liveScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
         ])
 
+        if embedded {
+            rows.setViews([configProblemLabel, liveSection, importStatus], in: .top)
+        } else {
         panel.setFrameAutosaveName("name.ekho.verbemo.status")
         if panel.frame.origin == .zero { panel.center() }
         // The autosaved frame remembers whatever height the window last had —
@@ -260,6 +267,7 @@ final class StatusWindow {
         // Idle, it opens compact again; the position is still remembered.
         if panel.frame.height > Self.compactSize.height {
             resize(to: Self.compactSize.height)
+        }
         }
         update(state: .idle, elapsed: nil)
     }
@@ -297,7 +305,7 @@ final class StatusWindow {
 
     /// What the window has in it, for the suite that builds it in both
     /// languages and looks for a sentence left behind in one of them.
-    var view: NSView? { panel.contentView }
+    var view: NSView? { contentView }
 
     /// The rows themselves, for a test that measures where they ended up.
     var rowsView: NSStackView { rows }
@@ -452,6 +460,7 @@ final class StatusWindow {
         liveSection.setContentHuggingPriority(visible ? .defaultLow : .required, for: .vertical)
         setRevealTitle(showing: visible)
 
+        if embedded { return }
         if visible {
             panel.minSize = NSSize(width: Self.compactSize.width, height: 320)
             guard panel.frame.height < Self.expandedHeight else { return }
@@ -484,6 +493,7 @@ final class StatusWindow {
     /// window shrinks when the live transcript folds away, which has a height
     /// to give back, and not every time a one-line status comes and goes.
     private func growToFitContent() {
+        guard !embedded else { return }
         guard panel.frame.height < fittingHeight else { return }
         resize(to: fittingHeight)
     }
@@ -491,6 +501,7 @@ final class StatusWindow {
     /// Keep the title bar where it is: a window that grows downward off the
     /// screen edge is how a status window ends up half-visible.
     private func resize(to height: CGFloat) {
+        guard !embedded else { return }
         let height = max(height, fittingHeight)
         guard height != panel.frame.height else { return }
         var frame = panel.frame
