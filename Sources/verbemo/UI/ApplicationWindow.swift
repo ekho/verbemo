@@ -22,9 +22,11 @@ final class ApplicationWindow: NSObject {
         }
         return view
     }()
+    var isProcessing: (() -> Bool)?
     var onRenameRecording: ((String) throws -> Void)?
     lazy var settings: SettingsWindow = {
         let settings = SettingsWindow(hostWindow: panel)
+        settings.isProcessing = { [weak self] in self?.isProcessing?() == true }
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
         return settings
     }()

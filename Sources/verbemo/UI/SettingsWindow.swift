@@ -46,6 +46,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         didSet { setup.isRecording = isRecording }
     }
 
+    var isProcessing: (() -> Bool)?
     private let panel: NSWindow
     private let embedded: Bool
     private(set) var contentView = NSView()
@@ -338,6 +339,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     /// The line under the Setup tab, from the form that computed it.
     private func showOutstanding() {
         outstanding.stringValue = setup.outstandingSentence
+        if embedded { refreshModels() }
     }
 
     /// The identifier stays English whatever the window is written in: it is
@@ -474,15 +476,17 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         // Present and disabled rather than absent: the row is the same row
         // whether or not the model is here, and a button that comes and goes
         // moves everything beside it.
-        delete.isEnabled = ready || partial
+        let deletionReason = embedded ? modelDeletionReason(model) : nil
+        delete.isEnabled = (ready || partial) && deletionReason == nil
+        delete.toolTip = deletionReason
 
         let line = NSStackView(views: [name, size, delete])
         line.orientation = .horizontal
         line.alignment = .firstBaseline
         line.spacing = 10
         NSLayoutConstraint.activate([
-            name.widthAnchor.constraint(equalToConstant: 190),
-            size.widthAnchor.constraint(equalToConstant: 190),
+            name.widthAnchor.constraint(lessThanOrEqualToConstant: 190),
+            size.widthAnchor.constraint(lessThanOrEqualToConstant: 190),
         ])
 
         let help = NSTextField(labelWithString: Self.purpose(of: model))
@@ -492,7 +496,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         help.maximumNumberOfLines = 0
         help.preferredMaxLayoutWidth = 460
 
-        let row = NSStackView(views: [line, help])
+        let row = NSStackView(views: embedded ? [line, help, setup.modelFilesControl(for: model)] : [line, help])
         row.orientation = .vertical
         row.alignment = .leading
         row.spacing = 2
@@ -542,9 +546,27 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     /// The asking is not ceremony: the download is hundreds of megabytes over
     /// whatever connection the person is on next time, and the alert is the
     /// only place that says the switch is going off with it.
+    func modelDeletionReason(_ model: ModelStorage.Model) -> String? {
+        if isProcessing?() == true || isRecording?() == true || setup.hasModelDownloads {
+            return localised("Wait for recording and processing to finish.", "Дождитесь окончания записи и обработки.")
+        }
+        let choice = TranscriptionChoice.read(engine: Config.transcriptionEngine(), cloudProvider: Config.transcriptionCloudProvider(), enabled: Config.transcriptionEnabled(), localModels: Platform.supportsLocalModels, localEngine: Config.transcriptionLocalEngine())
+        let selected: Bool = switch model.kind {
+        case .parakeet: choice.local && choice.localEngine == "parakeet" && model.directory == ParakeetEngine.cacheDirectory(for: ParakeetEngine.configuredVersion())
+        case .whisper: choice.local && choice.localEngine == "whisper"
+        case .gigaAM: choice.local && choice.localEngine == "gigaam"
+        case .live: Config.liveTranscriptionEnabled()
+        case .diarization: Config.localDiarizationEnabled() && model.diarizationModel == Config.diarizationModel()
+        }
+        return selected ? localised("Choose another model or turn this feature off before deleting it.", "Перед удалением выберите другую модель или выключите эту функцию.") : nil
+    }
+
     @objc private func deleteModelClicked(_ sender: NSButton) {
         guard sender.tag < shownModels.count else { return }
         let model = shownModels[sender.tag]
+        if embedded, let reason = modelDeletionReason(model) {
+            let alert = NSAlert(); alert.messageText = reason; alert.runModal(); return
+        }
         let choice = TranscriptionChoice.read(
             engine: Config.transcriptionEngine(),
             cloudProvider: Config.transcriptionCloudProvider(),
@@ -567,6 +589,9 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         alert.buttons.first?.hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
+        if embedded, let reason = modelDeletionReason(model) {
+            let failure = NSAlert(); failure.messageText = reason; failure.runModal(); return
+        }
         if model.kind == .diarization {
             sender.isEnabled = false
             Task { @MainActor [weak self] in

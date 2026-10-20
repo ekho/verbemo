@@ -6,8 +6,23 @@ final class ModelDownloadProgress: NSStackView {
     private let status = SetupLayout.status()
     private let bar = NSProgressIndicator()
     private let cancel: NSButton
+    private let model: String
+    private let cancelIdentifier: String
+    private weak var actionTarget: AnyObject?
+    private let cancelAction: Selector
+    private var mirrors: [ModelDownloadProgress] = []
 
-    init(model: String, identifier: String, target: AnyObject, action: Selector) {
+    func mirroredView() -> ModelDownloadProgress {
+        let mirror = ModelDownloadProgress(model: model, identifier: cancelIdentifier, target: actionTarget, action: cancelAction)
+        mirrors.append(mirror)
+        return mirror
+    }
+
+    init(model: String, identifier: String, target: AnyObject?, action: Selector) {
+        self.model = model
+        cancelIdentifier = identifier
+        actionTarget = target
+        cancelAction = action
         cancel = NSButton(title: "", target: target, action: action)
         super.init(frame: .zero)
 
@@ -49,12 +64,14 @@ final class ModelDownloadProgress: NSStackView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func begin() {
+        mirrors.forEach { $0.begin() }
         cancel.isEnabled = true
         isHidden = false
         update(0)
     }
 
     func update(_ fraction: Double?) {
+        mirrors.forEach { $0.update(fraction) }
         guard let fraction, fraction.isFinite else {
             status.stringValue = localised("Downloading…", "Загрузка…")
             bar.isIndeterminate = true
@@ -70,11 +87,13 @@ final class ModelDownloadProgress: NSStackView {
     }
 
     func cancelling() {
+        mirrors.forEach { $0.cancelling() }
         cancel.isEnabled = false
         status.stringValue = localised("Stopping…", "Останавливаем…")
     }
 
     func end() {
+        mirrors.forEach { $0.end() }
         bar.stopAnimation(nil)
         isHidden = true
     }

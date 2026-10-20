@@ -295,12 +295,18 @@ final class AppController {
     private func makeRecordingsWindow() -> RecordingsWindow {
         recordingsBuilt = true
         let window = RecordingsWindow(root: root, hostWindow: self.window.panel)
+        self.window.isProcessing = { [weak self] in self?.isBusyForUpdate == true }
         window.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
         window.onRetranscribe = { [weak self] _ in self?.catchUp() }
         window.onImportFiles = { [weak self] files in self?.importFiles(files) }
         window.onCancelImport = { [weak self] in self?.cancelImport() }
         window.onChooseImport = { [weak self] in self?.chooseMediaToImport() }
         let coordinator = transcription
+        window.onResumeDiarization = { [weak self] dir, request in
+            self?.processingStarted()
+            defer { self?.processingFinished() }
+            try await coordinator.resumeDiarization(dir, request: request)
+        }
         window.onRetryDiarization = { [weak self] dir in
             self?.processingStarted()
             defer { self?.processingFinished() }

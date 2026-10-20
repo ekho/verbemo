@@ -28,6 +28,7 @@ final class RecordingsWindow: NSObject {
     var onImportFiles: (([URL]) -> Void)?
     var onCancelImport: (() -> Void)?
     var onChooseImport: (() -> Void)?
+    var onResumeDiarization: ((URL, DiarizationState.Request) async throws -> Void)?
     var onRetryDiarization: ((URL) async throws -> Void)?
     var onSkipDiarization: ((URL) async throws -> Void)?
     private var root: URL
@@ -926,6 +927,8 @@ final class RecordingsWindow: NSObject {
         diarizationLabel.toolTip = diarizationLabel.stringValue
         let actions = state.retainsAudio && state.status != .running
         retryDiarizationButton.isHidden = !actions
+        let needsModel = !DiarizationModelStore.isReady(at: DiarizationModelStore.shared(for: state.request.model).directory, model: state.request.model)
+        retryDiarizationButton.title = needsModel ? localised("Download and continue", "Скачать и продолжить") : localised("Retry speaker separation", "Повторить разделение")
         skipDiarizationButton.isHidden = !actions
     }
 
@@ -964,7 +967,13 @@ final class RecordingsWindow: NSObject {
         working = true
         updateButtons()
         Task {
-            do { try await action(item.dir) } catch { say(error.localizedDescription, about: item) }
+            do {
+                if let state = DiarizationState.read(item.dir), let resume = onResumeDiarization,
+                   !DiarizationModelStore.isReady(at: DiarizationModelStore.shared(for: state.request.model).directory, model: state.request.model) {
+                    busyLabel.stringValue = localised("Downloading \(state.request.model.title)…", "Загрузка \(state.request.model.title)…")
+                    try await MeetingModelDownload.continueDiarization(item.dir, resume: resume)
+                } else { try await action(item.dir) }
+            } catch { say(error.localizedDescription, about: item) }
             working = false
             reload()
         }

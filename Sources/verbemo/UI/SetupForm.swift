@@ -90,6 +90,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// Redraws this copy when anything writes the config file — the other
     /// window showing the same form, the Advanced tab beside it, or the
     /// status window's live-transcript switch.
+    var hasModelDownloads: Bool { parakeetDownload != nil || whisperDownloadTask != nil || gigaAMDownloadTask != nil || liveDownloading || diarizationDownloadTask != nil }
+    private var formWindow: NSWindow? { view.window ?? settingsPages.values.compactMap(\.window).first }
+    private var storageControls: [String: (view: NSView, button: NSButton, note: NSTextField, model: ModelStorage.Model)] = [:]
+    private lazy var liveDownloadProgress = ModelDownloadProgress(model: "Nemotron Live", identifier: "live.cancel", target: self, action: #selector(cancelLiveDownload))
     private var configWatch: ConfigWatch.Token?
     /// Redraws this copy when verbemo comes back to the front. Every grant the
     /// Access rows ask for is given somewhere else — System Settings, a
@@ -378,7 +382,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// registered is a round trip to another daemon, and a window that is
     /// closed will be redrawn by `reload` when it opens anyway.
     func cameBack() {
-        guard view.window?.isVisible == true else { return }
+        guard formWindow?.isVisible == true else { return }
         refresh()
     }
 
@@ -740,8 +744,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             diarizationOperation = nil
             diarizationDownloadProgress[model]?.end()
             refreshDiarization()
+            refreshStorageControls()
+            onStateChange?()
         }
         refreshDiarization()
+        refreshStorageControls()
     }
 
     @objc private func cancelDiarizationClicked(_ sender: NSButton) {
@@ -1180,7 +1187,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// Whichever window is showing the form — the setup wizard or the
     /// settings tab. The form does not own a window and must not assume one.
     private func focusKeyField() {
-        view.window?.makeFirstResponder(cloudKey)
+        formWindow?.makeFirstResponder(cloudKey)
     }
 
     @objc private func liveTranscriptionToggled() {
@@ -1206,6 +1213,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
         Analytics.track(.modelDownloadStarted, [.asset: .text("nemotron-live")])
         liveDownloading = true
+        liveDownloadProgress.begin()
         liveStatus.stringValue = localised("preparing download…", "готовлюсь скачивать…")
         refresh()
         liveDownloadTask = Task { [weak self] in
@@ -1213,6 +1221,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             do {
                 _ = try await liveModelStore.download(language: prompt) { [weak self] fraction in
                     Task { @MainActor in
+                        self?.liveDownloadProgress.update(fraction)
                         self?.liveStatus.stringValue = localised(
                             "downloading — \(Int(fraction * 100))% of about 600 MB",
                             "скачивание — \(Int(fraction * 100))% из примерно 600 МБ")
@@ -1243,6 +1252,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             }
             liveDownloading = false
             liveDownloadTask = nil
+            liveDownloadProgress.end()
             refresh()
         }
     }
@@ -1955,6 +1965,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         configProblems.isHidden = problems.isEmpty
 
         highlightNextGrant()
+        refreshStorageControls()
         onStateChange?()
     }
 
@@ -2045,6 +2056,70 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         case "gigaam": return modelStorage.gigaAMModel()
         default: return modelStorage.parakeet(version: ParakeetEngine.configuredVersion())
         }
+    }
+
+    /// File operations reuse the same download task; they never select a working model.
+    func modelFilesControl(for model: ModelStorage.Model) -> NSView {
+        if let cached = storageControls[model.directory.path] { return cached.view }
+        let button = NSButton(title: localised("Download", "Скачать"), target: self, action: #selector(storageDownloadClicked(_:)))
+        button.identifier = .init(model.directory.path)
+        let note = SetupLayout.status()
+        let progress: NSView?
+        switch model.kind {
+        case .parakeet: progress = localDownloadProgress["parakeet"]?.mirroredView()
+        case .whisper: progress = localDownloadProgress["whisper"]?.mirroredView()
+        case .gigaAM: progress = localDownloadProgress["gigaam"]?.mirroredView()
+        case .diarization: progress = model.diarizationModel.flatMap { diarizationDownloadProgress[$0]?.mirroredView() }
+        case .live: progress = liveDownloadProgress.mirroredView()
+        }
+        let group = NSStackView(views: [button, note] + (progress.map { [$0] } ?? []))
+        group.orientation = .vertical
+        group.alignment = .leading
+        group.spacing = 6
+        if let progress { progress.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true }
+        storageControls[model.directory.path] = (group, button, note, model)
+        refreshStorageControls()
+        return group
+    }
+    private func refreshStorageControls() {
+        for (_, entry) in storageControls {
+            let model = entry.model
+            let downloading: Bool
+            let error: String?
+            switch model.kind {
+            case .parakeet: downloading = localModelIsDownloading("parakeet"); error = localDownloadErrors["parakeet"]
+            case .whisper: downloading = localModelIsDownloading("whisper"); error = localDownloadErrors["whisper"]
+            case .gigaAM: downloading = localModelIsDownloading("gigaam"); error = localDownloadErrors["gigaam"]
+            case .diarization: downloading = downloadingDiarizationModel == model.diarizationModel; error = model.diarizationModel.flatMap { diarizationErrors[$0] }
+            case .live: downloading = liveDownloading; error = liveStatus.stringValue
+            }
+            let ready = model.kind == .diarization
+                ? DiarizationModelStore.isReady(at: model.directory, model: model.diarizationModel ?? .community1)
+                : ModelStorage.bytes(of: model.directory) > 0 && !downloading
+            entry.button.isHidden = ready || downloading
+            entry.button.isEnabled = !Config.settingsUnknown && !(model.kind == .diarization && diarizationDownloadTask != nil)
+            entry.note.stringValue = error ?? ""
+            entry.note.isHidden = entry.note.stringValue.isEmpty
+        }
+    }
+    @objc private func storageDownloadClicked(_ sender: NSButton) {
+        guard let id = sender.identifier?.rawValue, let entry = storageControls[id], sender.isEnabled else { return }
+        switch entry.model.kind {
+        case .parakeet: downloadLocalIfNeeded("parakeet")
+        case .whisper: downloadLocalIfNeeded("whisper")
+        case .gigaAM: downloadLocalIfNeeded("gigaam")
+        case .live: downloadLiveModel()
+        case .diarization:
+            guard let model = entry.model.diarizationModel else { return }
+            let request = NSButton()
+            request.identifier = .init("transcription.diarization.download.\(model.rawValue)")
+            downloadDiarizationClicked(request)
+        }
+        refreshStorageControls()
+    }
+    @objc private func cancelLiveDownload() {
+        liveDownloadTask?.cancel()
+        liveDownloadProgress.cancelling()
     }
 
     private func isLocalModelDownloaded(_ id: String, model: ModelStorage.Model) -> Bool {
