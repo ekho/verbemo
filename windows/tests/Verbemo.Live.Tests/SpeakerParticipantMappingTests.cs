@@ -32,6 +32,10 @@ public sealed class SpeakerParticipantMappingTests
             await processor.SetSpeakerParticipantAsync(archive,"A",null);
             Assert.Equal("Manual",(await SpeakerFile.ReadAsync(archive,default)).Names["A"]);
             await Assert.ThrowsAsync<InvalidOperationException>(() => processor.SetSpeakerParticipantAsync(root,"A",new CalendarParticipant("outside","Unknown")));
+            await TranscriptWriter.WriteAsync(root,"Test",new("whisper","tiny",DateTimeOffset.UtcNow,[new(0,1000,"Hello","them")]));
+            var before = File.ReadAllBytes(Path.Combine(root,"transcript.json"));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => processor.SetSpeakerParticipantAsync(root,"them",new CalendarParticipant("a","Alex")));
+            Assert.Equal(before,File.ReadAllBytes(Path.Combine(root,"transcript.json")));
             File.WriteAllText(Path.Combine(root,TranscriptVersions.RequestFile),"whisper");
             await Assert.ThrowsAsync<InvalidOperationException>(() => processor.SetSpeakerParticipantAsync(root,"A",new CalendarParticipant("a","Alex")));
         }

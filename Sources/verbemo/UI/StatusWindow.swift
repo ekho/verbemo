@@ -273,7 +273,7 @@ final class StatusWindow {
     }
 
     func updateImport(_ update: MediaImportCoordinator.Update) {
-        if !panel.isVisible { bringToFront() }
+        if !embedded && !panel.isVisible { bringToFront() }
         importStatus.update(update)
         growToFitContent()
     }

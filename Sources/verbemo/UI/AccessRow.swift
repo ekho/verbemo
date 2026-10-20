@@ -42,6 +42,7 @@ final class AccessRow: NSView, LayerTinted {
         self.detail.lineBreakMode = .byWordWrapping
         self.detail.maximumNumberOfLines = 3
         self.detail.preferredMaxLayoutWidth = 460
+        self.detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         button.bezelStyle = .rounded
         button.controlSize = .small
@@ -59,6 +60,7 @@ final class AccessRow: NSView, LayerTinted {
         text.orientation = .vertical
         text.alignment = .leading
         text.spacing = 2
+        self.detail.widthAnchor.constraint(equalTo: text.widthAnchor).isActive = true
 
         for view in [mark, text, SetupLayout.spacer(), button] {
             stack.addArrangedSubview(view)

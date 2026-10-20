@@ -323,13 +323,13 @@ final class RecordingsWindow: NSObject {
         toolbar.spacing = 8
         toolbar.heightAnchor.constraint(equalTo: importButton.heightAnchor).isActive = true
 
-        let processingButtons = NSStackView(views: [
-            finishButton, retranscribeButton, openTranscriptButton,
+        let processingButtons = NSStackView(views: (embedded ? [] : [finishButton]) + [
+            retranscribeButton, openTranscriptButton,
             openFolderButton, deleteButton,
         ])
         processingButtons.orientation = .horizontal
         processingButtons.spacing = 8
-        processingButtons.heightAnchor.constraint(equalTo: finishButton.heightAnchor).isActive = true
+        if !embedded { processingButtons.heightAnchor.constraint(equalTo: finishButton.heightAnchor).isActive = true }
 
         let detailScroll = NSScrollView()
         detailScroll.documentView = speakersStack
@@ -412,7 +412,7 @@ final class RecordingsWindow: NSObject {
         openActiveButton.action = #selector(openActiveRecording)
         openActiveButton.isHidden = true
         let detail = NSStackView(views: embedded
-            ? [titleRow, detailMeta, calendarView, audioRow, openActiveButton, diarizationLabel, diarizationActions, versionActions, detailTabs, openTranscriptButton, busyLabel]
+            ? [titleRow, detailMeta, calendarView, audioRow, openActiveButton, diarizationLabel, diarizationActions, finishButton, versionActions, detailTabs, openTranscriptButton, busyLabel]
             : [detailTitle, diarizationLabel, diarizationActions, versionActions, detailTabs, processingButtons, busyLabel])
         detail.orientation = .vertical
         detail.distribution = .fill
@@ -762,6 +762,8 @@ final class RecordingsWindow: NSObject {
         reload()
     }
 
+    func refresh() { reload() }
+
     private func show(_ found: [SessionInventory.Item]) {
         let previous = selected?.dir
         allItems = found.filter { $0.dir != activeRecording?.dir }
@@ -990,7 +992,8 @@ final class RecordingsWindow: NSObject {
         moreButton.isEnabled = item != nil
         finishButton.isEnabled = !working && (selectedVersion?.isRequest == true
             ? item?.transcript.isOutstanding ?? false
-            : artifactDirectory.map { !PostProcessor.outstanding($0).isEmpty } ?? item?.isOutstanding ?? false)
+            : artifactDirectory.map { !PostProcessor.outstanding($0, retryFailed: true).isEmpty } ?? item?.isOutstanding ?? false)
+        if embedded { finishButton.isHidden = !finishButton.isEnabled }
         retranscribeButton.isEnabled = !working && (item?.hasAudio ?? false)
         openTranscriptButton.isEnabled = selectedVersion?.isRequest != true && (artifactDirectory.map {
             PostProcessor.readTranscript($0) != nil || FileManager.default.fileExists(
@@ -1157,7 +1160,7 @@ final class RecordingsWindow: NSObject {
         case .transcribe(let clearingFirst):
             return .transcribe(clearingFirst: clearingFirst)
         case .finish:
-            return PostProcessor.outstanding(item.dir, policy: policy).isEmpty
+            return PostProcessor.outstanding(item.dir, policy: policy, retryFailed: true).isEmpty
                 ? .nothingOwed
                 : .finish
         }
@@ -1179,7 +1182,7 @@ final class RecordingsWindow: NSObject {
             working = true
             updateButtons()
             Task {
-                await PostProcessor.finish(version.dir)
+                await PostProcessor.finish(version.dir, retryFailed: true)
                 working = false
                 reload()
             }
@@ -1207,7 +1210,7 @@ final class RecordingsWindow: NSObject {
             working = true
             updateButtons()
             Task {
-                let work = await PostProcessor.finish(item.dir)
+                let work = await PostProcessor.finish(item.dir, retryFailed: true)
                 working = false
                 reload()
                 if work.isEmpty { say(Self.nothingDoneLine(for: item.dir), about: item) }

@@ -47,6 +47,7 @@ enum SetupLayout {
     static func title(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.font = titleFont
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return label
     }
 
@@ -57,6 +58,7 @@ enum SetupLayout {
         label.lineBreakMode = .byWordWrapping
         label.maximumNumberOfLines = lines
         label.preferredMaxLayoutWidth = width
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return label
     }
 
@@ -185,6 +187,10 @@ enum SetupLayout {
         words.orientation = .vertical
         words.alignment = .leading
         words.spacing = 2
+        if let detail {
+            detail.widthAnchor.constraint(equalTo: words.widthAnchor).isActive = true
+        }
+        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         // The words are part of the switch, as the title of a checkbox is
         // part of the checkbox. Aiming at a 50pt switch is a worse target
         // than aiming at the sentence that says what it does.

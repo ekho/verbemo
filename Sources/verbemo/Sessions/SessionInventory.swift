@@ -73,6 +73,7 @@ enum SessionInventory {
         /// cleaned out with the Finder — the difference doesn't matter to
         /// anything asking, which is always asking "can this be done again".
         let hasAudio: Bool
+        var isDiarized = false
 
         /// Whether anything is left to do that a person might want to trigger.
         var isOutstanding: Bool {
@@ -200,7 +201,10 @@ enum SessionInventory {
             ),
             namedSpeakers: counts,
             sizeBytes: size(of: dir),
-            hasAudio: audioSurvives(dir, meta: meta)
+            hasAudio: audioSurvives(dir, meta: meta),
+            isDiarized: transcript?.segments.contains { segment in
+                !segment.speaker.isEmpty && segment.speaker != "me" && segment.speaker != "them"
+            } == true
         )
     }
 

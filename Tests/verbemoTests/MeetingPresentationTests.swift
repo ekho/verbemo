@@ -5,6 +5,15 @@ import Testing
 @testable import verbemo
 
 struct MeetingPresentationTests {
+    @Test(.freshHome) func twoSeparatedVoicesHaveDiarizationBadge() throws {
+        let dir = try SessionFixture.make(segments: [
+            .init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Hello"),
+            .init(speaker: "them A", start_ms: 1000, end_ms: 2000, text: "Hi"),
+        ])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(SessionInventory.item(for: dir))
+        #expect(MeetingPresentation.stages(item).first { $0.symbol == "doc.text" }?.diarized == true)
+    }
     @Test(.freshHome) func audioOnlyOffersExistingFilesInsideMeeting() throws {
         let dir = try SessionFixture.make()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -31,6 +40,24 @@ struct MeetingPresentationTests {
 @Suite(.serialized)
 @MainActor
 struct MeetingMenuTests {
+    @Test(.freshHome) func embeddedDetailsExposeManualFinishForFailedNaming() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixture = try SessionFixture.make()
+        let dir = root.appendingPathComponent("meeting")
+        try FileManager.default.moveItem(at: fixture, to: dir)
+        try SessionState.amend(dir, with: [SessionState.Key.speakersStatus: "failed"])
+        let library = RecordingsWindow(root: root, hostWindow: NSWindow())
+        await library.settled()
+        let button = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.title == "Finish processing" })
+        #expect(!button.isHidden)
+        #expect(button.isEnabled)
+        let item = try #require(SessionInventory.item(for: dir))
+        #expect(RecordingsWindow.decision(for: item, policy: .init(names: true, summary: false)) == .finish)
+        withExtendedLifetime(library) {}
+    }
     @Test(.speaking(.russian)) func oneMenuOrdersCopyAndRegenerationAndDisablesUntilReady() {
         let state = MeetingActionState(transcriptReady: false, summaryReady: false,
             hasAudio: true, isRecording: false, isBusy: false,

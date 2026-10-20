@@ -27,6 +27,8 @@ internal sealed class RecordingsWindow : Window
     private readonly System.Windows.Controls.ListBox grid = new() { BorderThickness = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
     private readonly Grid layout = new();
     private readonly DockPanel listPanel = new();
+    private readonly StackPanel deletionNotices = new();
+    private readonly Dictionary<string, System.Windows.Controls.Button> undoButtons = new(StringComparer.OrdinalIgnoreCase);
     private readonly TextBox search = new();
     private readonly System.Windows.Controls.Button regenerate;
     private readonly System.Windows.Controls.Button textCopy;
@@ -87,13 +89,18 @@ internal sealed class RecordingsWindow : Window
         };
         grid.ContextMenuOpening += (_, e) => { e.Handled = true; OpenMeetingMenu(grid); };
         grid.ContextMenu = new ContextMenu();
-        grid.PreviewKeyDown += (_, e) => { if (e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) { OpenMeetingMenu(grid); e.Handled = true; } };
-        grid.PreviewMouseLeftButtonUp += (_, _) =>
+        void OpenSelected()
         {
             if (Selected?.Item.Transcript == ProcessingStep.Recording) { ActiveMeetingRequested?.Invoke(this, EventArgs.Empty); return; }
             detailOpen = Selected is not null;
             UpdateLayoutMode();
+        }
+        grid.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) { OpenMeetingMenu(grid); e.Handled = true; }
+            else if (e.Key is Key.Enter or Key.Space) { OpenSelected(); e.Handled = true; }
         };
+        grid.PreviewMouseLeftButtonUp += (_, _) => OpenSelected();
         finish = Ui.Button(T("Finish", "Доделать"), () => { if (Selected is { } row) runtime.FinishProcessing(row.Item.Directory); });
         finish.ToolTip = T("Try again whatever gave up or is waiting, keeping the transcript and every name typed by hand.",
             "Ещё раз попробовать то, что не получилось или ждёт, — расшифровка и имена, введённые вручную, остаются.");
@@ -149,6 +156,7 @@ internal sealed class RecordingsWindow : Window
         var statusPanel = new StackPanel();
         statusPanel.Children.Add(processingStatus);
         statusPanel.Children.Add(problem);
+        statusPanel.Children.Add(finish);
         calendarPanel.Margin = new Thickness(0,12,0,12);
         statusPanel.Children.Add(calendarPanel);
         Grid.SetRow(statusPanel, 1);
@@ -177,7 +185,18 @@ internal sealed class RecordingsWindow : Window
         layout.Children.Add(listPanel);
         Grid.SetColumn(detail, 1);
         layout.Children.Add(detail);
-        Content = layout;
+        var content = new DockPanel();
+        DockPanel.SetDock(deletionNotices, Dock.Bottom);
+        content.Children.Add(deletionNotices);
+        content.Children.Add(layout);
+        Content = content;
+        EventHandler deletionChanged = (_, _) => Dispatcher.InvokeAsync(() =>
+        {
+            foreach (var (directory, button) in undoButtons.ToArray())
+                if (!runtime.Deletions.IsPending(directory)) { deletionNotices.Children.Remove(button); undoButtons.Remove(directory); }
+        });
+        runtime.Deletions.Changed += deletionChanged;
+        Closed += (_, _) => runtime.Deletions.Changed -= deletionChanged;
         layout.SizeChanged += (_, _) => UpdateLayoutMode();
         EventHandler changed = (_, _) => Dispatcher.InvokeAsync(ReloadAsync);
         runtime.SessionsChanged += changed;
@@ -263,8 +282,13 @@ internal sealed class RecordingsWindow : Window
             }
             await ReloadAsync();
         }
-        catch (Exception error) when (error is IOException or InvalidOperationException or UnauthorizedAccessException or JsonException)
-        { Ui.ShowError(Ui.OwnerOf(layout), "Verbemo", error.Message); await ReloadAsync(); }
+        catch (Exception error) when (error is IOException or InvalidOperationException or UnauthorizedAccessException or JsonException or ProcessingFailure)
+        {
+            await ReloadAsync();
+            problem.Text = error.Message;
+            problem.Visibility = Visibility.Visible;
+        }
+        catch (OperationCanceledException) { await ReloadAsync(); }
     }
 
     private async Task CopyAsync(bool markdown)
@@ -290,6 +314,7 @@ internal sealed class RecordingsWindow : Window
     public void ShowList() { search.Text = ""; detailOpen = false; UpdateLayoutMode(); }
     private void UpdateLayoutMode()
     {
+        if (Selected is null) detailOpen = false;
         var compact = layout.ActualWidth < 730;
         listPanel.Visibility = compact && detailOpen ? Visibility.Collapsed : Visibility.Visible;
         detail.Visibility = Selected is null || compact && !detailOpen ? Visibility.Collapsed : Visibility.Visible;
@@ -364,6 +389,7 @@ internal sealed class RecordingsWindow : Window
             || item.Transcript == ProcessingStep.Done && (item.SpeakerNames == ProcessingStep.Pending && runtime.Settings.SpeakerNames.Enabled
                 || item.Summary == ProcessingStep.Pending && runtime.Settings.Summary.Enabled);
         finish.IsEnabled = !recording && !busy && canFinish;
+        finish.Visibility = canFinish ? Visibility.Visible : Visibility.Collapsed;
         retranscribe.IsEnabled = !recording && item.HasAudio && !busy;
         listen.IsEnabled = item.HasAudio && !recording;
         folder.IsEnabled = true;
@@ -527,7 +553,7 @@ internal sealed class RecordingsWindow : Window
         if(json is null) return;
         TranscriptDocument? document;
         try { document = JsonSerializer.Deserialize<TranscriptDocument>(json); } catch(JsonException) { return; }
-        if(document is null || !document.Segments.Any(s => s.Speaker is not null)) return;
+        if(document?.IsDiarized != true) return;
         var names = await SpeakerFile.ReadAsync(directory,default);
         if(version != transcriptShown) return;
         var lines = new StackPanel { Margin = new Thickness(8,12,8,12) };
@@ -641,18 +667,22 @@ internal sealed class RecordingsWindow : Window
         if (answer != MessageBoxResult.OK) return;
         try
         {
-            runtime.ScheduleDeletion(row.Item.Directory);
-            var undo = Ui.Button(T("Undo deletion", "Отменить удаление"), () => runtime.Deletions.Undo(row.Item.Directory));
-            speakers.Children.Insert(0, undo);
-            // The notice stays outside the selected meeting while its row is hidden.
-            DockPanel.SetDock(undo, Dock.Bottom);
-            speakers.Children.Remove(undo);
-            listPanel.Children.Insert(0, undo);
+            ScheduleDeletion(row.Item.Directory);
         }
         catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException)
         {
             Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t delete the recording", "Не удалось удалить запись"), exception.Message);
         }
+    }
+
+    internal void ScheduleDeletion(string directory)
+    {
+        runtime.ScheduleDeletion(directory);
+        if (undoButtons.ContainsKey(directory)) return;
+        var undo = Ui.Button(T("Undo deletion", "Отменить удаление"), () => runtime.Deletions.Undo(directory));
+        undo.Margin = new Thickness(12, 6, 12, 6);
+        undoButtons.Add(directory, undo);
+        deletionNotices.Children.Add(undo);
     }
 
     private static async Task<string?> ReadAsync(string path)

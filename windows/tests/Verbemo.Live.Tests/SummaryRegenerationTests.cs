@@ -31,12 +31,21 @@ public sealed class SummaryRegenerationTests
     [InlineData("missing")]
     [InlineData("unreadable")]
     [InlineData("off")]
+    [InlineData("empty-object")]
+    [InlineData("empty-segments")]
+    [InlineData("empty-text")]
     public async Task Invalid_state_never_reaches_model(string state)
     {
         await using var fixture = await Fixture.Create();
         if (state == "missing") File.Delete(Path.Combine(fixture.Directory, "transcript.json"));
         else if (state == "unreadable") fixture.Readable = false;
         else if (state == "off") fixture.Settings.Summary.Enabled = false;
+        else if (state.StartsWith("empty-")) File.WriteAllText(Path.Combine(fixture.Directory, "transcript.json"), state switch
+        {
+            "empty-object" => "{}",
+            "empty-segments" => "{\"segments\":[]}",
+            _ => "{\"segments\":[{\"text\":\"  \"}]}"
+        });
         else File.WriteAllText(Path.Combine(fixture.Directory, state), "pending");
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Processor.RegenerateSummaryAsync(fixture.Directory));
         Assert.Equal(0, fixture.Calls);
@@ -76,7 +85,7 @@ public sealed class SummaryRegenerationTests
         Assert.Equal("New summary" + Environment.NewLine, File.ReadAllText(Path.Combine(archive, "summary.md")));
     }
 
-    private sealed class Fixture : IAsyncDisposable
+    internal sealed class Fixture : IAsyncDisposable
     {
         public required string Directory { get; init; }
         public required AppSettings Settings { get; init; }

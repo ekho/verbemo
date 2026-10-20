@@ -585,6 +585,8 @@ final class AppController {
     /// One run of the importer: batch after batch until nothing is waiting
     /// or somebody cancels, then one summary for the whole run.
     private func startImportRun() {
+        window.navigate(.allMeetings)
+        window.bringToFront()
         let stop = importStop
         mediaImportTask = Task { [weak self, mediaImport, transcription] in
             await stop?.value

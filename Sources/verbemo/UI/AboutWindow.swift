@@ -91,6 +91,10 @@ final class AboutWindow: NSObject {
         stack.setCustomSpacing(18, after: tagline)
         if hostWindow == nil { stack.setCustomSpacing(4, after: name) }
         stack.translatesAutoresizingMaskIntoConstraints = false
+        if hostWindow != nil {
+            tagline.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            tagline.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
 
         let content = NSView()
         content.addSubview(stack)

@@ -30,6 +30,13 @@ struct MeetingCalendarMetadataTests {
 
 @Suite(.serialized)
 struct SpeakerParticipantMappingTests {
+    @Test(.freshHome) func pendingReplacementCannotReceiveParticipantMapping() throws {
+        let dir = try session()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data("whisper".utf8).write(to: dir.appendingPathComponent(TranscriptVersions.requestFile))
+        #expect(throws: (any Error).self) { try PostProcessor.setSpeakerParticipant("them A", participant: .init(id: "anna", name: "Anna"), in: dir) }
+        #expect(SpeakerNames.read(from: dir)?.speakers["them A"]?.participantID == nil)
+    }
     private func session() throws -> URL {
         try SessionFixture.make(meta: ["calendar": ["schema_version": 2, "event_id": "event", "association": "confirmed", "title": "Planning", "agenda": "LOCAL_ONLY", "participants": [["id": "anna", "name": "Anna", "email": "private@example.test"]]]])
     }

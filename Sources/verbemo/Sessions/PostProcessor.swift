@@ -49,7 +49,7 @@ enum PostProcessor {
     /// backends it failed with, so a `failed` step whose recorded fingerprint
     /// no longer matches `MeetingEgress.fingerprint` is offered once more. A
     /// `failed` with no fingerprint predates the rule and stays given up.
-    static func outstanding(_ dir: URL, policy: Policy = .configured) -> Work {
+    static func outstanding(_ dir: URL, policy: Policy = .configured, retryFailed: Bool = false) -> Work {
         let fm = FileManager.default
         func exists(_ name: String) -> Bool {
             fm.fileExists(atPath: dir.appendingPathComponent(name).path)
@@ -71,12 +71,12 @@ enum PostProcessor {
         var work = Work()
         work.names = policy.names
             && !exists(SpeakerNames.file)
-            && !gaveUp(SessionState.Key.speakersStatus, SessionState.Key.speakersFailedFor,
-                       .speakerNames)
+            && (retryFailed || !gaveUp(SessionState.Key.speakersStatus, SessionState.Key.speakersFailedFor,
+                       .speakerNames))
         work.summary = policy.summary
             && !hasCurrentSummary(dir, meta: meta)
-            && !gaveUp(SessionState.Key.summaryStatus, SessionState.Key.summaryFailedFor,
-                       .summary)
+            && (retryFailed || !gaveUp(SessionState.Key.summaryStatus, SessionState.Key.summaryFailedFor,
+                       .summary))
         return work
     }
 
@@ -151,7 +151,7 @@ enum PostProcessor {
     /// say which steps it is exercising instead of inheriting whatever the
     /// machine owner has turned on this week.
     @discardableResult
-    static func finish(_ dir: URL, policy: Policy = .configured) async -> Work {
+    static func finish(_ dir: URL, policy: Policy = .configured, retryFailed: Bool = false) async -> Work {
         // Both steps hand the transcript to a model chosen by the config, so
         // they wait while it cannot be read — see `Config.Unreadable`.
         if let reason = Config.unreadableReason {
@@ -159,9 +159,6 @@ enum PostProcessor {
                 "post-processing waits — config.json can't be read (\(reason))", to: dir)
             return Work()
         }
-        let work = outstanding(dir, policy: policy)
-        guard !work.isEmpty else { return work }
-
         do {
             try SessionClaim.acquire(dir, stage: .finish)
         } catch {
@@ -169,6 +166,9 @@ enum PostProcessor {
             return Work()
         }
         defer { SessionClaim.release(dir) }
+
+        let work = outstanding(dir, policy: policy, retryFailed: retryFailed)
+        guard !work.isEmpty else { return work }
 
         guard let transcript = readTranscript(dir) else {
             appendSessionLog("post-processing skipped — can't read transcript.json", to: dir)
@@ -458,6 +458,9 @@ enum PostProcessor {
 
     static func setSpeakerParticipant(_ speakerID: String, participant: CalendarParticipant?, in dir: URL) throws {
         let root = try validatedSessionRoot(for: dir)
+        try SessionClaim.acquire(root, stage: .finish)
+        defer { SessionClaim.release(root) }
+        guard !TranscriptVersions.isRequested(root) else { throw CocoaError(.fileLocking) }
         guard let transcript = readTranscript(dir), transcript.segments.contains(where: { $0.speaker == speakerID }),
               DiarizationState.persisted(in: dir).isFinal else { throw CocoaError(.fileReadUnknown) }
         let calendar = MeetingCalendarMetadata.read(from: root)
@@ -465,8 +468,6 @@ enum PostProcessor {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
         guard !FileManager.default.fileExists(atPath: root.appendingPathComponent(".recording.json").path) else { throw CocoaError(.fileLocking) }
-        try SessionClaim.acquire(root, stage: .finish)
-        defer { SessionClaim.release(root) }
         try SessionLock.withLock(dir) {
             var names = SpeakerNames.read(from: dir) ?? SpeakerNames()
             let previous = names.speakers[speakerID]

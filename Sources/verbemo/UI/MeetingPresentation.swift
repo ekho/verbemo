@@ -91,7 +91,7 @@ enum MeetingPresentation {
         result.append(Stage(symbol: "mic", title: localised("Recording saved", "Запись сохранена"), state: .done))
         var transcript = stage(item.transcript, symbol: "doc.text", label: localised("Transcription", "Расшифровка"),
             done: localised("Transcript ready", "Расшифровка готова"), active: busy && !ready)
-        transcript.diarized = item.diarization.map { $0.status != .skipped } ?? ((item.namedSpeakers?.total ?? 0) > 2)
+        transcript.diarized = item.diarization.map { $0.status != .skipped } ?? item.isDiarized
         if transcript.diarized { transcript.title += localised(" · speaker separation enabled", " · диаризация включена") }
         result.append(transcript)
         result.append(stage(item.summary, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),

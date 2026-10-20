@@ -70,7 +70,9 @@ final class ApplicationWindow: NSObject {
         title.font = .systemFont(ofSize: 22, weight: .semibold)
         title.target = self
         title.action = #selector(showAll)
-        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        title.setContentCompressionResistancePriority(.required, for: .horizontal)
+        title.cell?.wraps = false
+        title.cell?.lineBreakMode = .byTruncatingTail
         let importButton = NSButton(title: localised("Import", "Импортировать"), target: self, action: #selector(importClicked))
         importButton.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
         importButton.imagePosition = .imageLeading
@@ -83,11 +85,15 @@ final class ApplicationWindow: NSObject {
         start.action = #selector(startClicked)
         actions.setViews([importButton, start], in: .center)
         actions.spacing = 8
-        toolbar.setViews([title, NSView(), actions], in: .center)
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        toolbar.setViews([title, spacer, actions], in: .center)
+        toolbar.distribution = .fill
         toolbar.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)
         toolbar.heightAnchor.constraint(equalToConstant: 60).isActive = true
         let right = NSStackView(views: [toolbar, contentHost])
         right.orientation = .vertical
+        right.distribution = .fill
         right.spacing = 0
         right.alignment = .leading
         contentHost.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -95,6 +101,7 @@ final class ApplicationWindow: NSObject {
         contentHost.widthAnchor.constraint(equalTo: right.widthAnchor).isActive = true
         let body = NSStackView(views: [sidebar, right])
         body.orientation = .horizontal
+        body.distribution = .fill
         body.alignment = .top
         body.spacing = 0
         sidebar.widthAnchor.constraint(equalToConstant: 190).isActive = true
@@ -102,6 +109,7 @@ final class ApplicationWindow: NSObject {
         right.heightAnchor.constraint(equalTo: body.heightAnchor).isActive = true
         let root = NSStackView(views: [recordingBar, body])
         root.orientation = .vertical
+        root.distribution = .fill
         root.spacing = 0
         root.alignment = .leading
         root.detachesHiddenViews = true
@@ -132,6 +140,7 @@ final class ApplicationWindow: NSObject {
         actions.isHidden = destination != .allMeetings
         let content: NSView
         if destination.isMeetings, let library = libraryProvider?() {
+            library.refresh()
             library.applyFilter(destination)
             library.onDetailVisibilityChange = { [weak self] visible in
                 guard let self, self.navigation.destination.isMeetings else { return }
@@ -170,8 +179,8 @@ final class ApplicationWindow: NSObject {
         sidebar.select(.allMeetings)
         mount(liveView)
     }
-    func show() { panel.orderFront(nil) }
-    func bringToFront() { NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) }
+    func show() { if navigation.destination.isMeetings { libraryProvider?()?.refresh() }; panel.orderFront(nil) }
+    func bringToFront() { if navigation.destination.isMeetings { libraryProvider?()?.refresh() }; NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) }
     func hide() { panel.orderOut(nil) }
     func update(state: MenuBarController.State, elapsed: String?) {
         let wasRecording = recordingBarIsVisible
@@ -188,7 +197,7 @@ final class ApplicationWindow: NSObject {
     func updateLivePreference(enabled: Bool) { live.updateLivePreference(enabled: enabled) }
     func updateConfigProblem(_ headline: String?) { live.updateConfigProblem(headline) }
     func updateTranscription(_ text: String?) { live.updateTranscription(text) }
-    func updateImport(_ update: MediaImportCoordinator.Update) { navigate(.allMeetings); bringToFront() }
+    func updateImport(_ update: MediaImportCoordinator.Update) { live.updateImport(update) }
     func finishImport(_ result: MediaImportCoordinator.Result) { libraryProvider?()?.sessionsChanged() }
     func startRecording() {
         guard !recordingBarIsVisible else { return }

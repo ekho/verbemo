@@ -304,6 +304,8 @@ internal sealed class SetupForm
         FrameworkElement ollamaBaseView, FrameworkElement ollamaModelView)
     {
         foreach (var id in new[] { "claude-cli", "codex-cli", "api-key", "ollama" }) summaryStatus[id] = Ui.Status();
+        summaryCards["auto"] = Ui.Card("auto", T("Automatic", "Автоматически"),
+            T("Use the first available configured service.", "Использовать первый доступный настроенный сервис."));
         summaryCards["claude-cli"] = Ui.Card("claude-cli", "Claude Code",
             T("On the subscription you’re already signed into. No key.", "По подписке, в которую вы уже вошли. Ключ не нужен."),
             summaryStatus["claude-cli"], CliActions("claude-cli", "claude", "https://claude.com/product/claude-code"));
@@ -333,6 +335,7 @@ internal sealed class SetupForm
         var disclosure = Ui.Detail(T("Claude, Codex and API models receive meeting content. Ollama stays on this computer only with a localhost URL.",
             "Claude, Codex и API-модели получают данные встречи. Ollama остаётся на этом компьютере только с адресом localhost."));
         return Ui.Group(Ui.CardGap,
+            summaryCards["auto"],
             summaryAuto,
             Ui.Cards(summaryCards["claude-cli"], summaryCards["codex-cli"], summaryCards["api-key"]),
             summaryCards["ollama"],
@@ -755,12 +758,10 @@ internal sealed class SetupForm
                 item.IsChecked = id == chosen;
                 item.IsEnabled = settings.Summary.Enabled;
             }
-            // "auto" is no card: it is the whole row, in order. Said, so that no
-            // card being picked does not read as summaries going nowhere.
             summaryAuto.Text = backend switch
             {
-                "auto" => T("No card chosen: the first that works of Claude Code, an Anthropic key, Codex, an OpenAI key and Ollama writes the summary. Pick a card to keep to one.",
-                    "Карточка не выбрана: сводку создаёт первое, что работает, из Claude Code, ключа Anthropic, Codex, ключа OpenAI и Ollama. Выберите карточку, чтобы держаться одного."),
+                "auto" => T("Tries Claude Code, an Anthropic key, Codex, an OpenAI key and Ollama in that order.",
+                    "Проверяет по порядку: Claude Code, ключ Anthropic, Codex, ключ OpenAI и Ollama."),
                 "none" => T("Summaries are skipped (backend none in Advanced).", "Создание сводки выключено."),
                 _ => "",
             };

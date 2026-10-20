@@ -710,7 +710,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
 
         let line = NSStackView(views: [label, control])
         line.orientation = embedded ? .vertical : .horizontal
-        line.alignment = entry.kind.isMultiline ? .top : .firstBaseline
+        line.alignment = embedded ? .leading : (entry.kind.isMultiline ? .top : .firstBaseline)
         line.spacing = 10
 
         // A toggle is a small thing on the right of a wide label; a text field
@@ -745,6 +745,11 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         row.orientation = .vertical
         row.alignment = .leading
         row.spacing = 2
+        if embedded {
+            line.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
+            help.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
+            help.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
         return row
     }
 

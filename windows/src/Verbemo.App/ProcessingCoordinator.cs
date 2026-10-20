@@ -306,8 +306,11 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
                 settings().Transcription.Enabled, MeetingEgress.Route(EgressPurpose.Summary, settings()) is not null,
                 Has(root, TranscriptVersions.RequestFile));
             if (state.Reason(MeetingAction.RegenerateSummary) is { } reason) throw new InvalidOperationException(reason);
-            _ = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
-            var markdown = await File.ReadAllTextAsync(Path.Combine(directory, "transcript.md"), cancellationToken).ConfigureAwait(false);
+            var document = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
+            if (document.Segments is not { Count: > 0 } || !document.Segments.Any(s => !string.IsNullOrWhiteSpace(s.Text)))
+                throw new InvalidOperationException(T("A finished transcript is required.", "Сначала нужна готовая расшифровка."));
+            var names = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
+            var markdown = TranscriptWriter.RenderMarkdown(await ReadTitleAsync(root, cancellationToken), document, names.Names);
             Publish(root, "summary", T("Writing the summary…", "Создаю сводку…"), true);
             await new SummaryService(languageModels, settings).GenerateAsync(directory, markdown, cancellationToken).ConfigureAwait(false);
             foreach (var marker in new[] { "summary.failed", "summary.deferred", "summary.off" }) File.Delete(Path.Combine(directory, marker));
@@ -355,6 +358,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         var calendar = await MeetingCalendarMetadata.ReadAsync(root,cancellationToken).ConfigureAwait(false);
         if(calendar?.IsConfirmed != true) throw new InvalidOperationException("This meeting has no confirmed calendar event.");
         var document = await ReadTranscriptAsync(directory,cancellationToken).ConfigureAwait(false);
+        if(!document.IsDiarized) throw new InvalidOperationException(T("Speaker separation is required for matching participants.", "Для сопоставления участников нужно разделение говорящих."));
         if(!document.Segments.Any(s => s.Speaker == speakerId)) throw new InvalidOperationException("Unknown speaker.");
         var stored = await SpeakerFile.ReadAsync(directory,cancellationToken).ConfigureAwait(false);
         var names = new Dictionary<string,string>(stored.Names);

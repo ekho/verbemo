@@ -2102,9 +2102,13 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             case .diarization: downloading = downloadingDiarizationModel == model.diarizationModel; error = model.diarizationModel.flatMap { diarizationErrors[$0] }
             case .live: downloading = liveDownloading; error = liveStatus.stringValue
             }
-            let ready = model.kind == .diarization
-                ? DiarizationModelStore.isReady(at: model.directory, model: model.diarizationModel ?? .community1)
-                : ModelStorage.bytes(of: model.directory) > 0 && !downloading
+            let ready: Bool
+            switch model.kind {
+            case .diarization: ready = DiarizationModelStore.isReady(at: model.directory, model: model.diarizationModel ?? .community1)
+            case .parakeet: ready = parakeetIsHere()
+            case .whisper, .gigaAM: ready = model.isDownloaded
+            case .live: ready = liveModelStore.isReady(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
+            }
             entry.button.isHidden = ready || downloading
             entry.button.isEnabled = !Config.settingsUnknown && !(model.kind == .diarization && diarizationDownloadTask != nil)
             entry.note.stringValue = error ?? ""

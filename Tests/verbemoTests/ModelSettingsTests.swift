@@ -4,6 +4,17 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct ModelSettingsTests {
+    @Test(.freshHome) func partialDownloadKeepsStorageResumeAvailable() throws {
+        let store = WhisperModelStore()
+        try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
+        try Data([1,2,3]).write(to: store.partialURL)
+        let model = try #require(ModelStorage().all().first { $0.kind == .whisper })
+        let form = SetupForm(forSettings: true)
+        let controls = form.modelFilesControl(for: model)
+        let download = try #require(controls.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == model.directory.path })
+        #expect(!download.isHidden)
+        #expect(download.isEnabled)
+    }
     @Test(.freshHome) func storageOffersFileOperationsWithoutAnotherModelSelector() throws {
         let form = SetupForm(forSettings: true)
         let model = try #require(ModelStorage().all().first { $0.kind == .whisper })

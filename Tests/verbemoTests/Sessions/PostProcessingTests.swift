@@ -223,6 +223,24 @@ struct PostProcessingTests {
 
     // MARK: - naming
 
+    @Test("Manual finish retries failed naming without re-transcribing; background sweeps leave it alone")
+    func manualFinishRetriesFailedNaming() async throws {
+        let dir = try SessionFixture.make()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let original = try Data(contentsOf: dir.appendingPathComponent("transcript.json"))
+        try SessionState.amend(dir, with: [SessionState.Key.speakersStatus: "failed"])
+        let model = FakeModel("claude-cli", answer: SessionFixture.namesThemA)
+        let policy = PostProcessor.Policy(names: true, summary: false)
+        try await Self.withModels([model]) {
+            #expect(await PostProcessor.finish(dir, policy: policy).isEmpty)
+            #expect(model.callCount == 0)
+            #expect(await PostProcessor.finish(dir, policy: policy, retryFailed: true).names)
+        }
+        #expect(model.callCount == 1)
+        #expect(SpeakerNames.read(from: dir)?.speakers["them A"]?.name == "Фёдор")
+        #expect(try Data(contentsOf: dir.appendingPathComponent("transcript.json")) == original)
+    }
+
     private static func name(_ dir: URL) async -> SpeakerNames? {
         await SpeakerNamer.name(
             transcript: SessionFixture.transcript, title: nil, attendees: [], app: nil, into: dir)

@@ -156,12 +156,15 @@ internal sealed class StatusWindow : Window
             }
             titleEditor.LostKeyboardFocus += async (_, _) => await Rename();
             titleEditor.KeyDown += async (_, e) => { if(e.Key == System.Windows.Input.Key.Enter) await Rename(); };
-            stack.Children.Add(titleEditor);
-            stack.Children.Add(Ui.Heading(T("Live transcript", "Расшифровка в реальном времени")));
-            stack.Children.Add(liveStatus);
-            stack.Children.Add(livePanel);
+            var content = new Grid { Margin = stack.Margin };
+            foreach (var height in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto, new GridLength(1, GridUnitType.Star) })
+                content.RowDefinitions.Add(new RowDefinition { Height = height });
+            var heading = Ui.Heading(T("Live transcript", "Расшифровка в реальном времени"));
+            foreach (var (element, row) in new (FrameworkElement, int)[] { (titleEditor,0), (heading,1), (liveStatus,2), (livePanel,3) })
+            { Grid.SetRow(element,row); content.Children.Add(element); }
+            Content = content;
             liveText.Height = double.NaN;
-            liveText.MinHeight = 300;
+            liveText.MinHeight = 80;
             livePanel.Visibility = Visibility.Visible;
         }
 
