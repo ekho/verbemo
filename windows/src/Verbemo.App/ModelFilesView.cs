@@ -37,8 +37,10 @@ internal sealed class ModelFilesView
             controls[id] = (status,download,delete,cancel);
         }
         runtime.DownloadProgressChanged += Progress;
+        runtime.ModelDownloadsChanged += Changed;
         runtime.SettingsChanged += Changed;
         runtime.StateChanged += StateChanged;
+        runtime.ProcessingStatusChanged += ProcessingChanged;
         Refresh();
     }
     private async Task DownloadAsync(string id)
@@ -50,6 +52,7 @@ internal sealed class ModelFilesView
     }
     private void Changed(object? sender,EventArgs e) => View.Dispatcher.InvokeAsync(Refresh);
     private void StateChanged(object? sender,Verbemo.Core.Recording.RecordingState e) => View.Dispatcher.InvokeAsync(Refresh);
+    private void ProcessingChanged(object? sender,ProcessingStatus e) => View.Dispatcher.InvokeAsync(Refresh);
     private void Progress(object? sender,DownloadProgress e) => View.Dispatcher.InvokeAsync(() =>
     {
         var id = e.Item.Replace("Model ","",StringComparison.Ordinal);
@@ -66,5 +69,5 @@ internal sealed class ModelFilesView
             if(runtime.LocalModelBytes(id) is { } size) c.Status.Text = T("Downloaded · ", "Скачано · ")+Ui.Megabytes(size);
         }
     }
-    public void Detach() { runtime.DownloadProgressChanged -= Progress; runtime.SettingsChanged -= Changed; runtime.StateChanged -= StateChanged; }
+    public void Detach() { runtime.DownloadProgressChanged -= Progress; runtime.ModelDownloadsChanged -= Changed; runtime.SettingsChanged -= Changed; runtime.StateChanged -= StateChanged; runtime.ProcessingStatusChanged -= ProcessingChanged; }
 }

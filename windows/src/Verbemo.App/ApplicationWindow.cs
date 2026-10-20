@@ -30,6 +30,7 @@ internal sealed class ApplicationWindow : Window
     private readonly TextBlock clockText = Ui.Status();
     private readonly Button auto;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly Dictionary<ApplicationDestination,Button> navigationButtons = [];
     private bool allowClose;
 
     public ApplicationNavigationState Navigation { get; } = new();
@@ -51,6 +52,7 @@ internal sealed class ApplicationWindow : Window
         live = TakeContent(status);
         about = AboutWindow.CreateView();
         status.RevealAction = Reveal;
+        status.HostWindow = this;
 
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -115,7 +117,7 @@ internal sealed class ApplicationWindow : Window
         body.Children.Add(work);
 
         var bar = new DockPanel { Margin = new Thickness(16, 8, 16, 8) };
-        var stop = Ui.Button(T("Stop", "Завершить"), async () => await status.ToggleRecordingAsync());
+        var stop = Ui.Button(T("Stop", "Завершить"), async () => { if(runtime.State.IsRecording) await status.ToggleRecordingAsync(); });
         DockPanel.SetDock(stop, Dock.Right);
         bar.Children.Add(stop);
         pause = Ui.Button(T("Pause", "Пауза"), async () => await status.TogglePauseAsync());
@@ -159,12 +161,18 @@ internal sealed class ApplicationWindow : Window
         button.HorizontalContentAlignment = HorizontalAlignment.Left;
         button.Margin = new Thickness(0, 3, 0, 3);
         button.MinHeight = 34;
+        navigationButtons[destination] = button;
         return button;
     }
 
     public void ShowDestination(ApplicationDestination destination)
     {
         Navigation.Destination = destination;
+        foreach(var (page,button) in navigationButtons)
+        {
+            button.FontWeight = page == destination ? FontWeights.SemiBold : FontWeights.Normal;
+            button.SetResourceReference(Control.BackgroundProperty,page == destination ? "ControlFillColorSecondaryBrush" : "ControlFillColorDefaultBrush");
+        }
         if (destination <= ApplicationDestination.Attention) recordings.SetFilter(destination switch
         { ApplicationDestination.Processing => Verbemo.Core.Processing.MeetingFilter.Processing, ApplicationDestination.Attention => Verbemo.Core.Processing.MeetingFilter.Attention, _ => Verbemo.Core.Processing.MeetingFilter.All });
         toolbar.Visibility = destination == ApplicationDestination.About ? Visibility.Collapsed : Visibility.Visible;

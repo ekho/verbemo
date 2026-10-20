@@ -20,6 +20,7 @@ public sealed class ModelManager(string dataDirectory, HttpClient httpClient, st
     public event EventHandler<string>? DownloadStarted;
     public event EventHandler<string>? DownloadFinished;
     public event EventHandler<string>? DownloadFailed;
+    public event EventHandler? DownloadStateChanged;
 
     public string? CliPath
     {
@@ -78,11 +79,13 @@ public sealed class ModelManager(string dataDirectory, HttpClient httpClient, st
         }
         try
         {
+            DownloadStateChanged?.Invoke(this,EventArgs.Empty);
             await DownloadVerifiedAsync($"Model {model}", artifact, ModelPath(model), operation.Token).ConfigureAwait(false);
         }
         finally
         {
             lock (downloading) { downloading.Remove(model); cancellations.Remove(model); }
+            DownloadStateChanged?.Invoke(this,EventArgs.Empty);
         }
     }
 

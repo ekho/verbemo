@@ -45,7 +45,7 @@ public sealed class RecordingActionsTests
     private static SessionListItem Item(string directory, bool audio) => new(directory, "Test", DateTimeOffset.UtcNow,
         1, "manual", "parakeet", ProcessingStep.Done, ProcessingStep.Done, ProcessingStep.Done, 0, audio);
 
-    private static void Select(RecordingsWindow window, SessionListItem item, ProcessingStatus? status)
+    internal static void Select(RecordingsWindow window, SessionListItem item, ProcessingStatus? status)
     {
         var row = Activator.CreateInstance(typeof(RecordingsWindow).GetNestedType("Row", BindingFlags.NonPublic)!, item, status)!;
         var grid = Field<ListBox>(window, "grid");
@@ -55,10 +55,10 @@ public sealed class RecordingActionsTests
             .Invoke(window, null)!).GetAwaiter().GetResult();
     }
 
-    private static T Field<T>(RecordingsWindow window, string name) =>
+    internal static T Field<T>(RecordingsWindow window, string name) =>
         (T)typeof(RecordingsWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
 
-    private static void WithWindow(Action<RecordingsWindow, string> test)
+    internal static void WithWindow(Action<RecordingsWindow, string> test)
     {
         var root = Path.Combine(Path.GetTempPath(), "verbemo-actions-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);

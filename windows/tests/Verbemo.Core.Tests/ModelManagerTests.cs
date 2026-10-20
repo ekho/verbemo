@@ -29,6 +29,8 @@ public sealed class ModelManagerTests
         Directory.CreateDirectory(Path.Combine(temp.Path,"local-runtime"));
         File.WriteAllBytes(Path.Combine(temp.Path,"local-runtime","transcribe-cli.exe"),[1]);
         var manager = new ModelManager(temp.Path,client,temp.Path);
+        var states = new List<bool>();
+        manager.DownloadStateChanged += (_, _) => states.Add(manager.IsDownloading("parakeet"));
         var downloading = manager.EnsureReadyAsync("parakeet");
         await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(manager.IsDownloading("parakeet"));
@@ -36,6 +38,7 @@ public sealed class ModelManagerTests
         manager.CancelDownload("parakeet");
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => downloading);
         Assert.False(manager.IsDownloading("parakeet"));
+        Assert.Equal(new[] { true,false },states);
         Assert.False(File.Exists(manager.ModelPath("parakeet")));
     }
 

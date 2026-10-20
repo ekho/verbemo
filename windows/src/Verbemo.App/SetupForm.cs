@@ -192,6 +192,7 @@ internal sealed class SetupForm
         Wire();
         runtime.SettingsChanged += OnSettingsChanged;
         runtime.DownloadProgressChanged += OnDownloadProgress;
+        runtime.ModelDownloadsChanged += OnSettingsChanged;
         Refresh();
         _ = DetectToolsAsync();
     }
@@ -200,6 +201,7 @@ internal sealed class SetupForm
     {
         runtime.SettingsChanged -= OnSettingsChanged;
         runtime.DownloadProgressChanged -= OnDownloadProgress;
+        runtime.ModelDownloadsChanged -= OnSettingsChanged;
     }
 
     private void OnSettingsChanged(object? sender, EventArgs e) => View.Dispatcher.InvokeAsync(Refresh);

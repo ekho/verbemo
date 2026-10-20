@@ -9,18 +9,20 @@ namespace Verbemo.App;
 
 internal static class MeetingListView
 {
-    public static FrameworkElement Card(SessionListItem item, ProcessingStatus? status)
+    public static FrameworkElement Card(SessionListItem item, ProcessingStatus? status, bool paused = false)
     {
         var stack = new StackPanel();
         var title = Ui.Heading(item.Title);
         title.Margin = new Thickness(0, 0, 0, 5);
         stack.Children.Add(title);
-        stack.Children.Add(Ui.Detail(MeetingPresentation.Date(item) + $" · {Math.Max(1, item.DurationSeconds / 60)} {T("min", "мин")}"));
+        var participants = item.Calendar?.IsConfirmed == true ? T($" · Invited: {item.Calendar.Participants.Count}", $" · Приглашены: {item.Calendar.Participants.Count}")
+            : item.SpeakerCount > 0 ? T($" · Speakers: {item.SpeakerCount}", $" · Говорящих: {item.SpeakerCount}") : "";
+        stack.Children.Add(Ui.Detail(MeetingPresentation.Date(item) + $" · {Math.Max(1, item.DurationSeconds / 60)} {T("min", "мин")}"+participants));
         var stages = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0,10,0,0) };
         var recording = item.Transcript == ProcessingStep.Recording;
         if(item.Calendar?.IsConfirmed == true) stages.Children.Add(Stage("\uE787",T("Linked calendar event", "Связано с событием календаря"),ProcessingStep.Done,false,false));
         stages.Children.Add(Stage("\uE720", recording ? T("Recording", "Идёт запись") : T("Recording saved", "Запись сохранена"),
-            recording ? ProcessingStep.Recording : ProcessingStep.Done, recording, false));
+            recording ? ProcessingStep.Recording : ProcessingStep.Done, recording && !paused, false));
         stages.Children.Add(Stage("\uE8A5", T("Transcript: ", "Расшифровка: ") + (status?.Stage == "transcribing" ? status.Message : item.Transcript.ToString()),
             item.Transcript, status is { Stage: "transcribing", IsBusy: true }, item.IsDiarized));
         stages.Children.Add(Stage("\uE9D5", MeetingPresentation.SummaryLabel(item.Summary), item.Summary,

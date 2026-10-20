@@ -87,6 +87,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         coordinator.StateChanged += (_, state) =>
         {
             StateChanged?.Invoke(this, state);
+            SessionsChanged?.Invoke(this,EventArgs.Empty);
             if (state.IsRecording)
                 _ = analytics.RecordAsync("recording_started", new Dictionary<string, object?> { ["trigger"] = TriggerName(state.Trigger) });
         };
@@ -123,6 +124,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         };
         processing.SessionsChanged += (_, _) => SessionsChanged?.Invoke(this, EventArgs.Empty);
         models.Progress += (_, progress) => DownloadProgressChanged?.Invoke(this, progress);
+        models.DownloadStateChanged += (_, _) => ModelDownloadsChanged?.Invoke(this,EventArgs.Empty);
         models.DownloadStarted += (_, item) => _ = analytics.RecordAsync("model_download_started", new Dictionary<string, object?> { ["asset"] = AnalyticsAsset(item) });
         models.DownloadFinished += (_, item) =>
         {
@@ -197,6 +199,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public event EventHandler? SessionsChanged;
     public event EventHandler<LiveLine>? LiveLineReady;
     public event EventHandler<string>? LiveStatusChanged;
+    public event EventHandler? ModelDownloadsChanged;
     /// <summary>Settings or their problems changed — here or in the file.</summary>
     public event EventHandler? SettingsChanged;
     public event EventHandler<(string Title, string Message, NotificationKind Kind)>? NotificationRequested;

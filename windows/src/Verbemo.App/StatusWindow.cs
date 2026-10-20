@@ -64,6 +64,7 @@ internal sealed class StatusWindow : Window
     private readonly Dictionary<long, (Paragraph Paragraph, Run Text)> liveParagraphs = [];
 
     public Action? RevealAction { get; set; }
+    public Window? HostWindow { get; set; }
 
     public StatusWindow(VerbemoRuntime runtime, bool embedded = false)
     {
@@ -166,11 +167,11 @@ internal sealed class StatusWindow : Window
 
         autoRecord.Click += (_, _) =>
         {
-            if (!Ui.TryUpdate(this, () => runtime.SetAutoRecord(autoRecord.IsChecked == true))) Refresh();
+            if (!Ui.TryUpdate(HostWindow ?? this, () => runtime.SetAutoRecord(autoRecord.IsChecked == true))) Refresh();
         };
         live.Click += (_, _) =>
         {
-            Ui.TryUpdate(this, () => runtime.Update(settings => settings.LiveTranscription.Enabled = live.IsChecked == true));
+            Ui.TryUpdate(HostWindow ?? this, () => runtime.Update(settings => settings.LiveTranscription.Enabled = live.IsChecked == true));
             Refresh();
         };
         runtime.StateChanged += (_, _) => Dispatcher.InvokeAsync(Refresh);
@@ -256,7 +257,7 @@ internal sealed class StatusWindow : Window
     {
         if (!runtime.State.IsRecording || operationPending) return;
         try { await runtime.TogglePauseAsync(); }
-        catch (Exception exception) { Ui.ShowError(this, T("Couldn’t pause", "Не удалось поставить на паузу"), exception.Message); }
+        catch (Exception exception) { Ui.ShowError(HostWindow ?? (IsVisible ? this : null), T("Couldn’t pause", "Не удалось поставить на паузу"), exception.Message); }
         finally { Refresh(); }
     }
 

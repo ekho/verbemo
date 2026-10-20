@@ -107,9 +107,9 @@ internal sealed class RecordingsWindow : Window
         markdownCopy = Ui.Button("Markdown", () => _ = CopyAsync(markdown: true));
         tabs.SelectionChanged += (_, e) => { if (e.Source == tabs) { if (navigation is not null) navigation.Tab = tabs.SelectedIndex; UpdateContentActions(); } };
         transcriptContent.Content = transcript;
+        tabs.Items.Add(new TabItem { Header = T("Summary", "Сводка"), Content = summary });
         tabs.Items.Add(new TabItem { Header = T("Transcript", "Расшифровка"), Content = transcriptContent });
         tabs.Items.Add(new TabItem { Header = T("Speakers", "Участники"), Content = Ui.Scroll(speakers) });
-        tabs.Items.Add(new TabItem { Header = T("Summary", "Сводка"), Content = summary });
         engineTabs.SelectionChanged += async (_, args) =>
         {
             if (!updatingChoices && args.Source == engineTabs) await ShowTranscriptAsync();
@@ -132,8 +132,8 @@ internal sealed class RecordingsWindow : Window
         detail.Margin = new Thickness(16, 8, 16, 14);
         detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        detail.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        detail.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         title.FontSize = 18;
         title.FontWeight = FontWeights.SemiBold;
         var titleRow = new DockPanel();
@@ -153,14 +153,14 @@ internal sealed class RecordingsWindow : Window
         statusPanel.Children.Add(calendarPanel);
         Grid.SetRow(statusPanel, 1);
         detail.Children.Add(statusPanel);
-        Grid.SetRow(transcriptPanel, 2);
+        Grid.SetRow(transcriptPanel, 3);
         detail.Children.Add(transcriptPanel);
         Grid.SetRow(actions, 3);
         var operations = new StackPanel();
         operations.Children.Add(actions);
         reprocessHint.Margin = new Thickness(0, 8, 0, 0);
         operations.Children.Add(reprocessHint);
-        Grid.SetRow(operations, 3);
+        Grid.SetRow(operations, 2);
         detail.Children.Add(operations);
 
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(290) });
@@ -170,7 +170,10 @@ internal sealed class RecordingsWindow : Window
         search.TextChanged += (_, _) => { if (navigation is not null) navigation.Query = search.Text; ApplyFilter(); };
         DockPanel.SetDock(search, Dock.Top);
         listPanel.Children.Add(search);
-        listPanel.Children.Add(grid);
+        var listContent = new Grid();
+        listContent.Children.Add(grid);
+        listContent.Children.Add(empty);
+        listPanel.Children.Add(listContent);
         layout.Children.Add(listPanel);
         Grid.SetColumn(detail, 1);
         layout.Children.Add(detail);
@@ -179,6 +182,12 @@ internal sealed class RecordingsWindow : Window
         EventHandler changed = (_, _) => Dispatcher.InvokeAsync(ReloadAsync);
         runtime.SessionsChanged += changed;
         Closed += (_, _) => runtime.SessionsChanged -= changed;
+        System.ComponentModel.PropertyChangedEventHandler motionChanged = (_, e) =>
+        {
+            if(e.PropertyName == nameof(SystemParameters.ClientAreaAnimation)) Dispatcher.InvokeAsync(ReloadAsync);
+        };
+        SystemParameters.StaticPropertyChanged += motionChanged;
+        Closed += (_, _) => SystemParameters.StaticPropertyChanged -= motionChanged;
         layout.Loaded += async (_, _) => await ReloadAsync();
         runtime.TrackArtifact("recordings_window");
     }
@@ -205,12 +214,12 @@ internal sealed class RecordingsWindow : Window
     {
         if (regenerate is null) return;
         var state = ActionState();
-        var summaryTab = tabs.SelectedIndex == 2;
+        var summaryTab = tabs.SelectedIndex == 0;
         regenerate.Visibility = summaryTab ? Visibility.Visible : Visibility.Collapsed;
-        retranscribe.Visibility = tabs.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
+        retranscribe.Visibility = tabs.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
         regenerate.IsEnabled = state.Reason(MeetingAction.RegenerateSummary) is null;
         regenerate.ToolTip = state.Reason(MeetingAction.RegenerateSummary);
-        textCopy.Visibility = markdownCopy.Visibility = tabs.SelectedIndex == 1 ? Visibility.Collapsed : Visibility.Visible;
+        textCopy.Visibility = markdownCopy.Visibility = tabs.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
         textCopy.IsEnabled = markdownCopy.IsEnabled = state.Reason(summaryTab ? MeetingAction.CopySummary : MeetingAction.CopyTranscript) is null;
         reprocessHint.Text = summaryTab ? runtime.Settings.Summary.Backend : EngineResolver.DisplayName(runtime.Settings.Transcription.Engine);
     }
@@ -260,7 +269,7 @@ internal sealed class RecordingsWindow : Window
 
     private async Task CopyAsync(bool markdown)
     {
-        var action = tabs.SelectedIndex == 2 ? MeetingAction.CopySummary : MeetingAction.CopyTranscript;
+        var action = tabs.SelectedIndex == 0 ? MeetingAction.CopySummary : MeetingAction.CopyTranscript;
         if (ActionState().Reason(action) is not null || ArtifactDirectory is not { } directory) return;
         try { await CopyArtifactAsync(directory, action == MeetingAction.CopySummary ? "summary.md" : "transcript.md", markdown); }
         catch (Exception error) when (error is IOException or System.Runtime.InteropServices.ExternalException) { Ui.ShowError(Ui.OwnerOf(layout), "Verbemo", error.Message); }
@@ -294,6 +303,10 @@ internal sealed class RecordingsWindow : Window
         var rows = allRows.Where(row => MeetingPresentation.Matches(row.Item, filter, search.Text, row.Status?.IsBusy == true)).ToList();
         grid.ItemsSource = rows;
         grid.SelectedItem = rows.FirstOrDefault(row => row.Item.Directory == selected) ?? rows.FirstOrDefault();
+        empty.Text = search.Text.Length > 0 ? T("No matching meetings.", "Встречи не найдены.") : T("No meetings in this section.", "В этом разделе пока нет встреч.");
+        empty.Margin = new Thickness(20);
+        empty.IsHitTestVisible = false;
+        empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateLayoutMode();
     }
 
@@ -306,17 +319,13 @@ internal sealed class RecordingsWindow : Window
             var selected = Selected?.Item.Directory;
             var selectedTab = tabs.SelectedIndex;
             var items = await runtime.LoadSessionsAsync();
-            var rows = items.Select(item => new Row(item, runtime.ProcessingStatusFor(item.Directory))).ToList();
+            var rows = items.Select(item => new Row(item, runtime.ProcessingStatusFor(item.Directory))
+            { IsPaused = runtime.State.SessionDirectory == item.Directory && runtime.State.IsPaused }).ToList();
             allRows = rows;
             ApplyFilter();
             grid.SelectedItem = rows.FirstOrDefault(row => row.Item.Directory == selected && grid.Items.Contains(row)) ?? grid.SelectedItem;
             tabs.SelectedIndex = selectedTab;
             // Setting the selection shows it: the rows are new, so the selection changes.
-            empty.Text = rows.Count == 0
-                ? T("No recordings yet. A meeting recorded by hand or by itself shows up here, and so does a file you import.",
-                    "Записей пока нет. Здесь появится встреча, записанная вручную или сама, и файл, который вы импортируете.")
-                : "";
-            empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             UpdateLayoutMode();
         }
         finally
@@ -502,7 +511,7 @@ internal sealed class RecordingsWindow : Window
                 if (box.Text.Trim() == stored) return;
                 stored = box.Text.Trim();
                 try { await runtime.SetSpeakerNameAsync(directory, label, stored, title: meetingTitle); }
-                catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
+                catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
                 {
                     Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t save the name", "Не удалось сохранить имя"), exception.Message);
                 }
@@ -599,11 +608,22 @@ internal sealed class RecordingsWindow : Window
 
     private void Listen(Row row)
     {
-        var audio = new[] { "audio.m4a", "mic.wav" }.Select(name => Path.Combine(row.Item.Directory, name)).FirstOrDefault(File.Exists)
-                    ?? Directory.EnumerateFiles(row.Item.Directory, "source.*").FirstOrDefault();
-        if (audio is null) return;
-        runtime.TrackArtifact("session_folder");
-        VerbemoRuntime.Open(audio);
+        var menu = new ContextMenu { PlacementTarget = listen };
+        foreach(var path in AudioFiles(row.Item.Directory))
+        {
+            var item = new MenuItem { Header = Path.GetFileName(path) };
+            item.Click += (_, _) => { runtime.TrackArtifact("audio"); VerbemoRuntime.Open(path); };
+            menu.Items.Add(item);
+        }
+        if(menu.Items.Count > 0) menu.IsOpen = true;
+    }
+
+    internal static IReadOnlyList<string> AudioFiles(string directory)
+    {
+        if(!Directory.Exists(directory)) return [];
+        var known = new[] { "audio.m4a", "mic.wav", "system.wav" }.Select(name => Path.Combine(directory,name));
+        var imported = Directory.EnumerateFiles(directory,"source.*").Where(path => new[] { ".wav", ".m4a", ".mp3", ".flac", ".ogg", ".aac", ".wma", ".mp4", ".mov", ".mkv", ".webm" }.Contains(Path.GetExtension(path),StringComparer.OrdinalIgnoreCase));
+        return known.Concat(imported).Where(File.Exists).Where(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private void OpenFolder(Row row)
@@ -653,9 +673,10 @@ internal sealed class RecordingsWindow : Window
     {
         public SessionListItem Item { get; } = item;
         public ProcessingStatus? Status { get; } = status;
+        public bool IsPaused { get; init; }
 
         public string When => MeetingPresentation.Date(Item);
-        public FrameworkElement View => MeetingListView.Card(Item, Status);
+        public FrameworkElement View => MeetingListView.Card(Item, Status, IsPaused);
 
         public string Meeting => Item.DurationSeconds > 0
             ? $"{Item.Title} · {Math.Max(1, (int)Math.Round(Item.DurationSeconds / 60.0))} {T("min", "мин")}"
