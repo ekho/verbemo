@@ -12,6 +12,12 @@ on:
       version:
         description: Stable version matching VERSION (ignored for auto)
         required: false
+      distribution:
+        description: Unsigned preview or signed stable release (resume reads the manifest)
+        type: choice
+        options: [preview, signed]
+        default: preview
+        required: true
       operation:
         description: Automatic version and release, prepare, publish, or resume latest
         type: choice
@@ -39,7 +45,17 @@ jobs:
       version: ${{ steps.source.outputs.version }}
       build_number: ${{ steps.source.outputs.build_number }}
       release: ${{ steps.version.outputs.release }}
+      prerelease: ${{ steps.distribution.outputs.prerelease }}
     steps:
+      - id: distribution
+        env:
+          DISTRIBUTION: ${{ inputs.distribution || 'preview' }}
+        run: |
+          case "$DISTRIBUTION" in
+            preview) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
+            signed) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
       - uses: actions/checkout@v6
         with:
           ref: ${{ (github.event_name == 'push' || inputs.operation == 'auto') && 'master' || inputs.ref }}
@@ -59,7 +75,11 @@ jobs:
         if: github.event_name == 'push' || inputs.operation == 'auto'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-automation/auto-release.mjs
+          PRERELEASE: ${{ steps.distribution.outputs.prerelease }}
+        run: |
+          arguments=()
+          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease); fi
+          node scripts/release-automation/auto-release.mjs "${arguments[@]}"
       - name: Persist the version and select the exact build source
         if: steps.version.outputs.release == 'true'
         env:
@@ -111,7 +131,14 @@ jobs:
           python3 -m unittest discover -s windows/tests -p 'test_*.py'
           python3 landing/tests/check.py
           python3 Tests/scripts/test_independent_product.py --all
+      - name: Build unsigned macos preview artifacts
+        if: needs.resolve.outputs.prerelease == 'true'
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+        run: bash scripts/build-macos-preview.sh --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --output "$RUNNER_TEMP/macos-artifacts"
       - name: Build signed macOS artifacts with temporary own credentials
+        if: needs.resolve.outputs.prerelease != 'true'
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
@@ -187,7 +214,16 @@ jobs:
         run: |
           & windows/tests/Test-ReleaseInstallerName.ps1
           & windows/tests/Test-ReleaseArtifacts.ps1
+      - name: Build unsigned windows preview artifacts
+        if: needs.resolve.outputs.prerelease == 'true'
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+        run: |
+          & windows/scripts/Build-Release.ps1 -Version $env:RELEASE_VERSION -SourceCommit $env:SOURCE_COMMIT -OutputDirectory (Join-Path $env:RUNNER_TEMP 'windows-artifacts') -Development
       - name: Build signed Windows artifacts with temporary own credentials
+        if: needs.resolve.outputs.prerelease != 'true'
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
@@ -240,6 +276,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
           SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
           BUILD_NUMBER: ${{ needs.resolve.outputs.build_number }}
+          PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
         run: |
           python3 - <<'PY'
           import os, shutil
@@ -254,7 +291,9 @@ jobs:
                   with (target / path.name).open('xb') as stream, path.open('rb') as source:
                       shutil.copyfileobj(source, stream)
           PY
-          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/release-artifacts" --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --build-number "$BUILD_NUMBER"
+          arguments=()
+          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease); fi
+          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/release-artifacts" --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --build-number "$BUILD_NUMBER" "${arguments[@]}"
       - uses: actions/upload-artifact@v5
         with:
           name: release-artifacts
@@ -295,10 +334,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
+          DISTRIBUTION: ${{ needs.resolve.outputs.prerelease == 'true' && 'preview' || 'signed' }}
         run: |
           current=$(gh api repos/ekho/verbemo/git/ref/heads/master --jq .object.sha)
           if [ "$current" != "$SOURCE_COMMIT" ]; then
-            gh workflow run release.yml --repo ekho/verbemo --ref master -f ref=master -f operation=auto
+            gh workflow run release.yml --repo ekho/verbemo --ref master -f ref=master -f operation=auto -f distribution="$DISTRIBUTION"
           fi
 
   resume:

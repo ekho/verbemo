@@ -112,12 +112,14 @@ def write_appcast(directory: Path, version: str, build_number: int, signature: s
     return target
 
 
-def write_macos_receipt(directory: Path, version: str, source_commit: str, build_number: int) -> Path:
+def write_macos_receipt(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False) -> Path:
+    signature = ({'code_signing': 'ad-hoc', 'notarization': 'not-performed', 'sparkle': 'disabled'} if prerelease else
+                 {'developer_id': 'verified', 'notarization': 'accepted', 'staple': 'verified',
+                  'gatekeeper': 'accepted', 'sparkle_dmg': 'verified', 'sparkle_appcast': 'verified'})
+    names = (dmg_name(version),) if prerelease else (dmg_name(version), 'appcast.xml')
     receipt = {'platform': 'macos', 'version': version, 'source_commit': source_commit,
-               'build_number': build_number, 'signature': {'developer_id': 'verified',
-               'notarization': 'accepted', 'staple': 'verified', 'gatekeeper': 'accepted',
-               'sparkle_dmg': 'verified', 'sparkle_appcast': 'verified'},
-               'files': [file_record(directory / name) for name in (dmg_name(version), 'appcast.xml')]}
+               'build_number': build_number, 'signature': signature,
+               'files': [file_record(directory / name) for name in names]}
     path = directory / 'macos-build.json'
     with path.open('x') as stream:
         json.dump(receipt, stream, indent=2)
@@ -125,7 +127,7 @@ def write_macos_receipt(directory: Path, version: str, source_commit: str, build
     return path
 
 
-def validate_macos_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
+def validate_macos_release(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False) -> dict:
     """Validate the standalone macOS receipt and feed."""
     validate_version(version)
     if not re.fullmatch(r'[0-9a-f]{40}', source_commit) or type(build_number) is not int or build_number < 1:
@@ -135,17 +137,20 @@ def validate_macos_release(directory: Path, version: str, source_commit: str, bu
                        'build_number': build_number}.items():
         if receipt.get(key) != value:
             raise ValueError(f'macOS receipt {key} mismatch')
-    expected = {dmg_name(version), 'appcast.xml'}
+    expected = {dmg_name(version)} if prerelease else {dmg_name(version), 'appcast.xml'}
     files = receipt.get('files', [])
     if len(files) != len(expected) or {item.get('name') for item in files} != expected:
         raise ValueError('macOS receipt files mismatch')
     for item in files:
         if file_record(directory / item['name']) != item:
             raise ValueError(f'release file hash/size mismatch: {item["name"]}')
-    required = {'developer_id': 'verified', 'notarization': 'accepted', 'staple': 'verified',
-                'gatekeeper': 'accepted', 'sparkle_dmg': 'verified', 'sparkle_appcast': 'verified'}
+    required = ({'code_signing': 'ad-hoc', 'notarization': 'not-performed', 'sparkle': 'disabled'} if prerelease else
+                {'developer_id': 'verified', 'notarization': 'accepted', 'staple': 'verified',
+                 'gatekeeper': 'accepted', 'sparkle_dmg': 'verified', 'sparkle_appcast': 'verified'})
     if receipt.get('signature') != required:
         raise ValueError('macOS signature validation missing')
+    if prerelease:
+        return receipt
     rss = ET.parse(directory / 'appcast.xml').getroot()
     channel = rss.find('channel')
     if (rss.tag != 'rss' or len(rss.findall('channel')) != 1 or len(rss.findall('.//enclosure')) != 1
@@ -169,19 +174,22 @@ def validate_macos_release(directory: Path, version: str, source_commit: str, bu
     return receipt
 
 
-def validate_windows_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
+def validate_windows_release(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False) -> dict:
     """Validate the Windows receipt without weakening the macOS-only API."""
     validate_version(version)
     if not re.fullmatch(r'[0-9a-f]{40}', source_commit) or type(build_number) is not int or build_number < 1:
         raise ValueError('invalid source commit or build number')
     receipt = json.loads((directory / 'windows-build.json').read_text())
     for key, value in {'platform': 'windows', 'version': version, 'source_commit': source_commit,
-                       'build_number': build_number, 'publishable': True}.items():
+                       'build_number': build_number, 'publishable': not prerelease}.items():
         if receipt.get(key) != value:
             raise ValueError(f'Windows receipt {key} mismatch')
     signature = receipt.get('signature', {})
-    if (signature.get('authenticode') != 'verified' or signature.get('timestamp') != 'verified'
-            or not re.fullmatch(r'[A-F0-9]{40}', signature.get('certificate_thumbprint', ''))):
+    if prerelease:
+        if signature != {'authenticode': 'unsigned-development', 'timestamp': 'unverified', 'certificate_thumbprint': None}:
+            raise ValueError('Windows unsigned receipt validation missing')
+    elif (signature.get('authenticode') != 'verified' or signature.get('timestamp') != 'verified'
+          or not re.fullmatch(r'[A-F0-9]{40}', signature.get('certificate_thumbprint', ''))):
         raise ValueError('Windows signature validation missing')
     installer = f'Verbemo-{version}-windows-x64-Setup.exe'
     portable = f'Verbemo-{version}-windows-x64-Portable.zip'
@@ -215,19 +223,24 @@ def validate_windows_release(directory: Path, version: str, source_commit: str, 
     return receipt
 
 
-def validate_release(directory: Path, version: str, source_commit: str, build_number: int) -> dict:
+def validate_release(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False) -> dict:
     """The common set is closed: no unvalidated sidecars or extra platforms."""
-    receipts = [validate_macos_release(directory, version, source_commit, build_number),
-                validate_windows_release(directory, version, source_commit, build_number)]
+    if type(prerelease) is not bool:
+        raise ValueError('prerelease must be a boolean')
+    receipts = [validate_macos_release(directory, version, source_commit, build_number, prerelease),
+                validate_windows_release(directory, version, source_commit, build_number, prerelease)]
     names = [item['name'] for receipt in receipts for item in receipt['files']]
     names += ['macos-build.json', 'windows-build.json']
     if len(names) != len(set(names)):
         raise ValueError('duplicate release filename')
     if {p.name for p in directory.iterdir()} - set(names) - {'release-manifest.json', 'SHA256SUMS'}:
         raise ValueError('unexpected release files')
-    return {'schema': 1, 'repository': 'ekho/verbemo', 'tag': f'verbemo-v{version}',
+    result = {'schema': 1, 'repository': 'ekho/verbemo', 'tag': f'verbemo-v{version}',
             'version': version, 'source_commit': source_commit, 'build_number': build_number,
             'files': [file_record(directory / name) for name in sorted(names)]}
+    if prerelease:
+        result['prerelease'] = True
+    return result
 
 
 def checksum_bytes(directory: Path, names) -> bytes:
@@ -255,6 +268,7 @@ def main():
     parser.add_argument('--build-number', type=int)
     parser.add_argument('--signature')
     parser.add_argument('--minimum', default='14.2')
+    parser.add_argument('--prerelease', action='store_true')
     args = parser.parse_args()
     try:
         if args.command == 'preflight':
@@ -262,16 +276,17 @@ def main():
             for name in (dmg_name(args.version), 'appcast.xml', 'macos-build.json'):
                 if (args.output / name).exists():
                     raise ValueError(f'release output already exists: {name}')
-            validate_credentials(os.environ)
+            if not args.prerelease:
+                validate_credentials(os.environ)
             print(build)
         elif args.command == 'appcast':
             write_appcast(args.output, args.version, args.build_number, args.signature, args.minimum)
         elif args.command == 'receipt':
-            write_macos_receipt(args.output, args.version, args.source_commit, args.build_number)
+            write_macos_receipt(args.output, args.version, args.source_commit, args.build_number, args.prerelease)
         elif args.command == 'validate-macos':
-            validate_macos_release(args.output, args.version, args.source_commit, args.build_number)
+            validate_macos_release(args.output, args.version, args.source_commit, args.build_number, args.prerelease)
         else:
-            validate_release(args.output, args.version, args.source_commit, args.build_number)
+            validate_release(args.output, args.version, args.source_commit, args.build_number, args.prerelease)
     except (ValueError, OSError, ET.ParseError) as error:
         parser.exit(1, f'release: {error}\n')
 

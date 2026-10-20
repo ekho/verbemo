@@ -50,8 +50,17 @@ jobs:
           # them run here whether or not they are found: a missing asset is
           # a failure on CI rather than the skip it is on a fresh checkout.
           VERBEMO_REQUIRE_LOCALVQE: "1"
-      - name: Universal development build without release credentials
-        run: make app SIGN_ID=-
+      - name: Universal preview build without release credentials
+        run: |
+          bash scripts/build-macos-preview.sh --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/verbemo-macos-preview"
+      - name: Retain checked ad-hoc macOS packages for acceptance
+        uses: actions/upload-artifact@v5
+        with:
+          name: Verbemo-macos-preview-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verbemo-macos-preview/*
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Landing checks
         run: python3 landing/tests/check.py
       - uses: actions/setup-node@v6
@@ -131,3 +140,46 @@ jobs:
           path: ${{ runner.temp }}/verbemo-development/*
           if-no-files-found: error
           retention-days: 7
+
+  preview:
+    needs: [test, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source checkout
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual=$(git rev-parse HEAD)
+          shallow=$(git rev-parse --is-shallow-repository)
+          printf 'Expected source: %s\nActual source: %s\nShallow: %s\n' "$EXPECTED_SOURCE_COMMIT" "$actual" "$shallow"
+          test "$actual" = "$EXPECTED_SOURCE_COMMIT"
+          test "$shallow" = false
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: Verbemo-*
+          path: ${{ runner.temp }}/preview-platforms
+      - name: Validate both unsigned preview platform sets
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          platforms = list((root / 'preview-platforms').iterdir())
+          if len(platforms) != 2:
+              raise ValueError('both platform artifact sets are required')
+          target = root / 'preview-artifacts'
+          target.mkdir()
+          for platform in platforms:
+              for path in platform.iterdir():
+                  if not path.is_file() or path.is_symlink():
+                      raise ValueError('unsafe platform artifact')
+                  with (target / path.name).open('xb') as stream, path.open('rb') as source:
+                      shutil.copyfileobj(source, stream)
+          PY
+          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/preview-artifacts" --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --build-number "$(git rev-list --count HEAD)" --prerelease --dry-run

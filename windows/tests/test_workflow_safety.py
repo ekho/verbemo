@@ -15,6 +15,32 @@ def workflow(name):
 
 
 class CommonReleaseWorkflowTests(unittest.TestCase):
+    def test_preview_distribution_uses_no_release_credentials_and_keeps_signed_mode(self):
+        data = workflow('release.yml')
+        distribution = data['on']['workflow_dispatch']['inputs'].get('distribution', {})
+        self.assertEqual(distribution.get('default'), 'preview')
+        self.assertEqual(distribution.get('options'), ['preview', 'signed'])
+        jobs = data['jobs']
+        self.assertEqual(jobs['resolve']['outputs']['prerelease'], '${{ steps.distribution.outputs.prerelease }}')
+        for platform in ('macos', 'windows'):
+            steps = jobs[platform]['steps']
+            preview = next(s for s in steps if s.get('name') == f'Build unsigned {platform} preview artifacts')
+            self.assertEqual(preview['if'], "needs.resolve.outputs.prerelease == 'true'")
+            self.assertNotIn('secrets.', str(preview))
+            signed = next(s for s in steps if s.get('name', '').startswith('Build signed'))
+            self.assertEqual(signed['if'], "needs.resolve.outputs.prerelease != 'true'")
+
+    def test_pr_ci_validates_the_two_real_platform_artifact_sets_without_publication(self):
+        data = workflow('ci.yml')
+        job = data['jobs'].get('preview', {})
+        self.assertEqual(set(job.get('needs', [])), {'test', 'windows'})
+        self.assertNotIn('secrets.', str(job))
+        self.assertNotIn('permissions', job)
+        command = '\n'.join(step.get('run', '') for step in job['steps'])
+        self.assertIn('release.py prepare', command)
+        self.assertIn('--prerelease --dry-run', command)
+        self.assertNotIn('release.py publish', command)
+
     def test_automatic_release_uses_the_version_commit_and_gates_both_platforms(self):
         data = workflow('release.yml')
         self.assertEqual(data['on'].get('push', {}).get('branches'), ['master'])
@@ -78,7 +104,7 @@ else:
 ''')
             gh.chmod(0o755)
             env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
-                   'SOURCE_COMMIT': 'a' * 40, 'TRACE': str(trace)}
+                   'SOURCE_COMMIT': 'a' * 40, 'TRACE': str(trace), 'DISTRIBUTION': 'preview'}
             for head, fails, dispatches in [('a' * 40, False, False), ('b' * 40, False, True),
                                            ('b' * 40, True, False)]:
                 with self.subTest(head=head, api_fails=fails):
@@ -92,7 +118,7 @@ else:
                     if dispatches:
                         self.assertEqual(json.loads(trace.read_text()), ['workflow', 'run', 'release.yml',
                                          '--repo', 'ekho/verbemo', '--ref', 'master', '-f', 'ref=master',
-                                         '-f', 'operation=auto'])
+                                         '-f', 'operation=auto', '-f', 'distribution=preview'])
 
     def test_windows_packaging_file_inputs_exist(self):
         builder = (ROOT / 'windows/scripts/Build-Release.ps1').read_text()
@@ -204,7 +230,7 @@ else:
         mac = '\n'.join(s.get('run', '') for s in data['jobs']['test']['steps'])
         win = '\n'.join(s.get('run', '') for s in data['jobs']['windows']['steps'])
         self.assertIn('swift test --no-parallel', mac)
-        self.assertIn('make app SIGN_ID=-', mac)
+        self.assertIn('build-macos-preview.sh', mac)
         self.assertIn('test_independent_product.py --all', mac)
         self.assertIn('Test-ReleaseInstallerName.ps1', win)
         self.assertIn('Test-ReleaseArtifacts.ps1', win)

@@ -16,6 +16,8 @@ def generate(artifacts, output, winget_id=None):
             r'[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9][A-Za-z0-9_-]*)+', winget_id)):
         raise ValueError('WinGet needs an explicitly chosen Publisher.Package catalog identifier')
     data, records = prepared(artifacts)
+    if data.get('prerelease', False):
+        raise ValueError('package catalogs require a signed stable release')
     version = data['version']
     base = f'https://github.com/ekho/verbemo/releases/download/{data["tag"]}/'
     portable = f'Verbemo-{version}-windows-x64-Portable.zip'
