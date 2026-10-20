@@ -5,10 +5,11 @@ using System.Text.Json;
 using Verbemo.App;
 using Verbemo.Core.Configuration;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Verbemo.Live.Tests;
 
-public sealed class ProcessingHookTests
+public sealed class ProcessingHookTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task An_open_hook_does_not_block_the_next_session_or_run_twice()
@@ -63,15 +64,26 @@ public sealed class ProcessingHookTests
             await repeated.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Single(await File.ReadAllLinesAsync(Path.Combine(sessions[1], "hook.runs")));
         }
+        catch (Exception exception)
+        {
+            output.WriteLine("Hook assertions failed before cleanup: {0}", exception);
+            throw;
+        }
         finally
         {
+            output.WriteLine("Releasing hooks in {0} at {1:O}", root, DateTimeOffset.UtcNow);
             foreach (var session in sessions) await File.WriteAllTextAsync(Path.Combine(session, "release"), "release");
             await processor.DisposeAsync();
             foreach (var session in sessions)
             {
                 var path = Path.Combine(session, "hook.pid");
-                if (!File.Exists(path)) continue;
+                if (!File.Exists(path))
+                {
+                    output.WriteLine("No PID published for {0}", session);
+                    continue;
+                }
                 var pid = int.Parse((await File.ReadAllTextAsync(path)).Trim());
+                output.WriteLine("Waiting for hook PID {0} in {1}", pid, session);
                 try
                 {
                     using var hook = Process.GetProcessById(pid);
