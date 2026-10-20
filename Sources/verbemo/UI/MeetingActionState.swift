@@ -2,7 +2,7 @@ import Foundation
 
 /// One availability decision shared by menu items and content buttons.
 struct MeetingActionState {
-    enum Action: CaseIterable {
+    enum Action: String, CaseIterable {
         case rename, copyTranscript, retranscribe, copySummary, regenerateSummary, openFolder, delete
     }
     var transcriptReady: Bool
@@ -13,6 +13,7 @@ struct MeetingActionState {
     var configReadable: Bool
     var transcriptionEnabled: Bool
     var summaryEnabled: Bool
+    var hasPendingTranscript = false
 
     func reason(for action: Action) -> String? {
         switch action {
@@ -29,7 +30,7 @@ struct MeetingActionState {
             if action == .delete { return nil }
             if !configReadable { return localised("Fix config.json before processing.", "Сначала исправьте config.json.") }
             if action == .regenerateSummary {
-                if !transcriptReady { return localised("A finished transcript is required.", "Сначала нужна готовая расшифровка.") }
+                if !transcriptReady || hasPendingTranscript { return localised("A finished transcript is required.", "Сначала нужна готовая расшифровка.") }
                 if !summaryEnabled { return localised("Enable summary generation in settings.", "Включите создание сводки в настройках.") }
             } else {
                 if !hasAudio { return localised("The source audio was not kept.", "Исходное аудио не сохранено.") }

@@ -297,7 +297,7 @@ enum TranscriptVersions {
     }
 }
 
-private enum RecordingsEngineName {
+enum RecordingsEngineName {
     static func name(_ id: String) -> String {
         switch id {
         case "local", "parakeet": return "Parakeet"

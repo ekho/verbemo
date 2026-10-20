@@ -653,6 +653,7 @@ final class AppController {
     /// to happen when the quit came from ⌘Q or the Dock rather than from us.
     /// Idempotent: stopSession does nothing without a session.
     func finishForTermination() {
+        if recordingsBuilt { recordings.cancelPendingDeletion() }
         // `applicationShouldTerminate` normally waits for this cancellation.
         // Keep the request here too for shutdown paths that skip that hook.
         mediaImportTask?.cancel()
