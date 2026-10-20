@@ -13,7 +13,7 @@ on:
         description: Stable version matching VERSION (ignored for auto)
         required: false
       distribution:
-        description: Unsigned preview or signed stable release (resume reads the manifest)
+        description: Unsigned macOS preview (signed builds paused for issue 19; resume reads the manifest)
         type: choice
         options: [preview, signed]
         default: preview
@@ -53,7 +53,9 @@ jobs:
         run: |
           case "$DISTRIBUTION" in
             preview) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
-            signed) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
+            signed)
+              echo '::error::Signed builds are paused until Windows is restored: https://github.com/ekho/verbemo/issues/19'
+              exit 1 ;;
             *) exit 1 ;;
           esac
       - uses: actions/checkout@v6
@@ -78,7 +80,7 @@ jobs:
           PRERELEASE: ${{ steps.distribution.outputs.prerelease }}
         run: |
           arguments=()
-          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease); fi
+          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease --macos-only); fi
           node scripts/release-automation/auto-release.mjs "${arguments[@]}"
       - name: Persist the version and select the exact build source
         if: steps.version.outputs.release == 'true'
@@ -196,7 +198,8 @@ jobs:
           retention-days: 7
 
   windows:
-    if: needs.resolve.outputs.release != 'false'
+    # Restore this job and common aggregate after https://github.com/ekho/verbemo/issues/19.
+    if: ${{ false }}
     needs: resolve
     runs-on: windows-2025
     timeout-minutes: 120
@@ -259,7 +262,7 @@ jobs:
           retention-days: 7
 
   aggregate:
-    needs: [resolve, macos, windows]
+    needs: [resolve, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -269,7 +272,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v5
         with:
-          pattern: platform-*
+          pattern: platform-macos
           path: ${{ runner.temp }}/platforms
       - name: Combine without filename collisions and validate the complete set
         env:
@@ -284,7 +287,7 @@ jobs:
           root = Path(os.environ['RUNNER_TEMP'])
           target = root / 'release-artifacts'
           target.mkdir()
-          for platform in ('platform-macos', 'platform-windows'):
+          for platform in ('platform-macos',):
               for path in (root / 'platforms' / platform).iterdir():
                   if not path.is_file() or path.is_symlink():
                       raise ValueError('unsafe platform artifact')
@@ -292,7 +295,7 @@ jobs:
                       shutil.copyfileobj(source, stream)
           PY
           arguments=()
-          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease); fi
+          if [ "$PRERELEASE" = true ]; then arguments+=(--prerelease --macos-only); fi
           python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/release-artifacts" --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --build-number "$BUILD_NUMBER" "${arguments[@]}"
       - uses: actions/upload-artifact@v5
         with:

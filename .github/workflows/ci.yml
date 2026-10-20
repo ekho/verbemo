@@ -93,6 +93,8 @@ jobs:
         run: python3 Tests/scripts/test_independent_product.py --all
 
   windows:
+    # Restore this job and preview dependency after https://github.com/ekho/verbemo/issues/19.
+    if: ${{ false }}
     runs-on: windows-2025
     timeout-minutes: 120
     steps:
@@ -155,7 +157,7 @@ jobs:
           retention-days: 7
 
   preview:
-    needs: [test, windows]
+    needs: [test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -175,17 +177,17 @@ jobs:
           test "$shallow" = false
       - uses: actions/download-artifact@v5
         with:
-          pattern: Verbemo-*
+          pattern: Verbemo-macos-preview-*
           path: ${{ runner.temp }}/preview-platforms
-      - name: Validate both unsigned preview platform sets
+      - name: Validate the macOS-only unsigned preview set
         run: |
           python3 - <<'PY'
           import os, shutil
           from pathlib import Path
           root = Path(os.environ['RUNNER_TEMP'])
           platforms = list((root / 'preview-platforms').iterdir())
-          if len(platforms) != 2:
-              raise ValueError('both platform artifact sets are required')
+          if len(platforms) != 1:
+              raise ValueError('exactly one macOS artifact set is required')
           target = root / 'preview-artifacts'
           target.mkdir()
           for platform in platforms:
@@ -195,4 +197,4 @@ jobs:
                   with (target / path.name).open('xb') as stream, path.open('rb') as source:
                       shutil.copyfileobj(source, stream)
           PY
-          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/preview-artifacts" --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --build-number "$(git rev-list --count HEAD)" --prerelease --dry-run
+          python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/preview-artifacts" --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --build-number "$(git rev-list --count HEAD)" --prerelease --macos-only --dry-run
