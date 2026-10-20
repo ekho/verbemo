@@ -46,6 +46,7 @@ final class ApplicationWindow: NSObject {
         get { recordingBar.title }
         set { recordingBar.title = newValue; liveView.title = newValue }
     }
+    private var appearance: AppearanceController?
     var toolbarIsHidden: Bool { toolbar.isHidden }
     var primaryActionsAreVisible: Bool { !actions.isHidden }
     var recordingBarIsVisible: Bool { !recordingBar.isHidden }
@@ -113,6 +114,7 @@ final class ApplicationWindow: NSObject {
             root.leadingAnchor.constraint(equalTo: container.leadingAnchor), root.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         ])
         panel.contentView = container
+        appearance = AppearanceController(window: panel)
         panel.contentMinSize = NSSize(width: 700, height: 600)
         panel.setFrameAutosaveName("name.ekho.verbemo.workspace")
         if panel.frame.origin == .zero { panel.center() }
@@ -128,6 +130,11 @@ final class ApplicationWindow: NSObject {
         actions.isHidden = destination != .allMeetings
         let content: NSView
         if destination.isMeetings, let library = libraryProvider?() {
+            library.applyFilter(destination)
+            library.onDetailVisibilityChange = { [weak self] visible in
+                guard let self, self.navigation.destination.isMeetings else { return }
+                self.title.isEnabled = visible || self.navigation.destination != .allMeetings
+            }
             content = library.contentView
         } else if destination == .about {
             content = SetupLayout.scroller(around: about.contentView)
@@ -187,7 +194,7 @@ final class ApplicationWindow: NSObject {
     }
     func pauseRecording() { if recordingBarIsVisible { onTogglePause?() } }
     func stopRecording() { if recordingBarIsVisible { onToggle?() } }
-    @objc private func showAll() { navigation.showAllMeetings(); navigate(.allMeetings) }
+    @objc private func showAll() { navigation.showAllMeetings(); libraryProvider?()?.applyFilter(.allMeetings, clearSearch: true); navigate(.allMeetings) }
     @objc private func importClicked() { onChooseImport?() }
     @objc private func startClicked() { startRecording() }
 }

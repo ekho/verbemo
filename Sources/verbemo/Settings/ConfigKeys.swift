@@ -59,6 +59,7 @@ extension Config {
         case dockIcon = "dock_icon"
         case menuBarIcon = "menu_bar_icon"
         case window
+        case interfaceTheme = "interface_theme"
         case interfaceLanguage = "interface_language"
         case keepAudio = "keep_audio"
         case summaryEnabled = "summary.enabled"

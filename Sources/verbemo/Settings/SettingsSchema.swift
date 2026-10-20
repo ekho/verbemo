@@ -518,6 +518,9 @@ enum SettingsSchema {
             // it is written in. It is named at length because two other
             // settings are called language and mean other people's words —
             // see `InterfaceLanguage`.
+            Entry(["interface_theme"], localised("Theme", "Тема"),
+                  localised("System follows this Mac’s appearance.", "Системная тема следует настройке macOS."),
+                  .choice(["system", "light", "dark"]), default: "system"),
             Entry(["interface_language"],
                   localised("Language of verbemo's own windows", "Язык окон verbemo"),
                   localised(

@@ -37,7 +37,7 @@ final class AboutWindow: NSObject {
         panel.isReleasedWhenClosed = false
 
         let icon = NSImageView()
-        icon.image = NSApp.applicationIconImage
+        icon.image = NSApplication.shared.applicationIconImage
         icon.setAccessibilityLabel("Verbemo")
         icon.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -56,14 +56,14 @@ final class AboutWindow: NSObject {
         version.isHidden = Self.versionLine == nil
 
         let tagline = NSTextField(labelWithString: localised(
-            "Records your meetings and keeps them on this Mac. Based on Amanu by Samat Galimov (MIT).",
-            "Записывает встречи и держит их на этом Маке. На основе Amanu Самата Галимова (MIT)."))
+            "Records microphone and call audio, transcribes live and after meetings, separates speakers, and creates summaries with decisions and tasks. Keeps recordings and results on your computer, with a choice of local models or cloud services.",
+            "Записывает звук с микрофона и из приложений звонков, расшифровывает речь в реальном времени и после встречи. Разделяет реплики по говорящим и готовит сводку с решениями и задачами. Хранит записи и результаты на компьютере. Для обработки можно выбрать локальные модели или облачные сервисы."))
         tagline.font = .systemFont(ofSize: 12)
         tagline.textColor = .secondaryLabelColor
         tagline.alignment = .center
         tagline.lineBreakMode = .byWordWrapping
         tagline.maximumNumberOfLines = 0
-        tagline.preferredMaxLayoutWidth = 260
+        tagline.preferredMaxLayoutWidth = hostWindow == nil ? 260 : 620
 
         linkButtons = [
             link(localised("Source code on GitHub", "Исходный код на GitHub"), Self.sourceRepository),

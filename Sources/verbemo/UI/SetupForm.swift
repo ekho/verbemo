@@ -253,7 +253,20 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private var summaryToolRuns: [String: Bool] = [:]
 
 
-    override init() {
+    private let forSettings: Bool
+    private(set) var settingsPages: [ApplicationNavigationState.Destination: FlippedStackView] = [:]
+    static var settingsCoveredPaths: Set<String> {
+        var paths: Set<String> = ["auto_record.enabled", "recordings_dir", "keep_audio", "menu_bar_icon", "dock_icon",
+            "transcription.enabled", "transcription.engine", "transcription.cloud", "summary.enabled", "summary.backend",
+            "summary.openai_base_url", "summary.openai_model", "summary.openai_compatible", "summary.ollama_base_url", "summary.ollama_model"]
+        if Platform.supportsLocalModels {
+            paths.formUnion(["transcription.local_engine", "transcription.local_diarization", "transcription.diarization_model", "live_transcription.enabled"])
+        }
+        return paths
+    }
+    override convenience init() { self.init(forSettings: false) }
+    init(forSettings: Bool) {
+        self.forSettings = forSettings
         super.init()
 
         let form = view
@@ -267,6 +280,27 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         micRow.identifier = NSUserInterfaceItemIdentifier("access.microphone")
         audioRow.identifier = NSUserInterfaceItemIdentifier("access.system-audio")
         calendarRow.identifier = NSUserInterfaceItemIdentifier("access.calendar")
+        if forSettings {
+            func page(_ destination: ApplicationNavigationState.Destination, _ content: [NSView]) {
+                let page = FlippedStackView(views: content)
+                page.orientation = .vertical
+                page.alignment = .leading
+                page.spacing = SetupLayout.sectionGap
+                page.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 24, right: 24)
+                for child in content { child.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -48).isActive = true }
+                settingsPages[destination] = page
+            }
+            page(.general, [SetupLayout.box([launchRow, menuBarIconRow(), dockIconRow()]), noIconsNote])
+            page(.recording, [SetupLayout.box([micRow, audioRow, calendarRow]), SetupLayout.box([autoRecordRow()])])
+            var transcription = [transcriptionRows()]
+            if Platform.supportsLocalModels {
+                transcription.append(SetupLayout.section(localised("Speaker separation", "Разделение говорящих"), content: diarizationRow()))
+                transcription.append(SetupLayout.box([liveTranscriptionRow()]))
+            }
+            page(.transcription, transcription)
+            page(.summary, [SetupLayout.section(localised("Summary", "Сводка"), leading: summariesOn, content: summaryChoices())])
+            page(.storage, [SetupLayout.box([folderRow(), keepAudioRow()])])
+        } else {
         form.addArrangedSubview(configProblems)
         form.addArrangedSubview(SetupLayout.section(
             localised("Access", "Доступ"),
@@ -311,6 +345,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         for view in form.arrangedSubviews {
             view.widthAnchor.constraint(
                 equalTo: form.widthAnchor, constant: -2 * SetupLayout.gutter).isActive = true
+        }
+
         }
 
         // Names for the switches that do not depend on the words beside
@@ -913,11 +949,14 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 localised("Install Ollama", "Установить Ollama"),
                 "https://ollama.com/download/mac")])
 
-        summaryCards.adopt([claude, codex, key, ollama])
+        let automatic = ChoiceCard(id: "auto", title: localised("Automatic", "Автоматически"),
+            detail: localised("Use the available summary services in the configured fallback order.", "Использовать доступные сервисы по порядку резервирования."))
+        summaryCards.adopt(forSettings ? [automatic, claude, codex, key, ollama] : [claude, codex, key, ollama])
         summaryCards.onChange = { [weak self] id in
             guard let self else { return }
-            Config.update(path: ["summary", "backend"], value: SetupSelection.summaryBackend(
-                choice: id, keyBackend: self.selectedKeyBackend))
+            let backend = self.forSettings && id == "claude-cli" ? "claude-cli"
+                : id == "auto" ? nil : SetupSelection.summaryBackend(choice: id, keyBackend: self.selectedKeyBackend)
+            Config.update(path: ["summary", "backend"], value: backend)
             self.refresh()
         }
         let disclosure = SetupLayout.detail(
@@ -927,7 +966,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             lines: 2,
             width: 520)
         return SetupLayout.group(
-            [SetupLayout.cards([claude, codex, key]), ollama, disclosure],
+            [SetupLayout.cards(forSettings ? [automatic, claude, codex, key] : [claude, codex, key]), ollama, disclosure],
             spacing: SetupLayout.cardGap)
     }
 
@@ -1890,7 +1929,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let summary = Config.summary()
         summariesOn.state = summary.enabled ? .on : .off
         let backendIsKey = summary.backend == "anthropic-api" || summary.backend == "openai-api"
-        summaryCards.select(SetupSelection.summaryChoice(backend: summary.backend))
+        summaryCards.select(forSettings && summary.backend == "auto" ? "auto" : SetupSelection.summaryChoice(backend: summary.backend))
         if backendIsKey {
             keyProvider.selectedSegment = summary.backend == "anthropic-api" ? 1
                 : (summary.openAICompatible ? 2 : 0)
