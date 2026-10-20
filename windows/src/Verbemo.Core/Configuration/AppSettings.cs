@@ -34,6 +34,9 @@ public sealed class AppSettings
     [JsonPropertyName("interface_language")]
     public string InterfaceLanguage { get; set; } = "auto";
 
+    [JsonPropertyName("interface_theme")]
+    public string InterfaceTheme { get; set; } = "system";
+
     [JsonPropertyName("user_name")]
     public string? UserName { get; set; }
 

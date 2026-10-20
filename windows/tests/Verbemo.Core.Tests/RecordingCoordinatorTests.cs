@@ -9,6 +9,25 @@ public sealed class RecordingCoordinatorTests
         new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task Edited_live_title_survives_pause_and_stop_without_a_second_capture()
+    {
+        using var root = new TemporaryDirectory();
+        var capture = new InspectableCapture();
+        await using var coordinator = Coordinator(root.Path, capture);
+        await coordinator.StartManualAsync(Started);
+        var directory = coordinator.State.SessionDirectory!;
+        await coordinator.RenameAsync("Edited meeting");
+        Assert.Contains("Edited meeting", File.ReadAllText(Path.Combine(directory, ".recording.json")));
+        await coordinator.TogglePauseAsync();
+        await coordinator.TogglePauseAsync();
+        await coordinator.StartManualAsync(Started.AddSeconds(1));
+        Assert.Equal(directory, coordinator.State.SessionDirectory);
+        await coordinator.StopAsync(Started.AddMinutes(1), "manual");
+        Assert.Contains("Edited meeting", File.ReadAllText(Path.Combine(directory, "meta.json")));
+        Assert.Single(Directory.GetDirectories(root.Path));
+    }
+
+    [Fact]
     public async Task Manual_start_and_stop_leave_a_complete_session()
     {
         using var root = new TemporaryDirectory();

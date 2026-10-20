@@ -32,6 +32,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     private readonly AppSettingsStore store;
     private readonly SessionStore sessions;
     private readonly RecordingCoordinator coordinator;
+    internal SessionDeletionController Deletions { get; }
     private readonly CallActivityMonitor activityMonitor;
     private readonly HttpClient httpClient;
     private readonly SecretStore secrets;
@@ -76,11 +77,17 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         models = new ModelManager(dataDirectory, httpClient);
         analytics = new AnalyticsService(dataDirectory, () => Settings, () => !ConfigUnreadable, httpClient);
         processing = new ProcessingCoordinator(() => Settings, () => !ConfigUnreadable, secrets, models, httpClient, analytics);
+        Deletions = new SessionDeletionController(processing.TryReserveIdleSession, directory =>
+            Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(directory, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin));
+        Deletions.Changed += (_, _) => SessionsChanged?.Invoke(this, EventArgs.Empty);
+        Deletions.Failed += (_, error) => Notify("Verbemo", error.Message, NotificationKind.Error);
         liveTranscription = new LiveTranscriptionCoordinator(capture, models, () => Settings);
 
         coordinator.StateChanged += (_, state) =>
         {
             StateChanged?.Invoke(this, state);
+            SessionsChanged?.Invoke(this,EventArgs.Empty);
             if (state.IsRecording)
                 _ = analytics.RecordAsync("recording_started", new Dictionary<string, object?> { ["trigger"] = TriggerName(state.Trigger) });
         };
@@ -117,6 +124,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         };
         processing.SessionsChanged += (_, _) => SessionsChanged?.Invoke(this, EventArgs.Empty);
         models.Progress += (_, progress) => DownloadProgressChanged?.Invoke(this, progress);
+        models.DownloadStateChanged += (_, _) => ModelDownloadsChanged?.Invoke(this,EventArgs.Empty);
         models.DownloadStarted += (_, item) => _ = analytics.RecordAsync("model_download_started", new Dictionary<string, object?> { ["asset"] = AnalyticsAsset(item) });
         models.DownloadFinished += (_, item) =>
         {
@@ -191,6 +199,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public event EventHandler? SessionsChanged;
     public event EventHandler<LiveLine>? LiveLineReady;
     public event EventHandler<string>? LiveStatusChanged;
+    public event EventHandler? ModelDownloadsChanged;
     /// <summary>Settings or their problems changed — here or in the file.</summary>
     public event EventHandler? SettingsChanged;
     public event EventHandler<(string Title, string Message, NotificationKind Kind)>? NotificationRequested;
@@ -392,6 +401,8 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public Task TogglePauseAsync() => coordinator.TogglePauseAsync();
 
+    public Task RenameRecordingAsync(string title) => coordinator.RenameAsync(title);
+
     public async Task StopForExitAsync()
     {
         if (State.IsRecording) await coordinator.StopAsync(DateTimeOffset.Now, "quit");
@@ -454,8 +465,27 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     // MARK: sessions
 
-    public Task<IReadOnlyList<SessionListItem>> LoadSessionsAsync(CancellationToken cancellationToken = default) =>
-        SessionInventory.ScanAsync(Settings.RecordingsDirectory, cancellationToken);
+    public async Task<IReadOnlyList<SessionListItem>> LoadSessionsAsync(CancellationToken cancellationToken = default) =>
+        (await SessionInventory.ScanAsync(Settings.RecordingsDirectory, cancellationToken)).Where(item => !Deletions.IsPending(item.Directory)).ToArray();
+
+    public void ScheduleDeletion(string directory)
+    {
+        if (string.Equals(State.SessionDirectory, directory, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(T("Finish the recording first.", "Сначала завершите запись."));
+        Deletions.Schedule(directory);
+    }
+
+    public async Task RenameSessionAsync(string directory, string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) throw new InvalidOperationException(T("Enter a meeting title.", "Введите название встречи."));
+        if (string.Equals(State.SessionDirectory, directory, StringComparison.OrdinalIgnoreCase)) { await RenameRecordingAsync(title); return; }
+        using var reservation = processing.TryReserveIdleSession(directory) ?? throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
+        var path = Path.Combine(directory, "meta.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))?.AsObject() ?? throw new InvalidDataException("Invalid meta.json");
+        json["title"] = title.Trim();
+        await AtomicFiles.WriteTextAsync(path, json.ToJsonString(AppSettings.JsonOptions), default);
+        SessionsChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public Task<string> ImportAsync(string source, CancellationToken cancellationToken = default) =>
         processing.ImportAsync(source, cancellationToken);
@@ -464,10 +494,16 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public Task RetranscribeAsync(string directory, string? engine) => processing.RetranscribeAsync(directory, engine);
 
+    public Task RegenerateSummaryAsync(string directory, CancellationToken cancellationToken = default) =>
+        processing.RegenerateSummaryAsync(directory, cancellationToken);
+
     public ProcessingStatus? ProcessingStatusFor(string directory) => processing.StatusFor(directory);
 
     public Task SetSpeakerNameAsync(string directory, string label, string name, CancellationToken cancellationToken = default, string? title = null) =>
         processing.SetSpeakerNameAsync(directory, label, name, cancellationToken, title);
+
+    public Task SetSpeakerParticipantAsync(string directory, string label, CalendarParticipant? participant, CancellationToken cancellationToken = default) =>
+        processing.SetSpeakerParticipantAsync(directory,label,participant,cancellationToken);
 
     /// <summary>Moves a session to the Recycle Bin, where it can still be got back.</summary>
     public void DeleteSession(string directory)
@@ -487,6 +523,15 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public bool IsLocalModelDownloading(string model) => models.IsDownloading(model);
     public bool LocalRuntimePresent => models.CliPath is not null;
     public long? LocalModelBytes(string model) => models.DownloadedBytes(model);
+    public void CancelModelDownload(string model) => models.CancelDownload(model);
+    public bool ModelInUse(string model) => State.IsRecording || IsProcessing
+        || model == Settings.Transcription.LocalEngine || model == Settings.Transcription.Engine
+        || model == "nemotron-live" && Settings.LiveTranscription.Enabled;
+    public void DeleteModel(string model)
+    {
+        models.Delete(model,ModelInUse(model));
+        SettingsChanged?.Invoke(this,EventArgs.Empty);
+    }
 
     public Task CompleteSetupAsync(CancellationToken cancellationToken = default) =>
         AtomicFiles.WriteJsonAsync(SetupPath, new { version = 1, completed_at = DateTimeOffset.UtcNow }, cancellationToken);
@@ -549,6 +594,8 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Deletions.Dispose();
+        models.CancelAllDownloads();
         if (disposed) return;
         disposed = true;
         SystemEvents.PowerModeChanged -= PowerModeChanged;

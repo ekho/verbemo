@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Verbemo.Core.Sessions;
 
 namespace Verbemo.Core.Processing;
 
@@ -19,7 +20,9 @@ public sealed record SessionListItem(
     int NamedSpeakerCount = 0,
     int SpeakerCount = 0,
     string? Problem = null,
-    IReadOnlyList<TranscriptVersion>? Transcripts = null);
+    IReadOnlyList<TranscriptVersion>? Transcripts = null,
+    MeetingCalendarMetadata? Calendar = null,
+    bool IsDiarized = false);
 
 /// <summary>What is in the recordings folder, read from the files each session leaves.</summary>
 public static class SessionInventory
@@ -99,7 +102,9 @@ public static class SessionInventory
             labels.Count(names.Contains),
             labels.Count,
             problem,
-            versions);
+            versions,
+            root.TryGetProperty("calendar",out var calendar) && calendar.ValueKind == JsonValueKind.Object ? MeetingCalendarMetadata.Parse(calendar) : null,
+            labels.Any(label => label != SpeakerLabels.Me && label != SpeakerLabels.Them));
     }
 
     private static ProcessingStep Step(string directory, string completedName, string prefix)

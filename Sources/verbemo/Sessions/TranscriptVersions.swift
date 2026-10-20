@@ -171,7 +171,11 @@ enum TranscriptVersions {
 
             let archive = try archiveCurrent(dir)
             let manual = SpeakerNames.read(from: dir)?.manual ?? [:]
-            let retained = preserveRemoteNames ? manual : manual.filter { $0.key == "me" }
+            let retained = (preserveRemoteNames ? manual : manual.filter { $0.key == "me" }).compactMapValues { entry -> SpeakerNames.Entry? in
+                guard entry.participantID != nil else { return entry }
+                // Raw speaker IDs may refer to different people in the new generation.
+                return entry.manualName.map { SpeakerNames.Entry(name: $0, source: .manual) }
+            }
             let names = retained.isEmpty ? nil : SpeakerNames(speakers: retained)
             let title = SessionState.value(dir, "transcript_session_name") as? String
                 ?? dir.lastPathComponent
@@ -297,7 +301,7 @@ enum TranscriptVersions {
     }
 }
 
-private enum RecordingsEngineName {
+enum RecordingsEngineName {
     static func name(_ id: String) -> String {
         switch id {
         case "local", "parakeet": return "Parakeet"

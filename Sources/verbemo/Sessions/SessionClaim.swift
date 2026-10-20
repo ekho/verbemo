@@ -99,7 +99,7 @@ enum SessionClaim {
                 return finishing
                     ? localised(
                         "verbemo is naming and summarizing this recording right now.",
-                        "verbemo прямо сейчас подбирает имена и пишет саммари для этой записи.")
+                        "verbemo прямо сейчас подбирает имена и создаёт сводку для этой записи.")
                     : localised(
                         "verbemo is transcribing this recording right now.",
                         "verbemo прямо сейчас расшифровывает эту запись.")
@@ -108,7 +108,7 @@ enum SessionClaim {
                 ? localised(
                     "Another verbemo (pid \(holder.pid)) is naming and summarizing this "
                         + "recording. Let it finish, then try again.",
-                    "Другая verbemo (pid \(holder.pid)) подбирает имена и пишет саммари для "
+                    "Другая verbemo (pid \(holder.pid)) подбирает имена и создаёт сводку для "
                         + "этой записи. Дайте ей закончить и попробуйте снова.")
                 : localised(
                     "Another verbemo (pid \(holder.pid)) is transcribing this recording. "

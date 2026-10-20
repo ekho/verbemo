@@ -14,8 +14,7 @@ public partial class App : System.Windows.Application
     private static VerbemoRuntime? runtime;
     private static StatusWindow? status;
     private static TrayIconService? tray;
-    private static RecordingsWindow? recordings;
-    private static SettingsWindow? settings;
+    private static ApplicationWindow? workspace;
     private static SetupWindow? setup;
     private static UpdateStartupAdmission? startupAdmission;
     private EventWaitHandle? doorbell;
@@ -102,8 +101,9 @@ public partial class App : System.Windows.Application
         runtime = VerbemoRuntime.Create();
         var background = e.Args.Contains("--background", StringComparer.OrdinalIgnoreCase);
 
-        status = new StatusWindow(runtime);
-        MainWindow = status;
+        status = new StatusWindow(runtime, embedded: true);
+        workspace = new ApplicationWindow(runtime, status);
+        MainWindow = workspace;
         tray = new TrayIconService(runtime, status);
         ListenForDoorbell();
 
@@ -159,25 +159,14 @@ public partial class App : System.Windows.Application
 
     public static void ShowRecordings()
     {
-        if (runtime is null) return;
-        if (recordings is null)
-        {
-            recordings = new RecordingsWindow(runtime);
-            recordings.Closed += (_, _) => recordings = null;
-        }
-        Bring(recordings);
+        workspace?.ShowDestination(ApplicationDestination.AllMeetings);
+        workspace?.Reveal();
     }
 
     public static void ShowSettings(int tab)
     {
-        if (runtime is null) return;
-        if (settings is null)
-        {
-            settings = new SettingsWindow(runtime);
-            settings.Closed += (_, _) => settings = null;
-        }
-        settings.ShowTab(tab);
-        Bring(settings);
+        workspace?.ShowDestination(ApplicationDestination.General);
+        workspace?.Reveal();
     }
 
     public static void ShowSetup()
@@ -195,7 +184,7 @@ public partial class App : System.Windows.Application
         Bring(setup);
     }
 
-    public static void ShowAbout() => Bring(new AboutWindow());
+    public static void ShowAbout() { workspace?.ShowDestination(ApplicationDestination.About); workspace?.Reveal(); }
 
     private static void Bring(Window window)
     {
@@ -247,6 +236,7 @@ public partial class App : System.Windows.Application
     {
         await TearDownAsync();
         status?.AllowClose();
+        workspace?.AllowClose();
         Current.Shutdown();
     }
 

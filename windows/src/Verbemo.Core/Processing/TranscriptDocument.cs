@@ -15,7 +15,11 @@ public sealed record TranscriptDocument(
     [property: JsonPropertyName("engine")] string Engine,
     [property: JsonPropertyName("model")] string Model,
     [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
-    [property: JsonPropertyName("segments")] IReadOnlyList<TranscriptSegment> Segments);
+    [property: JsonPropertyName("segments")] IReadOnlyList<TranscriptSegment> Segments)
+{
+    [JsonIgnore]
+    public bool IsDiarized => Segments?.Any(s => s.Speaker is { } label && label != SpeakerLabels.Me && label != SpeakerLabels.Them) == true;
+}
 
 public static class TranscriptWriter
 {

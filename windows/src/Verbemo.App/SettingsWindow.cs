@@ -151,7 +151,12 @@ internal sealed class AboutWindow : Window
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Icon = App.WindowIcon;
-        var stack = new StackPanel { Margin = new Thickness(32, 24, 32, 24), MaxWidth = 380 };
+        Content = CreateView();
+    }
+
+    internal static FrameworkElement CreateView()
+    {
+        var stack = new StackPanel { Margin = new Thickness(28), MaxWidth = 700, HorizontalAlignment = HorizontalAlignment.Left };
         stack.Children.Add(new System.Windows.Controls.Image { Source = App.WindowIcon, Width = 64, Height = 64, HorizontalAlignment = HorizontalAlignment.Left });
         var name = Ui.Title("Verbemo");
         name.FontSize = 20;
@@ -169,8 +174,7 @@ internal sealed class AboutWindow : Window
         support.Margin = new Thickness(16, 0, 0, 0);
         links.Children.Add(support);
         stack.Children.Add(links);
-        stack.Children.Add(Ui.Detail(T("Based on Amanu by Samat Galimov (MIT).", "На основе Amanu Самата Галимова (MIT).")));
         stack.Children.Add(Ui.Link(T("Origin and licenses", "Происхождение и лицензии"), "https://github.com/ekho/verbemo/blob/master/docs/origin.md"));
-        Content = stack;
+        return Ui.Scroll(stack);
     }
 }

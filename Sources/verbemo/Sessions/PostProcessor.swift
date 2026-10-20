@@ -49,7 +49,7 @@ enum PostProcessor {
     /// backends it failed with, so a `failed` step whose recorded fingerprint
     /// no longer matches `MeetingEgress.fingerprint` is offered once more. A
     /// `failed` with no fingerprint predates the rule and stays given up.
-    static func outstanding(_ dir: URL, policy: Policy = .configured) -> Work {
+    static func outstanding(_ dir: URL, policy: Policy = .configured, retryFailed: Bool = false) -> Work {
         let fm = FileManager.default
         func exists(_ name: String) -> Bool {
             fm.fileExists(atPath: dir.appendingPathComponent(name).path)
@@ -71,12 +71,12 @@ enum PostProcessor {
         var work = Work()
         work.names = policy.names
             && !exists(SpeakerNames.file)
-            && !gaveUp(SessionState.Key.speakersStatus, SessionState.Key.speakersFailedFor,
-                       .speakerNames)
+            && (retryFailed || !gaveUp(SessionState.Key.speakersStatus, SessionState.Key.speakersFailedFor,
+                       .speakerNames))
         work.summary = policy.summary
             && !hasCurrentSummary(dir, meta: meta)
-            && !gaveUp(SessionState.Key.summaryStatus, SessionState.Key.summaryFailedFor,
-                       .summary)
+            && (retryFailed || !gaveUp(SessionState.Key.summaryStatus, SessionState.Key.summaryFailedFor,
+                       .summary))
         return work
     }
 
@@ -88,6 +88,50 @@ enum PostProcessor {
         else { return false }
         let meta = meta ?? SessionState.read(dir) ?? [:]
         return meta[SessionState.Key.summaryStale] as? Bool != true
+    }
+
+    enum SummaryRegenerationError: LocalizedError {
+        case unavailable(String)
+        var errorDescription: String? {
+            switch self { case .unavailable(let reason): return reason }
+        }
+    }
+
+    /// Regenerate just this version's summary; keep the previous bytes on failure.
+    static func regenerateSummary(_ dir: URL, policy: Policy = .configured) async throws {
+        let root = try validatedSessionRoot(for: dir)
+        func validate() throws -> Transcript {
+            if let reason = Config.unreadableReason {
+                throw Refusal.configUnreadable(reason)
+            }
+            guard policy.summary else {
+                throw SummaryRegenerationError.unavailable(localised("Summary generation is off.", "Создание сводки выключено."))
+            }
+            guard !FileManager.default.fileExists(atPath: root.appendingPathComponent(".recording.json").path),
+                  !TranscriptVersions.isRequested(root), !TranscriptVersions.isRequested(dir), DiarizationState.persisted(in: dir).isFinal,
+                  let transcript = readTranscript(dir), !transcript.segments.isEmpty else {
+                throw SummaryRegenerationError.unavailable(localised("A finished transcript is required.", "Сначала нужна готовая расшифровка."))
+            }
+            return transcript
+        }
+        _ = try validate()
+        try SessionClaim.acquire(root, stage: .finish)
+        defer { SessionClaim.release(root) }
+        let transcript = try validate()
+        let meta = SessionState.read(root) ?? [:]
+        let calendar = meta["calendar"] as? [String: Any]
+        let title = (meta["title"] as? String) ?? (calendar?["title"] as? String) ?? root.lastPathComponent
+        var context = ["Meeting: \(title)"]
+        let attendees = MeetingCalendarMetadata.modelAttendees(calendar)
+        if !attendees.isEmpty {
+            context.append("Participants: " + attendees.joined(separator: ", "))
+        }
+        let names = SpeakerNames.read(from: dir)
+        guard await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir) != nil else {
+            throw SummaryRegenerationError.unavailable(localised(
+                "The summary could not be regenerated. The previous summary is preserved; see the session log.",
+                "Не удалось перегенерировать сводку. Предыдущая сводка сохранена; подробности в журнале встречи."))
+        }
     }
 
     /// Run whatever is outstanding for one session. Returns what it did.
@@ -107,7 +151,7 @@ enum PostProcessor {
     /// say which steps it is exercising instead of inheriting whatever the
     /// machine owner has turned on this week.
     @discardableResult
-    static func finish(_ dir: URL, policy: Policy = .configured) async -> Work {
+    static func finish(_ dir: URL, policy: Policy = .configured, retryFailed: Bool = false) async -> Work {
         // Both steps hand the transcript to a model chosen by the config, so
         // they wait while it cannot be read — see `Config.Unreadable`.
         if let reason = Config.unreadableReason {
@@ -115,9 +159,6 @@ enum PostProcessor {
                 "post-processing waits — config.json can't be read (\(reason))", to: dir)
             return Work()
         }
-        let work = outstanding(dir, policy: policy)
-        guard !work.isEmpty else { return work }
-
         do {
             try SessionClaim.acquire(dir, stage: .finish)
         } catch {
@@ -125,6 +166,9 @@ enum PostProcessor {
             return Work()
         }
         defer { SessionClaim.release(dir) }
+
+        let work = outstanding(dir, policy: policy, retryFailed: retryFailed)
+        guard !work.isEmpty else { return work }
 
         guard let transcript = readTranscript(dir) else {
             appendSessionLog("post-processing skipped — can't read transcript.json", to: dir)
@@ -134,7 +178,7 @@ enum PostProcessor {
         let meta = SessionState.read(dir) ?? [:]
         let calendar = meta["calendar"] as? [String: Any]
         let title = (meta["title"] as? String) ?? (calendar?["title"] as? String)
-        let attendees = calendar?["attendees"] as? [String] ?? []
+        let attendees = MeetingCalendarMetadata.modelAttendees(calendar)
         let app = meta["app"] as? String
 
         var names = SpeakerNames.read(from: dir)
@@ -274,7 +318,7 @@ enum PostProcessor {
     /// process` prints, `described` is what the recordings window puts in an
     /// alert, and the two are a line apart so that a reason cannot be added
     /// to one surface alone.
-    enum Refusal: Equatable, CustomStringConvertible {
+    enum Refusal: Error, Equatable, CustomStringConvertible {
         /// The config file cannot be read, carrying the parser's reason. Every
         /// plan waits on it: which engine, whether to summarize and where to,
         /// and the hook are all answers in the file.
@@ -312,7 +356,7 @@ enum PostProcessor {
                     "config.json can't be read (\(reason)), and until it can, transcription "
                         + "and summaries wait. Nothing in this recording has been touched.",
                     "config.json не читается (\(reason)), и пока это так, расшифровка и "
-                        + "саммари ждут. В этой записи ничего не тронуто.")
+                        + "сводка ждут. В этой записи ничего не тронуто.")
             case .transcriptionOff:
                 return localised(
                     "Transcription is off in the settings, so there is nothing to "
@@ -401,6 +445,41 @@ enum PostProcessor {
     /// The read, the change and the write are one step under the session's
     /// lock, the same one a naming run merges its answer under, so the two
     /// cannot write each other's work away.
+    private static func validatedSessionRoot(for dir: URL) throws -> URL {
+        let parent = dir.deletingLastPathComponent()
+        guard parent.lastPathComponent == "transcripts" else { return dir }
+        let root = parent.deletingLastPathComponent()
+        guard dir.resolvingSymlinksInPath().deletingLastPathComponent().path == root.resolvingSymlinksInPath().appendingPathComponent("transcripts").path,
+              TranscriptVersions.read(root).contains(where: { $0.dir.standardizedFileURL.path == dir.standardizedFileURL.path && !$0.isRequest }) else {
+            throw SummaryRegenerationError.unavailable(localised("This transcript version is unavailable.", "Эта версия расшифровки недоступна."))
+        }
+        return root
+    }
+
+    static func setSpeakerParticipant(_ speakerID: String, participant: CalendarParticipant?, in dir: URL) throws {
+        let root = try validatedSessionRoot(for: dir)
+        try SessionClaim.acquire(root, stage: .finish)
+        defer { SessionClaim.release(root) }
+        guard !TranscriptVersions.isRequested(root) else { throw CocoaError(.fileLocking) }
+        guard let transcript = readTranscript(dir), transcript.segments.contains(where: { $0.speaker == speakerID }),
+              DiarizationState.persisted(in: dir).isFinal else { throw CocoaError(.fileReadUnknown) }
+        let calendar = MeetingCalendarMetadata.read(from: root)
+        if let participant, !(calendar?.isConfirmed == true && calendar?.participants.contains(where: { $0.id == participant.id }) == true) {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        guard !FileManager.default.fileExists(atPath: root.appendingPathComponent(".recording.json").path) else { throw CocoaError(.fileLocking) }
+        try SessionLock.withLock(dir) {
+            var names = SpeakerNames.read(from: dir) ?? SpeakerNames()
+            let previous = names.speakers[speakerID]
+            let manual = previous?.participantID == nil && previous?.source == .manual ? previous?.name : previous?.manualName
+            let known = participant.flatMap { person in calendar?.participants.first { $0.id == person.id } }
+            names.speakers[speakerID] = SpeakerNames.Entry(name: known?.name ?? manual, source: .manual,
+                participantID: known?.id, manualName: manual)
+            try names.write(to: dir)
+            try transcript.writeMarkdown(to: dir, names: names)
+        }
+    }
+
     static func rename(_ label: String, to name: String?, in dir: URL) {
         let cleaned = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         do {

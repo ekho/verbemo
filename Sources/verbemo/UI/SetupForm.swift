@@ -90,6 +90,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// Redraws this copy when anything writes the config file — the other
     /// window showing the same form, the Advanced tab beside it, or the
     /// status window's live-transcript switch.
+    var hasModelDownloads: Bool { parakeetDownload != nil || whisperDownloadTask != nil || gigaAMDownloadTask != nil || liveDownloading || diarizationDownloadTask != nil }
+    private var formWindow: NSWindow? { view.window ?? settingsPages.values.compactMap(\.window).first }
+    private var storageControls: [String: (view: NSView, button: NSButton, note: NSTextField, model: ModelStorage.Model)] = [:]
+    private lazy var liveDownloadProgress = ModelDownloadProgress(model: "Nemotron Live", identifier: "live.cancel", target: self, action: #selector(cancelLiveDownload))
     private var configWatch: ConfigWatch.Token?
     /// Redraws this copy when verbemo comes back to the front. Every grant the
     /// Access rows ask for is given somewhere else — System Settings, a
@@ -253,7 +257,20 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private var summaryToolRuns: [String: Bool] = [:]
 
 
-    override init() {
+    private let forSettings: Bool
+    private(set) var settingsPages: [ApplicationNavigationState.Destination: FlippedStackView] = [:]
+    static var settingsCoveredPaths: Set<String> {
+        var paths: Set<String> = ["auto_record.enabled", "recordings_dir", "keep_audio", "menu_bar_icon", "dock_icon",
+            "transcription.enabled", "transcription.engine", "transcription.cloud", "summary.enabled", "summary.backend",
+            "summary.openai_base_url", "summary.openai_model", "summary.openai_compatible", "summary.ollama_base_url", "summary.ollama_model"]
+        if Platform.supportsLocalModels {
+            paths.formUnion(["transcription.local_engine", "transcription.local_diarization", "transcription.diarization_model", "live_transcription.enabled"])
+        }
+        return paths
+    }
+    override convenience init() { self.init(forSettings: false) }
+    init(forSettings: Bool) {
+        self.forSettings = forSettings
         super.init()
 
         let form = view
@@ -267,6 +284,27 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         micRow.identifier = NSUserInterfaceItemIdentifier("access.microphone")
         audioRow.identifier = NSUserInterfaceItemIdentifier("access.system-audio")
         calendarRow.identifier = NSUserInterfaceItemIdentifier("access.calendar")
+        if forSettings {
+            func page(_ destination: ApplicationNavigationState.Destination, _ content: [NSView]) {
+                let page = FlippedStackView(views: content)
+                page.orientation = .vertical
+                page.alignment = .leading
+                page.spacing = SetupLayout.sectionGap
+                page.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 24, right: 24)
+                for child in content { child.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -48).isActive = true }
+                settingsPages[destination] = page
+            }
+            page(.general, [SetupLayout.box([launchRow, menuBarIconRow(), dockIconRow()]), noIconsNote])
+            page(.recording, [SetupLayout.box([micRow, audioRow, calendarRow]), SetupLayout.box([autoRecordRow()])])
+            var transcription = [transcriptionRows()]
+            if Platform.supportsLocalModels {
+                transcription.append(SetupLayout.section(localised("Speaker separation", "Разделение говорящих"), content: diarizationRow()))
+                transcription.append(SetupLayout.box([liveTranscriptionRow()]))
+            }
+            page(.transcription, transcription)
+            page(.summary, [SetupLayout.section(localised("Summary", "Сводка"), leading: summariesOn, content: summaryChoices())])
+            page(.storage, [SetupLayout.box([folderRow(), keepAudioRow()])])
+        } else {
         form.addArrangedSubview(configProblems)
         form.addArrangedSubview(SetupLayout.section(
             localised("Access", "Доступ"),
@@ -293,7 +331,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             content: SetupLayout.box([folderRow(), keepAudioRow()])))
 
         form.addArrangedSubview(SetupLayout.section(
-            localised("Summaries", "Саммари"),
+            localised("Summaries", "Сводка"),
             leading: summariesOn,
             content: summaryChoices()))
 
@@ -311,6 +349,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         for view in form.arrangedSubviews {
             view.widthAnchor.constraint(
                 equalTo: form.widthAnchor, constant: -2 * SetupLayout.gutter).isActive = true
+        }
+
         }
 
         // Names for the switches that do not depend on the words beside
@@ -342,7 +382,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// registered is a round trip to another daemon, and a window that is
     /// closed will be redrawn by `reload` when it opens anyway.
     func cameBack() {
-        guard view.window?.isVisible == true else { return }
+        guard formWindow?.isVisible == true else { return }
         refresh()
     }
 
@@ -375,6 +415,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         gigaAMDownloadTask?.cancel()
         localDownloadProgress["gigaam"]?.cancelling()
     }
+    private func choiceCards(_ cards: [NSView]) -> NSView {
+        forSettings ? SetupLayout.group(cards, spacing: SetupLayout.cardGap) : SetupLayout.cards(cards)
+    }
+
     // MARK: - building
 
     /// The two questions this section actually asks: may audio leave this
@@ -445,7 +489,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 lines: 2, width: 440),
             trailing: [])
 
-        let localOptions = NSStackView(views: [SetupLayout.cards(localEngineCards.cards)])
+        let localOptions = NSStackView(views: [choiceCards(localEngineCards.cards)])
         localOptions.orientation = .vertical
         localOptions.alignment = .leading
         localOptions.spacing = 9
@@ -485,7 +529,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: "OpenAI",
             detail: localised(
                 "$0.36 an hour. Same key as summaries.",
-                "$0,36 за час. Тот же ключ, что и для саммари."),
+                "$0,36 за час. Тот же ключ, что и для сводки."),
             accessories: [link(
                 localised("Get a key", "Получить ключ"),
                 "https://platform.openai.com/api-keys")])
@@ -517,7 +561,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         keyLine.spacing = 10
         keyLine.setViews([cloudKey, cloudKeyStatus, NSView()], in: .leading)
 
-        let stack = NSStackView(views: [SetupLayout.cards(providerCards.cards), keyLine])
+        let stack = NSStackView(views: [choiceCards(providerCards.cards), keyLine])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
@@ -640,7 +684,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised(
                 "Separate speakers", "Разделять говорящих")),
             detail: diarizationDetail)
-        let options = NSStackView(views: [SetupLayout.cards(diarizationCards.cards)])
+        let options = NSStackView(views: [choiceCards(diarizationCards.cards)])
         options.orientation = .vertical
         options.alignment = .leading
         options.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
@@ -704,8 +748,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             diarizationOperation = nil
             diarizationDownloadProgress[model]?.end()
             refreshDiarization()
+            refreshStorageControls()
+            onStateChange?()
         }
         refreshDiarization()
+        refreshStorageControls()
     }
 
     @objc private func cancelDiarizationClicked(_ sender: NSButton) {
@@ -913,11 +960,16 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 localised("Install Ollama", "Установить Ollama"),
                 "https://ollama.com/download/mac")])
 
-        summaryCards.adopt([claude, codex, key, ollama])
+        let automatic = ChoiceCard(id: "auto", title: localised("Automatic", "Автоматически"),
+            detail: localised("Use the available summary services in the configured fallback order.", "Использовать доступные сервисы по порядку резервирования."))
+        let none = ChoiceCard(id: "none", title: localised("Do not create a summary", "Не создавать сводку"),
+            detail: localised("The summary service is off. Transcription is configured separately.", "Сервис сводки отключён. Расшифровка настраивается отдельно."))
+        summaryCards.adopt(forSettings ? [automatic, claude, codex, key, ollama, none] : [claude, codex, key, ollama])
         summaryCards.onChange = { [weak self] id in
             guard let self else { return }
-            Config.update(path: ["summary", "backend"], value: SetupSelection.summaryBackend(
-                choice: id, keyBackend: self.selectedKeyBackend))
+            let backend = self.forSettings && id == "claude-cli" ? "claude-cli"
+                : id == "auto" ? nil : SetupSelection.summaryBackend(choice: id, keyBackend: self.selectedKeyBackend)
+            Config.update(path: ["summary", "backend"], value: backend)
             self.refresh()
         }
         let disclosure = SetupLayout.detail(
@@ -927,7 +979,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             lines: 2,
             width: 520)
         return SetupLayout.group(
-            [SetupLayout.cards([claude, codex, key]), ollama, disclosure],
+            [choiceCards(forSettings ? [automatic, claude, codex, key] : [claude, codex, key]), ollama] + (forSettings ? [none] : []) + [disclosure],
             spacing: SetupLayout.cardGap)
     }
 
@@ -1141,7 +1193,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// Whichever window is showing the form — the setup wizard or the
     /// settings tab. The form does not own a window and must not assume one.
     private func focusKeyField() {
-        view.window?.makeFirstResponder(cloudKey)
+        formWindow?.makeFirstResponder(cloudKey)
     }
 
     @objc private func liveTranscriptionToggled() {
@@ -1167,6 +1219,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
         Analytics.track(.modelDownloadStarted, [.asset: .text("nemotron-live")])
         liveDownloading = true
+        liveDownloadProgress.begin()
         liveStatus.stringValue = localised("preparing download…", "готовлюсь скачивать…")
         refresh()
         liveDownloadTask = Task { [weak self] in
@@ -1174,6 +1227,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             do {
                 _ = try await liveModelStore.download(language: prompt) { [weak self] fraction in
                     Task { @MainActor in
+                        self?.liveDownloadProgress.update(fraction)
                         self?.liveStatus.stringValue = localised(
                             "downloading — \(Int(fraction * 100))% of about 600 MB",
                             "скачивание — \(Int(fraction * 100))% из примерно 600 МБ")
@@ -1204,6 +1258,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             }
             liveDownloading = false
             liveDownloadTask = nil
+            liveDownloadProgress.end()
             refresh()
         }
     }
@@ -1214,7 +1269,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     }
 
     @objc private func summariesToggled() {
-        Config.update(path: ["summary", "enabled"], value: summariesOn.state == .on ? nil : false)
+        let enabled = summariesOn.state == .on
+        if enabled && Config.summary().backend == "none" { Config.update(path: ["summary", "backend"], value: nil) }
+        Config.update(path: ["summary", "enabled"], value: enabled ? nil : false)
         refresh()
     }
 
@@ -1888,19 +1945,20 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             Config.resolveRoot(cliOverride: nil).path)
 
         let summary = Config.summary()
-        summariesOn.state = summary.enabled ? .on : .off
+        let summariesEnabled = summary.enabled && summary.backend != "none"
+        summariesOn.state = summariesEnabled ? .on : .off
         let backendIsKey = summary.backend == "anthropic-api" || summary.backend == "openai-api"
-        summaryCards.select(SetupSelection.summaryChoice(backend: summary.backend))
+        summaryCards.select(forSettings && summary.backend == "auto" ? "auto" : SetupSelection.summaryChoice(backend: summary.backend))
         if backendIsKey {
             keyProvider.selectedSegment = summary.backend == "anthropic-api" ? 1
                 : (summary.openAICompatible ? 2 : 0)
         }
-        summaryOpenAIBaseURL.stringValue = summary.openAIBaseURL
-        summaryOpenAIModel.stringValue = summary.openAIModel
-        summaryOllamaBaseURL.stringValue = summary.ollamaBaseURL
-        summaryOllamaModel.stringValue = summary.ollamaModel
+        if summaryOpenAIBaseURL.currentEditor() == nil { summaryOpenAIBaseURL.stringValue = summary.openAIBaseURL }
+        if summaryOpenAIModel.currentEditor() == nil { summaryOpenAIModel.stringValue = summary.openAIModel }
+        if summaryOllamaBaseURL.currentEditor() == nil { summaryOllamaBaseURL.stringValue = summary.ollamaBaseURL }
+        if summaryOllamaModel.currentEditor() == nil { summaryOllamaModel.stringValue = summary.ollamaModel }
         showKeyProvider()
-        for card in summaryCards.cards { card.isEnabled = summary.enabled }
+        for card in summaryCards.cards { card.isEnabled = summariesEnabled }
 
         menuBarIcon.state = Config.menuBarIcon() ? .on : .off
         dockIcon.state = Config.dockIcon() ? .on : .off
@@ -1916,6 +1974,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         configProblems.isHidden = problems.isEmpty
 
         highlightNextGrant()
+        refreshStorageControls()
         onStateChange?()
     }
 
@@ -2006,6 +2065,74 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         case "gigaam": return modelStorage.gigaAMModel()
         default: return modelStorage.parakeet(version: ParakeetEngine.configuredVersion())
         }
+    }
+
+    /// File operations reuse the same download task; they never select a working model.
+    func modelFilesControl(for model: ModelStorage.Model) -> NSView {
+        if let cached = storageControls[model.directory.path] { return cached.view }
+        let button = NSButton(title: localised("Download", "Скачать"), target: self, action: #selector(storageDownloadClicked(_:)))
+        button.identifier = .init(model.directory.path)
+        let note = SetupLayout.status()
+        let progress: NSView?
+        switch model.kind {
+        case .parakeet: progress = localDownloadProgress["parakeet"]?.mirroredView()
+        case .whisper: progress = localDownloadProgress["whisper"]?.mirroredView()
+        case .gigaAM: progress = localDownloadProgress["gigaam"]?.mirroredView()
+        case .diarization: progress = model.diarizationModel.flatMap { diarizationDownloadProgress[$0]?.mirroredView() }
+        case .live: progress = liveDownloadProgress.mirroredView()
+        }
+        let group = NSStackView(views: [button, note] + (progress.map { [$0] } ?? []))
+        group.orientation = .vertical
+        group.alignment = .leading
+        group.spacing = 6
+        if let progress { progress.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true }
+        storageControls[model.directory.path] = (group, button, note, model)
+        refreshStorageControls()
+        return group
+    }
+    private func refreshStorageControls() {
+        for (_, entry) in storageControls {
+            let model = entry.model
+            let downloading: Bool
+            let error: String?
+            switch model.kind {
+            case .parakeet: downloading = localModelIsDownloading("parakeet"); error = localDownloadErrors["parakeet"]
+            case .whisper: downloading = localModelIsDownloading("whisper"); error = localDownloadErrors["whisper"]
+            case .gigaAM: downloading = localModelIsDownloading("gigaam"); error = localDownloadErrors["gigaam"]
+            case .diarization: downloading = downloadingDiarizationModel == model.diarizationModel; error = model.diarizationModel.flatMap { diarizationErrors[$0] }
+            case .live: downloading = liveDownloading; error = liveStatus.stringValue
+            }
+            let ready: Bool
+            switch model.kind {
+            case .diarization: ready = DiarizationModelStore.isReady(at: model.directory, model: model.diarizationModel ?? .community1)
+            case .parakeet: ready = parakeetIsHere()
+            case .whisper, .gigaAM: ready = model.isDownloaded
+            case .live: ready = liveModelStore.isReady(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
+            }
+            entry.button.isHidden = ready || downloading
+            entry.button.isEnabled = !Config.settingsUnknown && !(model.kind == .diarization && diarizationDownloadTask != nil)
+            entry.note.stringValue = error ?? ""
+            entry.note.isHidden = entry.note.stringValue.isEmpty
+        }
+    }
+    @objc private func storageDownloadClicked(_ sender: NSButton) {
+        guard let id = sender.identifier?.rawValue, let entry = storageControls[id], sender.isEnabled else { return }
+        switch entry.model.kind {
+        case .parakeet: downloadLocalIfNeeded("parakeet")
+        case .whisper: downloadLocalIfNeeded("whisper")
+        case .gigaAM: downloadLocalIfNeeded("gigaam")
+        case .live: downloadLiveModel()
+        case .diarization:
+            guard let model = entry.model.diarizationModel else { return }
+            let request = NSButton()
+            request.identifier = .init("transcription.diarization.download.\(model.rawValue)")
+            downloadDiarizationClicked(request)
+        }
+        refreshStorageControls()
+    }
+    @objc private func cancelLiveDownload() {
+        liveDownloadTask?.cancel()
+        liveDownloadProgress.cancelling()
     }
 
     private func isLocalModelDownloaded(_ id: String, model: ModelStorage.Model) -> Bool {

@@ -488,6 +488,20 @@ actor TranscriptionCoordinator {
         }
     }
 
+    /// Resume the saved request after its model download, without adopting newer settings.
+    func resumeDiarization(_ dir: URL, request: DiarizationState.Request) async throws {
+        await takeProcessingTurn()
+        defer { releaseProcessingTurn() }
+        do {
+            let updated = try await runDiarization(dir, explicit: true, expectedRequest: request)
+            if updated { await PostProcessor.finish(dir) }
+            await releaseEngine()
+        } catch {
+            await releaseEngine()
+            throw error
+        }
+    }
+
     private func diarizeNowClaimed(_ dir: URL) async throws {
         try Config.requireReadable()
         guard !DiarizationState.persisted(in: dir).isUnreadable else {
@@ -675,13 +689,16 @@ actor TranscriptionCoordinator {
     }
 
     @discardableResult
-    private func runDiarization(_ dir: URL, explicit: Bool) async throws -> Bool {
+    private func runDiarization(_ dir: URL, explicit: Bool, expectedRequest: DiarizationState.Request? = nil) async throws -> Bool {
         try SessionClaim.acquire(dir, stage: .transcribe)
         defer { SessionClaim.release(dir) }
         try TranscriptVersions.recover(dir)
         TranscriptionScratch.remove(in: dir)
         guard var state = DiarizationState.read(dir),
               let provisional = PostProcessor.readTranscript(dir) else { return false }
+        if let expectedRequest, state.request != expectedRequest {
+            throw DiarizationUnavailable(reason: "the waiting speaker request changed")
+        }
         if state.status == .completed || state.status == .skipped || state.status == .notApplicable {
             return false
         }

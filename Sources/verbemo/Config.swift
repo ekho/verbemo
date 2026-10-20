@@ -452,6 +452,8 @@ enum Config {
     /// in this file would read as a third member of that family instead of as
     /// the one setting here that is about verbemo's own words. See
     /// `InterfaceLanguage`.
+    static func interfaceTheme() -> String { string(.interfaceTheme, in: load()) }
+
     static func interfaceLanguage() -> String? {
         text(.interfaceLanguage, in: load())
     }

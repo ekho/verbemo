@@ -46,8 +46,17 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         didSet { setup.isRecording = isRecording }
     }
 
+    var isProcessing: (() -> Bool)?
     private let panel: NSWindow
-    private let setup = SetupForm()
+    private let embedded: Bool
+    private(set) var contentView = NSView()
+    private let setup: SetupForm
+    private var pages: [ApplicationNavigationState.Destination: NSView] = [:]
+    private var pageNotices: [NSTextField] = []
+    private var providerRows: [(SettingsSchema.Entry, NSView)] = []
+    var representedSettingsPaths: [String] {
+        rows.map { $0.entry.path.joined(separator: ".") } + (embedded ? Array(SetupForm.settingsCoveredPaths.intersection(Set(SettingsSchema.sections.flatMap(\.entries).map { $0.path.joined(separator: ".") }))) : [])
+    }
     /// Redraws the Advanced tab when anything writes the config file. The
     /// Setup tab is a `SetupForm` and listens on its own.
     private var configWatch: ConfigWatch.Token?
@@ -81,8 +90,12 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         let control: NSControl
     }
 
-    override init() {
-        panel = NSWindow(
+    override convenience init() { self.init(hostWindow: nil) }
+
+    init(hostWindow: NSWindow?) {
+        setup = SetupForm(forSettings: hostWindow != nil)
+        embedded = hostWindow != nil
+        panel = hostWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
@@ -90,6 +103,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         )
         super.init()
 
+        if !embedded {
         panel.title = localised("verbemo settings", "Настройки verbemo")
         panel.level = .normal
         panel.hidesOnDeactivate = false
@@ -97,6 +111,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         // window — the program outlives its windows.
         panel.isReleasedWhenClosed = false
         panel.minSize = NSSize(width: 640, height: 460)
+        }
         // Rows and cards come and go as the form redraws; the Tab order has
         // to follow them, or a choice card that appeared after the window
         // opened could never be reached from the keyboard.
@@ -104,11 +119,13 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
 
         let tabs = NSTabView()
         tabs.translatesAutoresizingMaskIntoConstraints = false
+        if !embedded {
         tabs.addTabViewItem(tab(
             "Setup", localised("Setup", "Настройка"), holding: setupTab()))
         tabs.addTabViewItem(tab(
             "Advanced", localised("Advanced", "Дополнительно"),
             holding: SetupLayout.scroller(around: advancedForm())))
+        }
 
         for label in [configProblems, restartNotice, strayKeys] {
             label.font = .systemFont(ofSize: 11)
@@ -154,7 +171,9 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
             footer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
         ])
-        panel.contentView = content
+        contentView = content
+        if embedded { buildPages() }
+        if !embedded { panel.contentView = content }
 
         configWatch = ConfigWatch.observe { [weak self] in self?.refresh() }
         // Every redraw of the form ends here, whatever caused it — a grant
@@ -165,8 +184,10 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         setup.showsConfigProblems = false
         showOutstanding()
 
-        panel.setFrameAutosaveName("name.ekho.verbemo.settings")
-        if panel.frame.origin == .zero { panel.center() }
+        if !embedded {
+            panel.setFrameAutosaveName("name.ekho.verbemo.settings")
+            if panel.frame.origin == .zero { panel.center() }
+        }
         refresh()
     }
 
@@ -209,6 +230,69 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
             }
         }
         return found
+    }
+
+    func content(for destination: ApplicationNavigationState.Destination) -> NSView {
+        setup.reload()
+        refresh()
+        return pages[destination] ?? contentView
+    }
+
+    private func buildPages() {
+        for destination in ApplicationNavigationState.Destination.allCases where !destination.isMeetings && destination != .about {
+            let form = setup.settingsPages[destination] ?? FlippedStackView()
+            let notice = NSTextField(wrappingLabelWithString: "")
+            notice.textColor = .systemOrange
+            notice.font = .systemFont(ofSize: 12)
+            notice.isHidden = true
+            pageNotices.append(notice)
+            form.insertArrangedSubview(notice, at: 0)
+            notice.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
+            let entries = SettingsSchema.sections.flatMap(\.entries).filter {
+                SettingsPage.destination(for: $0.path) == destination && !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
+            }
+            let common: Set<String> = ["interface_theme", "interface_language", "window", "calendar", "system_audio", "transcription.language", "transcription.model", "summary.language", "summary.template", "user_name", "speaker_names.enabled"]
+            let rare = NSStackView()
+            rare.orientation = .vertical
+            rare.alignment = .leading
+            rare.spacing = 16
+            for entry in entries {
+                let row = makeRow(for: entry)
+                providerRows.append((entry, row))
+                let container = common.contains(entry.path.joined(separator: ".")) ? form : rare
+                container.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: container.widthAnchor, constant: container === form ? -48 : 0).isActive = true
+            }
+            if !rare.arrangedSubviews.isEmpty {
+                let disclosure = NSButton(checkboxWithTitle: localised("More options", "Дополнительные параметры"), target: self, action: #selector(toggleOptions(_:)))
+                disclosure.setButtonType(.onOff)
+                disclosure.bezelStyle = .disclosure
+                disclosure.identifier = .init("options.\(destination.rawValue)")
+                disclosure.state = .off
+                disclosure.setAccessibilityLabel(localised("Show more options", "Показать дополнительные параметры"))
+                disclosure.tag = optionGroups.count
+                optionGroups.append(rare)
+                rare.isHidden = true
+                form.addArrangedSubview(disclosure)
+                form.addArrangedSubview(rare)
+                rare.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
+            }
+            if destination == .storage && Platform.supportsLocalModels {
+                for view in modelsSection() {
+                    form.addArrangedSubview(view)
+                    view.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
+                }
+            }
+            if destination == .general {
+                let reveal = NSButton(title: localised("Reveal configuration file", "Показать файл настроек"), target: self, action: #selector(revealConfigClicked))
+                form.addArrangedSubview(reveal)
+            }
+            pages[destination] = SetupLayout.scroller(around: form)
+        }
+    }
+    private var optionGroups: [NSView] = []
+    @objc private func toggleOptions(_ sender: NSButton) {
+        optionGroups[sender.tag].isHidden = sender.state != .on
     }
 
     func hide() { panel.orderOut(nil) }
@@ -255,6 +339,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     /// The line under the Setup tab, from the form that computed it.
     private func showOutstanding() {
         outstanding.stringValue = setup.outstandingSentence
+        if embedded { refreshModels() }
     }
 
     /// The identifier stays English whatever the window is written in: it is
@@ -391,15 +476,17 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         // Present and disabled rather than absent: the row is the same row
         // whether or not the model is here, and a button that comes and goes
         // moves everything beside it.
-        delete.isEnabled = ready || partial
+        let deletionReason = embedded ? modelDeletionReason(model) : nil
+        delete.isEnabled = (ready || partial) && deletionReason == nil
+        delete.toolTip = deletionReason
 
         let line = NSStackView(views: [name, size, delete])
         line.orientation = .horizontal
         line.alignment = .firstBaseline
         line.spacing = 10
         NSLayoutConstraint.activate([
-            name.widthAnchor.constraint(equalToConstant: 190),
-            size.widthAnchor.constraint(equalToConstant: 190),
+            name.widthAnchor.constraint(lessThanOrEqualToConstant: 190),
+            size.widthAnchor.constraint(lessThanOrEqualToConstant: 190),
         ])
 
         let help = NSTextField(labelWithString: Self.purpose(of: model))
@@ -409,7 +496,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         help.maximumNumberOfLines = 0
         help.preferredMaxLayoutWidth = 460
 
-        let row = NSStackView(views: [line, help])
+        let row = NSStackView(views: embedded ? [line, help, setup.modelFilesControl(for: model)] : [line, help])
         row.orientation = .vertical
         row.alignment = .leading
         row.spacing = 2
@@ -459,9 +546,27 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     /// The asking is not ceremony: the download is hundreds of megabytes over
     /// whatever connection the person is on next time, and the alert is the
     /// only place that says the switch is going off with it.
+    func modelDeletionReason(_ model: ModelStorage.Model) -> String? {
+        if isProcessing?() == true || isRecording?() == true || setup.hasModelDownloads {
+            return localised("Wait for recording and processing to finish.", "Дождитесь окончания записи и обработки.")
+        }
+        let choice = TranscriptionChoice.read(engine: Config.transcriptionEngine(), cloudProvider: Config.transcriptionCloudProvider(), enabled: Config.transcriptionEnabled(), localModels: Platform.supportsLocalModels, localEngine: Config.transcriptionLocalEngine())
+        let selected: Bool = switch model.kind {
+        case .parakeet: choice.local && choice.localEngine == "parakeet" && model.directory == ParakeetEngine.cacheDirectory(for: ParakeetEngine.configuredVersion())
+        case .whisper: choice.local && choice.localEngine == "whisper"
+        case .gigaAM: choice.local && choice.localEngine == "gigaam"
+        case .live: Config.liveTranscriptionEnabled()
+        case .diarization: Config.localDiarizationEnabled() && model.diarizationModel == Config.diarizationModel()
+        }
+        return selected ? localised("Choose another model or turn this feature off before deleting it.", "Перед удалением выберите другую модель или выключите эту функцию.") : nil
+    }
+
     @objc private func deleteModelClicked(_ sender: NSButton) {
         guard sender.tag < shownModels.count else { return }
         let model = shownModels[sender.tag]
+        if embedded, let reason = modelDeletionReason(model) {
+            let alert = NSAlert(); alert.messageText = reason; alert.runModal(); return
+        }
         let choice = TranscriptionChoice.read(
             engine: Config.transcriptionEngine(),
             cloudProvider: Config.transcriptionCloudProvider(),
@@ -484,6 +589,9 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         alert.buttons.first?.hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
+        if embedded, let reason = modelDeletionReason(model) {
+            let failure = NSAlert(); failure.messageText = reason; failure.runModal(); return
+        }
         if model.kind == .diarization {
             sender.isEnabled = false
             Task { @MainActor [weak self] in
@@ -601,8 +709,8 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let line = NSStackView(views: [label, control])
-        line.orientation = .horizontal
-        line.alignment = entry.kind.isMultiline ? .top : .firstBaseline
+        line.orientation = embedded ? .vertical : .horizontal
+        line.alignment = embedded ? .leading : (entry.kind.isMultiline ? .top : .firstBaseline)
         line.spacing = 10
 
         // A toggle is a small thing on the right of a wide label; a text field
@@ -616,7 +724,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         default: controlWidth = 260
         }
         NSLayoutConstraint.activate([
-            label.widthAnchor.constraint(equalToConstant: 260),
+            label.widthAnchor.constraint(lessThanOrEqualToConstant: 460),
             control.widthAnchor.constraint(equalToConstant: controlWidth),
         ])
 
@@ -637,6 +745,11 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         row.orientation = .vertical
         row.alignment = .leading
         row.spacing = 2
+        if embedded {
+            line.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
+            help.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
+            help.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
         return row
     }
 
@@ -651,6 +764,13 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         case .choice(let options):
             let popup = NSPopUpButton()
             popup.addItems(withTitles: options)
+            if embedded && entry.path == ["interface_theme"] {
+                for item in popup.itemArray {
+                    let raw = item.title
+                    item.representedObject = raw
+                    item.title = raw == "system" ? localised("System", "Системная") : raw == "light" ? localised("Light", "Светлая") : localised("Dark", "Тёмная")
+                }
+            }
             popup.target = self
             popup.action = #selector(controlChanged(_:))
             return popup
@@ -688,6 +808,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     private func refresh() {
         let config = Config.raw()
         for row in rows {
+            if (row.control as? NSTextField)?.currentEditor() != nil { continue }
             let stored = value(at: row.entry.path, in: config)
             switch row.entry.kind {
             case .toggle:
@@ -695,7 +816,10 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
                 (row.control as? NSSwitch)?.state = on ? .on : .off
             case .choice:
                 let selected = stored as? String ?? row.entry.defaultValue as? String
-                if let selected { (row.control as? NSPopUpButton)?.selectItem(withTitle: selected) }
+                if let selected, let popup = row.control as? NSPopUpButton {
+                    if row.entry.path == ["interface_theme"], let index = popup.itemArray.firstIndex(where: { $0.representedObject as? String == selected }) { popup.selectItem(at: index) }
+                    else { popup.selectItem(withTitle: selected) }
+                }
             case .list:
                 let items = stored as? [String] ?? []
                 row.control.stringValue = items.joined(separator: ", ")
@@ -713,6 +837,23 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         // Last, because it reads the disk rather than the file, and because
         // what it lists depends on `transcription.model` just above it.
         refreshModels()
+        for notice in pageNotices {
+            notice.stringValue = [configProblems, restartNotice, strayKeys].filter { !$0.isHidden }.map(\.stringValue).joined(separator: "\n")
+            notice.isHidden = notice.stringValue.isEmpty
+        }
+        for (entry, view) in providerRows { view.isHidden = !providerIsSelected(entry.path) }
+    }
+
+    private func providerIsSelected(_ path: [String]) -> Bool {
+        if path.first == "transcription", path.count > 2 {
+            return path[1] == Config.transcriptionCloudProvider()
+        }
+        guard path.first == "summary", let leaf = path.last else { return true }
+        let backend = Config.summary().backend
+        if leaf.hasPrefix("ollama_") { return backend == "ollama" || backend == "auto" }
+        if leaf.hasPrefix("openai_") { return backend == "openai-api" || backend == "auto" }
+        if leaf == "api_key_path" { return backend == "anthropic-api" || backend == "auto" }
+        return true
     }
 
     private func value(at path: [String], in config: [String: Any]) -> Any? {
@@ -759,7 +900,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         case .toggle:
             input = .flag((row.control as? NSSwitch)?.state == .on)
         case .choice:
-            input = .choice((row.control as? NSPopUpButton)?.titleOfSelectedItem ?? "")
+            input = .choice((row.control as? NSPopUpButton)?.selectedItem?.representedObject as? String ?? (row.control as? NSPopUpButton)?.titleOfSelectedItem ?? "")
         case .number, .text, .multilineText, .list:
             input = .text(row.control.stringValue)
         }

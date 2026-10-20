@@ -366,7 +366,7 @@ final class AutoRecordController {
                 // The call app usually grabs the mic a moment after the event
                 // starts, so it may be nil here — the calendar carries the name.
                 let context = MeetingContext(
-                    meeting: event, app: mic.names.first, appFamilies: mic.families)
+                    meeting: event, app: mic.names.first, appFamilies: mic.families, confirmed: true)
                 if attemptStart(.calendar, context, now: now) {
                     markHandled(event)
                     currentEvent = event

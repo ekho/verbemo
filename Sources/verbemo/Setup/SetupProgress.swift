@@ -67,7 +67,7 @@ struct SetupProgress: Equatable {
             case .liveModel:
                 return localised("live model", "модель для расшифровки на лету")
             case .summaryTool:
-                return localised("something to summarise with", "чем писать саммари")
+                return localised("something to summarise with", "чем создавать сводку")
             }
         }
 

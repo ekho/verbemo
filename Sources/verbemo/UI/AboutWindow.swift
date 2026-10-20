@@ -17,10 +17,13 @@ import AppKit
 @MainActor
 final class AboutWindow: NSObject {
     private let panel: NSWindow
+    private(set) var contentView = NSView()
     private var linkButtons: [NSButton] = []
 
-    override init() {
-        panel = NSWindow(
+    override convenience init() { self.init(hostWindow: nil) }
+
+    init(hostWindow: NSWindow?) {
+        panel = hostWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 300),
             // No resize and no minimise: there is nothing in here that a
             // bigger window would show more of.
@@ -30,11 +33,11 @@ final class AboutWindow: NSObject {
         )
         super.init()
 
-        panel.title = localised("About Verbemo", "О программе Verbemo")
+        if hostWindow == nil { panel.title = localised("About Verbemo", "О программе Verbemo") }
         panel.isReleasedWhenClosed = false
 
         let icon = NSImageView()
-        icon.image = NSApp.applicationIconImage
+        icon.image = NSApplication.shared.applicationIconImage
         icon.setAccessibilityLabel("Verbemo")
         icon.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -53,14 +56,14 @@ final class AboutWindow: NSObject {
         version.isHidden = Self.versionLine == nil
 
         let tagline = NSTextField(labelWithString: localised(
-            "Records your meetings and keeps them on this Mac. Based on Amanu by Samat Galimov (MIT).",
-            "Записывает встречи и держит их на этом Маке. На основе Amanu Самата Галимова (MIT)."))
+            "Records microphone and call audio, transcribes live and after meetings, separates speakers, and creates summaries with decisions and tasks. Keeps recordings and results on your computer, with a choice of local models or cloud services.",
+            "Записывает звук с микрофона и из приложений звонков, расшифровывает речь в реальном времени и после встречи. Разделяет реплики по говорящим и готовит сводку с решениями и задачами. Хранит записи и результаты на компьютере. Для обработки можно выбрать локальные модели или облачные сервисы."))
         tagline.font = .systemFont(ofSize: 12)
         tagline.textColor = .secondaryLabelColor
-        tagline.alignment = .center
+        tagline.alignment = hostWindow == nil ? .center : .left
         tagline.lineBreakMode = .byWordWrapping
         tagline.maximumNumberOfLines = 0
-        tagline.preferredMaxLayoutWidth = 260
+        tagline.preferredMaxLayoutWidth = hostWindow == nil ? 260 : 620
 
         linkButtons = [
             link(localised("Source code on GitHub", "Исходный код на GitHub"), Self.sourceRepository),
@@ -69,18 +72,29 @@ final class AboutWindow: NSObject {
         ]
         let links = NSStackView(views: linkButtons)
         links.orientation = .vertical
-        links.alignment = .centerX
-        links.spacing = 4
+        links.alignment = hostWindow == nil ? .centerX : .leading
+        links.spacing = hostWindow == nil ? 4 : 18
 
-        let stack = NSStackView(views: [icon, name, version, tagline, links])
+        let identity = NSStackView(views: [name, version])
+        identity.orientation = .vertical
+        identity.alignment = .leading
+        identity.spacing = 6
+        let heading = NSStackView(views: [icon, identity])
+        heading.spacing = 24
+        heading.alignment = .centerY
+        let stack = NSStackView(views: hostWindow == nil ? [icon, name, version, tagline, links] : [heading, tagline, links])
         stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 10
+        stack.alignment = hostWindow == nil ? .centerX : .leading
+        stack.spacing = hostWindow == nil ? 10 : 24
         // The links are a group of their own, and the gap above them is what
         // says so.
         stack.setCustomSpacing(18, after: tagline)
-        stack.setCustomSpacing(4, after: name)
+        if hostWindow == nil { stack.setCustomSpacing(4, after: name) }
         stack.translatesAutoresizingMaskIntoConstraints = false
+        if hostWindow != nil {
+            tagline.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            tagline.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
 
         let content = NSView()
         content.addSubview(stack)
@@ -90,14 +104,17 @@ final class AboutWindow: NSObject {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -24),
         ])
-        panel.contentView = content
+        contentView = content
+        if hostWindow == nil { panel.contentView = content }
         // The height is whatever the words come to. Russian runs a fifth
         // longer than English and the version line is missing from a bare
         // build, so a number written here would be the right one for one of
         // the four windows this can be.
+        if hostWindow == nil {
         content.layoutSubtreeIfNeeded()
         panel.setContentSize(NSSize(width: Self.width, height: content.fittingSize.height))
         panel.center()
+        }
     }
 
     func show() {
@@ -109,7 +126,7 @@ final class AboutWindow: NSObject {
     /// What the window says, for the walk that reads every window in both
     /// languages. The title is in here because it is a sentence like the
     /// others, and it is the one that is not inside the content view.
-    var view: NSView? { panel.contentView }
+    var view: NSView? { contentView }
     var title: String { panel.title }
 
     /// The three links, as they read and where they go. The window is

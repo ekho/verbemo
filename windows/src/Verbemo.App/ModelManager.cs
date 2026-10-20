@@ -20,6 +20,7 @@ public sealed class ModelManager(string dataDirectory, HttpClient httpClient, st
     public event EventHandler<string>? DownloadStarted;
     public event EventHandler<string>? DownloadFinished;
     public event EventHandler<string>? DownloadFailed;
+    public event EventHandler? DownloadStateChanged;
 
     public string? CliPath
     {
@@ -40,6 +41,21 @@ public sealed class ModelManager(string dataDirectory, HttpClient httpClient, st
         ModelCatalog.Models.ContainsKey(model) && File.Exists(ModelPath(model)) ? new FileInfo(ModelPath(model)).Length : null;
 
     private readonly HashSet<string> downloading = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CancellationTokenSource> cancellations = new(StringComparer.OrdinalIgnoreCase);
+
+    public void CancelDownload(string model) { lock(downloading) { if(cancellations.TryGetValue(model, out var cancellation)) cancellation.Cancel(); } }
+    public void CancelAllDownloads() { lock(downloading) foreach(var cancellation in cancellations.Values.ToArray()) cancellation.Cancel(); }
+
+    public void Delete(string model, bool inUse)
+    {
+        if (!ModelCatalog.Models.ContainsKey(model)) throw new InvalidOperationException("Unknown local model.");
+        lock(downloading)
+        {
+            if(inUse || downloading.Contains(model)) throw new InvalidOperationException("This model is selected or in use.");
+            File.Delete(ModelPath(model));
+            File.Delete(ModelPath(model) + ".partial");
+        }
+    }
 
     public bool IsDownloading(string model)
     {
@@ -53,19 +69,23 @@ public sealed class ModelManager(string dataDirectory, HttpClient httpClient, st
         if (model == "nemotron-live" ? !LiveRuntimePresent : CliPath is null)
             throw new InvalidOperationException("The local transcription runtime is missing from this Verbemo installation.");
         Directory.CreateDirectory(ModelDirectory);
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         lock (downloading)
         {
             // A second click while the first download runs would fetch the same
             // file into the same place twice.
             if (!downloading.Add(model)) return;
+            cancellations[model] = operation;
         }
         try
         {
-            await DownloadVerifiedAsync($"Model {model}", artifact, ModelPath(model), cancellationToken).ConfigureAwait(false);
+            DownloadStateChanged?.Invoke(this,EventArgs.Empty);
+            await DownloadVerifiedAsync($"Model {model}", artifact, ModelPath(model), operation.Token).ConfigureAwait(false);
         }
         finally
         {
-            lock (downloading) downloading.Remove(model);
+            lock (downloading) { downloading.Remove(model); cancellations.Remove(model); }
+            DownloadStateChanged?.Invoke(this,EventArgs.Empty);
         }
     }
 

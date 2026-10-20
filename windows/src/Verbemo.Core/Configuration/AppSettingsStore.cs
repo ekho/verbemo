@@ -15,9 +15,9 @@ public sealed record ConfigProblem(bool Unreadable, string Headline, string Expl
     public static ConfigProblem UnreadableFile(string reason) => new(
         true,
         T("config.json can't be read — transcription and summaries are waiting",
-          "config.json не читается — расшифровка и саммари ждут"),
+          "config.json не читается — расшифровка и сводка ждут"),
         T($"config.json can't be read ({reason}). Until it is fixed, Verbemo keeps to the settings it last read from it — its defaults, with auto-record off and nothing sent anywhere, if it never could — and keeps recording, but holds transcription and summaries, sends no usage statistics, and saves no changed settings.",
-          $"config.json не читается ({reason}). Пока файл не исправлен, Verbemo держится настроек, прочитанных из него в последний раз (а если не смогла прочитать ни разу — настроек по умолчанию с выключенной автозаписью, ничего никуда не отправляя), и продолжает записывать, но расшифровка и саммари ждут, статистика не отправляется, а изменённые настройки не сохраняются."));
+          $"config.json не читается ({reason}). Пока файл не исправлен, Verbemo держится настроек, прочитанных из него в последний раз (а если не смогла прочитать ни разу — настроек по умолчанию с выключенной автозаписью, ничего никуда не отправляя), и продолжает записывать, но расшифровка и сводка ждут, статистика не отправляется, а изменённые настройки не сохраняются."));
 
     public static ConfigProblem UnusableValue(string key, string found, string expected) => new(
         false,

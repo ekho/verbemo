@@ -226,17 +226,16 @@ final class AppController {
     /// one, waiting for that to finish.
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
-    private let window = StatusWindow()
+    private let window = ApplicationWindow()
     /// Built on first use. It is thirty-odd controls, and verbemo spends nearly
     /// all of its life recording rather than being configured.
     private lazy var settings: SettingsWindow = {
-        let window = SettingsWindow()
+        let window = self.window.settings
         window.isRecording = { [weak self] in self?.isRecording == true }
         return window
     }()
     /// Built on first use, like the others, and for a stronger reason: most
     /// copies of verbemo will never be asked who wrote them.
-    private lazy var aboutWindow = AboutWindow()
     private lazy var setupWindow: SetupWindow = {
         let setup = SetupWindow()
         setup.isRecording = { [weak self] in self?.isRecording == true }
@@ -289,18 +288,33 @@ final class AppController {
     var recordingElapsed: TimeInterval? {
         session.map { Date().timeIntervalSince($0.startedAt) }
     }
+    private var liveRecordingStatus = LiveTranscriptionCoordinator.Status.idle
     private var ticker: Timer?
     private var recordingsBuilt = false
     private lazy var recordings: RecordingsWindow = makeRecordingsWindow()
 
     private func makeRecordingsWindow() -> RecordingsWindow {
         recordingsBuilt = true
-        let window = RecordingsWindow(root: root)
+        let window = RecordingsWindow(root: root, hostWindow: self.window.panel)
+        self.window.isProcessing = { [weak self] in self?.isBusyForUpdate == true }
         window.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
+        window.onOpenActiveRecording = { [weak self] in self?.window.showActiveRecording() }
+        window.onRenameActiveRecording = { [weak self] title in
+            guard let self, let session = self.session else { throw CocoaError(.fileNoSuchFile) }
+            try session.rename(to: title)
+            self.window.recordingTitle = title
+            self.updateActiveRecording()
+        }
+        window.onRetranscribe = { [weak self] _ in self?.catchUp() }
         window.onImportFiles = { [weak self] files in self?.importFiles(files) }
         window.onCancelImport = { [weak self] in self?.cancelImport() }
         window.onChooseImport = { [weak self] in self?.chooseMediaToImport() }
         let coordinator = transcription
+        window.onResumeDiarization = { [weak self] dir, request in
+            self?.processingStarted()
+            defer { self?.processingFinished() }
+            try await coordinator.resumeDiarization(dir, request: request)
+        }
         window.onRetryDiarization = { [weak self] dir in
             self?.processingStarted()
             defer { self?.processingFinished() }
@@ -384,6 +398,11 @@ final class AppController {
         menuBar.update(state: .idle, elapsed: nil)
         menuBar.updatesAvailable(updates.isAvailable)
 
+        window.libraryProvider = { [weak self] in self?.recordings }
+        window.onRenameRecording = { [weak self] name in
+            guard let session = self?.session else { throw CocoaError(.fileNoSuchFile) }
+            try session.rename(to: name)
+        }
         window.onToggle = { [weak self] in self?.toggle() }
         window.onTogglePause = { [weak self] in self?.togglePause() }
         window.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
@@ -566,6 +585,8 @@ final class AppController {
     /// One run of the importer: batch after batch until nothing is waiting
     /// or somebody cancels, then one summary for the whole run.
     private func startImportRun() {
+        window.navigate(.allMeetings)
+        window.bringToFront()
         let stop = importStop
         mediaImportTask = Task { [weak self, mediaImport, transcription] in
             await stop?.value
@@ -648,6 +669,7 @@ final class AppController {
     /// to happen when the quit came from ⌘Q or the Dock rather than from us.
     /// Idempotent: stopSession does nothing without a session.
     func finishForTermination() {
+        if recordingsBuilt { recordings.cancelPendingDeletion() }
         // `applicationShouldTerminate` normally waits for this cancellation.
         // Keep the request here too for shutdown paths that skip that hook.
         mediaImportTask?.cancel()
@@ -979,6 +1001,8 @@ final class AppController {
     }
 
     private func showLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {
+        liveRecordingStatus = snapshot.status
+        updateActiveRecording()
         window.updateLive(snapshot)
         switch snapshot.status {
         case .overloaded, .error:
@@ -1001,7 +1025,8 @@ final class AppController {
     /// have to click again before you can type in it is a small insult.
     func showSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        settings.show()
+        window.navigate(.general)
+        window.bringToFront()
     }
 
     /// About, from either menu. Activating for the same reason Settings
@@ -1010,7 +1035,8 @@ final class AppController {
     /// to go looking for.
     func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
-        aboutWindow.show()
+        window.navigate(.about)
+        window.bringToFront()
     }
 
     /// First-run setup: opened by the first launch, by the menu item while
@@ -1054,8 +1080,17 @@ final class AppController {
     /// never disagree about whether something is being recorded.
     private func present(_ state: MenuBarController.State, elapsed: String?) {
         menuBar.update(state: state, elapsed: elapsed)
+        window.recordingTitle = session?.title ?? localised("New meeting", "Новая встреча")
         window.update(state: state, elapsed: elapsed)
+        updateActiveRecording()
         DockPresentation.update(state: state, elapsed: elapsed)
+    }
+
+    private func updateActiveRecording() {
+        guard recordingsBuilt else { return }
+        recordings.setActiveRecording(session.map {
+            MeetingPresentation.ActiveRecording(dir: $0.dir, title: $0.title ?? localised("New meeting", "Новая встреча"), started: $0.startedAt, paused: $0.isPaused, liveStatus: liveRecordingStatus)
+        })
     }
 
     private func tick() {
@@ -1084,7 +1119,8 @@ final class AppController {
             self?.catchUp()
         }
         NSApp.activate(ignoringOtherApps: true)
-        recordings.show()
+        window.navigate(.allMeetings)
+        window.bringToFront()
     }
 
     /// The elapsed time as the status window shows it. Not private and not

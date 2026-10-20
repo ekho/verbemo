@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using Verbemo.Core.Analytics;
 using Verbemo.Core.Configuration;
 using Verbemo.Core.Processing;
+using Verbemo.Core.Sessions;
 using static Verbemo.Core.Localization.Localized;
 
 namespace Verbemo.App;
@@ -64,7 +65,8 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         ModelManager models,
         HttpClient httpClient,
         AnalyticsService analytics,
-        Func<string, AppSettings, ITranscriptionEngine>? localEngineFactory = null)
+        Func<string, AppSettings, ITranscriptionEngine>? localEngineFactory = null,
+        Func<EgressPurpose, IReadOnlyList<LanguageModelBackend>>? languageModelBackends = null)
     {
         this.settings = settings;
         this.configReadable = configReadable;
@@ -73,7 +75,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         this.httpClient = httpClient;
         this.analytics = analytics;
         this.localEngineFactory = localEngineFactory;
-        languageModels = new LanguageModels(httpClient, secrets, settings);
+        languageModels = new LanguageModels(httpClient, secrets, settings, languageModelBackends);
     }
 
     public event EventHandler<ProcessingStatus>? StatusChanged;
@@ -96,18 +98,31 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
     /// <summary>Reserve this session while an action changes its files; other sessions can still queue.</summary>
     internal bool TryUseIdleSession(string directory, Action action)
     {
+        using var reservation = TryReserveIdleSession(directory);
+        if (reservation is null) return false;
+        action();
+        return true;
+    }
+
+    internal IDisposable? TryReserveIdleSession(string directory)
+    {
         directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
         lock (queueLock)
         {
-            if (queued.Contains(directory) || !preparing.Add(directory)) return false;
+            if (queued.Contains(directory) || !preparing.Add(directory)) return null;
         }
-        try { action(); return true; }
-        finally { lock (queueLock) preparing.Remove(directory); }
+        return new Reservation(() => { lock(queueLock) preparing.Remove(directory); });
+    }
+
+    private sealed class Reservation(Action release) : IDisposable
+    {
+        private Action? action = release;
+        public void Dispose() => Interlocked.Exchange(ref action, null)?.Invoke();
     }
 
     public bool IsBusy
     {
-        get { lock (queueLock) return queued.Count > 0; }
+        get { lock (queueLock) return queued.Count > 0 || preparing.Count > 0; }
     }
 
     public void Start()
@@ -273,8 +288,45 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         Enqueue(directory);
     }
 
+    public async Task RegenerateSummaryAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
+        var root = TranscriptVersions.ValidatedSessionRoot(directory);
+        lock (queueLock)
+        {
+            if (queued.Contains(root) || !preparing.Add(root))
+                throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
+        }
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime.Token);
+        try
+        {
+            cancellationToken = operation.Token;
+            var state = new MeetingActionState(Has(directory, "transcript.json") && Has(directory, "transcript.md"),
+                Has(directory, "summary.md"), false, Has(root, ".recording.json"), false, configReadable(),
+                settings().Transcription.Enabled, MeetingEgress.Route(EgressPurpose.Summary, settings()) is not null,
+                Has(root, TranscriptVersions.RequestFile));
+            if (state.Reason(MeetingAction.RegenerateSummary) is { } reason) throw new InvalidOperationException(reason);
+            var document = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
+            if (document.Segments is not { Count: > 0 } || document.Segments.Any(s => s is null || s.Text is null)
+                || !document.Segments.Any(s => !string.IsNullOrWhiteSpace(s.Text)))
+                throw new InvalidOperationException(T("A finished transcript is required.", "Сначала нужна готовая расшифровка."));
+            var names = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
+            var markdown = TranscriptWriter.RenderMarkdown(await ReadTitleAsync(root, cancellationToken), document, names.Names);
+            Publish(root, "summary", T("Writing the summary…", "Создаю сводку…"), true);
+            await new SummaryService(languageModels, settings).GenerateAsync(directory, markdown, cancellationToken).ConfigureAwait(false);
+            foreach (var marker in new[] { "summary.failed", "summary.deferred", "summary.off" }) File.Delete(Path.Combine(directory, marker));
+        }
+        finally
+        {
+            lock (queueLock) preparing.Remove(root);
+            Publish(root, "idle", "", false);
+        }
+    }
+
     public async Task SetSpeakerNameAsync(string directory, string label, string name, CancellationToken cancellationToken = default, string? title = null)
     {
+        var root = TranscriptVersions.ValidatedSessionRoot(directory);
+        using var reservation = TryReserveIdleSession(root) ?? throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
         var transcript = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
         var file = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
         var names = new Dictionary<string, string>(file.Names);
@@ -289,10 +341,48 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
             names[label] = name.Trim();
             sources[label] = "manual";
         }
-        await SpeakerFile.WriteAsync(directory, names, sources, cancellationToken).ConfigureAwait(false);
+        var ids = new Dictionary<string,string>(file.ParticipantIds);
+        var manual = new Dictionary<string,string>(file.ManualNames);
+        ids.Remove(label);
+        manual.Remove(label);
+        await SpeakerFile.WriteAsync(directory, new SpeakerFile.Contents(names,sources) { ParticipantIds = ids, ManualNames = manual }, cancellationToken).ConfigureAwait(false);
         await TranscriptWriter.WriteAsync(directory, title ?? await ReadTitleAsync(directory, cancellationToken), transcript, names, cancellationToken)
             .ConfigureAwait(false);
         SessionsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task SetSpeakerParticipantAsync(string directory, string speakerId, CalendarParticipant? participant, CancellationToken cancellationToken = default)
+    {
+        var root = TranscriptVersions.ValidatedSessionRoot(directory);
+        using var reservation = TryReserveIdleSession(root) ?? throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
+        if(Has(root,".recording.json") || Has(root,TranscriptVersions.RequestFile)) throw new InvalidOperationException(T("A finished transcript is required.", "Сначала нужна готовая расшифровка."));
+        var calendar = await MeetingCalendarMetadata.ReadAsync(root,cancellationToken).ConfigureAwait(false);
+        if(calendar?.IsConfirmed != true) throw new InvalidOperationException("This meeting has no confirmed calendar event.");
+        var document = await ReadTranscriptAsync(directory,cancellationToken).ConfigureAwait(false);
+        if(!document.IsDiarized) throw new InvalidOperationException(T("Speaker separation is required for matching participants.", "Для сопоставления участников нужно разделение говорящих."));
+        if(!document.Segments.Any(s => s.Speaker == speakerId)) throw new InvalidOperationException("Unknown speaker.");
+        var stored = await SpeakerFile.ReadAsync(directory,cancellationToken).ConfigureAwait(false);
+        var names = new Dictionary<string,string>(stored.Names);
+        var sources = new Dictionary<string,string>(stored.Sources);
+        var ids = new Dictionary<string,string>(stored.ParticipantIds);
+        var manual = new Dictionary<string,string>(stored.ManualNames);
+        if(participant is not null)
+        {
+            var known = calendar.Participants.FirstOrDefault(p => p.Id == participant.Id) ?? throw new InvalidOperationException("This person is not invited to the event.");
+            if(!ids.ContainsKey(speakerId) && sources.GetValueOrDefault(speakerId) == "manual" && names.TryGetValue(speakerId,out var typed)) manual[speakerId] = typed;
+            names[speakerId] = known.Name;
+            sources[speakerId] = "calendar";
+            ids[speakerId] = known.Id;
+        }
+        else
+        {
+            ids.Remove(speakerId);
+            if(manual.Remove(speakerId,out var typed)) { names[speakerId] = typed; sources[speakerId] = "manual"; }
+            else { names.Remove(speakerId); sources.Remove(speakerId); }
+        }
+        await SpeakerFile.WriteAsync(directory,new SpeakerFile.Contents(names,sources) { ParticipantIds = ids, ManualNames = manual },cancellationToken).ConfigureAwait(false);
+        await TranscriptWriter.WriteAsync(directory,await ReadTitleAsync(root,cancellationToken),document,names,cancellationToken).ConfigureAwait(false);
+        SessionsChanged?.Invoke(this,EventArgs.Empty);
     }
 
     private async Task WorkerAsync(CancellationToken cancellationToken)
@@ -413,7 +503,8 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
             var speakers = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
             var replacing = Has(directory, TranscriptVersions.RequestFile);
             var names = replacing
-                ? speakers.Names.Where(pair => speakers.Sources.GetValueOrDefault(pair.Key) == "manual").ToDictionary()
+                ? speakers.Names.Where(pair => speakers.Sources.GetValueOrDefault(pair.Key) == "manual").Concat(speakers.ManualNames)
+                    .GroupBy(pair => pair.Key).ToDictionary(group => group.Key, group => group.Last().Value)
                 : speakers.Names;
             await TranscriptVersions.ArchiveCurrentAsync(directory, cancellationToken).ConfigureAwait(false);
             if (replacing && Has(directory, "summary.md"))
@@ -569,7 +660,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         }
         if (Has(directory, "summary.failed") || Has(directory, "summary.off")) return true;
         if (Has(directory, "summary.md") && !Has(directory, "summary.stale")) return true;
-        Publish(directory, "summary", T("Writing the summary…", "Пишу саммари…"), true);
+        Publish(directory, "summary", T("Writing the summary…", "Создаю сводку…"), true);
         try
         {
             var markdown = await File.ReadAllTextAsync(Path.Combine(directory, "transcript.md"), cancellationToken).ConfigureAwait(false);

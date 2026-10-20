@@ -28,6 +28,7 @@ namespace Verbemo.App;
 internal sealed class StatusWindow : Window
 {
     private readonly VerbemoRuntime runtime;
+    private System.Windows.Controls.TextBox? titleEditor;
     private readonly Ellipse dot = new() { Width = 10, Height = 10, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock state = new() { FontSize = 16, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock processingLine = Ui.Status();
@@ -62,7 +63,10 @@ internal sealed class StatusWindow : Window
     private bool allowClose;
     private readonly Dictionary<long, (Paragraph Paragraph, Run Text)> liveParagraphs = [];
 
-    public StatusWindow(VerbemoRuntime runtime)
+    public Action? RevealAction { get; set; }
+    public Window? HostWindow { get; set; }
+
+    public StatusWindow(VerbemoRuntime runtime, bool embedded = false)
     {
         this.runtime = runtime;
         Title = "Verbemo";
@@ -137,14 +141,40 @@ internal sealed class StatusWindow : Window
         livePanel.Children.Add(livePlaceholder);
         stack.Children.Add(livePanel);
         Content = stack;
+        if (embedded)
+        {
+            stack.Children.Remove(livePanel);
+            stack.Children.Remove(liveStatus);
+            stack.Children.Clear();
+            titleEditor = new System.Windows.Controls.TextBox { Margin = new Thickness(0,0,0,16), FontSize = 22 };
+            System.Windows.Automation.AutomationProperties.SetName(titleEditor,T("Meeting title", "Название встречи"));
+            async Task Rename()
+            {
+                if(!runtime.State.IsRecording || string.IsNullOrWhiteSpace(titleEditor.Text)) return;
+                try { await runtime.RenameRecordingAsync(titleEditor.Text); }
+                catch(Exception error) when(error is IOException or InvalidOperationException or UnauthorizedAccessException) { Ui.ShowError(Ui.OwnerOf(stack),"Verbemo",error.Message); }
+            }
+            titleEditor.LostKeyboardFocus += async (_, _) => await Rename();
+            titleEditor.KeyDown += async (_, e) => { if(e.Key == System.Windows.Input.Key.Enter) await Rename(); };
+            var content = new Grid { Margin = stack.Margin };
+            foreach (var height in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto, new GridLength(1, GridUnitType.Star) })
+                content.RowDefinitions.Add(new RowDefinition { Height = height });
+            var heading = Ui.Heading(T("Live transcript", "Расшифровка в реальном времени"));
+            foreach (var (element, row) in new (FrameworkElement, int)[] { (titleEditor,0), (heading,1), (liveStatus,2), (livePanel,3) })
+            { Grid.SetRow(element,row); content.Children.Add(element); }
+            Content = content;
+            liveText.Height = double.NaN;
+            liveText.MinHeight = 80;
+            livePanel.Visibility = Visibility.Visible;
+        }
 
         autoRecord.Click += (_, _) =>
         {
-            if (!Ui.TryUpdate(this, () => runtime.SetAutoRecord(autoRecord.IsChecked == true))) Refresh();
+            if (!Ui.TryUpdate(HostWindow ?? this, () => runtime.SetAutoRecord(autoRecord.IsChecked == true))) Refresh();
         };
         live.Click += (_, _) =>
         {
-            Ui.TryUpdate(this, () => runtime.Update(settings => settings.LiveTranscription.Enabled = live.IsChecked == true));
+            Ui.TryUpdate(HostWindow ?? this, () => runtime.Update(settings => settings.LiveTranscription.Enabled = live.IsChecked == true));
             Refresh();
         };
         runtime.StateChanged += (_, _) => Dispatcher.InvokeAsync(Refresh);
@@ -181,6 +211,7 @@ internal sealed class StatusWindow : Window
 
     public void Reveal()
     {
+        if (RevealAction is { } reveal) { reveal(); return; }
         Show();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
@@ -229,13 +260,26 @@ internal sealed class StatusWindow : Window
     {
         if (!runtime.State.IsRecording || operationPending) return;
         try { await runtime.TogglePauseAsync(); }
-        catch (Exception exception) { Ui.ShowError(this, T("Couldn’t pause", "Не удалось поставить на паузу"), exception.Message); }
+        catch (Exception exception) { Ui.ShowError(HostWindow ?? (IsVisible ? this : null), T("Couldn’t pause", "Не удалось поставить на паузу"), exception.Message); }
         finally { Refresh(); }
     }
 
     private void Refresh()
     {
         var current = runtime.State;
+        if(titleEditor is { IsKeyboardFocusWithin: false } editor)
+        {
+            editor.IsEnabled = current.IsRecording;
+            if(current.SessionDirectory is { } directory)
+            {
+                try
+                {
+                    using var marker = System.Text.Json.JsonDocument.Parse(File.ReadAllText(System.IO.Path.Combine(directory,".recording.json")));
+                    editor.Text = marker.RootElement.TryGetProperty("title",out var value) && value.GetString() is { Length: > 0 } name ? name : T("Current meeting", "Текущая встреча");
+                }
+                catch(Exception error) when(error is IOException or System.Text.Json.JsonException) { }
+            }
+        }
         var settings = runtime.Settings;
         var elapsed = current.StartedAt is { } started ? DateTimeOffset.Now - started : TimeSpan.Zero;
         var display = RecordingDisplay.From(current, elapsed);
