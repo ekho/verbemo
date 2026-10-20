@@ -5,13 +5,16 @@ using System.Text.Json;
 using Verbemo.App;
 using Verbemo.Core.Configuration;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Verbemo.Live.Tests;
 
-public sealed class ProcessingHookTests
+public sealed class ProcessingHookTests(ITestOutputHelper output)
 {
-    [Fact]
-    public async Task An_open_hook_does_not_block_the_next_session_or_run_twice()
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(500, true)]
+    public async Task An_open_hook_does_not_block_the_next_session_or_run_twice(int startupDelay, bool stopBeforeHookReady)
     {
         var root = Path.Combine(Path.GetTempPath(), "verbemo-hook-tests", Guid.NewGuid().ToString("N"));
         var sessions = new[] { Path.Combine(root, "first"), Path.Combine(root, "second") };
@@ -22,8 +25,10 @@ public sealed class ProcessingHookTests
         }
         // A viewer stays open until the test releases it, like Notepad opened
         // by on_stop. No network, audio, credentials or user settings are used.
-        const string script = "$PID | Set-Content -LiteralPath 'hook.pid'; Add-Content -LiteralPath 'hook.runs' -Value 'started'; "
-            + "while (-not (Test-Path -LiteralPath 'release')) { Start-Sleep -Milliseconds 50 }";
+        var script = $"Start-Sleep -Milliseconds {startupDelay}; "
+            + "$PID | Set-Content -LiteralPath 'hook.pid.tmp'; Move-Item -LiteralPath 'hook.pid.tmp' -Destination 'hook.pid'; "
+            + "Add-Content -LiteralPath 'hook.runs' -Value 'started'; $deadline = [DateTime]::UtcNow.AddSeconds(30); "
+            + "while (-not (Test-Path -LiteralPath 'release') -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }";
         var settings = AppSettings.CreateDefault(root);
         settings.RecordingsDirectory = root;
         settings.Transcription.Enabled = false;
@@ -50,6 +55,8 @@ public sealed class ProcessingHookTests
         {
             processor.Start();
             await bothDone.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            // Exercise teardown before a slow shell has published its identity.
+            if (stopBeforeHookReady) throw new OperationCanceledException("Simulated interruption before hook startup");
             foreach (var session in sessions)
             {
                 await WaitForFileAsync(Path.Combine(session, "hook.runs"));
@@ -63,37 +70,70 @@ public sealed class ProcessingHookTests
             await repeated.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Single(await File.ReadAllLinesAsync(Path.Combine(sessions[1], "hook.runs")));
         }
+        catch (OperationCanceledException) when (stopBeforeHookReady) { }
+        catch (Exception exception)
+        {
+            output.WriteLine("Hook assertions failed before cleanup: {0}", exception);
+            throw;
+        }
         finally
         {
+            output.WriteLine("Releasing hooks in {0} at {1:O}", root, DateTimeOffset.UtcNow);
             foreach (var session in sessions) await File.WriteAllTextAsync(Path.Combine(session, "release"), "release");
             await processor.DisposeAsync();
+            var cleanupErrors = new List<Exception>();
             foreach (var session in sessions)
             {
-                var path = Path.Combine(session, "hook.pid");
-                if (!File.Exists(path)) continue;
-                var pid = int.Parse((await File.ReadAllTextAsync(path)).Trim());
                 try
                 {
-                    using var hook = Process.GetProcessById(pid);
-                    using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                    try { await hook.WaitForExitAsync(limit.Token); }
-                    catch (OperationCanceledException) { hook.Kill(entireProcessTree: true); await hook.WaitForExitAsync(); }
+                    var path = Path.Combine(session, "hook.pid");
+                    if (!ProcessingCoordinator.Ledger(session).HookRan) continue;
+                    // A launched shell can still be starting when assertions time out.
+                    // Keep its release marker and working directory until it registers and exits.
+                    await WaitForFileAsync(path);
+                    var pid = int.Parse((await File.ReadAllTextAsync(path)).Trim());
+                    output.WriteLine("Waiting for hook PID {0} in {1}", pid, session);
+                    try
+                    {
+                        using var hook = Process.GetProcessById(pid);
+                        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                        try { await hook.WaitForExitAsync(limit.Token); }
+                        catch (OperationCanceledException)
+                        {
+                            output.WriteLine("Terminating timed-out hook PID {0}", pid);
+                            try { hook.Kill(entireProcessTree: true); }
+                            catch (InvalidOperationException) when (hook.HasExited) { }
+                            using var killLimit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                            await hook.WaitForExitAsync(killLimit.Token);
+                            throw new TimeoutException($"Hook PID {pid} did not exit after release");
+                        }
+                    }
+                    catch (ArgumentException) { }
                 }
-                catch (ArgumentException) { }
+                catch (Exception exception)
+                {
+                    output.WriteLine("Hook cleanup failed for {0}: {1}", session, exception);
+                    cleanupErrors.Add(exception);
+                }
             }
-            // Windows can briefly retain the child's working-directory handle
-            // after its exit is signalled. Wait for that handle to be released.
+            if (cleanupErrors.Count > 0)
+                throw new AggregateException("Hook cleanup failed; release markers retained", cleanupErrors);
+            // A session directory can remain locked briefly after the hook exits.
             for (var attempt = 0; ; attempt++)
             {
                 try { Directory.Delete(root, recursive: true); break; }
-                catch (IOException) when (attempt < 20) { await Task.Delay(100); }
+                catch (IOException exception) when (attempt < 20)
+                {
+                    output.WriteLine("Directory release pending at {0:O}: {1}", DateTimeOffset.UtcNow, exception.Message);
+                    await Task.Delay(100);
+                }
             }
         }
     }
 
     private static async Task WaitForFileAsync(string path)
     {
-        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         while (!File.Exists(path)) await Task.Delay(25, limit.Token);
     }
 }

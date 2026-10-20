@@ -31,51 +31,48 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
             signed = next(s for s in steps if s.get('name', '').startswith('Build signed'))
             self.assertEqual(signed['if'], "needs.resolve.outputs.prerelease != 'true'")
 
-    def test_pr_ci_validates_the_macos_only_artifact_set_without_publication(self):
+    def test_pr_ci_validates_both_platform_artifact_sets_without_publication(self):
         data = workflow('ci.yml')
         job = data['jobs'].get('preview', {})
-        self.assertEqual(set(job.get('needs', [])), {'test'})
+        self.assertEqual(set(job.get('needs', [])), {'test', 'windows'})
         self.assertNotIn('secrets.', str(job))
         self.assertNotIn('permissions', job)
         command = '\n'.join(step.get('run', '') for step in job['steps'])
         self.assertIn('release.py prepare', command)
-        for flag in ('--prerelease', '--macos-only', '--dry-run'):
+        for flag in ('--prerelease', '--dry-run'):
             self.assertIn(flag, command)
         self.assertNotIn('release.py publish', command)
 
-    def test_windows_pause_keeps_macos_checks_and_refuses_signed_dispatch(self):
+    def test_both_platforms_are_enabled_and_downloaded_by_exact_id(self):
         ci, release = workflow('ci.yml'), workflow('release.yml')
-        for data in (ci, release):
-            self.assertEqual(data['jobs']['windows']['if'], '${{ false }}')
-        self.assertEqual(set(release['jobs']['aggregate']['needs']), {'resolve', 'macos'})
-        for job in (ci['jobs']['preview'], release['jobs']['aggregate']):
-            download = next(s for s in job['steps'] if s.get('uses', '').startswith('actions/download-artifact@'))
-            self.assertIn('artifact-ids', download['with'])
-            self.assertIn('--macos-only', '\n'.join(s.get('run', '') for s in job['steps']))
-        for data, source, consumer in ((ci, 'test', 'preview'), (release, 'macos', 'aggregate')):
-            self.assertEqual(data['jobs'][source]['outputs']['artifact_id'], '${{ steps.artifacts.outputs.artifact-id }}')
-            upload = next(s for s in data['jobs'][source]['steps'] if s.get('id') == 'artifacts')
-            self.assertTrue(upload['uses'].startswith('actions/upload-artifact@'))
+        self.assertNotIn('if', ci['jobs']['windows'])
+        self.assertEqual(release['jobs']['windows']['if'], "needs.resolve.outputs.release != 'false'")
+        for data, sources, consumer in ((ci, ('test', 'windows'), 'preview'),
+                                        (release, ('macos', 'windows'), 'aggregate')):
+            for source in sources:
+                self.assertEqual(data['jobs'][source]['outputs']['artifact_id'], '${{ steps.artifacts.outputs.artifact-id }}')
+                upload = next(s for s in data['jobs'][source]['steps'] if s.get('id') == 'artifacts')
+                self.assertTrue(upload['uses'].startswith('actions/upload-artifact@'))
             download = next(s for s in data['jobs'][consumer]['steps'] if s.get('uses', '').startswith('actions/download-artifact@'))
-            self.assertEqual(download['with']['artifact-ids'], '${{ needs.' + source + '.outputs.artifact_id }}')
+            self.assertEqual(download['with']['artifact-ids'], ','.join('${{ needs.' + source + '.outputs.artifact_id }}' for source in sources))
+            self.assertEqual(download['with']['merge-multiple'], 'true')
+            self.assertNotIn('--macos-only', str(data))
         step = next(s for s in release['jobs']['resolve']['steps'] if s.get('id') == 'distribution')
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / 'output'
-            env = {**os.environ, 'GITHUB_OUTPUT': str(output), 'DISTRIBUTION': 'preview'}
-            result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], env=env, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('prerelease=true', output.read_text())
-            output.unlink()
-            env['DISTRIBUTION'] = 'signed'
-            result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], env=env, capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('issues/19', result.stdout + result.stderr)
-            self.assertFalse(output.exists())
+        for distribution, expected in (('preview', 'true'), ('signed', 'false')):
+            with self.subTest(distribution=distribution), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / 'output'
+                env = {**os.environ, 'GITHUB_OUTPUT': str(output), 'DISTRIBUTION': distribution}
+                result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text(), f'prerelease={expected}\n')
 
-    def test_single_macos_artifact_is_validated_from_its_flat_download_directory(self):
+    def test_both_platform_artifacts_are_validated_from_the_merged_download_directory(self):
         spec = importlib.util.spec_from_file_location('workflow_manifest', ROOT / 'scripts/release_manifest.py')
         manifest = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(manifest)
+        spec = importlib.util.spec_from_file_location('workflow_fixtures', ROOT / 'Tests/scripts/test_release_manifest.py')
+        fixtures = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixtures)
         version = (ROOT / 'VERSION').read_text().strip()
         source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
         build = int(subprocess.check_output(['git', 'rev-list', '--count', 'HEAD'], cwd=ROOT, text=True))
@@ -87,23 +84,31 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
                 artifacts.mkdir()
                 (artifacts / manifest.dmg_name(version)).write_bytes(b'ad-hoc preview DMG')
                 manifest.write_macos_receipt(artifacts, version, source, build, prerelease=True)
+                helper = fixtures.WindowsManifestTests()
+                helper.module = manifest
+                receipt = helper.fixture(artifacts, version=version, commit=source, build=build)
+                receipt['publishable'] = False
+                receipt['signature'] = {'authenticode': 'unsigned-development', 'timestamp': 'unverified',
+                                        'certificate_thumbprint': None}
+                (artifacts / 'windows-build.json').write_text(json.dumps(receipt))
                 step = next(s for s in job['steps'] if 'release.py prepare' in s.get('run', ''))
                 env = {**os.environ, 'RUNNER_TEMP': directory, 'RELEASE_VERSION': version,
                        'SOURCE_COMMIT': source, 'BUILD_NUMBER': str(build), 'PRERELEASE': 'true'}
                 result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=ROOT,
                                         env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(json.loads(result.stdout)['platforms'], ['macos'])
+                self.assertNotIn('platforms', json.loads(result.stdout))
                 self.assertEqual((artifacts / 'release-manifest.json').exists(), writes_metadata)
                 self.assertEqual((artifacts / 'SHA256SUMS').exists(), writes_metadata)
 
-    def test_automatic_release_uses_the_version_commit_and_gates_macos(self):
+    def test_automatic_release_uses_the_version_commit_and_gates_both_platforms(self):
         data = workflow('release.yml')
         self.assertEqual(data['on'].get('push', {}).get('branches'), ['master'])
         self.assertIn('auto', data['on']['workflow_dispatch']['inputs']['operation']['options'])
         jobs = data['jobs']
         self.assertEqual(jobs['resolve']['outputs']['release'], '${{ steps.version.outputs.release }}')
-        self.assertEqual(jobs['macos']['if'], "needs.resolve.outputs.release != 'false'")
+        for platform in ('macos', 'windows'):
+            self.assertEqual(jobs[platform]['if'], "needs.resolve.outputs.release != 'false'")
         self.assertIn("needs.resolve.outputs.release != 'false'", jobs['publish']['if'])
         self.assertEqual(jobs['publish']['permissions'], {'contents': 'write', 'actions': 'write'})
         continuation = next(s for s in jobs['publish']['steps'] if s.get('name') == 'Release changes merged during this build')
@@ -238,7 +243,7 @@ else:
 
     def test_both_builds_use_one_resolved_commit_with_full_history(self):
         jobs = workflow('release.yml')['jobs']
-        self.assertEqual(set(jobs['aggregate']['needs']), {'resolve', 'macos'})
+        self.assertEqual(set(jobs['aggregate']['needs']), {'resolve', 'macos', 'windows'})
         for platform in ('macos', 'windows'):
             job = jobs[platform]
             self.assertEqual(job['needs'], 'resolve')

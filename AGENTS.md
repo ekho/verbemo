@@ -34,12 +34,6 @@
 - Apple Developer Program membership is deferred. Continue local macOS ad-hoc
   builds and testing; retain signed-release preparation. Actual Developer ID
   signing and notarization await the user's own credentials.
-- Temporary exception while [#19](https://github.com/ekho/verbemo/issues/19) is open:
-  Windows builds are paused in CI and release workflows. Publish only macOS
-  unsigned prereleases, explicitly scoped as `platforms: ["macos"]`; signed
-  workflow dispatches are blocked. Restore both Windows jobs and both-platform
-  validation as part of resolving #19. Preserve all previously published files,
-  tags, and verification/resume support for every existing release scope.
 
 ## Windows testing
 
