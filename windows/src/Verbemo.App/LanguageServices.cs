@@ -32,13 +32,15 @@ public sealed record LanguageModelAnswer(string Text, string Backend, string? Mo
 /// may go at all is decided by <see cref="MeetingEgress"/>; nothing here shows a
 /// model a meeting without asking it first.
 /// </summary>
-public sealed class LanguageModels(HttpClient httpClient, SecretStore secrets, Func<AppSettings> settings)
+public sealed class LanguageModels(HttpClient httpClient, SecretStore secrets, Func<AppSettings> settings,
+    Func<EgressPurpose, IReadOnlyList<LanguageModelBackend>>? backends = null)
 {
     public IReadOnlyList<LanguageModelBackend> For(EgressPurpose purpose)
     {
         var current = settings();
         var route = MeetingEgress.Route(purpose, current);
         if (route is null) return [];
+        if (backends is not null) return backends(purpose);
         var summary = current.Summary;
         var candidates = new Dictionary<string, LanguageModelBackend>();
 
@@ -460,6 +462,7 @@ public static class AtomicFiles
         try
         {
             await File.WriteAllTextAsync(temporary, value, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporary, path, overwrite: true);
         }
         finally

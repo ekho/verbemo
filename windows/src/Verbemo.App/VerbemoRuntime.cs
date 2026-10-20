@@ -464,6 +464,9 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public Task RetranscribeAsync(string directory, string? engine) => processing.RetranscribeAsync(directory, engine);
 
+    public Task RegenerateSummaryAsync(string directory, CancellationToken cancellationToken = default) =>
+        processing.RegenerateSummaryAsync(directory, cancellationToken);
+
     public ProcessingStatus? ProcessingStatusFor(string directory) => processing.StatusFor(directory);
 
     public Task SetSpeakerNameAsync(string directory, string label, string name, CancellationToken cancellationToken = default, string? title = null) =>

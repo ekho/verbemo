@@ -13,6 +13,21 @@ public static class TranscriptVersions
 {
     public const string RequestFile = "transcribe.requested";
 
+    public static string ValidatedSessionRoot(string artifactDirectory)
+    {
+        var directory = new DirectoryInfo(Path.GetFullPath(artifactDirectory));
+        if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("A transcript version must remain inside its meeting.");
+        if (File.Exists(Path.Combine(directory.FullName, "meta.json"))) return directory.FullName;
+        var parent = directory.Parent;
+        var root = parent?.Parent;
+        if (parent?.Name != "transcripts" || root is null || !File.Exists(Path.Combine(root.FullName, "meta.json"))
+            || (parent.Attributes & FileAttributes.ReparsePoint) != 0 || (root.Attributes & FileAttributes.ReparsePoint) != 0
+            || directory.Name.Length != 64 || !directory.Name.All(Uri.IsHexDigit))
+            throw new InvalidOperationException("This is not a saved transcript version.");
+        return root.FullName;
+    }
+
     public static async Task ArchiveCurrentAsync(string directory, CancellationToken cancellationToken = default)
     {
         var path = Path.Combine(directory, "transcript.json");

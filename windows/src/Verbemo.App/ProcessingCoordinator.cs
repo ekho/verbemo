@@ -64,7 +64,8 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         ModelManager models,
         HttpClient httpClient,
         AnalyticsService analytics,
-        Func<string, AppSettings, ITranscriptionEngine>? localEngineFactory = null)
+        Func<string, AppSettings, ITranscriptionEngine>? localEngineFactory = null,
+        Func<EgressPurpose, IReadOnlyList<LanguageModelBackend>>? languageModelBackends = null)
     {
         this.settings = settings;
         this.configReadable = configReadable;
@@ -73,7 +74,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         this.httpClient = httpClient;
         this.analytics = analytics;
         this.localEngineFactory = localEngineFactory;
-        languageModels = new LanguageModels(httpClient, secrets, settings);
+        languageModels = new LanguageModels(httpClient, secrets, settings, languageModelBackends);
     }
 
     public event EventHandler<ProcessingStatus>? StatusChanged;
@@ -107,7 +108,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
 
     public bool IsBusy
     {
-        get { lock (queueLock) return queued.Count > 0; }
+        get { lock (queueLock) return queued.Count > 0 || preparing.Count > 0; }
     }
 
     public void Start()
@@ -271,6 +272,37 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
             lock (queueLock) preparing.Remove(directory);
         }
         Enqueue(directory);
+    }
+
+    public async Task RegenerateSummaryAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
+        var root = TranscriptVersions.ValidatedSessionRoot(directory);
+        lock (queueLock)
+        {
+            if (queued.Contains(root) || !preparing.Add(root))
+                throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
+        }
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime.Token);
+        try
+        {
+            cancellationToken = operation.Token;
+            var state = new MeetingActionState(Has(directory, "transcript.json") && Has(directory, "transcript.md"),
+                Has(directory, "summary.md"), false, Has(root, ".recording.json"), false, configReadable(),
+                settings().Transcription.Enabled, MeetingEgress.Route(EgressPurpose.Summary, settings()) is not null,
+                Has(root, TranscriptVersions.RequestFile));
+            if (state.Reason(MeetingAction.RegenerateSummary) is { } reason) throw new InvalidOperationException(reason);
+            _ = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
+            var markdown = await File.ReadAllTextAsync(Path.Combine(directory, "transcript.md"), cancellationToken).ConfigureAwait(false);
+            Publish(root, "summary", T("Writing the summary…", "Создаю сводку…"), true);
+            await new SummaryService(languageModels, settings).GenerateAsync(directory, markdown, cancellationToken).ConfigureAwait(false);
+            foreach (var marker in new[] { "summary.failed", "summary.deferred", "summary.off" }) File.Delete(Path.Combine(directory, marker));
+        }
+        finally
+        {
+            lock (queueLock) preparing.Remove(root);
+            Publish(root, "idle", "", false);
+        }
     }
 
     public async Task SetSpeakerNameAsync(string directory, string label, string name, CancellationToken cancellationToken = default, string? title = null)
