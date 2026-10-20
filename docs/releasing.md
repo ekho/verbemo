@@ -6,26 +6,18 @@ root `VERSION`, build number (`git rev-list --count`), GitHub release named
 Read the source version from `VERSION`; a committed version does not establish
 a public release. No site, domain, SSH server or analytics backend is needed.
 
-## Temporary Windows pause
+## Platform scope
 
-[Issue #19](https://github.com/ekho/verbemo/issues/19) tracks a Windows Live-test
-cleanup failure and the required restoration of Windows builds. While it is
-open, Windows jobs are explicitly skipped in CI and the release workflow.
-Automatic previews contain macOS only; the manifest explicitly records
-`platforms: ["macos"]` and `prerelease: true`, and the release body explains
-that Windows builds are paused. Existing releases, assets and tags stay intact.
+CI and new releases require macOS and Windows from the same source commit,
+version and build number. Missing Windows artifacts fail preparation; they never
+silently reduce the release scope.
 
-Use `--prerelease --macos-only` for local preparation of these artifact sets.
-Their exact set is the DMG, `macos-build.json`, `release-manifest.json` and
-`SHA256SUMS`. The full-platform CLI default still requires Windows; missing
-files never silently change the release scope. macOS-only stable releases
-are rejected. Signed workflow dispatches stop before version preparation
-until Windows is restored; verification/resume of existing releases still works.
-
-Closing #19 requires restoring both Windows jobs, CI/aggregate dependencies,
-both-platform downloads/validation, signed dispatch and the active full-preview
-flags. Remove the temporary `.github/actionlint.yaml` exceptions as well.
-Keep verification/resume support for already published macOS-only prereleases.
+Earlier macOS-only unsigned prereleases published during the temporary
+[Issue #19](https://github.com/ekho/verbemo/issues/19) pause retain their explicit
+`platforms: ["macos"]` scope. Keep their existing files and tags unchanged.
+Verification and resume still support them. The CLI's `--prerelease --macos-only`
+option remains available for recovering those historical sets, outside the active
+cross-platform workflow. macOS-only stable releases are rejected.
 
 ## Local development and signed prerequisites
 
@@ -50,8 +42,7 @@ permissions again. Existing stable updates, README/site direct download links
 and catalog metadata remain restricted to signed stable release evidence.
 
 `distribution=signed` retains Developer ID/notarization/Sparkle and Windows
-Authenticode requirements. Its workflow is temporarily blocked by #19.
-No missing credential silently changes that mode.
+Authenticode requirements. Missing credentials fail that mode explicitly.
 
 To package a local macOS preview from a clean committed checkout:
 
@@ -98,12 +89,11 @@ The automatic path is:
    changes also bump MAJOR before 1.0; they are not silently downgraded to MINOR.
 3. Commit `VERSION`, `CHANGELOG.md` and `docs/release-notes-verbemo-v<VERSION>.md`
    as `chore(release): <VERSION>` with the exact parent in `Release-Source` and
-   the selected `Release-Channel` (`preview-macos` during the pause, otherwise
-   `preview` or `signed`).
+   the selected `Release-Channel` (`preview` or `signed`).
    Push normally to `master`; a concurrent merge rejects the push without
    overwriting anyone's work. The newer merge's run (or a manual `auto` run)
    recalculates from the current branch.
-4. Test/build the enabled platforms at that exact version commit, then aggregate
+4. Test/build both platforms at that exact version commit, then aggregate
    and validate their complete artifact set.
 5. Use the existing publisher to create the tag/draft after successful builds,
    attach the generated release notes and all files, verify and publish. Only a
@@ -133,9 +123,8 @@ The version commit uses `GITHUB_TOKEN`, whose push does not start another CI
 run. The release workflow therefore tests the exact version commit itself,
 including a complete Swift test report, script/workflow tests, landing checks
 and the product-independence guard. PR CI also tests the version tooling.
-During #19 it builds the unsigned macOS package and validates its receipt,
-source identity and file hashes without publishing. Windows build/test
-definitions remain available for restoration but do not execute.
+PR CI builds both unsigned platform packages and validates their receipts,
+source identity and file hashes together without publishing.
 Use Conventional Commit messages in the final history: with squash merges,
 make the PR title the intended final commit message.
 
@@ -152,7 +141,7 @@ npm --prefix scripts/release-automation test
 ```
 
 Manual workflow `ref`, `version`, `operation`, `distribution` inputs resolve a source ref once and check out
-the exact SHA on enabled platforms. `prepare` is the default: it builds/tests the enabled
+the exact SHA on both platforms. `prepare` is the default: it builds/tests both
 platform sets in the selected distribution mode, combines them without collisions, validates them and
 retains `release-artifacts`. It does not create a public release.
 `publish` performs the same preparation before publication. `resume` verifies
@@ -166,8 +155,8 @@ version/release policy as an ordinary merge. Manual `prepare`, `publish` and
 gh workflow run release.yml --repo ekho/verbemo --ref master -f operation=auto
 ```
 
-After #19 is resolved, the same dispatch can explicitly select
-`-f distribution=signed` when own credentials are configured.
+The same dispatch can explicitly select `-f distribution=signed` when own
+credentials are configured.
 A signed release uses a new version after any
 published preview; it cannot replace or promote that preview in place.
 
@@ -195,8 +184,8 @@ python3 scripts/release.py prepare --artifacts "$VERBEMO_RELEASE_ARTIFACTS" \
 ```
 
 For full-platform preview artifacts, add `--prerelease` to each `prepare`
-command (including `--dry-run`). During #19, add `--prerelease --macos-only`
-for macOS-only sets. The stable default rejects unsigned artifacts. The prepared
+command (including `--dry-run`). Use `--prerelease --macos-only` only when
+recovering a historical macOS-only set. The stable default rejects unsigned artifacts. The prepared
 manifest records `prerelease: true`, which publication and resume validate.
 
 `--dry-run` validates the selected receipts and prospective metadata without writing
@@ -316,7 +305,7 @@ planner creates a new candidate at current source with a `Release-Channel`
 marker, regenerating notes from the last published release (or own VERSION
 adoption). It keeps the pending number unless new changes require a higher
 SemVer bump. Switching to/from `preview-macos` also selects current source,
-so a pending candidate cannot retain old tooling that still requires Windows.
+so a pending candidate cannot retain the temporary Windows pause.
 Once a tag or
 draft reserves that version, mode/source changes are refused.
 
