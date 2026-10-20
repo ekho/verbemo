@@ -9,7 +9,7 @@
 #
 #   make            build + sign Verbemo.app
 #   make run-app    and launch it through LaunchServices
-#   make icon       redraw Resources/Verbemo.icns from the feather
+#   make icon       rebuild macOS, Windows and website icons from the wave artwork
 #   make identities list available signing identities
 #   make verify     show the built app's signature
 #   make release    build, notarize and publish a release
@@ -109,13 +109,12 @@ verify-nemotron: nemotron
 build: localvqe nemotron
 	swift build -c release --arch arm64 --arch x86_64
 
-# Drawn from the same feather the menu bar uses, so the Dock, the window and
-# the status item are one program rather than three.
+# Keep every packaged icon in sync with the approved wave artwork.
 icon:
-	@swift scripts/make-icon.swift $(ICON)
+	@swift scripts/make-icon.swift
 
-$(ICON):
-	@swift scripts/make-icon.swift $(ICON)
+$(ICON): scripts/make-icon.swift Resources/Verbemo-wave-master.png
+	@swift scripts/make-icon.swift
 
 app: build $(ICON)
 	@rm -rf $(APP)

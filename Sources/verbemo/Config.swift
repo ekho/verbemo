@@ -426,7 +426,7 @@ enum Config {
         flag(.dockIcon, in: load())
     }
 
-    /// Show verbemo's feather in the menu bar, with the clock beside it while a
+    /// Show verbemo's wave in the menu bar, with the clock beside it while a
     /// meeting is being recorded. On by default, and it may be turned off
     /// together with the Dock icon: with neither, verbemo is a program with no
     /// icon anywhere, and the way back to its window is to open Verbemo again —
