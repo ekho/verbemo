@@ -11,8 +11,10 @@ namespace Verbemo.Live.Tests;
 
 public sealed class ProcessingHookTests(ITestOutputHelper output)
 {
-    [Fact]
-    public async Task An_open_hook_does_not_block_the_next_session_or_run_twice()
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(500, true)]
+    public async Task An_open_hook_does_not_block_the_next_session_or_run_twice(int startupDelay, bool stopBeforeHookReady)
     {
         var root = Path.Combine(Path.GetTempPath(), "verbemo-hook-tests", Guid.NewGuid().ToString("N"));
         var sessions = new[] { Path.Combine(root, "first"), Path.Combine(root, "second") };
@@ -23,7 +25,8 @@ public sealed class ProcessingHookTests(ITestOutputHelper output)
         }
         // A viewer stays open until the test releases it, like Notepad opened
         // by on_stop. No network, audio, credentials or user settings are used.
-        const string script = "$PID | Set-Content -LiteralPath 'hook.pid'; Add-Content -LiteralPath 'hook.runs' -Value 'started'; "
+        var script = $"Start-Sleep -Milliseconds {startupDelay}; "
+            + "$PID | Set-Content -LiteralPath 'hook.pid'; Add-Content -LiteralPath 'hook.runs' -Value 'started'; "
             + "while (-not (Test-Path -LiteralPath 'release')) { Start-Sleep -Milliseconds 50 }";
         var settings = AppSettings.CreateDefault(root);
         settings.RecordingsDirectory = root;
@@ -51,6 +54,8 @@ public sealed class ProcessingHookTests(ITestOutputHelper output)
         {
             processor.Start();
             await bothDone.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            // Exercise teardown before a slow shell has published its identity.
+            if (stopBeforeHookReady) return;
             foreach (var session in sessions)
             {
                 await WaitForFileAsync(Path.Combine(session, "hook.runs"));
