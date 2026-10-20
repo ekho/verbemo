@@ -68,7 +68,7 @@ internal sealed class SetupForm
     private readonly TextBlock folderDetail = Ui.Detail(FolderAdvice);
     private readonly CheckBox keepAudio = Ui.Switch(T("Keep the audio after transcribing", "Оставлять звук после расшифровки"));
 
-    private readonly CheckBox summaries = Ui.Switch(T("Write summaries", "Писать саммари"));
+    private readonly CheckBox summaries = Ui.Switch(T("Write summaries", "Создавать сводку"));
     private readonly Dictionary<string, RadioButton> summaryCards = [];
     private readonly Dictionary<string, TextBlock> summaryStatus = [];
     private readonly Dictionary<string, (TextBlock Install, Button SignIn)> cliActions = [];
@@ -107,7 +107,18 @@ internal sealed class SetupForm
         settingsPages[ApplicationDestination.Transcription].Children.Add(sections[2]);
         settingsPages[ApplicationDestination.Storage].Children.Add(sections[3]);
         settingsPages[ApplicationDestination.Summary].Children.Add(sections[4]);
+        foreach(var page in settingsPages.Values) StackCards(page);
         return settingsPages;
+    }
+
+    private static void StackCards(DependencyObject element)
+    {
+        if(element is System.Windows.Controls.Primitives.UniformGrid grid)
+        {
+            grid.Rows = 0; grid.Columns = 1;
+            foreach(var card in grid.Children.OfType<FrameworkElement>()) card.Margin = new Thickness(0,0,0,8);
+        }
+        foreach(var child in LogicalTreeHelper.GetChildren(element).OfType<DependencyObject>()) StackCards(child);
     }
 
     /// <summary>Anything a host shows about the form may have changed — what is left to do.</summary>
@@ -159,7 +170,7 @@ internal sealed class SetupForm
                 Ui.Detail(T("One stereo M4A: your mic on the left, the other side on the right.",
                     "Один стереофайл M4A: ваш микрофон слева, собеседники справа.")), keepAudio))));
 
-        View.Children.Add(Ui.Section(T("Summaries", "Саммари"), SummaryChoices(openAiBaseView, openAiModelView, ollamaBaseView, ollamaModelView), summaries));
+        View.Children.Add(Ui.Section(T("Summaries", "Сводка"), SummaryChoices(openAiBaseView, openAiModelView, ollamaBaseView, ollamaModelView), summaries));
 
         noIconsNote.Margin = new Thickness(0, Ui.HeaderGap, 0, 0);
         View.Children.Add(Ui.Section(T("Where Verbemo shows up", "Где видно Verbemo"), Ui.Group(0,
@@ -206,7 +217,7 @@ internal sealed class SetupForm
         var providers = new (string Id, string Title, string Detail, string Url)[]
         {
             ("assemblyai", "AssemblyAI", T("$0.23 an hour. No limit on meeting length.", "$0,23 за час. Без ограничения на длину встречи."), "https://www.assemblyai.com/dashboard/signup"),
-            ("openai", "OpenAI", T("$0.36 an hour. Same key as summaries.", "$0,36 за час. Тот же ключ, что и для саммари."), "https://platform.openai.com/api-keys"),
+            ("openai", "OpenAI", T("$0.36 an hour. Same key as summaries.", "$0,36 за час. Тот же ключ, что и для сводки."), "https://platform.openai.com/api-keys"),
             ("elevenlabs", "ElevenLabs", T("Scribe v2. $0.44 an hour for a two-channel call.", "Scribe v2. $0,44 за час разговора с двумя каналами."), "https://elevenlabs.io/app/developers/api-keys"),
         };
         foreach (var (id, title, detail, url) in providers)
@@ -363,7 +374,11 @@ internal sealed class SetupForm
         live.Click += (_, _) => Change(settings => settings.LiveTranscription.Enabled = live.IsChecked == true);
         keepAudio.Click += (_, _) => Change(settings => settings.KeepAudio = keepAudio.IsChecked == true);
 
-        summaries.Click += (_, _) => Change(settings => settings.Summary.Enabled = summaries.IsChecked == true);
+        summaries.Click += (_, _) => Change(settings =>
+        {
+            settings.Summary.Enabled = summaries.IsChecked == true;
+            if(settings.Summary.Enabled && settings.Summary.Backend == "none") settings.Summary.Backend = "auto";
+        });
         foreach (var (id, card) in summaryCards)
             card.Click += (_, _) => Change(settings => settings.Summary.Backend = id == "api-key" ? SelectedKeyBackend : id);
         keyProvider.SelectionChanged += (_, _) =>
@@ -730,7 +745,7 @@ internal sealed class SetupForm
             folderPath.Text = settings.RecordingsDirectory;
             keepAudio.IsChecked = settings.KeepAudio;
 
-            summaries.IsChecked = settings.Summary.Enabled;
+            summaries.IsChecked = settings.Summary.Enabled && settings.Summary.Backend != "none";
             var backend = settings.Summary.Backend;
             var chosen = backend is "anthropic-api" or "openai-api" ? "api-key" : backend;
             foreach (var (id, item) in summaryCards)
@@ -743,8 +758,8 @@ internal sealed class SetupForm
             summaryAuto.Text = backend switch
             {
                 "auto" => T("No card chosen: the first that works of Claude Code, an Anthropic key, Codex, an OpenAI key and Ollama writes the summary. Pick a card to keep to one.",
-                    "Карточка не выбрана: саммари пишет первое, что работает, из Claude Code, ключа Anthropic, Codex, ключа OpenAI и Ollama. Выберите карточку, чтобы держаться одного."),
-                "none" => T("Summaries are skipped (backend none in Advanced).", "Саммари пропускаются (в «Дополнительно» выбрано none)."),
+                    "Карточка не выбрана: сводку создаёт первое, что работает, из Claude Code, ключа Anthropic, Codex, ключа OpenAI и Ollama. Выберите карточку, чтобы держаться одного."),
+                "none" => T("Summaries are skipped (backend none in Advanced).", "Создание сводки выключено."),
                 _ => "",
             };
             summaryAuto.Visibility = summaryAuto.Text.Length > 0 && settings.Summary.Enabled ? Visibility.Visible : Visibility.Collapsed;
@@ -805,7 +820,7 @@ internal sealed class SetupForm
             if (!plan.Usable) left.Add(T("a transcription key or model", "ключ или модель для расшифровки"));
         }
         if (settings.Summary.Enabled && settings.Summary.Backend != "none" && runtime.LanguageModels.For(EgressPurpose.Summary).Count == 0)
-            left.Add(T("a model for summaries", "модель для саммари"));
+            left.Add(T("a model for summaries", "модель для сводки"));
         return left;
     }
 }

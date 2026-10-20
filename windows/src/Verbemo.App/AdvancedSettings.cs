@@ -105,6 +105,14 @@ internal sealed class AdvancedSettings
     private FrameworkElement Choice(SettingEntry entry)
     {
         var combo = new ComboBox { MinWidth = 240, ItemsSource = entry.Options };
+        if(entry.Path == "interface_theme")
+        {
+            combo.ItemsSource = new[] { (Value:"system",Label:T("System", "Системная")), (Value:"light",Label:T("Light", "Светлая")), (Value:"dark",Label:T("Dark", "Тёмная")) }
+                .Select(option => new ComboBoxItem { Content = option.Label, Tag = option.Value }).ToArray();
+            refreshers.Add(() => combo.SelectedItem = combo.Items.Cast<ComboBoxItem>().FirstOrDefault(item => (string)item.Tag == runtime.Settings.InterfaceTheme));
+            combo.SelectionChanged += (_, _) => { if(!refreshing && combo.SelectedItem is ComboBoxItem item) Commit(entry,JsonValue.Create((string)item.Tag)); };
+            return combo;
+        }
         System.Windows.Automation.AutomationProperties.SetName(combo, entry.Label);
         refreshers.Add(() => combo.SelectedItem = runtime.GetValue(entry.Path)?.ToString());
         combo.SelectionChanged += (_, _) =>

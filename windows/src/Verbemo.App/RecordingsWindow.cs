@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Verbemo.Core.Configuration;
 using Verbemo.Core.Processing;
+using Verbemo.Core.Sessions;
 using static Verbemo.Core.Localization.Localized;
 using ContextMenu = System.Windows.Controls.ContextMenu;
 using DataGrid = System.Windows.Controls.DataGrid;
@@ -41,6 +42,8 @@ internal sealed class RecordingsWindow : Window
     private readonly TextBlock problem = Ui.Status("", Ui.Caution);
     private readonly MarkdownPreview summary = new();
     private readonly MarkdownPreview transcript = new();
+    private readonly ContentControl transcriptContent = new();
+    private readonly StackPanel calendarPanel = new();
     private readonly TabControl engineTabs = new() { Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
     private readonly TextBlock processingStatus = Ui.Status("");
     private readonly StackPanel speakers = new() { Margin = new Thickness(12) };
@@ -103,9 +106,10 @@ internal sealed class RecordingsWindow : Window
         textCopy = Ui.Button(T("Text", "Текст"), () => _ = CopyAsync(markdown: false));
         markdownCopy = Ui.Button("Markdown", () => _ = CopyAsync(markdown: true));
         tabs.SelectionChanged += (_, e) => { if (e.Source == tabs) { if (navigation is not null) navigation.Tab = tabs.SelectedIndex; UpdateContentActions(); } };
-        tabs.Items.Add(new TabItem { Header = T("Transcript", "Расшифровка"), Content = transcript });
+        transcriptContent.Content = transcript;
+        tabs.Items.Add(new TabItem { Header = T("Transcript", "Расшифровка"), Content = transcriptContent });
         tabs.Items.Add(new TabItem { Header = T("Speakers", "Участники"), Content = Ui.Scroll(speakers) });
-        tabs.Items.Add(new TabItem { Header = T("Summary", "Саммари"), Content = summary });
+        tabs.Items.Add(new TabItem { Header = T("Summary", "Сводка"), Content = summary });
         engineTabs.SelectionChanged += async (_, args) =>
         {
             if (!updatingChoices && args.Source == engineTabs) await ShowTranscriptAsync();
@@ -145,6 +149,8 @@ internal sealed class RecordingsWindow : Window
         var statusPanel = new StackPanel();
         statusPanel.Children.Add(processingStatus);
         statusPanel.Children.Add(problem);
+        calendarPanel.Margin = new Thickness(0,12,0,12);
+        statusPanel.Children.Add(calendarPanel);
         Grid.SetRow(statusPanel, 1);
         detail.Children.Add(statusPanel);
         Grid.SetRow(transcriptPanel, 2);
@@ -338,6 +344,8 @@ internal sealed class RecordingsWindow : Window
             return;
         }
         var item = row.Item;
+        calendarPanel.Children.Clear();
+        if(MeetingCalendarView.Create(item.Calendar) is { } calendarView) calendarPanel.Children.Add(calendarView);
         var recording = item.Transcript == ProcessingStep.Recording;
         var busy = row.Status?.IsBusy == true;
         var canFinish = item.Transcript is ProcessingStep.Failed or ProcessingStep.Deferred
@@ -386,12 +394,15 @@ internal sealed class RecordingsWindow : Window
     private async Task ShowTranscriptAsync()
     {
         var version = ++transcriptShown;
+        transcriptContent.Content = transcript;
+        transcript.ShowText("");
+        summary.ShowText("");
         speakers.Children.Clear();
         var item = Selected?.Item;
         if (engineTabs.SelectedItem is not TabItem { Tag: TranscriptChoice choice })
         {
             var emptySummary = item is null ? "" : await ReadAsync(Path.Combine(item.Directory, "summary.md"))
-                ?? T("No summary yet.", "Саммари пока нет.");
+                ?? T("No summary yet.", "Сводки пока нет.");
             if (version != transcriptShown) return;
             transcript.ShowText(T("No transcript yet.", "Расшифровки пока нет."));
             summary.ShowMarkdown(emptySummary);
@@ -404,18 +415,20 @@ internal sealed class RecordingsWindow : Window
         if (choice.Version.State != ProcessingStep.Done)
         {
             transcript.ShowText(choice.Label + "\n\n" + (item?.Problem ?? T("Earlier transcripts are available in the tabs above.", "Предыдущие расшифровки доступны во вкладках выше.")));
-            summary.ShowText(T("No summary for this transcript yet.", "Саммари этой расшифровки пока нет."));
+            summary.ShowText(T("No summary for this transcript yet.", "Сводки этой расшифровки пока нет."));
             speakers.Children.Add(Ui.Detail(T("Speakers appear once this transcript is ready.", "Участники появятся, когда эта расшифровка будет готова.")));
             return;
         }
         var text = await ReadAsync(Path.Combine(directory, "transcript.md")) ?? T("No transcript text available.", "Текст расшифровки недоступен.");
         var summaryText = await ReadAsync(Path.Combine(directory, "summary.md"))
-            ?? (item?.Summary == ProcessingStep.Off ? T("Summaries are off.", "Саммари выключены.") : T("No summary yet.", "Саммари пока нет."));
+            ?? (item?.Summary == ProcessingStep.Off ? T("Summaries are off.", "Создание сводки выключено.") : T("No summary yet.", "Сводки пока нет."));
         if (File.Exists(Path.Combine(directory, "summary.stale")))
-            summaryText = T("This summary refers to the previous transcript.\n\n", "Это саммари предыдущей расшифровки.\n\n") + summaryText;
+            summaryText = T("This summary refers to the previous transcript.\n\n", "Это сводка предыдущей расшифровки.\n\n") + summaryText;
         if (version != transcriptShown) return;
         transcript.ShowMarkdown(text);
         summary.ShowMarkdown(summaryText);
+        if(item?.Calendar is { IsConfirmed: true, Participants.Count: > 0 } calendar)
+            await ShowTranscriptParticipantsAsync(directory,calendar,version);
         await ShowSpeakersAsync(directory, item?.Title ?? "", version);
         UpdateContentActions();
     }
@@ -440,6 +453,13 @@ internal sealed class RecordingsWindow : Window
         if (document is null) return;
         var file = await SpeakerFile.ReadAsync(directory, CancellationToken.None);
         if (version != transcriptShown) return;
+        if(Selected?.Item.Calendar is { IsConfirmed: true } calendar)
+        {
+            speakers.Children.Add(Ui.Heading(T("Invited from calendar", "Приглашённые из календаря")));
+            speakers.Children.Add(Ui.Detail(T("An invitation does not confirm attendance.", "Приглашение не подтверждает присутствие на встрече.")));
+            foreach(var person in calendar.Participants) speakers.Children.Add(Ui.Detail(person.Name+(person.Email is { } email ? " · "+email : "")));
+            speakers.Children.Add(Ui.Heading(T("Speakers in the recording", "Говорящие в записи")));
+        }
         foreach (var group in document.Segments.Where(segment => segment.Speaker is not null).GroupBy(segment => segment.Speaker!))
         {
             var label = group.Key;
@@ -490,6 +510,46 @@ internal sealed class RecordingsWindow : Window
             box.LostKeyboardFocus += async (_, _) => await CommitAsync();
             box.KeyDown += async (_, args) => { if (args.Key == Key.Enter) await CommitAsync(); };
         }
+    }
+
+    private async Task ShowTranscriptParticipantsAsync(string directory, MeetingCalendarMetadata calendar, int version)
+    {
+        var json = await ReadAsync(Path.Combine(directory,"transcript.json"));
+        if(json is null) return;
+        TranscriptDocument? document;
+        try { document = JsonSerializer.Deserialize<TranscriptDocument>(json); } catch(JsonException) { return; }
+        if(document is null || !document.Segments.Any(s => s.Speaker is not null)) return;
+        var names = await SpeakerFile.ReadAsync(directory,default);
+        if(version != transcriptShown) return;
+        var lines = new StackPanel { Margin = new Thickness(8,12,8,12) };
+        lines.Children.Add(Ui.Detail(T("Choose an invited participant for a speaker. The choice applies to all their lines in this version.",
+            "Выберите приглашённого участника для говорящего. Выбор применяется ко всем его репликам в этой версии.")));
+        foreach(var segment in document.Segments)
+        {
+            var row = new StackPanel { Margin = new Thickness(0,18,0,8) };
+            row.Children.Add(Ui.Detail(TimeSpan.FromMilliseconds(segment.StartMs).ToString(@"hh\:mm\:ss")));
+            if(segment.Speaker is { } speaker)
+            {
+                var combo = new System.Windows.Controls.ComboBox { MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
+                combo.Items.Add(new ComboBoxItem { Content = SpeakerLabels.Display(speaker)+T(" · not matched", " · не сопоставлен"), Tag = null });
+                foreach(var person in calendar.Participants)
+                    combo.Items.Add(new ComboBoxItem { Content = person.Name+(person.Email is { } email ? " · "+email : ""), Tag = person });
+                combo.SelectedItem = combo.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (i.Tag as CalendarParticipant)?.Id == names.ParticipantIds.GetValueOrDefault(speaker)) ?? combo.Items[0];
+                System.Windows.Automation.AutomationProperties.SetName(combo,T("Who is speaking? ", "Кто говорит? ")+SpeakerLabels.Display(speaker));
+                combo.IsEnabled = runtime.ProcessingStatusFor(Selected!.Item.Directory)?.IsBusy != true;
+                combo.SelectionChanged += async (_, _) =>
+                {
+                    try { await runtime.SetSpeakerParticipantAsync(directory,speaker,(combo.SelectedItem as ComboBoxItem)?.Tag as CalendarParticipant); }
+                    catch(Exception error) when(error is IOException or InvalidOperationException or UnauthorizedAccessException) { Ui.ShowError(Ui.OwnerOf(layout),"Verbemo",error.Message); }
+                };
+                row.Children.Add(combo);
+            }
+            var words = Ui.Title(segment.Text);
+            words.Margin = new Thickness(0,8,0,0);
+            row.Children.Add(words);
+            lines.Children.Add(row);
+        }
+        transcriptContent.Content = Ui.Scroll(lines);
     }
 
     private void OpenRetranscribeMenu()
@@ -556,7 +616,7 @@ internal sealed class RecordingsWindow : Window
     {
         var answer = System.Windows.MessageBox.Show(Ui.OwnerOf(layout) ?? this,
             T($"Delete “{row.Item.Title}” with its audio, transcript and summary?",
-              $"«{row.Item.Title}» уйдёт в корзину вместе со звуком, расшифровкой и саммари."),
+              $"«{row.Item.Title}» уйдёт в корзину вместе со звуком, расшифровкой и сводкой."),
             T("Delete this recording?", "Удалить запись?"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
         if (answer != MessageBoxResult.OK) return;
         try

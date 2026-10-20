@@ -18,10 +18,11 @@ internal static class MeetingListView
         stack.Children.Add(Ui.Detail(MeetingPresentation.Date(item) + $" · {Math.Max(1, item.DurationSeconds / 60)} {T("min", "мин")}"));
         var stages = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0,10,0,0) };
         var recording = item.Transcript == ProcessingStep.Recording;
+        if(item.Calendar?.IsConfirmed == true) stages.Children.Add(Stage("\uE787",T("Linked calendar event", "Связано с событием календаря"),ProcessingStep.Done,false,false));
         stages.Children.Add(Stage("\uE720", recording ? T("Recording", "Идёт запись") : T("Recording saved", "Запись сохранена"),
             recording ? ProcessingStep.Recording : ProcessingStep.Done, recording, false));
         stages.Children.Add(Stage("\uE8A5", T("Transcript: ", "Расшифровка: ") + (status?.Stage == "transcribing" ? status.Message : item.Transcript.ToString()),
-            item.Transcript, status is { Stage: "transcribing", IsBusy: true }, item.SpeakerCount > 1));
+            item.Transcript, status is { Stage: "transcribing", IsBusy: true }, item.IsDiarized));
         stages.Children.Add(Stage("\uE9D5", MeetingPresentation.SummaryLabel(item.Summary), item.Summary,
             status is { Stage: "summary", IsBusy: true }, false));
         stack.Children.Add(stages);

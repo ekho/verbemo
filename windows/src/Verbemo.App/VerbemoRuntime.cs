@@ -499,6 +499,9 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public Task SetSpeakerNameAsync(string directory, string label, string name, CancellationToken cancellationToken = default, string? title = null) =>
         processing.SetSpeakerNameAsync(directory, label, name, cancellationToken, title);
 
+    public Task SetSpeakerParticipantAsync(string directory, string label, CalendarParticipant? participant, CancellationToken cancellationToken = default) =>
+        processing.SetSpeakerParticipantAsync(directory,label,participant,cancellationToken);
+
     /// <summary>Moves a session to the Recycle Bin, where it can still be got back.</summary>
     public void DeleteSession(string directory)
     {
@@ -517,6 +520,15 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public bool IsLocalModelDownloading(string model) => models.IsDownloading(model);
     public bool LocalRuntimePresent => models.CliPath is not null;
     public long? LocalModelBytes(string model) => models.DownloadedBytes(model);
+    public void CancelModelDownload(string model) => models.CancelDownload(model);
+    public bool ModelInUse(string model) => State.IsRecording || IsProcessing
+        || model == Settings.Transcription.LocalEngine || model == Settings.Transcription.Engine
+        || model == "nemotron-live" && Settings.LiveTranscription.Enabled;
+    public void DeleteModel(string model)
+    {
+        models.Delete(model,ModelInUse(model));
+        SettingsChanged?.Invoke(this,EventArgs.Empty);
+    }
 
     public Task CompleteSetupAsync(CancellationToken cancellationToken = default) =>
         AtomicFiles.WriteJsonAsync(SetupPath, new { version = 1, completed_at = DateTimeOffset.UtcNow }, cancellationToken);
@@ -580,6 +592,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Deletions.Dispose();
+        models.CancelAllDownloads();
         if (disposed) return;
         disposed = true;
         SystemEvents.PowerModeChanged -= PowerModeChanged;

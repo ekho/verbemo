@@ -342,7 +342,7 @@ public sealed class SpeakerNamingService(LanguageModels models, Func<AppSettings
                     sources[proposal.Speaker] = "model";
                 }
         }
-        await SpeakerFile.WriteAsync(sessionDirectory, names, sources, cancellationToken).ConfigureAwait(false);
+        await SpeakerFile.WriteAsync(sessionDirectory, file with { Names = names, Sources = sources }, cancellationToken).ConfigureAwait(false);
         return new Result(names, asked);
     }
 
@@ -388,13 +388,19 @@ public sealed class SpeakerNamingService(LanguageModels models, Func<AppSettings
 /// <summary>speakers.json: the name for each label, and where each name came from.</summary>
 public static class SpeakerFile
 {
-    public sealed record Contents(IReadOnlyDictionary<string, string> Names, IReadOnlyDictionary<string, string> Sources);
+    public sealed record Contents(IReadOnlyDictionary<string, string> Names, IReadOnlyDictionary<string, string> Sources)
+    {
+        public IReadOnlyDictionary<string,string> ParticipantIds { get; init; } = new Dictionary<string,string>();
+        public IReadOnlyDictionary<string,string> ManualNames { get; init; } = new Dictionary<string,string>();
+    }
 
     public static async Task<Contents> ReadAsync(string directory, CancellationToken cancellationToken)
     {
         var path = Path.Combine(directory, "speakers.json");
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
+        var participantIds = new Dictionary<string,string>(StringComparer.Ordinal);
+        var manualNames = new Dictionary<string,string>(StringComparer.Ordinal);
         if (!File.Exists(path)) return new(names, sources);
         try
         {
@@ -408,14 +414,24 @@ public static class SpeakerFile
                 foreach (var pair in each.EnumerateObject()) sources[pair.Name] = pair.Value.GetString() ?? "";
             foreach (var label in names.Keys.Where(label => !sources.ContainsKey(label)).ToArray())
                 sources[label] = whole ?? "model";
+            ReadMap("participantIds",participantIds);
+            ReadMap("manualNames",manualNames);
+            void ReadMap(string key, Dictionary<string,string> target)
+            {
+                if(root.TryGetProperty(key,out var map) && map.ValueKind == JsonValueKind.Object)
+                    foreach(var entry in map.EnumerateObject()) if(entry.Value.ValueKind == JsonValueKind.String && entry.Value.GetString() is { } value) target[entry.Name] = value;
+            }
         }
         catch (JsonException) { }
-        return new(names, sources);
+        return new(names, sources) { ParticipantIds = participantIds, ManualNames = manualNames };
     }
 
     public static Task WriteAsync(string directory, IReadOnlyDictionary<string, string> names,
         IReadOnlyDictionary<string, string> sources, CancellationToken cancellationToken) =>
         AtomicFiles.WriteJsonAsync(Path.Combine(directory, "speakers.json"), new { names, sources }, cancellationToken);
+
+    public static Task WriteAsync(string directory, Contents contents, CancellationToken cancellationToken) =>
+        AtomicFiles.WriteJsonAsync(Path.Combine(directory,"speakers.json"),contents,cancellationToken);
 }
 
 public sealed class SummaryService(LanguageModels models, Func<AppSettings> settings)

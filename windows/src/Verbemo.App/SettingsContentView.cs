@@ -8,7 +8,10 @@ namespace Verbemo.App;
 internal sealed class SettingsContentView
 {
     private readonly SetupForm form;
+    private readonly ModelFilesView models;
     private readonly List<AdvancedSettings> advanced = [];
+    private readonly List<TextBlock> problemLabels = [];
+    private readonly VerbemoRuntime runtime;
     public Dictionary<ApplicationDestination, FrameworkElement> Pages { get; } = [];
     public static IReadOnlySet<string> PrimaryPaths => SettingsSchema.Sections.SelectMany(s => s.Entries)
         .Where(e => e.AskedInSetup).Select(e => e.Path).Concat(new[] { "summary.backend", "summary.openai_model", "summary.openai_base_url",
@@ -18,11 +21,14 @@ internal sealed class SettingsContentView
 
     public SettingsContentView(VerbemoRuntime runtime)
     {
+        this.runtime = runtime;
         form = new SetupForm(runtime, showsConfigProblems: false);
+        models = new ModelFilesView(runtime);
         var primary = form.ExtractSettingsPages();
         foreach (var destination in EditorPaths.Keys)
         {
             var content = primary[destination];
+            if(destination == ApplicationDestination.Storage) content.Children.Add(models.View);
             var entries = SettingsSchema.Sections.SelectMany(s => s.Entries)
                 .Where(e => Destination(e.Path) == destination && !PrimaryPaths.Contains(e.Path)).ToArray();
             var editor = new AdvancedSettings(runtime, entries);
@@ -31,14 +37,17 @@ internal sealed class SettingsContentView
             if (destination == ApplicationDestination.General) content.Children.Insert(0, editor.View);
             else content.Children.Add(new Expander { Header = T("More options", "Дополнительные параметры"), Content = editor.View, Margin = new Thickness(0, 12, 0, 16) });
             var problems = Ui.Status("", Ui.Caution);
-            void RefreshProblems() => problems.Text = string.Join(Environment.NewLine, runtime.ConfigProblems.Select(p => p.Explanation));
-            RefreshProblems();
+            problemLabels.Add(problems);
             content.Children.Insert(0, problems);
             Pages[destination] = Ui.Scroll(content);
         }
+        runtime.SettingsChanged += Changed;
+        RefreshProblems();
     }
 
-    public void Detach() { form.Detach(); foreach (var editor in advanced) editor.Detach(); }
+    private void Changed(object? sender,EventArgs e) => form.View.Dispatcher.InvokeAsync(RefreshProblems);
+    private void RefreshProblems() { foreach(var label in problemLabels) label.Text = string.Join(Environment.NewLine,runtime.ConfigProblems.Select(p => p.Explanation)); }
+    public void Detach() { runtime.SettingsChanged -= Changed; form.Detach(); models.Detach(); foreach (var editor in advanced) editor.Detach(); }
     private static ApplicationDestination Destination(string path) => path switch
     {
         "recordings_dir" or "keep_audio" => ApplicationDestination.Storage,
