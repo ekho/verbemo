@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -261,18 +262,23 @@ struct SetupOfferTests {
         #expect(appMenu.items.first?.title == "About Verbemo")
     }
 
-    /// The window itself: three links, and each going where it says.
-    @Test("The About window links to Verbemo source, support and origin")
+    @Test("The About page links to Verbemo source, support and origin", .freshHome, .speaking(.english))
     @MainActor
-    func aboutWindowOffersThreeLinks() {
-        let about = AboutWindow()
-        #expect(about.offeredLinks.map(\.title)
-            == ["Source code on GitHub ↗", "Support ↗", "Origin and licenses ↗"])
-        #expect(about.offeredLinks.map(\.url) == [
+    func aboutPageOffersThreeLinks() throws {
+        _ = NSApplication.shared
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        app.navigate(.about)
+        let destinations = [
             "https://github.com/ekho/verbemo",
             "https://github.com/ekho/verbemo/issues",
             "https://github.com/ekho/verbemo/blob/master/docs/origin.md",
-        ])
+        ]
+        let links = try #require(app.panel.contentView).allDescendants.compactMap { $0 as? NSButton }
+            .filter { destinations.contains($0.identifier?.rawValue ?? "") }
+        #expect(links.map(\.title)
+            == ["Source code on GitHub ↗", "Support ↗", "Origin and licenses ↗"])
+        #expect(links.compactMap { $0.identifier?.rawValue } == destinations)
     }
 
     @Test("The app menu's Setup follows the same answer, and Settings never does")

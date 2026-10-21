@@ -14,6 +14,8 @@ struct AnalyticsV2CatalogueTests {
             ("openai", "ft:private:customer-name", "custom"),
             ("assemblyai", "universal · auto-detect", "universal"),
             ("assemblyai", "private-model · ru+en", "custom"),
+            ("nemotron", "nemotron-3.5-asr-streaming-multilingual-0.6b/multilingual/1120ms", "nemotron-3.5-asr-0.6b"),
+            ("nemotron", "private-model/ru", "custom"),
             ("other", "anything", "unknown"),
         ]
         for (engine, provenance, expected) in cases {

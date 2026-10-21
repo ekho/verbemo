@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Testing
+import os
 
 @testable import verbemo
 
@@ -10,12 +11,247 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct SetupFormBehaviourTests {
+    @Test(.freshHome(config: #"{"transcription":{"engine":"parakeet"}}"#), .enabled(if: Platform.supportsLocalModels))
+    func nemotronModesShareOneDownloadWithoutEnablingEachOther() async throws {
+        let store = NemotronModelStore()
+        let started = Gate(), finish = Gate()
+        let downloads = OSAllocatedUnfairLock(initialState: 0)
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        form.liveModelStore = NemotronModelStore(root: store.root) { language, root, progress in
+            downloads.withLock { $0 += 1 }
+            started.open(); progress(0.4); await finish.pass(); try Task.checkCancellation()
+            let variant = NemotronModelStore(root: root).variantDirectory(language: language)
+            try NemotronFixtures.install(at: variant); return variant
+        }
+        let card = try #require(Self.view("choice.nemotron", in: form) as? ChoiceCard)
+        card.onSelect?("nemotron")
+        await started.pass()
+        #expect(Config.transcriptionEngine() == "nemotron")
+        #expect(!Config.liveTranscriptionEnabled())
+        let live = try #require(Self.view("transcription.live", in: form) as? NSSwitch)
+        live.state = .on
+        _ = NSApp.sendAction(try #require(live.action), to: live.target, from: live)
+        try await Task.sleep(for: .milliseconds(50))
+        form.refresh()
+        #expect(downloads.withLock { $0 } == 1)
+        #expect(Config.transcriptionEngine() == "nemotron")
+        #expect(form.hasModelDownloads)
+        live.state = .off
+        _ = NSApp.sendAction(try #require(live.action), to: live.target, from: live)
+        finish.open()
+        for _ in 0..<100 where form.hasModelDownloads { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(store.isReady(language: "auto"))
+        #expect(!Config.liveTranscriptionEnabled())
+        #expect(Config.transcriptionEngine() == "nemotron")
+        #expect(downloads.withLock { $0 } == 1)
+        #expect(ModelStorage().all().filter { $0.kind == .nemotron }.count == 1)
+        #expect(card.status.contains("downloaded") || card.status.contains("скачана"))
+        // A later live enable consumes the same ready files without another request.
+        live.state = .on
+        _ = NSApp.sendAction(try #require(live.action), to: live.target, from: live)
+        #expect(downloads.withLock { $0 } == 1)
+        Config.update(path: ["live_transcription", "enabled"], value: false)
+        Config.update(path: ["transcription", "enabled"], value: false)
+        try await store.delete()
+        form.refresh()
+        #expect(!store.isReady(language: "auto"))
+        #expect(!card.status.contains("downloaded") && !card.status.contains("скачана"))
+    }
+
+    @Test(.freshHome(config: #"{"transcription":{"engine":"parakeet","model":"v2","cloud":"openai"}}"#),
+          .enabled(if: Platform.supportsLocalModels))
+    func transcriptionModesAreExclusiveAndRememberTheirSelections() throws {
+        try Credentials.writeSecret("test-openai-key", to: Config.openAIKeyPath)
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        form.parakeetIsHere = { true }
+        form.refresh()
+        let cloud = try #require(Self.view("transcription.cloud", in: form) as? NSSwitch)
+        let local = try #require(Self.view("transcription.local", in: form) as? NSSwitch)
+        #expect(local.state == .on && cloud.state == .off)
+        cloud.state = .on
+        _ = NSApp.sendAction(try #require(cloud.action), to: cloud.target, from: cloud)
+        #expect(cloud.state == .on && local.state == .off)
+        #expect(Config.transcriptionEngine() == "openai")
+        local.state = .on
+        _ = NSApp.sendAction(try #require(local.action), to: local.target, from: local)
+        #expect(local.state == .on && cloud.state == .off)
+        #expect(Config.transcriptionEngine() == "parakeet")
+        #expect(Config.transcriptionModel() == "v2")
+        form.refresh()
+        #expect(local.state == .on && cloud.state == .off)
+        cloud.state = .on
+        _ = NSApp.sendAction(try #require(cloud.action), to: cloud.target, from: cloud)
+        #expect(cloud.state == .on && local.state == .off)
+        #expect(Config.transcriptionEngine() == "openai")
+        #expect(Config.openAIKey() == "test-openai-key")
+        cloud.state = .off
+        _ = NSApp.sendAction(try #require(cloud.action), to: cloud.target, from: cloud)
+        #expect(cloud.state == .off && local.state == .off)
+        #expect(!Config.transcriptionEnabled())
+    }
+
+    @Test(.freshHome(config: #"{"transcription":{"engine":"parakeet","cloud":"openai"}}"#),
+          .enabled(if: Platform.supportsLocalModels), arguments: [false, true])
+    func cloudKeyValidationCannotEnableBothModesOrUndoLocalSelection(selectLocal: Bool) async throws {
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        form.parakeetIsHere = { true }
+        let cloud = try #require(Self.view("transcription.cloud", in: form) as? NSSwitch)
+        let local = try #require(Self.view("transcription.local", in: form) as? NSSwitch)
+        cloud.state = .on
+        _ = NSApp.sendAction(try #require(cloud.action), to: cloud.target, from: cloud)
+        #expect(cloud.state == .on && local.state == .off)
+        #expect(!Config.transcriptionEnabled(), "Cloud processing waits for a validated key")
+        let field = try #require(Self.view("transcription.key.openai", in: form) as? NSSecureTextField)
+        field.stringValue = "test-openai-key"
+        let started = Gate(), release = Gate()
+        form.checkKey = { _ in started.open(); await release.pass(); return .works }
+        let check = Task { await form.saveCloudKey(for: "openai") }
+        await started.pass()
+        if selectLocal {
+            local.state = .on
+            _ = NSApp.sendAction(try #require(local.action), to: local.target, from: local)
+        }
+        release.open()
+        await check.value
+        #expect(Config.transcriptionEnabled())
+        #expect(Config.transcriptionEngine() == (selectLocal ? "parakeet" : "openai"))
+        #expect(local.state == (selectLocal ? .on : .off))
+        #expect(cloud.state == (selectLocal ? .off : .on))
+        #expect(Config.openAIKey() == "test-openai-key")
+    }
+
+    @Test(.freshHome, .enabled(if: Platform.supportsLocalModels), arguments: [false, true])
+    func legacyAutoDisplaysOnePrimaryModeWithoutRewritingSettings(hasKey: Bool) throws {
+        if hasKey { try Credentials.writeSecret("test-key", to: Config.assemblyAIKeyPath) }
+        let before = Home.current.configText
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        let cloud = try #require(Self.view("transcription.cloud", in: form) as? NSSwitch)
+        let local = try #require(Self.view("transcription.local", in: form) as? NSSwitch)
+        #expect(cloud.state == (hasKey ? .on : .off))
+        #expect(local.state == (hasKey ? .off : .on))
+        #expect(Home.current.configText == before)
+    }
+
+    @Test(.freshHome, .speaking(.russian))
+    func loginCanBeDisabledAndEnabledWithoutOpeningSystemSettings() throws {
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        var state = LoginItem.State.enabled
+        var changes: [Bool] = []
+        var settingsOpened = 0
+        form.loginItemStatus = { state }
+        form.setLoginItemEnabled = { enabled in
+            changes.append(enabled)
+            state = enabled ? .enabled : .notRegistered
+            return state
+        }
+        form.openLoginItemSettings = { settingsOpened += 1 }
+        form.refresh()
+        let toggle = try #require(Self.view("access.login.toggle", in: form) as? NSSwitch)
+        #expect(toggle.accessibilityLabel() == "Запуск при входе")
+        #expect(toggle.state == .on)
+        toggle.state = .off
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        #expect(changes == [false])
+        #expect(state == .notRegistered)
+        #expect(toggle.state == .off)
+        toggle.state = .on
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        #expect(changes == [false, true])
+        #expect(toggle.state == .on)
+        #expect(settingsOpened == 0)
+    }
+
+    @Test(.freshHome, .speaking(.russian))
+    func loginFailureKeepsTheActualStateAndAllowsRetry() throws {
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        var state = LoginItem.State.enabled
+        var attempts = 0
+        form.loginItemStatus = { state }
+        form.setLoginItemEnabled = { enabled in
+            attempts += 1
+            if attempts == 1 { throw CocoaError(.fileWriteNoPermission) }
+            state = enabled ? .enabled : .notRegistered
+            return state
+        }
+        form.refresh()
+        let toggle = try #require(Self.view("access.login.toggle", in: form) as? NSSwitch)
+        toggle.state = .off
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        form.refresh()
+        let row = try #require(Self.view("access.login", in: form))
+        #expect(Self.labels(in: row).contains { $0.contains("не удалось отключить запуск при входе") })
+        #expect(toggle.accessibilityHelp()?.contains("не удалось отключить запуск при входе") == true)
+        #expect(toggle.state == .on)
+        #expect(toggle.isEnabled)
+        #expect(form.loginItemStatus() == .enabled)
+        toggle.state = .off
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        #expect(attempts == 2)
+        #expect(toggle.state == .off)
+        #expect(!Self.labels(in: row).contains { $0.contains("не удалось") })
+    }
+
+    @Test(.freshHome)
+    func loginChangesRespectRecordingGuardAndSystemApproval() throws {
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        var recording = true
+        var changes = 0
+        var settingsOpened = 0
+        var state = LoginItem.State.notRegistered
+        form.isRecording = { recording }
+        form.loginItemStatus = { state }
+        form.setLoginItemEnabled = { _ in changes += 1; state = .needsApproval; return state }
+        form.openLoginItemSettings = { settingsOpened += 1 }
+        form.refresh()
+        let toggle = try #require(Self.view("access.login.toggle", in: form) as? NSSwitch)
+        toggle.state = .on
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        #expect(changes == 0)
+        #expect(toggle.state == .off)
+        recording = false
+        toggle.state = .on
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        #expect(changes == 1)
+        #expect(settingsOpened == 1)
+        #expect(toggle.state == .off)
+        toggle.state = .on
+        _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+        #expect(changes == 1)
+        #expect(settingsOpened == 2)
+        #expect(toggle.state == .off)
+        state = .enabled
+        form.refresh()
+        #expect(toggle.state == .on)
+    }
+
+    @Test(.freshHome)
+    func loginSwitchIsDisabledWithoutAPersistentApplication() throws {
+        let form = SetupForm(mode: .settings)
+        defer { form.stop() }
+        form.loginItemStatus = { .unavailable }
+        form.refresh()
+        let toggle = try #require(Self.view("access.login.toggle", in: form) as? NSSwitch)
+        #expect(toggle.state == .off)
+        #expect(!toggle.isEnabled)
+        #expect(toggle.accessibilityHelp()?.contains("Only Verbemo.app") == true)
+    }
+
     @Test("Speaker model cards require local transcription and the feature switch",
           .freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet"}}"#),
           .enabled(if: Platform.supportsLocalModels))
     func diarizationSwitchDoesNotDownload() throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        form.fetchDiarization = { _, _ in }
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let toggle = try #require(Self.view("transcription.local-diarization", in: form) as? NSSwitch)
         let names = ["nemotron-3", "ls-eend-ami", "community-1"]
         let cards = try names.map { try #require(Self.view("choice.diarization.\($0)", in: form) as? ChoiceCard) }
@@ -43,8 +279,11 @@ struct SetupFormBehaviourTests {
           .freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet","local_diarization":true}}"#),
           .enabled(if: Platform.supportsLocalModels))
     func diarizationDefaultPickIsPersisted() throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        form.fetchDiarization = { _, _ in }
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let ami = try #require(Self.view("choice.diarization.ls-eend-ami", in: form) as? ChoiceCard)
         let nemo = try #require(Self.view("choice.diarization.nemotron-3", in: form) as? ChoiceCard)
         #expect(ami.accessibilityPerformPress())
@@ -61,8 +300,10 @@ struct SetupFormBehaviourTests {
           .freshHome(config: #"{"transcription":{"enabled":true,"engine":"openai","local_diarization":true}}"#),
           .speaking(.english), .enabled(if: Platform.supportsLocalModels))
     func diarizationRequiresLocalMode() throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let toggle = try #require(Self.view("transcription.local-diarization", in: form) as? NSSwitch)
         let card = try #require(Self.view("choice.diarization.nemotron-3", in: form) as? ChoiceCard)
         let download = try #require(Self.button("transcription.diarization.download.nemotron-3", in: form))
@@ -70,14 +311,15 @@ struct SetupFormBehaviourTests {
         #expect(!card.isEnabled)
         #expect(!download.isEnabled)
         #expect(!card.accessibilityPerformPress())
-        #expect(Self.labels(in: form.view).contains("Available with On this Mac enabled."))
+        #expect(Self.labels(in: application.panel.contentView).contains("Available with On this Mac enabled."))
     }
 
     @Test("A broken config leaves the speaker choices unavailable",
           .freshHome(config: "{broken"), .enabled(if: Platform.supportsLocalModels))
     func diarizationCannotBypassBadConfig() throws {
-        let form = Self.localForm()
-        defer { form.stop() }
+        let application = Self.localApplication()
+        let form = application.settings.setup
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let toggle = try #require(Self.view("transcription.local-diarization", in: form) as? NSSwitch)
         let card = try #require(Self.view("choice.diarization.nemotron-3", in: form) as? ChoiceCard)
         #expect(!toggle.isEnabled)
@@ -88,8 +330,10 @@ struct SetupFormBehaviourTests {
     @Test("Speaker radio cards explain their capacity in English", .freshHome,
           .speaking(.english))
     func diarizationEnglishDescriptions() throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let nemo = try #require(Self.view("choice.diarization.nemotron-3", in: form) as? ChoiceCard)
         let ami = try #require(Self.view("choice.diarization.ls-eend-ami", in: form) as? ChoiceCard)
         let community = try #require(Self.view("choice.diarization.community-1", in: form) as? ChoiceCard)
@@ -101,8 +345,10 @@ struct SetupFormBehaviourTests {
     @Test("Speaker radio cards explain their capacity in Russian", .freshHome,
           .speaking(.russian))
     func diarizationRussianDescriptions() throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let nemo = try #require(Self.view("choice.diarization.nemotron-3", in: form) as? ChoiceCard)
         let ami = try #require(Self.view("choice.diarization.ls-eend-ami", in: form) as? ChoiceCard)
         let community = try #require(Self.view("choice.diarization.community-1", in: form) as? ChoiceCard)
@@ -115,17 +361,21 @@ struct SetupFormBehaviourTests {
           .freshHome(config: #"{"transcription":{"enabled":true,"engine":"openai","local_diarization":true}}"#),
           .speaking(.russian), .enabled(if: Platform.supportsLocalModels))
     func diarizationRussianCloudOnlyHint() {
-        let form = SetupForm()
-        defer { form.stop() }
-        #expect(Self.labels(in: form.view).contains("Доступно при включённом «На этом Mac»."))
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
+        #expect(Self.labels(in: application.panel.contentView).contains("Доступно при включённом «На этом Mac»."))
     }
 
-    @Test("Only a card's download button fetches its snapshotted speaker model",
+    @Test("Selecting speaker models starts each missing download once",
           .freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet"}}"#),
           .enabled(if: Platform.supportsLocalModels))
-    func diarizationDownloadIsExplicitAndIndependent() async throws {
-        let form = SetupForm()
-        defer { form.stop() }
+    func diarizationSelectionDownloadsMissingModelsIndependently() async throws {
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let gate = Gate()
         var fetched: [DiarizationModel] = []
         form.fetchDiarization = { model, _ in
@@ -138,24 +388,49 @@ struct SetupFormBehaviourTests {
         let download = try #require(Self.button("transcription.diarization.download.ls-eend-ami", in: form))
         toggle.performClick(nil)
         #expect(ami.accessibilityPerformPress())
-        #expect(fetched.isEmpty, "selecting a model fetched it silently")
-        download.performClick(nil)
         for _ in 0..<10 where fetched.isEmpty { await Task.yield() }
         #expect(fetched == [.lsEendAMI])
         #expect(!download.isEnabled)
+        #expect(ami.accessibilityPerformPress())
+        for _ in 0..<10 { await Task.yield() }
+        #expect(fetched == [.lsEendAMI], "reselecting a model duplicated its active download")
         #expect(nemo.accessibilityPerformPress())
         #expect(Config.diarizationModel() == .nemotron3)
-        #expect(fetched == [.lsEendAMI], "changing selection changed the active fetch")
+        for _ in 0..<100 where fetched.count < 2 { await Task.yield() }
+        #expect(fetched == [.lsEendAMI, .nemotron3])
         gate.open()
-        for _ in 0..<50 where !download.isEnabled { await Task.yield() }
+        for _ in 0..<100 where form.hasModelDownloads { await Task.yield() }
         #expect(download.isEnabled)
+        #expect(!form.hasModelDownloads)
+    }
+
+    @Test("Reopening settings or choosing a ready speaker model does not download",
+          .freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet","local_diarization":true}}"#),
+          .enabled(if: Platform.supportsLocalModels))
+    func readyDiarizationSelectionDoesNotDownload() async throws {
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
+        var fetched = 0
+        form.diarizationIsHere = { $0 == .nemotron3 }
+        form.fetchDiarization = { _, _ in fetched += 1 }
+        form.reload()
+        let card = try #require(Self.view("choice.diarization.nemotron-3", in: form) as? ChoiceCard)
+        #expect(card.accessibilityPerformPress())
+        for _ in 0..<10 { await Task.yield() }
+        #expect(fetched == 0)
+        #expect(!form.hasModelDownloads)
+        #expect(Config.diarizationModel() == .nemotron3)
     }
 
     @Test("Every model card owns a hidden progress bar and named cancel control",
           .freshHome, .speaking(.english), .enabled(if: Platform.supportsLocalModels))
     func modelProgressBelongsToItsCard() throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         for (id, name) in [
             ("parakeet", "Parakeet"),
             ("whisper", "Whisper large-v3-turbo"),
@@ -178,8 +453,9 @@ struct SetupFormBehaviourTests {
     @Test("Cancel stops Parakeet without losing the selected engine or showing an error",
           .freshHome, .speaking(.english), .enabled(if: Platform.supportsLocalModels))
     func parakeetCancelRestoresDownload() async throws {
-        let form = Self.localForm()
-        defer { form.stop() }
+        let application = Self.localApplication()
+        let form = application.settings.setup
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let gate = Gate()
         form.parakeetIsHere = { false }
         form.fetchParakeet = {
@@ -211,8 +487,10 @@ struct SetupFormBehaviourTests {
           .freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet"}}"#),
           .speaking(.russian), .enabled(if: Platform.supportsLocalModels))
     func diarizationCancelAndRetryIgnoreStaleProgress() async throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let gates = [Gate(), Gate()]
         var callbacks: [@Sendable (Double) -> Void] = []
         form.fetchDiarization = { _, progress in
@@ -274,8 +552,10 @@ struct SetupFormBehaviourTests {
           .freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet"}}"#),
           .speaking(.english), .enabled(if: Platform.supportsLocalModels))
     func diarizationDownloadShowsHTTPFailure() async throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         form.fetchDiarization = { _, _ in
             throw VerifiedModelStore.Error.badHTTPStatus(404)
         }
@@ -285,7 +565,7 @@ struct SetupFormBehaviourTests {
         let progress = try #require(card.allDescendants
             .compactMap { $0 as? ModelDownloadProgress }.first)
         toggle.performClick(nil)
-        download.performClick(nil)
+        #expect(card.accessibilityPerformPress())
         for _ in 0..<100 where progress.isHidden == false { await Task.yield() }
 
         #expect(card.status.contains("HTTP 404"), "the error hid the actionable HTTP status")
@@ -295,8 +575,10 @@ struct SetupFormBehaviourTests {
 
     /// A form whose transcription settings live in memory and say "parakeet,
     /// on this Mac", so the local model is the thing it is waiting for.
-    private static func localForm() -> SetupForm {
-        let form = SetupForm()
+    private static func localApplication() -> ApplicationWindow {
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
         form.storedTranscription = {
             TranscriptionChoice.read(
                 engine: "parakeet", cloudProvider: "assemblyai", enabled: true,
@@ -304,7 +586,7 @@ struct SetupFormBehaviourTests {
         }
         form.write = { _, _ in }
         form.refresh()
-        return form
+        return application
     }
 
     /// Closing the window stopped the bar's timer and, with it, the form's
@@ -314,7 +596,8 @@ struct SetupFormBehaviourTests {
         "A parakeet download outlives the window closing, and reopening does not start another",
         .enabled(if: Platform.supportsLocalModels))
     func parakeetDownloadSurvivesClosing() async throws {
-        let form = Self.localForm()
+        let application = Self.localApplication()
+        let form = application.settings.setup
         let gate = Gate()
         var fetches = 0
         form.parakeetIsHere = { false }
@@ -355,8 +638,10 @@ struct SetupFormBehaviourTests {
     @Test("The system-audio test is refused during a recording, and says why",
           .freshHome)
     func noToneDuringARecording() async throws {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.recording)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         var tones = 0
         form.playTestTone = { tones += 1; return .heard }
         var recording = true
@@ -380,8 +665,10 @@ struct SetupFormBehaviourTests {
     /// microphone row went on saying denied beside a grant that existed.
     @Test("Coming back to verbemo redraws a form that is on screen, and only one that is")
     func activationRedraws() {
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.recording)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         var redraws = 0
         form.onStateChange = { redraws += 1 }
 
@@ -393,13 +680,8 @@ struct SetupFormBehaviourTests {
             name: NSApplication.didBecomeActiveNotification, object: NSApp)
         #expect(redraws == before, "a form nobody can see asked macOS for its grants")
 
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 700, height: 400),
-            styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = form.view
-        window.orderFront(nil)
-        defer { window.orderOut(nil) }
+        application.panel.orderFront(nil)
+        defer { application.panel.orderOut(nil) }
 
         before = redraws
         NotificationCenter.default.post(
@@ -414,7 +696,7 @@ extension SetupFormBehaviourTests {
     }
 
     fileprivate static func view(_ id: String, in form: SetupForm) -> NSView? {
-        var pending: [NSView] = [form.view]
+        var pending = Array(form.settingsPages.values) as [NSView]
         while let view = pending.popLast() {
             if view.identifier?.rawValue == id { return view }
             pending.append(contentsOf: view.subviews)
@@ -423,9 +705,9 @@ extension SetupFormBehaviourTests {
     }
 
     /// The words on screen under a view, hidden ones left out.
-    fileprivate static func labels(in root: NSView) -> [String] {
+    fileprivate static func labels(in root: NSView?) -> [String] {
         var found: [String] = []
-        var pending: [NSView] = [root]
+        var pending = root.map { [$0] } ?? []
         while let view = pending.popLast() {
             if let label = view as? NSTextField, !label.isHidden { found.append(label.stringValue) }
             pending.append(contentsOf: view.subviews)

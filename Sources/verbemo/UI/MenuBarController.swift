@@ -1,7 +1,7 @@
 import AppKit
 
 /// Status bar item in the top-right of the menu bar. Shows recording state at
-/// a glance, and carries the menu that is verbemo's fullest control surface.
+/// a glance, and provides recording controls and navigation into the main window.
 ///
 /// The item can be taken away — `menu_bar_icon: false` — so it is held as an
 /// optional and the menu is kept apart from it. That way the menu outlives
@@ -26,7 +26,7 @@ final class MenuBarController {
     private var elapsed: String?
     private let stateLabel: NSMenuItem
     private let transcriptionLabel: NSMenuItem
-    /// Says the config file cannot be used, and opens the settings window —
+    /// Says the config file cannot be used, and opens the settings page —
     /// the one surface that names the file and offers to reveal it.
     private let configProblemItem: NSMenuItem
     private let toggleItem: NSMenuItem
@@ -40,9 +40,8 @@ final class MenuBarController {
     var onTogglePause: (() -> Void)?
     var onToggleAutoRecord: (() -> Void)?
     var onOpenFolder: (() -> Void)?
-    var onShowRecordings: (() -> Void)?
+    var onShowMeetings: (() -> Void)?
     var onImport: (() -> Void)?
-    var onShowWindow: (() -> Void)?
     var onShowSettings: (() -> Void)?
     var onShowSetup: (() -> Void)?
     var onCheckForUpdates: (() -> Void)?
@@ -109,31 +108,12 @@ final class MenuBarController {
 
         menu.addItem(.separator())
 
-        // The window is the reliable surface — this item is how you get it
-        // back when the menu bar is where you happened to look first.
-        let showWindow = NSMenuItem(
-            title: localised("Show Verbemo window", "Показать окно verbemo"),
-            action: #selector(showWindowClicked),
-            keyEquivalent: "w"
-        )
-        menu.addItem(showWindow)
-
-        let openFolder = NSMenuItem(
-            title: localised("Open recordings folder", "Открыть папку записей"),
-            action: #selector(openFolderClicked),
-            keyEquivalent: "o"
-        )
-        menu.addItem(openFolder)
-
-        // Not "r" — that starts a recording, and a shortcut that either starts
-        // recording or opens a list depending on which item claimed it first
-        // is worse than no shortcut.
-        let recordings = NSMenuItem(
-            title: localised("Manage recordings…", "Управление записями…"),
-            action: #selector(showRecordingsClicked),
+        let meetings = NSMenuItem(
+            title: localised("Meetings", "Встречи"),
+            action: #selector(showMeetingsClicked),
             keyEquivalent: "l"
         )
-        menu.addItem(recordings)
+        menu.addItem(meetings)
 
         let importItem = NSMenuItem(
             title: localised("Import…", "Импортировать…"),
@@ -141,6 +121,14 @@ final class MenuBarController {
             keyEquivalent: "i"
         )
         menu.addItem(importItem)
+
+        let openFolder = NSMenuItem(
+            title: localised("Open recordings folder", "Открыть папку записей"),
+            action: #selector(openFolderClicked),
+            keyEquivalent: "o"
+        )
+        menu.addItem(openFolder)
+        menu.addItem(.separator())
 
         let settings = NSMenuItem(
             title: localised("Settings…", "Настройки…"),
@@ -173,7 +161,7 @@ final class MenuBarController {
         // first, and an `.accessory` app's application menu is only on
         // screen while one of its windows is in front.
         let about = NSMenuItem(
-            title: localised("About Verbemo", "О программе verbemo"),
+            title: localised("About Verbemo", "О приложении"),
             action: #selector(showAboutClicked),
             keyEquivalent: ""
         )
@@ -189,8 +177,8 @@ final class MenuBarController {
         menu.addItem(quit)
 
         for item in [
-            toggleItem, pauseItem, autoRecordItem, showWindow, openFolder,
-            recordings, importItem, settings, setupItem, updatesItem, about, quit,
+            toggleItem, pauseItem, autoRecordItem, meetings, openFolder,
+            importItem, settings, setupItem, updatesItem, about, quit,
             configProblemItem,
         ] {
             item.target = self
@@ -239,12 +227,8 @@ final class MenuBarController {
         updatesItem.isHidden = !available
     }
 
-    /// Show or hide **Setup…**. The wizard is the first run, and once it has
-    /// been through, the same form is in Settings for good — what the wizard
-    /// adds is the order things must happen in and the line saying what is
-    /// still outstanding, and both are answered by then. `verbemo setup` resets
-    /// the marker, so the item comes back whenever there is a first run to
-    /// finish again.
+    /// First-run permissions remain available until setup is completed.
+    /// `verbemo setup` resets the marker and makes the entry available again.
     func setupAvailable(_ available: Bool) {
         setupItem.isHidden = !available
     }
@@ -346,11 +330,10 @@ final class MenuBarController {
     @objc private func toggleClicked() { onToggle?() }
     @objc private func pauseClicked() { onTogglePause?() }
     @objc private func autoRecordClicked() { onToggleAutoRecord?() }
-    @objc private func showWindowClicked() { onShowWindow?() }
     @objc private func showSettingsClicked() { onShowSettings?() }
     @objc private func showSetupClicked() { onShowSetup?() }
     @objc private func openFolderClicked() { onOpenFolder?() }
-    @objc private func showRecordingsClicked() { onShowRecordings?() }
+    @objc private func showMeetingsClicked() { onShowMeetings?() }
     @objc private func importClicked() { onImport?() }
     @objc private func checkForUpdatesClicked() { onCheckForUpdates?() }
     @objc private func showAboutClicked() { onShowAbout?() }

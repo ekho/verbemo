@@ -85,11 +85,11 @@ struct InterfaceLanguageTests {
     /// in both languages on purpose — names, prices in dollars, paths, and
     /// the meeting languages, which are named in themselves and never
     /// translated.
-    @Test("Nothing in the setup form is left in English when the form is Russian")
+    @Test("Nothing in settings or permissions is left in English when the form is Russian")
     @MainActor
     func theFormIsAllInOneLanguage() {
-        let english = Self.inLanguage(.english) { Self.readable(SetupForm()) }
-        let russian = Self.inLanguage(.russian) { Self.readable(SetupForm()) }
+        let english = Self.inLanguage(.english) { Self.readableSettingsAndPermissions() }
+        let russian = Self.inLanguage(.russian) { Self.readableSettingsAndPermissions() }
 
         #expect(english.count == russian.count, "the two forms are not the same form")
         #expect(Self.untranslated(english, russian).isEmpty,
@@ -103,11 +103,11 @@ struct InterfaceLanguageTests {
     /// the live session's status, who is talking — so building one and
     /// reading it proves only that its checkboxes were translated. Drive it
     /// through every state it has instead, and read it after each.
-    @Test("Nothing in the status window is left in English when the window is Russian")
+    @Test("Nothing in the live recording page is left in English when the window is Russian")
     @MainActor
-    func theStatusWindowIsAllInOneLanguage() {
-        let english = Self.inLanguage(.english) { Self.readableStatusWindow() }
-        let russian = Self.inLanguage(.russian) { Self.readableStatusWindow() }
+    func theLivePageIsAllInOneLanguage() {
+        let english = Self.inLanguage(.english) { Self.readableLivePage() }
+        let russian = Self.inLanguage(.russian) { Self.readableLivePage() }
 
         #expect(english.count == russian.count, "the two windows are not the same window")
         #expect(Self.untranslated(english, russian).isEmpty,
@@ -154,7 +154,7 @@ struct InterfaceLanguageTests {
     /// the recordings a person actually made — those are their conversations.
     @Test("Nothing in the recordings window is left in English when it is Russian")
     @MainActor
-    func theRecordingsWindowIsAllInOneLanguage() throws {
+    func theMeetingLibraryControllerIsAllInOneLanguage() throws {
         let root = try Self.recordingsOnADiskOfTheirOwn()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -182,7 +182,7 @@ struct InterfaceLanguageTests {
 
         func refusal(_ language: InterfaceLanguage) -> String {
             Self.inLanguage(language) {
-                guard case .refuse(let why) = RecordingsWindow.decision(
+                guard case .refuse(let why) = MeetingLibraryController.decision(
                     for: item, transcriptionEnabled: true
                 ) else { return "" }
                 return why
@@ -194,15 +194,15 @@ struct InterfaceLanguageTests {
         #expect(!russian.isEmpty)
         #expect(english != russian, "still English in a Russian alert: \(russian)")
 
-        #expect(Self.inLanguage(.english) { RecordingsWindow.nothingOwedLine }
-            != Self.inLanguage(.russian) { RecordingsWindow.nothingOwedLine })
+        #expect(Self.inLanguage(.english) { MeetingLibraryController.nothingOwedLine }
+            != Self.inLanguage(.russian) { MeetingLibraryController.nothingOwedLine })
     }
 
     /// And the About window, which is four sentences and three links and is
     /// read in one go — nothing in it changes after it is built.
     @Test("Nothing in the About window is left in English when it is Russian")
     @MainActor
-    func theAboutWindowIsAllInOneLanguage() {
+    func theAboutPageIsAllInOneLanguage() {
         let english = Self.inLanguage(.english) { Self.readableAbout() }
         let russian = Self.inLanguage(.russian) { Self.readableAbout() }
 
@@ -216,8 +216,8 @@ struct InterfaceLanguageTests {
     func aboutLinksAreIndependentInBothLanguages() {
         let expected = ["https://github.com/ekho/verbemo", "https://github.com/ekho/verbemo/issues",
                         "https://github.com/ekho/verbemo/blob/master/docs/origin.md"]
-        #expect(Self.inLanguage(.english) { AboutWindow().offeredLinks.map(\.url) } == expected)
-        #expect(Self.inLanguage(.russian) { AboutWindow().offeredLinks.map(\.url) } == expected)
+        #expect(Self.inLanguage(.english) { AboutPage().offeredLinks.map(\.url) } == expected)
+        #expect(Self.inLanguage(.russian) { AboutPage().offeredLinks.map(\.url) } == expected)
     }
 
     /// And the same question of the Advanced tab, which is written from
@@ -262,8 +262,8 @@ struct InterfaceLanguageTests {
     @Test("The models-on-disk block is in the window's language too")
     @MainActor
     func theModelsBlockIsTranslated() {
-        let english = Self.inLanguage(.english) { SettingsWindow().modelLines }
-        let russian = Self.inLanguage(.russian) { SettingsWindow().modelLines }
+        let english = Self.inLanguage(.english) { ApplicationWindow().settings.modelLines }
+        let russian = Self.inLanguage(.russian) { ApplicationWindow().settings.modelLines }
 
         #expect(english.count == russian.count)
         #expect(Self.untranslated(english, russian).isEmpty,
@@ -324,12 +324,14 @@ struct InterfaceLanguageTests {
     /// runs would be the test lying about what it checks, and one that did
     /// not differ would be reported as untranslated. A name is neither.
     @MainActor
-    private static func readableStatusWindow() -> [String] {
+    private static func readableLivePage() -> [String] {
         _ = NSApplication.shared
-        let window = StatusWindow()
+        let window = ApplicationWindow()
+        window.update(state: .recording, elapsed: "1:23")
+        window.showActiveRecording()
         var found: [String] = []
         func read() {
-            guard let view = window.view else { return }
+            guard let view = window.panel.contentView else { return }
             view.layoutSubtreeIfNeeded()
             found.append(contentsOf: strings(in: view))
         }
@@ -338,12 +340,13 @@ struct InterfaceLanguageTests {
             window.update(state: state, elapsed: "1:23")
             read()
         }
+        window.update(state: .recording, elapsed: "1:23")
+        window.showActiveRecording()
         // The reason is the parser's own and stays in English; the sentence
         // around it is what has to change.
         window.updateConfigProblem(Config.Problem.unreadable(reason: "1").headline)
         read()
         window.updateConfigProblem(nil)
-        window.updateTranscription(nil)
         window.updateAutoRecord(enabled: true, decision: nil)
 
         var transcript = LiveTranscriptState()
@@ -378,7 +381,7 @@ struct InterfaceLanguageTests {
         // text is showing again.
         window.updateLive(snapshot(recording: false, status: .idle))
         read()
-        for view in window.view?.allDescendants ?? []
+        for view in window.panel.contentView?.allDescendants ?? []
         where view.identifier?.rawValue == "live-reveal" {
             (view as? NSButton)?.performClick(nil)
         }
@@ -445,10 +448,9 @@ struct InterfaceLanguageTests {
     @MainActor
     private static func readableAbout() -> [String] {
         _ = NSApplication.shared
-        let about = AboutWindow()
-        guard let view = about.view else { return [about.title] }
-        view.layoutSubtreeIfNeeded()
-        return [about.title] + strings(in: view)
+        let about = AboutPage()
+        about.contentView.layoutSubtreeIfNeeded()
+        return strings(in: about.contentView)
     }
 
     /// What a menu shows. An item that carries a submenu shows the submenu's
@@ -501,16 +503,17 @@ struct InterfaceLanguageTests {
     @MainActor
     private static func readableRecordings(in root: URL) -> [String] {
         _ = NSApplication.shared
-        let window = RecordingsWindow(root: root)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
         var found: [String] = []
         func read() {
-            found.append(contentsOf: window.listLines)
-            guard let view = window.view else { return }
+            guard let view = app.panel.contentView else { return }
             view.layoutSubtreeIfNeeded()
             found.append(contentsOf: strings(in: view))
         }
         read()
-        for view in window.view?.allDescendants ?? [] {
+        for view in library.listContentView.allDescendants {
             guard let table = view as? NSTableView, table.numberOfRows > 0 else { continue }
             for row in 0..<table.numberOfRows {
                 table.selectRowIndexes([row], byExtendingSelection: false)
@@ -530,9 +533,16 @@ struct InterfaceLanguageTests {
     /// in — which is the same order in both languages, because it is the same
     /// form built twice.
     @MainActor
-    private static func readable(_ form: SetupForm) -> [String] {
-        form.view.layoutSubtreeIfNeeded()
-        return [form.nextActionTitle, form.outstandingSentence] + strings(in: form.view)
+    private static func readableSettingsAndPermissions() -> [String] {
+        let app = ApplicationWindow()
+        var found: [String] = []
+        for destination in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage] {
+            let page = app.settings.content(for: destination)
+            found.append(contentsOf: strings(in: page))
+        }
+        let form = SetupForm(mode: .permissions)
+        defer { form.stop() }
+        return found + [form.nextActionTitle, form.outstandingSentence] + strings(in: form.view)
     }
 
     /// Everything a person can read inside a view, in the order the views are
@@ -541,6 +551,7 @@ struct InterfaceLanguageTests {
     @MainActor
     private static func strings(in root: NSView) -> [String] {
         var found: [String] = []
+        let schemaControls = Set(SettingsSchema.sections.flatMap(\.entries).map { $0.path.joined(separator: ".") })
         for view in root.allDescendants {
             // A view that shows what somebody said in a meeting says it in
             // the language they said it in. See `openingLabel`.
@@ -549,9 +560,13 @@ struct InterfaceLanguageTests {
             // model ids and server URLs stay byte-for-byte the same in every
             // language, just like paths do.
             if view.identifier?.rawValue.hasPrefix("summary.") == true { continue }
+            // Schema controls contain config values and defaults; their labels
+            // and help are translated and checked separately above.
+            if let control = view as? NSControl, let id = control.identifier?.rawValue,
+               schemaControls.contains(id) { continue }
             switch view {
             case let field as NSTextField:
-                found.append(field.stringValue)
+                if !field.isEditable { found.append(field.stringValue) }
                 found.append(field.placeholderString ?? "")
             case let popup as NSPopUpButton:
                 found.append(contentsOf: popup.itemTitles)
@@ -560,7 +575,10 @@ struct InterfaceLanguageTests {
                     segmented.label(forSegment: $0) ?? ""
                 })
             case let button as NSButton:
-                found.append(button.title)
+                // AppKit owns the search/cancel icons and uses the system locale.
+                if sequence(first: view, next: { $0.superview }).contains(where: { $0 is NSSearchField }) { continue }
+                found.append(button.imagePosition == .imageOnly
+                    ? (button.accessibilityLabel() ?? "") : button.title)
             case let text as NSTextView:
                 found.append(text.string)
             default:
@@ -587,7 +605,7 @@ struct InterfaceLanguageTests {
             "AssemblyAI", "OpenAI", "OpenAI-compatible", "ElevenLabs", "Anthropic", "Claude Code", "Codex", "Ollama",
             "sk-ant-…", "sk-…", "verbemo", "Verbemo",
             // The models, named the way their release notes name them.
-            "parakeet v3", "parakeet v2", "NVIDIA nemotron",
+            "parakeet v3", "parakeet v2", "v3", "v2", "NVIDIA nemotron", "Nemotron 3.5 ASR", NemotronModelStore.title,
             "Parakeet", "Parakeet v3", "Whisper large-v3-turbo", "GigaAM v3",
             "Nemotron 3", "LS-EEND AMI", "Community-1",
             // License identifiers are published names, not interface copy.

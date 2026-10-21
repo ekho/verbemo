@@ -4,8 +4,9 @@ import Testing
 
 @testable import verbemo
 
+@Suite(.serialized, .freshHome)
 struct RecordingsOpenActionsTests {
-    @Test("Open Transcript is available when Markdown or canonical JSON exists")
+    @Test("Open Transcript is available from the meeting menu for a finished transcript")
     @MainActor
     func transcriptButtonTracksReadableFile() async throws {
         _ = NSApplication.shared
@@ -16,13 +17,19 @@ struct RecordingsOpenActionsTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try Data("{}".utf8).write(to: session.appendingPathComponent("meta.json"))
 
-        let window = RecordingsWindow(root: root)
-        let views = window.view?.allDescendants ?? []
-        let table = try #require(views.compactMap { $0 as? NSTableView }.first)
-        let button = try #require(views.compactMap { $0 as? NSButton }
-            .first { $0.identifier?.rawValue == "open-transcript" })
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let table = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSTableView }.first)
+        let menu = try #require(table.menu)
+        func editorItem() throws -> NSMenuItem {
+            library.menuWillOpen(menu)
+            return try #require(menu.items.first { $0.representedObject as? String == MeetingActionState.Action.openTranscript.rawValue })
+        }
         table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
-        #expect(!button.isEnabled)
+        #expect(try !editorItem().isEnabled)
 
         let transcript = Transcript(
             engine: "parakeet", model: "v3", created_at: "2026-09-23T12:00:00Z",
@@ -30,18 +37,18 @@ struct RecordingsOpenActionsTests {
         )
         try JSONEncoder().encode(transcript)
             .write(to: session.appendingPathComponent("transcript.json"))
-        window.show()
-        await window.settled()
-        #expect(button.isEnabled)
+        library.refresh()
+        await library.settled()
+        #expect(try editorItem().isEnabled)
+        #expect(try editorItem().target === library)
+        #expect(try editorItem().action != nil)
 
         try FileManager.default.removeItem(at: session.appendingPathComponent("transcript.json"))
         try Data("# Meeting\n".utf8).write(to: session.appendingPathComponent("transcript.md"))
-        window.show()
-        await window.settled()
-        #expect(button.isEnabled)
-        #expect(button.target != nil)
-        #expect(button.action != nil)
-        withExtendedLifetime(window) {}
+        library.refresh()
+        await library.settled()
+        #expect(try !editorItem().isEnabled)
+        #expect(MeetingLibraryController.readableTranscript(in: session)?.lastPathComponent == "transcript.md")
     }
 
     @Test("The transcript uses its default app and falls back to a text editor")
@@ -50,7 +57,7 @@ struct RecordingsOpenActionsTests {
         let file = URL(fileURLWithPath: "/tmp/transcript.md")
         var opened: [String] = []
 
-        RecordingsWindow.openTranscript(file,
+        MeetingLibraryController.openTranscript(file,
             openDefault: { url in
                 #expect(url == file)
                 opened.append("default")
@@ -60,7 +67,7 @@ struct RecordingsOpenActionsTests {
         #expect(opened == ["default"])
 
         opened.removeAll()
-        RecordingsWindow.openTranscript(file,
+        MeetingLibraryController.openTranscript(file,
             openDefault: { _ in
                 opened.append("default")
                 return false
@@ -88,7 +95,7 @@ struct RecordingsOpenActionsTests {
         try JSONEncoder().encode(transcript)
             .write(to: session.appendingPathComponent("transcript.json"))
 
-        let file = try #require(RecordingsWindow.readableTranscript(in: session))
+        let file = try #require(MeetingLibraryController.readableTranscript(in: session))
         #expect(file.lastPathComponent == "transcript.md")
         #expect(try String(contentsOf: file, encoding: .utf8).contains("Hello, team."))
     }

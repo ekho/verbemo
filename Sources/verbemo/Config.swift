@@ -99,7 +99,7 @@ enum Config {
     /// The cloud engines, by the name they carry in the config and in
     /// transcript.json's provenance.
     static let cloudEngines: Set<String> = ["assemblyai", "openai", "elevenlabs"]
-    static let localEngines: Set<String> = ["parakeet", "whisper", "gigaam"]
+    static let localEngines: Set<String> = ["parakeet", "whisper", "gigaam", "nemotron"]
 
     /// OpenAI's transcription model. The default is the only one of theirs
     /// that returns timings and speakers; the setting exists for the day they

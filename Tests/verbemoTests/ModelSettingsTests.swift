@@ -9,23 +9,63 @@ struct ModelSettingsTests {
         try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
         try Data([1,2,3]).write(to: store.partialURL)
         let model = try #require(ModelStorage().all().first { $0.kind == .whisper })
-        let form = SetupForm(forSettings: true)
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.storage)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let controls = form.modelFilesControl(for: model)
-        let download = try #require(controls.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == model.directory.path })
+        let download = controls.button
         #expect(!download.isHidden)
         #expect(download.isEnabled)
     }
     @Test(.freshHome) func storageOffersFileOperationsWithoutAnotherModelSelector() throws {
-        let form = SetupForm(forSettings: true)
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.storage)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         let model = try #require(ModelStorage().all().first { $0.kind == .whisper })
         let controls = form.modelFilesControl(for: model)
-        #expect(controls === form.modelFilesControl(for: model))
-        #expect(!controls.allDescendants.contains { $0 is NSPopUpButton || $0 is NSSwitch || $0 is ChoiceCard })
-        #expect(controls.allDescendants.compactMap { $0 as? NSButton }.contains { $0.title == localised("Download", "Скачать") })
+        #expect(controls.status === form.modelFilesControl(for: model).status)
+        #expect(controls.button === form.modelFilesControl(for: model).button)
+        #expect(!controls.status.allDescendants.contains { $0 is NSPopUpButton || $0 is NSSwitch || $0 is ChoiceCard })
+        #expect(controls.button.title == localised("Download", "Скачать"))
         #expect(!FileManager.default.fileExists(atPath: model.directory.path))
     }
+    @Test(.freshHome, .speaking(.russian), .enabled(if: Platform.supportsLocalModels))
+    func modelTypesAndActionsStayAlignedAtBothWindowWidths() throws {
+        let store = WhisperModelStore()
+        try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: store.modelURL)
+        let application = ApplicationWindow()
+        defer { application.settings.setup.stop(); application.hide() }
+        application.navigate(.storage)
+        let content = application.settings.content(for: .storage)
+        let labels = content.allDescendants.compactMap { $0 as? NSTextField }
+        let heading = try #require(labels.first { $0.stringValue == "Расшифровка" })
+        let group = try #require(heading.superview as? NSStackView)
+        #expect(group.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue } == ["Расшифровка", "Диаризация"])
+
+        for width in [1340.0, 760.0] {
+            application.panel.setContentSize(NSSize(width: width, height: 820))
+            application.panel.contentView?.layoutSubtreeIfNeeded()
+            for model in ModelStorage().all() {
+                let name = try #require(labels.first { $0.stringValue == model.name })
+                let line = try #require(name.superview as? NSStackView)
+                let action = try #require(line.arrangedSubviews.compactMap { $0 as? NSButton }.first)
+                #expect(action.title == (model.kind == .whisper ? "Удалить" : "Скачать"))
+                #expect(!action.isHidden)
+                #expect(NSFontManager.shared.traits(of: try #require(name.font)).contains(.boldFontMask))
+                #expect(abs(action.convert(action.bounds, to: group).maxX - group.bounds.maxX) < 1)
+                #expect(name.frame.maxX <= action.frame.minX)
+                #expect(name.frame.width > 100)
+            }
+        }
+    }
     @Test(.freshHome) func selectedAndProcessingModelsCannotBeDeleted() throws {
-        let settings = SettingsWindow(hostWindow: NSWindow())
+        let application = ApplicationWindow()
+        let settings = application.settings
+        application.navigate(.storage)
+        defer { withExtendedLifetime(application) {} }
         let model = try #require(ModelStorage().all().first { $0.kind == .whisper })
         Config.update(path: ["transcription", "engine"], value: "whisper")
         #expect(settings.modelDeletionReason(model) != nil)

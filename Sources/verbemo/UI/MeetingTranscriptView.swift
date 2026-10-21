@@ -3,12 +3,14 @@ import AppKit
 /// Reuse native rows so a long meeting does not create thousands of controls at once.
 @MainActor
 final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableViewDelegate {
+    var onPlayFrom: ((TimeInterval) -> Void)?
     var onMap: ((String, CalendarParticipant?) throws -> Void)?
     private let table = NSTableView()
     private var segments: [Transcript.Segment] = []
     private var names: SpeakerNames?
     private var participants: [CalendarParticipant] = []
     private var canEdit = false
+    private var canPlay = false
     init() {
         super.init(frame: .zero)
         hasVerticalScroller = true
@@ -26,14 +28,18 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         documentView = table
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool) {
+    func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false) {
         segments = transcript.segments
         self.names = names
         self.participants = participants
         self.canEdit = canEdit
+        self.canPlay = canPlay
         table.reloadData()
     }
     func numberOfRows(in tableView: NSTableView) -> Int { segments.count }
+    func tableViewColumnDidResize(_ notification: Notification) {
+        table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
+    }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         let width = max(160, tableView.tableColumns[0].width - 20)
         let rect = (segments[row].text as NSString).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 14)])
@@ -44,7 +50,13 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let cell = (tableView.makeView(withIdentifier: id, owner: self) as? SegmentCell) ?? SegmentCell()
         cell.identifier = id
         let segment = segments[row]
-        cell.time.stringValue = String(format: "%02d:%02d", segment.start_ms / 60_000, (segment.start_ms / 1000) % 60)
+        cell.time.title = String(format: "%02d:%02d", segment.start_ms / 60_000, (segment.start_ms / 1000) % 60)
+        cell.time.tag = row
+        cell.time.target = self
+        cell.time.action = #selector(playFrom(_:))
+        cell.time.isEnabled = canPlay
+        cell.time.toolTip = localised("Play from \(cell.time.title)", "Воспроизвести с \(cell.time.title)")
+        cell.time.setAccessibilityLabel(cell.time.toolTip)
         cell.body.stringValue = segment.text
         cell.body.preferredMaxLayoutWidth = max(160, tableView.tableColumns[0].width - 20)
         Self.configureParticipants(cell.person, speaker: segment.speaker, names: names,
@@ -52,9 +64,13 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.person.tag = row
         cell.person.target = self
         cell.person.action = #selector(mapped(_:))
-        cell.person.isEnabled = canEdit
-        cell.person.setAccessibilityLabel(localised("Who is speaking at \(cell.time.stringValue)?", "Кто говорит в \(cell.time.stringValue)?"))
+        cell.person.isEnabled = canEdit && !participants.isEmpty
+        cell.person.setAccessibilityLabel(localised("Who is speaking at \(cell.time.title)?", "Кто говорит в \(cell.time.title)?"))
         return cell
+    }
+    @objc private func playFrom(_ sender: NSButton) {
+        guard canPlay, segments.indices.contains(sender.tag) else { return }
+        onPlayFrom?(Double(segments[sender.tag].start_ms) / 1000)
     }
     @objc private func mapped(_ sender: NSPopUpButton) {
         guard canEdit, segments.indices.contains(sender.tag) else { return }
@@ -85,13 +101,15 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
 
 @MainActor
 private final class SegmentCell: NSTableCellView {
-    let time = NSTextField(labelWithString: "")
+    let time = NSButton(title: "", target: nil, action: nil)
     let person = NSPopUpButton()
     let body = NSTextField(wrappingLabelWithString: "")
     init() {
         super.init(frame: .zero)
         time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        time.textColor = .secondaryLabelColor
+        time.isBordered = false
+        time.contentTintColor = JournalStyle.accent
+        time.identifier = .init("transcript.playFrom")
         body.font = .systemFont(ofSize: 14)
         body.isSelectable = true
         person.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

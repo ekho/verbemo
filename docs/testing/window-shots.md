@@ -1,31 +1,22 @@
-# Seeing the windows
+# Seeing the Journal pages
 
-`Tests/verbemoTests/WindowShots.swift` renders every window verbemo has to PNG
-files, and writes a listing of where every view in the setup window ended up.
-It asserts nothing. It exists because the defects these
-windows produce are not the kind a test catches: a label whose descenders sit
-on the hairline below it, a border still painted in the appearance the Mac has
-left, two rows nobody thought to compare that came out different heights. Each
-of those was found by rendering the window and looking at it.
+`Tests/verbemoTests/WindowShots.swift` renders pages of the real
+`ApplicationWindow` to PNG files for human layout review. It also writes a view
+listing for the transcription settings page. The suite checks that its fixture
+controls exist, but does not compare pixels or establish GUI acceptance.
 
 ```sh
-mkdir -p /tmp/shots && VERBEMO_SHOTS=/tmp/shots swift test --filter 'Window(Shots|Gallery)'
+mkdir -p /tmp/shots
+VERBEMO_SHOTS=/tmp/shots swift test --filter 'Window(Shots|Gallery)'
 ```
 
-Two suites live in that file. `WindowShots` is the diagnostic one — the setup
-and settings windows at the wrong sizes on purpose, and through a change of
-appearance. `WindowGallery` is the other errand: the status window and the
-recordings window, which produce no layout defects and so were never in the
-first suite, plus the setup window at the exact height of its own form. Filter
-to one of them by name when only one is wanted; the two write into the same
-directory.
+The directory must already exist. Without `VERBEMO_SHOTS`, both suites are
+skipped. `WindowShots` captures content without window chrome; `WindowGallery`
+includes the title bar. Both use the Journal's normal 1340×820 content size and
+760×680 for narrow captures. No fixture creates a standalone setup, settings,
+status, About or recordings window.
 
-The directory has to exist: the suite writes into it rather than creating it,
-so a first run without the `mkdir` fails on the first PNG.
-
-`VERBEMO_SHOTS_LANGUAGE=ru` builds the windows in Russian instead. Everything
-else about the run is the same, filenames included, so give it a directory of
-its own:
+Use separate directories for the two languages; filenames are the same:
 
 ```sh
 mkdir -p /tmp/shots-en /tmp/shots-ru
@@ -33,119 +24,66 @@ VERBEMO_SHOTS=/tmp/shots-en swift test --filter 'Window(Shots|Gallery)'
 VERBEMO_SHOTS_LANGUAGE=ru VERBEMO_SHOTS=/tmp/shots-ru swift test --filter 'Window(Shots|Gallery)'
 ```
 
-`VERBEMO_SHOTS` both switches the suite on and says where to write; without it
-`swift test` skips the whole thing, which is why it can live in the test target
-without lengthening the suite. It is in the test target because that is the only
-place that can see `SetupWindow` and `SettingsWindow`: they are internal, and
-making them public so a command-line tool could open them would be widening the
-program to suit its instruments.
+The New recording fixture also renders the attached form with a synthetic calendar event or a timestamp title; it never reads real calendars or starts capture.
 
 ## What comes out
 
-| File | What it is |
+`{light,dark}` below means one file per appearance. Settings pages are
+`general`, `recording`, `transcription`, `summary`, `calendar` and `storage`.
+
+| File | Contents |
 | --- | --- |
-| `setup-{light,dark}-window.png` | The setup window at 700×760, the size a person gets. |
-| `setup-{light,dark}-full.png` | The same at 700×1600 — taller than the form, which is where anchoring mistakes show. |
-| `setup-switched-to-dark.png`, `setup-switched-back-to-light.png` | One window built in light and handed to the other appearance and back. |
-| `settings-setup-{light,dark}.png` | The settings window's first tab: the same form in another window. |
-| `settings-advanced-{light,dark}.png` | The Advanced tab, and `-narrow` at the minimum width the window allows. |
-| `settings-advanced-{light,dark}-bottom.png` | The same tab scrolled to its end, which is the only picture the models-on-disk block appears in. |
-| `settings-setup-switched-*.png` | The settings window through the same change of appearance. |
-| `about-{light,dark}.png` | The About window, which sizes itself to its words — so this pair is where a Russian line that outgrew the width would show. |
-| `setup-{light,dark}-whole.png` | The setup window closed onto its own form: the whole screen, one image, no scrollbar and no empty band. This is the one to show somebody. |
-| `status-idle-{light,dark}.png` | The status window as it sits all day. |
-| `status-recording-{light,dark}.png` | The same window recording, with the live transcript that borrows its height. |
-| `recordings-{light,dark}.png` | The recordings window over four sessions made for the picture — finished, waiting, refused, and one whose names are half filled in — with the newest selected so the detail half is not blank. |
-| `tree.txt` | Every view in the setup window with its frame, in window coordinates. |
+| `setup-permissions-{light,dark}.png` and `-narrow` | First-run microphone and call-audio permissions inside Journal. |
+| `setup-permissions-switched-to-dark.png`, `setup-permissions-switched-back-to-light.png` | The same permissions page through an appearance change. |
+| `settings-{page}-{light,dark}.png` and `-narrow` | Each of the six settings pages. |
+| `settings-storage-{light,dark}-narrow-bottom.png` | Storage scrolled to the model files at the bottom. |
+| `settings-transcription-switched-to-light.png`, `settings-transcription-switched-back-to-dark.png` | Transcription settings through an appearance change. |
+| `settings-transcription-cloud-only-{light,dark}.png` and `-narrow` | Cloud-only transcription with local speaker separation unavailable. |
+| `settings-transcription-{light,dark}-narrow-diarization-error.png` | A long speaker-model error. |
+| `settings-transcription-{light,dark}-narrow-{local,diarization}-progress.png` | Posed download progress; no download starts. |
+| `about-{light,dark}.png` | About inside Journal. |
+| `journal-empty-{light,dark}.png` | An empty meeting library. |
+| `journal-live-{light,dark}.png` and `-narrow` | Active recording controls and a synthetic live transcript. |
+| `journal-meeting-{completed,pending,failed}-{light,dark}.png` | Transcript and inspector, including speakers and processing state. |
+| `journal-meeting-summary-{light,dark}.png` and `-narrow` | The selected meeting's summary. |
+| `journal-meeting-inspector-{light,dark}-narrow.png` | The inspector opened at minimum width. |
+| `journal-meeting-versions-{light,dark}-narrow.png` | Current and archived transcript versions. |
+| `tree.txt` | Every view on the transcription settings page, with its frame and control state. |
 
 ## How to read them
 
-**The switched pictures are the point of the exercise.** A layer colour is a
-resolved number rather than a living rule (`docs/pitfalls.md`, *A `CGColor` is a
-number, not a colour*), so a window can go on wearing the appearance it was born
-in. Compare each `*switched*` file against the file for the appearance it ended
-in: they should be **identical to the pixel**. Any difference is that bug.
+Compare appearance-switch captures against the matching page built in the
+final appearance. Stale layer colours are a reason to inspect the live app;
+small rendering differences alone are not an automated failure.
 
-**Compare the two languages against each other, not against yesterday.**
-Russian runs about a fifth longer than English, and the labels in these
-windows have both a wrapping width and a line limit: past the limit a row
-either truncates or grows and pushes everything under it down. Neither shows
-in one picture — a row looks like a row. The pair from one run shows it at
-once, and the two `tree.txt` files settle it: every frame in the two listings
-should match, and a row that has grown is a translation to shorten rather than
-a line limit to raise.
+Compare English and Russian from the same revision and machine. Look for
+clipped labels, inaccessible controls and unexpected row growth. `tree.txt`
+gives exact frames for the transcription page when a visual gap is hard to
+measure.
 
-**Do not read a switch's state off a picture.** An `NSSwitch` is drawn by
-SwiftUI and comes out in the off position offscreen whatever it is set to. Every
-switch in these files looks off — grey, where a switch that is on is blue.
-`tree.txt` reports the real state, and it is the only place to read it.
+`cacheDisplay` has known limits: an offscreen `NSSwitch` can look off regardless
+of its actual state, and AppKit controls can draw differently from the active
+app. Read the switch state in `tree.txt` or verify it in the running app.
+Gallery title-bar buttons can appear inactive. The capture helper retains its
+painted background so dark text and surfaces are not flattened onto transparency.
 
-This has been tried and does not yield. Rendering the layer tree instead of the
-view tree gives the same picture; so does putting the window on screen first,
-and so does setting each switch's state again after the window exists to drive
-a redraw through it. The hosted view is not rendered by `cacheDisplay` at all,
-and there is no public way to make it. A picture that has to show a switch
-being on has to be taken of the real application, on a screen, with
-`screencapture`.
+## Isolation and limits
 
-**Measure in `tree.txt`, not with your eyes.** Rows are wrong by two or three
-points at a time, which is exactly the range where looking is unreliable and a
-frame is not. A row's insets are the gap between its own frame and the frame of
-the words inside it.
+Both suites use a fresh application home and a separate temporary pasteboard.
+Meeting files, names, summaries, transcripts and the live conversation are
+synthetic. The gallery creates its own meeting directory and removes it after
+capture. Where an audio source is needed, it writes valid silent test audio;
+it does not record or play audio. Download progress and errors are posed in
+existing controls without fetching a model.
 
-**The tab picker at the top of the settings window comes out as a white
-rectangle.** It draws itself in a way `cacheDisplay` does not reach. Nothing
-else in these files does that, so it is the one thing to ignore rather than
-report.
+System permission and login-item status still comes from this Mac. These
+pictures cannot establish permission prompts, real capture, model downloads,
+playback, keyboard interaction or Windows behavior. They are macOS offscreen
+layout evidence, not a substitute for running the actual application.
 
-Everything else in a picture is real, including the background: a plain view
-painted in `windowBackgroundColor` goes in behind the form for the length of the
-exposure, because `cacheDisplay` renders views and not the window under them,
-and a dark window without that comes out as white text on nothing.
+Keep generated PNGs out of git: compare captures from the same machine before
+and after a change. Website screenshots must come from the final macOS bundle
+and actual Windows app, with source/build/language provenance. Do not relabel
+historical or offscreen fixture captures as release acceptance evidence.
 
-## What they cannot tell you
-
-The pictures show this Mac, now. Which permissions are granted, which keys are
-present, whether the local model is downloaded — all of it is read from the
-machine, and all of it changes what the window says and how tall its rows are.
-Two runs on different days differ for reasons that are not the code. When
-comparing across commits, compare runs taken close together, and check
-`tree.txt` before concluding that a layout moved.
-
-**The gallery's pictures have the window's title bar in them; the diagnostic
-ones do not.** `WindowGallery` photographs the window's frame view rather than
-its content view, so the three buttons in the corner are in the frame and the
-picture reads as a Mac window rather than as a rectangle of controls. They come
-out grey rather than red, yellow and green, because they are drawn for a window
-belonging to an application macOS has not activated — and it will not activate
-a test binary. `WindowShots` keeps to the content view: its pictures are
-compared against each other to the pixel, and chrome is one more thing that
-could differ for a reason nobody wants to chase.
-
-**The recordings window is posed, and the rest are not.** Its four sessions are
-written into a folder of its own for the exposure and deleted afterwards —
-these files get shown to people, and the real recordings folder is full of the
-names of actual meetings. Everything else in these pictures is this Mac saying
-what is true about it.
-
-**A download in progress is not among the states it can take.** The local
-model's row grows a progress bar and swaps its size for a running count while
-parakeet is being fetched, and that is a layout worth a picture — but the tool
-cannot pose it. The windows own their form privately, so nothing here can reach
-the switch's seams to say "no model, and this is how to pretend to fetch it";
-the bar would read zero anyway, because it is the cache directory's size and a
-pretended download writes no bytes; and by the rule above, the switch that
-started it comes out looking off whatever it is set to. Seeing that row mid-
-download means turning the switch on in the real window with no model on the
-Mac, which is also the only way to see it at all.
-
-Which is why no picture from this tool belongs in the repository as a
-reference to compare against: it would be a picture of one machine on one day,
-and it would disagree with the next machine for reasons nobody could act on.
-The tool is here; its output is not. If these ever run unattended, the
-comparison to make is two runs on the same machine — before a change and after
-it — never a run against a file in git.
-
-Website screenshots must come from the final Task9 bundle and actual Windows
-app, with source/build/language provenance. Imported shots and preliminary
-About captures are historical evidence only; do not relabel them as Verbemo.
+New recording: `new-recording-{calendar,timestamp}-{light,dark}.png` (form contents, without sheet chrome).

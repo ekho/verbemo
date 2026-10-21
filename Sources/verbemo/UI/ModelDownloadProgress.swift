@@ -86,6 +86,11 @@ final class ModelDownloadProgress: NSStackView {
             + "\(Int(value * 100))%"
     }
 
+    func setCancellable(_ value: Bool) {
+        cancel.isEnabled = value
+        mirrors.forEach { $0.setCancellable(value) }
+    }
+
     func cancelling() {
         mirrors.forEach { $0.cancelling() }
         cancel.isEnabled = false

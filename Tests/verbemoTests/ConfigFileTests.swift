@@ -160,9 +160,9 @@ struct ConfigFileTests {
         }
     }
 
-    @Test("The menu and the status window say it in one line", .freshHome(config: broken))
+    @Test("The menu and live transcript page say it in one line", .freshHome(config: broken))
     @MainActor
-    func menuAndStatusWindowSaySo() throws {
+    func menuAndLivePageSaySo() throws {
         let headline = try #require(Config.problems().first?.headline)
         let menuBar = MenuBarController(visible: false)
         #expect(!menuBar.offeredItemTitles.contains { $0.contains(headline) })
@@ -171,18 +171,18 @@ struct ConfigFileTests {
         menuBar.updateConfigProblem(nil)
         #expect(!menuBar.offeredItemTitles.contains { $0.contains(headline) })
 
-        let window = StatusWindow()
+        let window = LiveTranscriptContent()
         window.updateConfigProblem(headline)
-        let shown = (window.view?.allDescendants ?? [])
+        let shown = window.contentView.allDescendants
             .compactMap { $0 as? NSTextField }
             .filter { !$0.isHiddenOrHasHiddenAncestor }
             .map(\.stringValue)
         #expect(shown.contains(headline))
     }
 
-    @Test("The setup and settings windows explain it, once each", .freshHome(config: broken))
+    @Test("The permissions and settings pages explain it, once each", .freshHome(config: broken))
     @MainActor
-    func windowsExplain() throws {
+    func pagesExplain() throws {
         let explanation = try #require(Config.problems().first?.explanation)
         func visible(in view: NSView?) -> [String] {
             (view?.allDescendants ?? [])
@@ -191,15 +191,16 @@ struct ConfigFileTests {
                 .map(\.stringValue)
         }
 
-        let form = SetupForm()
+        let form = SetupForm(mode: .permissions)
         defer { form.stop() }
         #expect(visible(in: form.view).filter { $0 == explanation }.count == 1)
 
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo settings" })
-        #expect(visible(in: panel.contentView).filter { $0 == explanation }.count == 1,
-                "the settings window should say it once, under both tabs")
+        let app = ApplicationWindow()
+        for destination in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage] {
+            app.navigate(destination)
+            #expect(visible(in: app.panel.contentView).filter { $0 == explanation }.count == 1,
+                    "The settings page should explain the configuration error once: \(destination)")
+        }
     }
 
     @Test("Every sentence about the file is said in Russian too")

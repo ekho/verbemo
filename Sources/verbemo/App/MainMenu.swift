@@ -12,7 +12,7 @@ extension Run {
         let appMenu = NSMenu()
         // First in the menu, where every Mac puts it.
         let about = NSMenuItem(
-            title: localised("About Verbemo", "О программе verbemo"),
+            title: localised("About Verbemo", "О приложении"),
             action: #selector(AppDelegate.showAboutClicked(_:)),
             keyEquivalent: ""
         )

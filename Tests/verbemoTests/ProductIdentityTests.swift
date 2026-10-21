@@ -76,10 +76,10 @@ struct ProductIdentityTests {
         }
     }
 
-    @Test func doesNotReadOrModifyAmanu() throws {
+    @Test func doesNotReadOrModifyAmanu() async throws {
         let home = Home.sandbox()
         defer { try? FileManager.default.removeItem(at: home.url) }
-        try Home.$scoped.withValue(home) {
+        try await Home.$scoped.withValue(home) {
             let legacy = [
                 ".config/amanu/config.json": Data(#"{"user_name":"Amanu sentinel","recordings_dir":"~/Recordings"}"#.utf8),
                 ".config/amanu/setup.json": Data("old setup".utf8),
@@ -106,7 +106,8 @@ struct ProductIdentityTests {
             for model in storage.all() where model.kind != .diarization {
                 try FileManager.default.createDirectory(at: model.directory, withIntermediateDirectories: true)
                 try Data("new model".utf8).write(to: model.directory.appendingPathComponent("sentinel"))
-                try storage.delete(model)
+                if model.kind == .nemotron { try await NemotronModelStore().delete() }
+                else { try storage.delete(model) }
                 #expect(!FileManager.default.fileExists(atPath: model.directory.path))
             }
             for (path, bytes) in legacy {

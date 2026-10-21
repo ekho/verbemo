@@ -1,55 +1,26 @@
 import AppKit
 
-/// The window a new installation opens by itself: `SetupForm` in a wizard's
-/// clothes.
-///
-/// The form is the same one the settings window shows; what this adds is the
-/// wizard around it — a footer saying what is still outstanding, and one
-/// button that does the next thing that has to happen. That ordering matters
-/// on a first run and nowhere else: macOS shows one permission dialog at a
-/// time, and a grant given to the wrong process is worse than no grant.
+/// First-run permissions inside the application window. The footer offers
+/// the next missing permission without blocking access to the rest of the app.
 @MainActor
-final class SetupWindow: NSObject, NSWindowDelegate {
+final class SetupPage: NSObject {
     /// Whether a recording is in progress. Registering at login and testing
     /// system audio both disturb a running recording, and nothing in this
-    /// window is worth losing a meeting for.
+    /// page is worth losing a meeting for.
     var isRecording: (() -> Bool)? {
         didSet { form.isRecording = isRecording }
     }
-    /// Called when the window has done everything it can and been dismissed.
+    /// Called when setup is finished or deferred.
     var onFinished: (() -> Void)?
 
-    private let panel: NSWindow
-    private let embedded: Bool
-    private let form: SetupForm
+    private let form = SetupForm(mode: .permissions)
     private(set) var contentView = NSView()
     private let footerNote = NSTextField(labelWithString: "")
     private let primary = NSButton(
         title: localised("Done", "Готово"), target: nil, action: nil)
 
-    override convenience init() { self.init(hostWindow: nil) }
-
-    init(hostWindow: NSWindow?) {
-        embedded = hostWindow != nil
-        form = SetupForm(forSettings: false, permissionsOnly: embedded)
-        panel = hostWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 700, height: 760),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+    override init() {
         super.init()
-
-        if !embedded {
-        panel.title = localised("verbemo setup", "Первая настройка verbemo")
-        panel.isReleasedWhenClosed = false
-        panel.delegate = self
-        panel.minSize = NSSize(width: 640, height: 460)
-        }
-        // Rows and cards come and go as the form redraws; the Tab order has
-        // to follow them, or a choice card that appeared after the window
-        // opened could never be reached from the keyboard.
-        panel.autorecalculatesKeyViewLoop = true
 
         let scroll = SetupLayout.scroller(around: form.view)
 
@@ -92,31 +63,24 @@ final class SetupWindow: NSObject, NSWindowDelegate {
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
         ])
         contentView = content
-        if !embedded { panel.contentView = content; panel.center() }
 
         form.onStateChange = { [weak self] in self?.updateFooter() }
         updateFooter()
     }
 
-    func show() {
-        if !panel.isVisible { Analytics.track(.setupOpened) }
+    func prepare() {
+        if !isVisible { Analytics.track(.setupOpened) }
         form.reload()
-        panel.makeKeyAndOrderFront(nil)
     }
 
-    var isVisible: Bool { panel.isVisible && (!embedded || contentView.window === panel) }
-
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        finish()
-        return false
-    }
+    var isVisible: Bool { contentView.window?.isVisible == true }
 
     @objc private func laterClicked() {
         finish()
     }
 
     @objc private func primaryClicked() {
-        // The button does the next unfinished thing, and only closes when
+        // The button does the next unfinished thing, and only finishes when
         // there is nothing left it can do from here.
         if let next = form.nextAction {
             next()
@@ -125,14 +89,10 @@ final class SetupWindow: NSObject, NSWindowDelegate {
         finish()
     }
 
-    /// Setup is marked done on the way out however it was dismissed. Asking
-    /// once is the promise; a window that comes back every launch until every
-    /// box is ticked would be nagging, and `verbemo doctor` still says what is
-    /// missing.
+    /// Permissions remain available in Settings after setup is deferred.
     private func finish() {
         SetupState.markCompleted()
         form.stop()
-        if !embedded { panel.orderOut(nil) }
         onFinished?()
     }
 

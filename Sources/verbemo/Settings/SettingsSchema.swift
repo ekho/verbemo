@@ -120,12 +120,12 @@ enum SettingsSchema {
         guard supported else {
             return [
                 Entry(["transcription", "local_diarization"],
-                      localised("Separate local speakers", "Разделять говорящих локально"),
+                      localised("Local diarization", "Локальная диаризация"),
                       localised("Needs Apple Silicon; this Mac cannot run the model.",
                                 "Нужен Apple Silicon; этот мак не запустит модель."),
                       .toggle, default: false, askedInSetup: true),
                 Entry(["transcription", "diarization_model"],
-                      localised("Speaker model", "Модель говорящих"),
+                      localised("Diarization model", "Модель диаризации"),
                       localised("Needs Apple Silicon; this Mac cannot run the model.",
                                 "Нужен Apple Silicon; этот мак не запустит модель."),
                       .choice(DiarizationModel.allCases.map(\.rawValue)),
@@ -145,7 +145,7 @@ enum SettingsSchema {
                       localised(
                           "Used when this universal app runs on Apple Silicon.",
                           "Используется, когда универсальная сборка работает на Apple Silicon."),
-                      .choice(["parakeet", "whisper", "gigaam"]),
+                      .choice(["parakeet", "whisper", "gigaam", "nemotron"]),
                       default: "parakeet", askedInSetup: true),
                 Entry(["transcription", "language"], localised("Meeting language", "Язык встреч"),
                       localised(
@@ -162,22 +162,22 @@ enum SettingsSchema {
             Entry(["live_transcription", "enabled"],
                   localised("Show a live transcript", "Показывать расшифровку по ходу встречи"),
                   localised(
-                      "Uses an additional local NVIDIA model while a meeting is being recorded.",
-                      "Пока идёт запись, работает ещё одна местная модель NVIDIA."),
+                      "Uses Nemotron during recording. Shares downloaded files with final transcription; enabled independently.",
+                      "Использует Nemotron во время записи. Файлы общие с итоговой расшифровкой; включается отдельно."),
                   .toggle, default: false, askedInSetup: true),
             Entry(["transcription", "local_diarization"],
-                  localised("Separate local speakers", "Разделять говорящих локально"),
-                  localised("Optional local stage. Download the model explicitly; audio stays on this Mac.",
-                            "Необязательный локальный этап. Модель скачивается отдельно; звук остаётся на маке."),
+                  localised("Local diarization", "Локальная диаризация"),
+                  localised("Optional local stage. Selecting a missing model downloads it; audio stays on this Mac.",
+                            "Необязательный локальный этап. Недостающая модель скачивается при выборе; звук остаётся на маке."),
                   .toggle, default: false, askedInSetup: true),
             Entry(["transcription", "diarization_model"],
-                  localised("Speaker model", "Модель говорящих"),
+                  localised("Diarization model", "Модель диаризации"),
                   localised("Choose which local model separates speakers in new recordings.",
                             "Выберите локальную модель для разделения говорящих в новых записях."),
                   .choice(DiarizationModel.allCases.map(\.rawValue)),
                   default: DiarizationModel.default.rawValue, askedInSetup: true),
             Entry(["transcription", "diarization_threshold"],
-                  localised("Speaker separation threshold", "Порог разделения говорящих"),
+                  localised("Diarization threshold", "Порог диаризации"),
                   localised("Initial clustering setting (0.3–1.2), not an accuracy score.",
                             "Начальная настройка группировки (0,3–1,2), не оценка точности."),
                   .number(unit: ""), default: 0.6),
@@ -185,7 +185,7 @@ enum SettingsSchema {
                   localised(
                       "auto: the cloud engine when there's a key and the network answers, parakeet otherwise.",
                       "auto — облачный движок, когда есть ключ и отвечает сеть, иначе parakeet."),
-                      .choice(["auto", "assemblyai", "openai", "elevenlabs", "parakeet", "whisper", "gigaam"]), default: "auto", askedInSetup: true),
+                      .choice(["auto", "assemblyai", "openai", "elevenlabs", "parakeet", "whisper", "gigaam", "nemotron"]), default: "auto", askedInSetup: true),
             Entry(["transcription", "cloud"], localised("Cloud engine", "Облачный движок"),
                   localised(
                       "Which service auto uploads to when a key is available.",
@@ -196,7 +196,7 @@ enum SettingsSchema {
                   localised(
                       "Which private model auto uses when the cloud is unavailable.",
                       "Какую локальную модель auto использует, когда облако недоступно."),
-                  .choice(["parakeet", "whisper", "gigaam"]),
+                  .choice(["parakeet", "whisper", "gigaam", "nemotron"]),
                   default: "parakeet", askedInSetup: true),
             Entry(["transcription", "language"], localised("Meeting language", "Язык встреч"),
                   localised(

@@ -30,7 +30,7 @@ struct ApplicationWindowTests {
         defer { app.hide() }
         app.panel.setContentSize(NSSize(width: 760, height: 680))
         app.show()
-        for page in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .storage, .about] {
+        for page in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage, .about] {
             app.navigate(page)
             app.panel.contentView?.layoutSubtreeIfNeeded()
             try? await Task.sleep(for: .milliseconds(30))
@@ -39,14 +39,14 @@ struct ApplicationWindowTests {
     }
     @Test(.freshHome) func workspaceFillsAvailableWidthAfterLayout() throws {
         let app = ApplicationWindow()
-        let library = RecordingsWindow(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), hostWindow: app.panel)
+        let library = MeetingLibraryController(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), hostWindow: app.panel)
         app.libraryProvider = { library }
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let available = try #require(app.panel.contentView).bounds.width - 190
-        #expect(library.contentView.bounds.width >= available - 2)
-        let split = try #require(library.contentView.allDescendants.compactMap { $0 as? NSSplitView }.first)
+        let available = try #require(app.panel.contentView).bounds.width - JournalStyle.sidebarWidth
+        #expect(library.contentView.bounds.width >= available - 2, "content=\(library.contentView.bounds.width), available=\(available)")
+        let split = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.columns" })
         #expect(split.bounds.width >= available - 32)
-        let heading = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSTextField }.first { $0.font?.pointSize == 22 && !$0.isHiddenOrHasHiddenAncestor })
+        let heading = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "journal.breadcrumb" && !$0.isHiddenOrHasHiddenAncestor })
         #expect(heading.bounds.width >= heading.fittingSize.width)
     }
     @Test(.freshHome) func reopeningRefreshesMeetingsChangedWhileHidden() async throws {
@@ -54,9 +54,9 @@ struct ApplicationWindowTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let app = ApplicationWindow()
-        let library = RecordingsWindow(root: root, hostWindow: app.panel)
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
-        let table = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTableView }.first)
+        let table = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSTableView }.first)
         app.hide()
         let meeting = root.appendingPathComponent("meeting")
         try FileManager.default.createDirectory(at: meeting, withIntermediateDirectories: true)
@@ -85,9 +85,42 @@ struct ApplicationWindowTests {
         let app = ApplicationWindow()
         app.update(state: .recording, elapsed: "01:00")
         app.showActiveRecording()
-        let heading = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.font?.pointSize == 22 })
+        let heading = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "journal.breadcrumb" })
         #expect(heading.isEnabled)
     }
+    @Test(.freshHome, .speaking(.russian)) func trayDestinationsReuseTheMainWindow() throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        let menu = MenuBarController(visible: false)
+        menu.setupAvailable(false)
+        menu.onShowMeetings = { app.navigate(.allMeetings); app.bringToFront() }
+        menu.onShowSettings = { app.navigate(.general); app.bringToFront() }
+        menu.onShowAbout = { app.navigate(.about); app.bringToFront() }
+        let before = Set(NSApp.windows.filter { $0.styleMask.contains(.titled) }.map(ObjectIdentifier.init))
+        let commands: [(String, ApplicationNavigationState.Destination)] = [
+            ("Встречи", .allMeetings), ("Настройки…", .general), ("О приложении", .about),
+        ]
+        for (title, destination) in commands {
+            app.hide()
+            #expect(menu.performOfferedItem(titled: title))
+            #expect(app.navigation.destination == destination)
+            #expect(app.panel.isVisible)
+            #expect(Set(NSApp.windows.filter { $0.styleMask.contains(.titled) }.map(ObjectIdentifier.init)) == before)
+        }
+        let setup = SetupPage()
+        app.presentSetup(setup)
+        #expect(setup.contentView.window === app.panel)
+        #expect(Set(NSApp.windows.filter { $0.styleMask.contains(.titled) }.map(ObjectIdentifier.init)) == before)
+        #expect(menu.offeredItemTitles.filter { $0 == "Встречи" }.count == 1)
+        #expect(!menu.offeredItemTitles.contains("Управление записями…"))
+        #expect(!menu.offeredItemTitles.contains("Показать окно verbemo"))
+        for title in ["Начать запись", "Импортировать…", "Открыть папку записей", "Записывать встречи автоматически"] {
+            #expect(menu.offeredItemTitles.contains(title))
+        }
+    }
+
     @Test(.freshHome) func destinationsShareOneWindowAndAboutHasNoToolbar() {
         let app = ApplicationWindow()
         let panel = app.panel
@@ -95,7 +128,7 @@ struct ApplicationWindowTests {
             app.navigate(destination)
             #expect(app.panel === panel)
             #expect(app.toolbarIsHidden == (destination == .about))
-            #expect(app.primaryActionsAreVisible == (destination == .allMeetings))
+            #expect(app.primaryActionsAreVisible)
         }
         app.update(state: .recording, elapsed: "04:32")
         app.navigate(.general)

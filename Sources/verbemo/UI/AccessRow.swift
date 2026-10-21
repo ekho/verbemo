@@ -180,7 +180,7 @@ final class AccessRow: NSView, LayerTinted {
                 accessibilityDescription: localised("denied", "запрещено"))
             mark.contentTintColor = .systemOrange
             button.isHidden = false
-            button.title = localised("Open Settings", "Открыть настройки")
+            button.title = actionTitle ?? localised("Open Settings", "Открыть настройки")
         case .notAsked, .unknown:
             mark.image = NSImage(
                 systemSymbolName: "circle.dashed",

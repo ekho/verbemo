@@ -134,10 +134,14 @@ final class RecordingSession {
         root: URL,
         context: MeetingContext = .empty,
         trigger: Trigger = .manual,
+        title: String? = nil,
         mic: MicTrackRecorder? = nil,
         system: SystemTrackRecorder? = nil,
         writeFile: @escaping FileWriter = RecordingSession.durableWrite
     ) throws {
+        let cleanedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanedTitle?.isEmpty != true else { throw CocoaError(.validationMissingMandatoryProperty) }
+        self.editedTitle = cleanedTitle
         self.context = context
         self.trigger = trigger
         self.tapFamilies = context.appFamilies
@@ -149,7 +153,7 @@ final class RecordingSession {
         self.writeFile = writeFile
 
         var base = Self.folderFormat.string(from: startedAt)
-        if let suffix = context.folderSuffix {
+        if let suffix = MeetingContext(title: cleanedTitle ?? context.title, app: context.app).folderSuffix {
             base += " " + suffix
         }
         var candidate = root.appendingPathComponent(base, isDirectory: true)

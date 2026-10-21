@@ -92,7 +92,7 @@ enum MeetingPresentation {
         var transcript = stage(item.transcript, symbol: "doc.text", label: localised("Transcription", "Расшифровка"),
             done: localised("Transcript ready", "Расшифровка готова"), active: busy && !ready)
         transcript.diarized = item.diarization.map { $0.status != .skipped } ?? item.isDiarized
-        if transcript.diarized { transcript.title += localised(" · speaker separation enabled", " · диаризация включена") }
+        if transcript.diarized { transcript.title += localised(" · diarization enabled", " · диаризация включена") }
         result.append(transcript)
         result.append(stage(item.summary, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),
             done: localised("Summary ready", "Сводка готова"), active: busy && ready && item.summary != .off))

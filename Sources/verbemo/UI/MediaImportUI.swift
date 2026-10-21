@@ -49,7 +49,7 @@ enum MediaImportPresentation {
     }
 }
 
-/// A compact queue indicator shared by both windows. Unknown stages spin;
+/// A compact queue indicator shared by the meeting library and live page. Unknown stages spin;
 /// AVFoundation conversion uses a real fraction and a real progress bar.
 @MainActor
 final class MediaImportStatusView: NSStackView {

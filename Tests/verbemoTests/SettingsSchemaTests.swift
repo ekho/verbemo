@@ -246,33 +246,25 @@ struct SettingsSchemaTests {
         ])
     }
 
-    /// The two that stay on both tabs, and why: setup asks them, but cannot
-    /// say everything the schema allows. The language menu offers parakeet's
-    /// 25 European languages while the cloud engines understand more, and the
-    /// summary cards have no card for `none`. Flagging either would leave a
-    /// legal value reachable only by editing the config file by hand.
-    @Test("A setting setup asks only partly is still asked in Advanced")
-    func partialCoverageStaysInAdvanced() {
-        let advanced = Set(SettingsSchema.advancedSections
-            .flatMap(\.entries)
-            .map { $0.path.joined(separator: ".") })
-        #expect(advanced.contains("transcription.language"))
-        #expect(advanced.contains("summary.backend"))
-
-        // The claim about the menu, checked rather than asserted: a menu that
-        // grew to every language the cloud takes would make the field above
-        // redundant after all.
-        let offered = Set(MeetingLanguages.menu.map(\.code))
-        #expect(!offered.contains("ja"), "the meeting-language menu now covers more than parakeet")
-        // And the claim about the cards: every card setup offers, resolved
-        // through the translation the form uses, and none of them is `none`.
-        let cards = ["claude-cli", "codex-cli", "api-key", "ollama"]
-        let reachable = cards.flatMap { card in
-            ["anthropic-api", "openai-api"].compactMap {
-                SetupSelection.summaryBackend(choice: card, keyBackend: $0)
+    @Test("Summary controls represent every backend allowed by the schema", .freshHome)
+    @MainActor
+    func summaryCardsCoverSchemaBackends() throws {
+        let application = ApplicationWindow()
+        application.navigate(.summary)
+        defer { withExtendedLifetime(application) {} }
+        let entry = try #require(SettingsSchema.sections.flatMap(\.entries).first { $0.path == ["summary", "backend"] })
+        guard case .choice(let backends) = entry.kind else { Issue.record("Summary backend must be a choice"); return }
+        let cards = try #require(application.panel.contentView).allDescendants.compactMap { $0 as? ChoiceCard }
+        for backend in backends {
+            Config.update(path: ["summary", "backend"], value: backend)
+            let expected = ["anthropic-api", "openai-api"].contains(backend) ? "api-key" : backend
+            #expect(cards.filter(\.isSelected).map(\.id) == (backend == "none" ? [] : [expected]))
+            if backend == "none" {
+                let toggle = try #require(application.panel.contentView?.allDescendants
+                    .first { $0.identifier?.rawValue == "summary.enabled" } as? NSSwitch)
+                #expect(toggle.state == .off)
             }
         }
-        #expect(!reachable.contains("none"), "a summary card now writes none after all")
     }
 
     /// The list that tells someone a setting is being ignored has to be right
@@ -496,46 +488,47 @@ struct SettingsSchemaTests {
     }
 }
 
-/// The window itself, built headlessly. It can't be clicked here, but "does it
-/// open at all" and "does every setting reach it" are the two ways this window
-/// fails invisibly — a setting present in the code and absent from the window
-/// is one nobody will ever find.
+/// The actual Journal settings pages retain the schema's editors and defaults.
+@Suite(.serialized)
 @MainActor
-struct SettingsWindowTests {
-    @Test("Every setting the Advanced tab is for gets a control")
-    func rendersEverySetting() {
-        _ = NSApplication.shared
-        let window = SettingsWindow()
-        let controls = window.renderedControls
-        let entries = SettingsSchema.advancedSections.flatMap(\.entries)
-
-        #expect(controls.count == entries.count)
-        for (entry, control) in zip(entries, controls) {
+struct SettingsControllerTests {
+    @Test("Every schema setting not covered by the form gets a control", .freshHome)
+    func rendersEverySetting() throws {
+        let application = ApplicationWindow()
+        let settings = application.settings
+        defer { withExtendedLifetime(application) {} }
+        let entries = SettingsSchema.sections.flatMap(\.entries).filter {
+            !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
+        }
+        #expect(settings.renderedControls.count == entries.count)
+        for entry in entries {
+            application.navigate(SettingsPage.destination(for: entry.path))
+            let control = try #require(settings.renderedControls.first { $0.identifier?.rawValue == entry.path.joined(separator: ".") })
+            #expect(control.window === application.panel)
             switch entry.kind {
             case .toggle:
                 #expect(control is NSSwitch, "\(entry.path) should be a switch")
             case .choice(let options):
-                let popup = control as? NSPopUpButton
-                #expect(popup != nil, "\(entry.path) should be a pop-up")
-                #expect(popup?.itemTitles == options, "\(entry.path) is missing options")
+                let popup = try #require(control as? NSPopUpButton)
+                let values = popup.itemArray.map { $0.representedObject as? String ?? $0.title }
+                #expect(values == options, "\(entry.path) is missing options")
             case .number, .text, .multilineText, .list:
                 #expect(control is NSTextField, "\(entry.path) should be a text field")
             }
         }
     }
 
-    /// Placeholders are how a default is visible without being set, which is
-    /// the thing that lets the config file stay empty. Not merely present —
-    /// the *default*: a placeholder showing a plausible example instead is how
-    /// the Language field spent a version implying its default was `ru` when
-    /// leaving it alone lets the engine detect what it hears.
-    @Test("Every field shows its own default as a placeholder")
-    func fieldsShowDefaults() {
-        _ = NSApplication.shared
-        let window = SettingsWindow()
-        for (entry, control) in zip(SettingsSchema.advancedSections.flatMap(\.entries),
-                                    window.renderedControls) {
-            guard let field = control as? NSTextField else { continue }
+    @Test("Every schema field shows its own default", .freshHome)
+    func fieldsShowDefaults() throws {
+        let application = ApplicationWindow()
+        let settings = application.settings
+        defer { withExtendedLifetime(application) {} }
+        for entry in SettingsSchema.sections.flatMap(\.entries) {
+            guard let field = settings.renderedControls.first(where: {
+                $0.identifier?.rawValue == entry.path.joined(separator: ".")
+            }) as? NSTextField else { continue }
+            application.navigate(SettingsPage.destination(for: entry.path))
+            #expect(field.window === application.panel)
             if case .multilineText = entry.kind {
                 #expect(field.stringValue == SettingsSchema.describeDefault(entry),
                         "\(entry.path) doesn't start with its editable default")
@@ -543,23 +536,22 @@ struct SettingsWindowTests {
             }
             #expect(field.placeholderString == SettingsSchema.describeDefault(entry),
                     "\(entry.path) doesn't show its default as its placeholder")
-            #expect(!(field.placeholderString ?? "").isEmpty,
-                    "\(entry.path) has no placeholder")
+            #expect(!(field.placeholderString ?? "").isEmpty, "\(entry.path) has no placeholder")
         }
     }
 
-    @Test("Return inserts a newline in the summary template")
+    @Test("Return inserts a newline in the summary template", .freshHome)
     func multilineReturn() throws {
-        _ = NSApplication.shared
-        let window = SettingsWindow()
-        let entries = SettingsSchema.advancedSections.flatMap(\.entries)
-        let index = try #require(entries.firstIndex { $0.path == ["summary", "template"] })
-        let field = try #require(window.renderedControls[index] as? NSTextField)
+        let application = ApplicationWindow()
+        application.navigate(.summary)
+        defer { withExtendedLifetime(application) {} }
+        let settings = application.settings
+        let field = try #require(settings.renderedControls.first { $0.identifier?.rawValue == "summary.template" } as? NSTextField)
         let editor = NSTextView()
         editor.string = "First line"
         editor.selectedRange = NSRange(location: editor.string.utf16.count, length: 0)
 
-        #expect(window.control(field, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(settings.control(field, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:))))
         #expect(editor.string == "First line\n")
     }
 }

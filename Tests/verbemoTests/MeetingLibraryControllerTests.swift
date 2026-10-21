@@ -4,12 +4,12 @@ import Testing
 
 @testable import verbemo
 
-/// The recordings window keeping up with a folder that other things write
+/// The Journal library keeping up with a folder that other things write
 /// into: the transcription queue, a moved recordings folder, a session that
 /// is still being worked on.
-@Suite(.serialized)
+@Suite(.serialized, .freshHome)
 @MainActor
-struct RecordingsWindowTests {
+struct MeetingLibraryControllerTests {
     @Test("Diarization details distinguish confirmed speakers, unknown speech and retained retry audio")
     func diarizationDetails() {
         var state = DiarizationState(
@@ -18,7 +18,7 @@ struct RecordingsWindowTests {
         state.hasUnknown = true
         state.rejectedTurnCount = 2
         state.reason = "Model unavailable"
-        let line = RecordingsWindow.diarizationLine(state)
+        let line = MeetingLibraryController.diarizationLine(state)
         #expect(line.contains("failed"))
         #expect(line.contains("3 confirmed speakers"))
         #expect(line.contains("some speech has no speaker"))
@@ -26,21 +26,21 @@ struct RecordingsWindowTests {
         #expect(line.contains("audio kept for retry"))
         #expect(line.contains("Model unavailable"))
         state.status = .completed
-        #expect(!RecordingsWindow.diarizationLine(state).contains("audio kept for retry"))
+        #expect(!MeetingLibraryController.diarizationLine(state).contains("audio kept for retry"))
     }
 
     @Test("An unreadable saved speaker request shows a blocked status in English",
           .freshHome, .speaking(.english))
     func unreadableDiarizationEnglish() throws {
         try assertUnreadableDiarizationStatus(
-            "Speaker separation: saved model request cannot be read. Processing is blocked.")
+            "Diarization: saved model request cannot be read. Processing is blocked.")
     }
 
     @Test("An unreadable saved speaker request shows a blocked status in Russian",
           .freshHome, .speaking(.russian))
     func unreadableDiarizationRussian() throws {
         try assertUnreadableDiarizationStatus(
-            "Разделение говорящих: не удалось прочитать сохранённый запрос модели. Обработка заблокирована.")
+            "Диаризация: не удалось прочитать сохранённый запрос модели. Обработка заблокирована.")
     }
 
     private func assertUnreadableDiarizationStatus(_ expected: String) throws {
@@ -52,8 +52,12 @@ struct RecordingsWindowTests {
             "status": "pending",
         ]])
         #expect(SessionInventory.item(for: dir)?.unreadableDiarization == true)
-        let recordings = RecordingsWindow(root: root)
-        let views = recordings.view?.allDescendants ?? []
+        let app = ApplicationWindow()
+        let recordings = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { recordings }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let views = recordings.contentView.allDescendants
         let status = try #require(views.compactMap { $0 as? NSTextField }
             .first { $0.identifier?.rawValue == "diarization.status" })
         #expect(!status.isHidden)
@@ -92,11 +96,12 @@ struct RecordingsWindowTests {
         )).write(to: dir.appendingPathComponent("transcript.json"))
     }
 
-    /// What the one row's transcript column says: `listLines` is the column
-    /// titles, then each row's cells in column order.
-    private static func transcriptCell(_ window: RecordingsWindow) -> String? {
-        let lines = window.listLines
-        return lines.count >= 8 ? lines[7] : nil
+    private static func meetingTitles(_ library: MeetingLibraryController) throws -> [String] {
+        let table = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSTableView }.first)
+        return (0..<table.numberOfRows).flatMap { row in
+            library.tableView(table, viewFor: table.tableColumns.first, row: row)?
+                .allDescendants.compactMap { ($0 as? NSTextField)?.stringValue } ?? []
+        }
     }
 
     @Test("Selecting another recording replaces both previews, including missing files")
@@ -108,17 +113,24 @@ struct RecordingsWindowTests {
         try Data("A decision from the first meeting.".utf8)
             .write(to: first.appendingPathComponent("summary.md"))
         try Self.session("2026-09-28-090000-second", in: root)
-        let window = RecordingsWindow(root: root)
-        let views = window.view?.allDescendants ?? []
-        let table = try #require(views.compactMap { $0 as? NSTableView }.first)
+        let app = ApplicationWindow()
+        let window = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { window }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let views = window.contentView.allDescendants
+        let table = try #require(window.listContentView.allDescendants.compactMap { $0 as? NSTableView }.first)
         let tabs = try #require(views.compactMap { $0 as? NSTabView }.first)
         let summary = try #require(tabs.tabViewItems.first { ($0.identifier as? String) == "summary" }?.view?
             .allDescendants.compactMap { $0 as? NSTextView }.first)
         let transcript = try #require(tabs.tabViewItems.first { ($0.identifier as? String) == "transcript" }?.view?
             .allDescendants.compactMap { $0 as? NSTextView }.first)
-        let firstRow = try #require(window.listLines.firstIndex { $0.hasPrefix("2026-09-28-100000-first") })
-        // The table contains five columns, preceded by five headings.
-        table.selectRowIndexes([(firstRow - 5) / 5], byExtendingSelection: false)
+        let firstRow = try #require((0..<table.numberOfRows).first { row in
+            window.tableView(table, viewFor: table.tableColumns.first, row: row)?
+                .allDescendants.compactMap { ($0 as? NSTextField)?.stringValue }
+                .contains("2026-09-28-100000-first") == true
+        })
+        table.selectRowIndexes([firstRow], byExtendingSelection: false)
         #expect(summary.string == "A decision from the first meeting.")
         #expect(transcript.string.contains("Hello."))
         #expect(!summary.isEditable && summary.isSelectable)
@@ -139,8 +151,12 @@ struct RecordingsWindowTests {
         for file in ["summary.md", "transcript.md"] {
             try Data(markdown.utf8).write(to: dir.appendingPathComponent(file))
         }
-        let recordings = RecordingsWindow(root: root)
-        let tabs = try #require(recordings.view?.allDescendants.compactMap { $0 as? NSTabView }.first)
+        let app = ApplicationWindow()
+        let recordings = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { recordings }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let tabs = try #require(recordings.contentView.allDescendants.compactMap { $0 as? NSTabView }.first)
         for identifier in ["summary", "transcript"] {
             let text = try #require(tabs.tabViewItems.first { ($0.identifier as? String) == identifier }?.view?
                 .allDescendants.compactMap { $0 as? NSTextView }.first)
@@ -158,29 +174,27 @@ struct RecordingsWindowTests {
         withExtendedLifetime(recordings) {}
     }
 
-    @Test("Making the window taller gives the space to the recording content")
+    @Test("Making the application window taller gives the space to the Journal document")
     func recordingContentFillsWindow() throws {
         let root = try Self.folder()
         defer { try? FileManager.default.removeItem(at: root) }
-        let recordings = RecordingsWindow(root: root)
-        let view = try #require(recordings.view)
-        let window = try #require(view.window)
-        let split = try #require(view.allDescendants.compactMap { $0 as? NSSplitView }.first)
-        window.setContentSize(NSSize(width: 980, height: 700))
-        view.layoutSubtreeIfNeeded()
-        let before = split.frame.height
-        window.setContentSize(NSSize(width: 980, height: 900))
-        view.layoutSubtreeIfNeeded()
-        #expect(split.frame.height >= before + 190)
-        #expect(split.frame.minY < 7, "unused space should belong to the recording panes")
-        split.setPosition(250, ofDividerAt: 0)
-        view.layoutSubtreeIfNeeded()
-        #expect(abs(split.arrangedSubviews[0].frame.height - 250) < 2,
-                "the divider must let the user give more room to the recording details")
-        withExtendedLifetime(recordings) {}
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let columns = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.columns" })
+        app.panel.setContentSize(NSSize(width: 1340, height: 700))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let before = columns.frame.height
+        app.panel.setContentSize(NSSize(width: 1340, height: 900))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(columns.frame.height >= before + 190)
+        #expect(library.contentView.window === app.panel)
+        #expect(!library.contentView.allDescendants.contains { $0 is NSSplitView })
     }
 
-    @Test("A long opening excerpt leaves room for speaker name fields")
+    @Test("Long speaker excerpts leave name fields visible in the inspector")
     func speakerFieldsStayVisible() throws {
         let root = try Self.folder()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -192,18 +206,23 @@ struct RecordingsWindowTests {
                       end_ms: (index + 1) * 1000, text: "We discussed the plans for our next meeting and the work ahead.")
             }
         )).write(to: dir.appendingPathComponent("transcript.json"))
-        let recordings = RecordingsWindow(root: root)
-        let view = try #require(recordings.view)
-        let tabs = try #require(view.allDescendants.compactMap { $0 as? NSTabView }.first)
-        tabs.selectTabViewItem(withIdentifier: "speakers")
-        view.layoutSubtreeIfNeeded()
-        let speakers = try #require(tabs.selectedTabViewItem?.view)
-        let scroll = try #require(speakers.allDescendants.compactMap { $0 as? NSScrollView }.first)
-        let field = try #require(speakers.allDescendants.compactMap { $0 as? NSTextField }.first { $0.isEditable })
+        let app = ApplicationWindow()
+        let recordings = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { recordings }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let view = recordings.contentView
+        app.panel.setContentSize(NSSize(width: 1340, height: 820))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let inspector = try #require(view.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        let speaker = try #require(inspector.allDescendants.compactMap { $0 as? MeetingSpeakerView }.first)
+        let edit = try #require(speaker.allDescendants.compactMap { $0 as? NSButton }.first)
+        #expect(edit.sendAction(edit.action, to: edit.target))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let scroll = try #require(inspector.allDescendants.compactMap { $0 as? NSScrollView }.first)
+        let field = try #require(speaker.allDescendants.compactMap { $0 as? NSTextField }.first { $0.isEditable })
         let visible = field.convert(field.bounds, to: scroll.contentView)
         #expect(visible.intersects(scroll.contentView.bounds), "the excerpt must not push names out of view")
-        #expect(tabs.contentRect.contains(field.convert(field.bounds, to: tabs)),
-                "the name field must be inside the visible tab, not below its bottom edge")
         withExtendedLifetime(recordings) {}
     }
 
@@ -217,55 +236,49 @@ struct RecordingsWindowTests {
             engine: "assemblyai", model: "universal", created_at: "2026-09-28T09:11:00Z",
             segments: [.init(speaker: "A", start_ms: 0, end_ms: 1000, text: longText)]
         )).write(to: dir.appendingPathComponent("transcript.json"))
-        let recordings = RecordingsWindow(root: root)
-        let view = try #require(recordings.view)
-        let window = try #require(view.window)
-        let tabs = try #require(view.allDescendants.compactMap { $0 as? NSTabView }.first)
-        window.setContentSize(NSSize(width: 860, height: 700))
-        window.orderFront(nil)
-        defer { window.orderOut(nil) }
-        view.layoutSubtreeIfNeeded()
-        tabs.selectTabViewItem(withIdentifier: "speakers")
-        view.layoutSubtreeIfNeeded()
-        // AppKit applies the window's constraint-derived minimum on its next update.
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
-        let speakers = try #require(tabs.selectedTabViewItem?.view)
-        #expect(speakers.fittingSize.width <= 820,
-                "the speaker pane must be compressible to the available tab width")
-        #expect(view.fittingSize.width <= 860,
-                "spoken text must fit the pane instead of raising the window's minimum width")
-        window.setContentSize(NSSize(width: 860, height: 700))
-        view.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
-        #expect(view.bounds.width <= 860)
+        let app = ApplicationWindow()
+        let recordings = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { recordings }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let view = recordings.contentView
+        app.panel.setContentSize(NSSize(width: 760, height: 700))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        recordings.updateCompactLayout()
+        let inspector = try #require(view.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        let toggle = try #require(recordings.toolbarContent.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.inspector" })
+        #expect(inspector.isHidden)
+        #expect(toggle.sendAction(toggle.action, to: toggle.target))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(!inspector.isHidden)
+        #expect(inspector.frame.width <= view.bounds.width + 1)
+        #expect(app.panel.contentView?.bounds.width == 760)
         withExtendedLifetime(recordings) {}
     }
 
-    @Test("Switching meetings keeps the speaker pane anchored inside its tab")
+    @Test("Switching meetings keeps the speaker inspector anchored beside the document")
     func speakerPaneDoesNotDrift() throws {
         let root = try Self.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         for name in ["2026-09-28-100000-first", "2026-09-28-090000-second"] {
             try Self.transcribe(Self.session(name, in: root))
         }
-        let recordings = RecordingsWindow(root: root)
-        let view = try #require(recordings.view)
-        let window = try #require(view.window)
-        let table = try #require(view.allDescendants.compactMap { $0 as? NSTableView }.first)
-        let tabs = try #require(view.allDescendants.compactMap { $0 as? NSTabView }.first)
-        window.setContentSize(NSSize(width: 980, height: 700))
-        window.orderFront(nil)
-        defer { window.orderOut(nil) }
-        tabs.selectTabViewItem(withIdentifier: "speakers")
+        let app = ApplicationWindow()
+        let recordings = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { recordings }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let view = recordings.contentView
+        let table = try #require(recordings.listContentView.allDescendants.compactMap { $0 as? NSTableView }.first)
+        let inspector = try #require(view.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        app.panel.setContentSize(NSSize(width: 1340, height: 820))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let original = inspector.frame
         for index in 0..<12 {
             table.selectRowIndexes([index % 2], byExtendingSelection: false)
-            view.layoutSubtreeIfNeeded()
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
-            let pane = try #require(tabs.selectedTabViewItem?.view)
-            #expect(abs(pane.frame.minX - tabs.contentRect.minX) < 1,
-                    "speaker pane moved horizontally after selection \(index): \(pane.frame)")
-            #expect(abs(pane.frame.minY - tabs.contentRect.minY) < 1,
-                    "speaker pane moved vertically after selection \(index): \(pane.frame)")
+            app.panel.contentView?.layoutSubtreeIfNeeded()
+            #expect(inspector.frame == original)
+            #expect(inspector.allDescendants.contains { $0 is MeetingSpeakerView })
         }
         withExtendedLifetime(recordings) {}
     }
@@ -279,18 +292,22 @@ struct RecordingsWindowTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let dir = try Self.session("2026-09-28-090000-standup", in: root)
 
-        let window = RecordingsWindow(root: root)
-        window.show()
+        let app = ApplicationWindow()
+        let window = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { window }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        app.show()
         defer { withExtendedLifetime(window) {} }
-        let before = Self.transcriptCell(window)
+        let before = window.currentActions.transcriptReady
 
         try Self.transcribe(dir)
         window.sessionsChanged()
         await window.settled()
 
-        #expect(Self.transcriptCell(window) != before, "the window still shows the transcript as owed")
-        #expect(Self.transcriptCell(window)?.hasPrefix(
-            SessionInventory.Step.done.described) == true)
+        #expect(!before)
+        #expect(window.currentActions.transcriptReady, "the Journal still shows the transcript as owed")
+        app.panel.orderOut(nil)
     }
 
     @Test("A closed window does not read the folder until it is opened")
@@ -298,12 +315,17 @@ struct RecordingsWindowTests {
         let root = try Self.folder()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let window = RecordingsWindow(root: root)
+        let app = ApplicationWindow()
+        let window = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { window }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
         defer { withExtendedLifetime(window) {} }
+        await window.settled()
         try Self.session("2026-09-28-100000-later", in: root)
         window.sessionsChanged()
         await window.settled()
-        #expect(!window.listLines.contains("2026-09-28-100000-later"))
+        #expect(try !Self.meetingTitles(window).contains("2026-09-28-100000-later"))
     }
 
     @Test("Moved to another recordings folder, the window lists that folder")
@@ -317,14 +339,18 @@ struct RecordingsWindowTests {
         try Self.session("2026-09-28-090000-old-folder", in: first)
         try Self.session("2026-09-28-090000-new-folder", in: second)
 
-        let window = RecordingsWindow(root: first)
+        let app = ApplicationWindow()
+        let window = MeetingLibraryController(root: first, hostWindow: app.panel)
+        app.libraryProvider = { window }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
         defer { withExtendedLifetime(window) {} }
-        #expect(window.listLines.contains { $0.hasPrefix("2026-09-28-090000-old-folder") })
+        #expect(try Self.meetingTitles(window).contains("2026-09-28-090000-old-folder"))
 
         window.setRoot(second)
         await window.settled()
-        #expect(window.listLines.contains { $0.hasPrefix("2026-09-28-090000-new-folder") })
-        #expect(!window.listLines.contains { $0.hasPrefix("2026-09-28-090000-old-folder") })
+        #expect(try Self.meetingTitles(window).contains("2026-09-28-090000-new-folder"))
+        #expect(try !Self.meetingTitles(window).contains("2026-09-28-090000-old-folder"))
     }
 
     /// Delete moved a folder to the Trash while the transcription queue was
@@ -335,13 +361,13 @@ struct RecordingsWindowTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let dir = try Self.session("2026-09-28-090000-busy", in: root)
 
-        #expect(RecordingsWindow.deleteRefusal(for: dir) == nil)
+        #expect(MeetingLibraryController.deleteRefusal(for: dir) == nil)
 
         try SessionClaim.acquire(dir, stage: .transcribe)
-        let why = RecordingsWindow.deleteRefusal(for: dir)
+        let why = MeetingLibraryController.deleteRefusal(for: dir)
         SessionClaim.release(dir)
 
         #expect(why?.contains("working on this recording") == true)
-        #expect(RecordingsWindow.deleteRefusal(for: dir) == nil)
+        #expect(MeetingLibraryController.deleteRefusal(for: dir) == nil)
     }
 }

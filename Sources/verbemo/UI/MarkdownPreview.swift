@@ -4,8 +4,8 @@ import AppKit
 /// breaks to display its block and inline presentation intents in NSTextView.
 @MainActor
 enum MarkdownPreview {
-    static func render(_ markdown: String) -> NSAttributedString {
-        let baseFont = NSFont.systemFont(ofSize: 13)
+    static func render(_ markdown: String, fontSize: CGFloat = 13) -> NSAttributedString {
+        let baseFont = NSFont.systemFont(ofSize: fontSize)
         guard let parsed = try? AttributedString(markdown: markdown) else {
             return NSAttributedString(string: markdown, attributes: [
                 .font: baseFont, .foregroundColor: NSColor.labelColor,

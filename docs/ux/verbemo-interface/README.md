@@ -16,7 +16,7 @@
 | Модели / загрузки | Расшифровка / Хранение и модели | Каталог платформы | ModelSettingsTests |
 | Календарь / говорящие | Карточка события / расшифровка | EventKit на Mac; сохранённый контекст на Windows | MeetingCalendarMetadataTests / SpeakerParticipantMappingTests |
 | Автостарт, tray/menu, выход, updates | Настройки / системное меню | Обе | ApplicationWindowTests / существующие runtime tests |
-| Диаризация retry/skip, неизвестные подписи | Ошибка во встрече | Существующие возможности платформы | RecordingsWindowTests / diarization lifecycle |
+| Диаризация retry/skip, неизвестные подписи | Ошибка во встрече | Существующие возможности платформы | MeetingLibraryControllerTests / diarization lifecycle |
 | Недеструктивное удаление | Удалить с подтверждением и отменой | Обе | SessionDeletionTests |
 
 Снимки фиксируют согласованную терминологию «Сводка» и меню; не являются доказательством реализации нативного UI.

@@ -4,7 +4,7 @@ import Testing
 
 @testable import verbemo
 
-/// What the setup and settings windows are to the keyboard and to VoiceOver.
+/// Keyboard and VoiceOver behavior of the Journal settings pages.
 @Suite(.serialized)
 @MainActor
 struct AccessibilityTests {
@@ -67,11 +67,16 @@ struct AccessibilityTests {
 
     /// No `setAccessibilityLabel` anywhere: every switch in the window was
     /// announced as "switch" and nothing more.
-    @Test("Every switch in the setup form is named for its row", .freshHome)
+    @Test("Every settings switch is named for its row", .freshHome)
     func everySwitchIsNamed() {
-        let form = SetupForm()
-        defer { form.stop() }
-        let switches = form.view.allDescendants.compactMap { $0 as? NSSwitch }
+        let application = ApplicationWindow()
+        defer { withExtendedLifetime(application) {} }
+        var switches: [NSSwitch] = []
+        for destination in ApplicationNavigationState.Destination.allCases
+            where !destination.isMeetings && destination != .about {
+            application.navigate(destination)
+            switches += application.panel.contentView?.allDescendants.compactMap { $0 as? NSSwitch } ?? []
+        }
         #expect(switches.count >= 8)
         for toggle in switches {
             let name = toggle.accessibilityLabel() ?? ""
@@ -80,14 +85,18 @@ struct AccessibilityTests {
         let keepAudio = switches.first { $0.identifier?.rawValue == "files.keep-audio" }
         #expect(keepAudio?.accessibilityLabel() == "Keep the audio after transcribing")
         let summaries = switches.first { $0.identifier?.rawValue == "summary.enabled" }
-        #expect(summaries?.accessibilityLabel() == "Summaries")
+        #expect(summaries?.accessibilityLabel() == "Summary")
     }
 
-    @Test("Every card in the setup form is a named radio button", .freshHome)
+    @Test("Every settings card is a named radio button", .freshHome)
     func everyCardIsNamed() {
-        let form = SetupForm()
-        defer { form.stop() }
-        let cards = form.view.allDescendants.compactMap { $0 as? ChoiceCard }
+        let application = ApplicationWindow()
+        defer { withExtendedLifetime(application) {} }
+        var cards: [ChoiceCard] = []
+        for destination: ApplicationNavigationState.Destination in [.transcription, .summary] {
+            application.navigate(destination)
+            cards += application.panel.contentView?.allDescendants.compactMap { $0 as? ChoiceCard } ?? []
+        }
         #expect(!cards.isEmpty)
         for card in cards {
             #expect(card.accessibilityRole() == .radioButton)
@@ -97,17 +106,19 @@ struct AccessibilityTests {
 
     @Test("An Access row's button says which grant it asks for", .freshHome)
     func accessButtonsSayWhatFor() throws {
-        let form = SetupForm()
-        defer { form.stop() }
-        let button = try #require(form.view.allDescendants
+        let application = ApplicationWindow()
+        application.navigate(.recording)
+        defer { withExtendedLifetime(application) {} }
+        let button = try #require(application.panel.contentView?.allDescendants
             .first { $0.identifier?.rawValue == "access.microphone.action" } as? NSButton)
         #expect(button.accessibilityLabel()?.contains("Microphone") == true)
     }
 
-    @Test("Every control on the Advanced tab is named for its setting", .freshHome)
-    func advancedControlsAreNamed() {
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime(settings) {} }
+    @Test("Every schema control is named for its setting", .freshHome)
+    func schemaControlsAreNamed() {
+        let application = ApplicationWindow()
+        let settings = application.settings
+        defer { withExtendedLifetime(application) {} }
         #expect(!settings.renderedControls.isEmpty)
         for control in settings.renderedControls {
             #expect(control.accessibilityLabel()?.isEmpty == false,

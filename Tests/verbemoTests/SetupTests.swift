@@ -357,10 +357,12 @@ struct SetupTests {
     @MainActor
     func keepAudioLabelTogglesItsSwitch() throws {
         try withFreshHome { home in
-            let form = SetupForm()
-            defer { form.stop() }
-            let toggle = try Self.control(NSSwitch.self, "files.keep-audio", in: form.view)
-            let label = try #require(form.view.allDescendants
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.storage)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let toggle = try Self.control(NSSwitch.self, "files.keep-audio", in: application.panel.contentView)
+            let label = try #require(application.panel.contentView?.allDescendants
                 .compactMap { $0 as? NSTextField }
                 .first { $0.stringValue == "Keep the audio after transcribing" })
             let words = try #require(label.superview)
@@ -516,19 +518,24 @@ struct SetupTests {
         .enabled(if: Platform.supportsLocalModels))
     @MainActor
     func transcriptionSwitchesWrite() throws {
-        let store = TranscriptionStore()
-        let form = SetupForm()
-        defer { form.stop() }
+        let store = TranscriptionStore(engine: "assemblyai")
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         form.storedTranscription = { store.choice }
         form.write = { store.write($0, $1) }
+        form.parakeetIsHere = { true }
         form.refresh()
 
-        let cloud = try Self.control(NSSwitch.self, "transcription.cloud", in: form.view)
-        let local = try Self.control(NSSwitch.self, "transcription.local", in: form.view)
-        #expect(cloud.state == .on && local.state == .on)
+        let cloud = try Self.control(NSSwitch.self, "transcription.cloud", in: application.panel.contentView)
+        let local = try Self.control(NSSwitch.self, "transcription.local", in: application.panel.contentView)
+        #expect(cloud.state == .on && local.state == .off)
 
-        cloud.performClick(nil)
-        #expect(store.engine == "parakeet", "the cloud went off and \(store.engine ?? "nothing") was written")
+        local.state = .on
+        _ = NSApp.sendAction(try #require(local.action), to: local.target, from: local)
+        #expect(cloud.state == .off && local.state == .on)
+        #expect(store.engine == "parakeet")
         #expect(store.enabled)
 
         local.performClick(nil)
@@ -541,9 +548,10 @@ struct SetupTests {
     @Test("Cloud providers are offered with their price and key link")
     @MainActor
     func providerCardsCarryPriceAndLink() throws {
-        let setup = SetupWindow()
-        defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo setup" })
+        let application = ApplicationWindow()
+        application.navigate(.transcription)
+        defer { withExtendedLifetime(application) {} }
+        let panel = application.panel
         let cards = panel.contentView?.allDescendants.compactMap { $0 as? ChoiceCard } ?? []
 
         let assembly = try #require(cards.first { $0.id == "assemblyai" })
@@ -578,14 +586,19 @@ struct SetupTests {
     @Test("Return commits a key field instead of pressing Done")
     @MainActor
     func returnInAKeyFieldIsSwallowed() throws {
-        let setup = SetupWindow()
-        defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo setup" })
-        let keyFields = panel.contentView?.allDescendants
-            .compactMap { $0 as? NSSecureTextField } ?? []
-        // Both of them: the cloud key and the summary key sit under the same
-        // default button and had the same problem.
-        #expect(keyFields.count == 2)
+        let application = ApplicationWindow()
+        application.navigate(.transcription)
+        defer { withExtendedLifetime(application) {} }
+        let panel = application.panel
+        var keyFields: [NSSecureTextField] = []
+        for destination: ApplicationNavigationState.Destination in [.transcription, .summary] {
+            application.navigate(destination)
+            keyFields += panel.contentView?.allDescendants.compactMap { $0 as? NSSecureTextField } ?? []
+        }
+        #expect(Set(keyFields.compactMap { $0.identifier?.rawValue }) == Set([
+            "transcription.key.assemblyai", "transcription.key.openai",
+            "transcription.key.elevenlabs", "summary.key",
+        ]))
 
         let editor = NSTextView()
         for field in keyFields {
@@ -605,12 +618,13 @@ struct SetupTests {
     @Test("The Summaries switch sits to the left of its heading")
     @MainActor
     func summariesSwitchIsFirst() throws {
-        let setup = SetupWindow()
-        defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo setup" })
+        let application = ApplicationWindow()
+        application.navigate(.summary)
+        defer { withExtendedLifetime(application) {} }
+        let panel = application.panel
         let heading = try #require(panel.contentView?.allDescendants
             .compactMap { $0 as? NSTextField }
-            .first { $0.stringValue == "Summaries" })
+            .first { $0.stringValue == "Summary" })
         let header = try #require(heading.superview as? NSStackView)
 
         #expect(header.arrangedSubviews.first is NSSwitch)
@@ -623,20 +637,29 @@ struct SetupTests {
     @MainActor
     func summariesSwitchWrites() throws {
         try withFreshHome { _ in
-            let form = SetupForm()
-            defer { form.stop() }
-            let toggle = try Self.control(NSSwitch.self, "summary.enabled", in: form.view)
-            let cards = form.view.allDescendants.compactMap { $0 as? ChoiceCard }
-                .filter { ["claude-cli", "codex-cli", "api-key", "ollama"].contains($0.id) }
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.summary)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let toggle = try Self.control(NSSwitch.self, "summary.enabled", in: application.panel.contentView)
+            let cards = try #require(application.panel.contentView).allDescendants.compactMap { $0 as? ChoiceCard }
             #expect(toggle.state == .on)
+            let codex = try #require(cards.first { $0.id == "codex-cli" })
+            #expect(codex.accessibilityPerformPress())
+            #expect(Config.summary().backend == "codex-cli")
 
-            toggle.performClick(nil)
+            toggle.state = .off
+            _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
             #expect(Config.summary().enabled == false)
+            #expect(Config.summary().backend == "codex-cli")
             #expect(cards.allSatisfy { !$0.isEnabled }, "a card stayed live under a switch that is off")
 
-            toggle.performClick(nil)
+            toggle.state = .on
+            _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
             #expect(Config.summary().enabled)
-            #expect(Config.raw()["summary"] == nil, "switching back on left a key behind")
+            #expect(Config.summary().backend == "codex-cli")
+            #expect(codex.isSelected)
+            #expect(cards.allSatisfy { $0.isEnabled })
         }
     }
 
@@ -644,14 +667,16 @@ struct SetupTests {
     /// The pair is worth checking together: each is only safe to offer
     /// because the other exists, and a form that grew one of them without the
     /// other would be a form that can strand a running recorder.
-    @Test("Setup offers the menu bar and the Dock as two switches, and each writes its own")
+    @Test("Settings offer the menu bar and the Dock as two switches, and each writes its own")
     @MainActor
     func iconSwitchesAreOffered() throws {
         try withFreshHome { _ in
-            let form = SetupForm()
-            defer { form.stop() }
-            let menuBar = try Self.control(NSSwitch.self, "icons.menu-bar", in: form.view)
-            let dock = try Self.control(NSSwitch.self, "icons.dock", in: form.view)
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.general)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let menuBar = try Self.control(NSSwitch.self, "icons.menu-bar", in: application.panel.contentView)
+            let dock = try Self.control(NSSwitch.self, "icons.dock", in: application.panel.contentView)
             #expect(menuBar.accessibilityLabel() == "In the menu bar")
             #expect(dock.accessibilityLabel() == "In the Dock")
 
@@ -697,9 +722,11 @@ struct SetupTests {
     @MainActor
     func languageIsAMenuOfNames() throws {
         try withFreshHome { _ in
-            let form = SetupForm()
-            defer { form.stop() }
-            let popup = try Self.control(NSPopUpButton.self, "transcription.language", in: form.view)
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.transcription)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let popup = try Self.control(NSPopUpButton.self, "transcription.language", in: application.panel.contentView)
 
             #expect(popup.itemTitles.first == "Detect automatically")
             let codes = popup.menu?.items.compactMap { $0.representedObject as? String } ?? []
@@ -720,9 +747,10 @@ struct SetupTests {
     @Test("Ollama is a full summary card with the official install link")
     @MainActor
     func ollamaIsInstallableChoiceCard() throws {
-        let setup = SetupWindow()
-        defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo setup" })
+        let application = ApplicationWindow()
+        application.navigate(.summary)
+        defer { withExtendedLifetime(application) {} }
+        let panel = application.panel
         let ollama = try #require(panel.contentView?.allDescendants
             .compactMap { $0 as? ChoiceCard }
             .first { $0.id == "ollama" })
@@ -739,10 +767,11 @@ struct SetupTests {
 
     @Test("OpenAI-compatible and Ollama endpoints are editable where they are chosen")
     @MainActor
-    func summaryEndpointsAreVisibleInSetup() throws {
-        let setup = SetupWindow()
-        defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo setup" })
+    func summaryEndpointsAreVisibleInSettings() throws {
+        let application = ApplicationWindow()
+        application.navigate(.summary)
+        defer { withExtendedLifetime(application) {} }
+        let panel = application.panel
         let fields = panel.contentView?.allDescendants
             .compactMap { $0 as? NSTextField }
         let byID = Dictionary(uniqueKeysWithValues: (fields ?? []).compactMap { field in
@@ -770,9 +799,10 @@ struct SetupTests {
     @Test("Local engines are separate cards with their download sizes")
     @MainActor
     func localEngineCards() throws {
-        let setup = SetupWindow()
-        defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo setup" })
+        let application = ApplicationWindow()
+        application.navigate(.transcription)
+        defer { withExtendedLifetime(application) {} }
+        let panel = application.panel
         let cards = panel.contentView?.allDescendants.compactMap { $0 as? ChoiceCard } ?? []
 
         let parakeet = try #require(cards.first { $0.id == "parakeet" })
@@ -803,13 +833,15 @@ struct SetupTests {
     @MainActor
     func localEngineCardChoosesWithoutEnabling() throws {
         let store = TranscriptionStore(engine: "assemblyai")
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         form.storedTranscription = { store.choice }
         form.write = { store.write($0, $1) }
         form.refresh()
 
-        let gigaAM = try #require(form.view.allDescendants
+        let gigaAM = try #require(application.panel.contentView?.allDescendants
             .compactMap { $0 as? ChoiceCard }
             .first { $0.id == "gigaam" })
         let event = try #require(NSEvent.mouseEvent(
@@ -829,144 +861,100 @@ struct SetupTests {
         #expect(store.engine == "assemblyai")
     }
 
-    /// The settings window is not allowed a second, poorer copy of the setup
-    /// form: two hand-written forms over one set of settings drift the moment
-    /// either is edited. This is the cheapest way to notice — the provider
-    /// cards only exist in `SetupForm`, so finding one inside the settings
-    /// window is evidence that the window shows the form rather than
-    /// imitating it.
-    @Test("The settings window shows the setup form itself")
+    @Test("Settings pages share the Journal window without legacy tabs", .freshHome)
     @MainActor
-    func settingsReusesTheSetupForm() throws {
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo settings" })
-        let tabs = try #require(panel.contentView?.allDescendants
-            .compactMap { $0 as? NSTabView }.first)
-
-        #expect(tabs.tabViewItems.map(\.label) == ["Setup", "Advanced"])
-        // Only the selected tab is in the hierarchy, and setup is the one a
-        // person opening settings should land on.
-        let cards = panel.contentView?.allDescendants.compactMap { $0 as? ChoiceCard } ?? []
-        #expect(cards.contains { $0.id == "assemblyai" })
-        #expect(cards.contains { $0.id == "claude-cli" })
+    func settingsPagesUseJournalWindow() throws {
+        let application = ApplicationWindow()
+        defer { withExtendedLifetime(application) {} }
+        let windows = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
+        for destination: ApplicationNavigationState.Destination in [.transcription, .summary, .general] {
+            application.navigate(destination)
+            let content = try #require(application.panel.contentView)
+            #expect(!content.allDescendants.contains { $0 is NSTabView })
+            let cards = content.allDescendants.compactMap { $0 as? ChoiceCard }
+            if destination == .transcription { #expect(cards.contains { $0.id == "assemblyai" }) }
+            if destination == .summary { #expect(cards.contains { $0.id == "claude-cli" }) }
+        }
+        #expect(Set(NSApplication.shared.windows.map(ObjectIdentifier.init)) == windows)
     }
 
-    @Test("Setup offers no usage statistics switch")
+    @Test("Settings and permission onboarding offer no usage statistics switch", .freshHome)
     @MainActor
     func analyticsCannotBeEnabledInSetup() {
-        let form = SetupForm()
-        defer { form.stop() }
-        #expect(!form.view.allDescendants.contains { $0.identifier?.rawValue == "analytics" })
-        #expect(!form.view.allDescendants.compactMap { $0 as? NSTextField }
-            .contains { $0.stringValue == "Send usage statistics" })
-        #expect(!SettingsSchema.sections.flatMap(\.entries)
-            .contains { $0.path == ["analytics"] })
+        let application = ApplicationWindow()
+        defer { withExtendedLifetime(application) {} }
+        for destination in ApplicationNavigationState.Destination.allCases
+            where !destination.isMeetings && destination != .about {
+            application.navigate(destination)
+            #expect(application.panel.contentView?.allDescendants.contains {
+                $0.identifier?.rawValue == "analytics"
+            } == false)
+        }
+        let setup = SetupPage()
+        application.presentSetup(setup)
+        #expect(setup.contentView.allDescendants.contains { $0.identifier?.rawValue == "analytics" } == false)
+        #expect(!SettingsSchema.sections.flatMap(\.entries).contains { $0.path == ["analytics"] })
     }
 
-    /// Setup is a window and also the first tab of Settings, and nothing
-    /// stops both being open: the menu opens either, `verbemo setup` rings the
-    /// doorbell for the window, and the first run opens it by itself.
-    ///
-    /// Whichever one is used, the other has to agree. It did not: the file
-    /// was written correctly and the window nobody had touched kept the old
-    /// answer until it was closed and reopened — which reads as the change
-    /// not having been saved, and is the reason to look at the file to find
-    /// out what a program thinks.
-    ///
-    /// This is the listening half; the writing half is the test after it.
-    @Test("A config change redraws every open copy of the form")
+    @Test("A config notification redraws the mounted settings page", .freshHome)
     @MainActor
-    func everyOpenFormRedrawsOnAChange() throws {
-        let setup = SetupWindow()
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime((setup, settings)) {} }
-
-        let panels = [
-            try #require(NSApp.windows.last { $0.title == "verbemo setup" }),
-            try #require(NSApp.windows.last { $0.title == "verbemo settings" }),
-        ]
-        // One switch, in two windows: the settings copy is on its Setup tab,
-        // which is the tab a person lands on.
-        let switches = try panels.map { panel in
-            try Self.control(NSSwitch.self, "files.keep-audio", in: panel.contentView)
-        }
-
-        // Both are made to lie, by hand: setting the state fires no action,
-        // so nothing is written and the config file is only read here.
+    func settingsPageRedrawsOnAChange() throws {
+        let application = ApplicationWindow()
+        application.navigate(.storage)
+        defer { withExtendedLifetime(application) {} }
+        let toggle = try Self.control(NSSwitch.self, "files.keep-audio", in: application.panel.contentView)
         let stored: NSControl.StateValue = Config.keepAudio() ? .on : .off
-        for toggle in switches { toggle.state = stored == .on ? .off : .on }
+        toggle.state = stored == .on ? .off : .on
 
         NotificationCenter.default.post(name: Config.didChange, object: nil)
 
-        for (panel, toggle) in zip(panels, switches) {
-            #expect(toggle.state == stored, "\(panel.title) kept the stale answer")
-        }
+        #expect(toggle.state == stored)
     }
 
-    /// The half that could not be tested while the suite wrote to the config
-    /// file of whoever ran it: a click in one window writes the file, the
-    /// write announces itself, and the other window follows.
-    @Test("A switch thrown in one window is written, and the other window follows")
+    @Test("A setting is saved and follows external changes while its page is hidden", .freshHome)
     @MainActor
     func aClickIsWrittenAndFollowed() throws {
-        try withFreshHome { home in
-            let setup = SetupWindow()
-            let settings = SettingsWindow()
-            defer { withExtendedLifetime((setup, settings)) {} }
+        let application = ApplicationWindow()
+        application.navigate(.storage)
+        defer { withExtendedLifetime(application) {} }
+        let toggle = try Self.control(NSSwitch.self, "files.keep-audio", in: application.panel.contentView)
+        #expect(toggle.state == .off)
+        toggle.performClick(nil)
+        #expect(Config.keepAudio())
+        #expect(try String(contentsOf: Config.path, encoding: .utf8).contains("\"keep_audio\" : true"))
 
-            let panels = [
-                try #require(NSApp.windows.last { $0.title == "verbemo setup" }),
-                try #require(NSApp.windows.last { $0.title == "verbemo settings" }),
-            ]
-            let switches = try panels.map { panel in
-                try Self.control(NSSwitch.self, "files.keep-audio", in: panel.contentView)
-            }
-            #expect(switches.allSatisfy { $0.state == .off })
-
-            switches[0].performClick(nil)
-
-            #expect(home.configText?.contains("\"keep_audio\" : true") == true)
-            #expect(switches[1].state == .on, "the settings window kept the old answer")
-        }
+        application.navigate(.general)
+        Config.update(path: ["keep_audio"], value: nil)
+        application.navigate(.storage)
+        let reopened = try Self.control(NSSwitch.self, "files.keep-audio", in: application.panel.contentView)
+        #expect(reopened === toggle)
+        #expect(reopened.state == .off)
     }
 
-    /// The rule these windows now live by: drawing is not deciding.
-    ///
-    /// It is not tidiness. Every write announces itself so that each open copy
-    /// of the form redraws, so a write from inside a redraw is a loop, not a
-    /// wasted syscall — and short of that, the file's timestamp is the only
-    /// evidence anybody has that a setting was changed. It was moving on its
-    /// own: switching to the Setup tab rewrote the file byte for byte.
-    ///
-    /// Redrawing is what a config change causes, so posting the change is how
-    /// a redraw is asked for here. The count is of the posts this test made
-    /// itself; anything above that came from a redraw that wrote.
-    @Test("Redrawing every open form leaves the config file alone")
+    @Test("Redrawing and navigating settings leaves the config file alone", .freshHome)
     @MainActor
     func redrawingWritesNothing() throws {
-        let setup = SetupWindow()
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime((setup, settings)) {} }
-
+        let application = ApplicationWindow()
+        application.navigate(.general)
+        defer { withExtendedLifetime(application) {} }
         let path = Config.path
         let before = try? Data(contentsOf: path)
         let stamped = { (try? FileManager.default.attributesOfItem(atPath: path.path))?
             .first { $0.key == .modificationDate }?.value as? Date }
         let stamp = stamped()
-
         let posts = PostCount()
         let observer = NotificationCenter.default.addObserver(
             forName: Config.didChange, object: nil, queue: nil
         ) { _ in posts.value += 1 }
         defer { NotificationCenter.default.removeObserver(observer) }
 
-        for _ in 0..<5 {
+        for destination: ApplicationNavigationState.Destination in [.storage, .summary, .general, .recording, .transcription] {
+            application.navigate(destination)
             NotificationCenter.default.post(name: Config.didChange, object: nil)
         }
 
         #expect(posts.value == 5, "a redraw wrote the config, and the write announced itself")
-        #expect((try? Data(contentsOf: path)) == before, "a redraw changed the config file")
+        #expect((try? Data(contentsOf: path)) == before)
         #expect(stamped() == stamp, "a redraw rewrote the config file with the same bytes")
     }
 
@@ -990,21 +978,23 @@ struct SetupTests {
     @MainActor
     func localSwitchChoosesBeforeItDownloads() throws {
         let store = TranscriptionStore(engine: "assemblyai")
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         form.storedTranscription = { store.choice }
         form.write = { store.write($0, $1) }
         form.parakeetIsHere = { false }
         form.fetchParakeet = {}
         form.refresh()
 
-        let local = try Self.control(NSSwitch.self, "transcription.local", in: form.view)
+        let local = try Self.control(NSSwitch.self, "transcription.local", in: application.panel.contentView)
         #expect(local.state == .off, "the form did not start from the cloud-only config")
 
         local.performClick(nil)
 
         #expect(local.state == .on, "the switch was put back by the redraw its own click caused")
-        #expect(store.engine == nil, "the click wrote \(store.engine ?? "nothing")")
+        #expect(store.engine == "parakeet", "the click wrote \(store.engine ?? "nothing")")
         #expect(store.enabled)
         #expect(form.isDownloading, "the model was chosen but never fetched")
     }
@@ -1019,15 +1009,17 @@ struct SetupTests {
     @MainActor
     func clickingAgainDuringTheDownloadWritesTheSame() throws {
         let store = TranscriptionStore(engine: "assemblyai")
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         form.storedTranscription = { store.choice }
         form.write = { store.write($0, $1) }
         form.parakeetIsHere = { false }
         form.fetchParakeet = {}
         form.refresh()
 
-        let local = try Self.control(NSSwitch.self, "transcription.local", in: form.view)
+        let local = try Self.control(NSSwitch.self, "transcription.local", in: application.panel.contentView)
         local.performClick(nil)
         let first = store.log
         #expect(form.isDownloading)
@@ -1054,15 +1046,17 @@ struct SetupTests {
     @MainActor
     func localSwitchLeavesRecordOnly() throws {
         let store = TranscriptionStore(enabled: false)
-        let form = SetupForm()
-        defer { form.stop() }
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        application.navigate(.transcription)
+        defer { form.stop(); withExtendedLifetime(application) {} }
         form.storedTranscription = { store.choice }
         form.write = { store.write($0, $1) }
         form.parakeetIsHere = { false }
         form.fetchParakeet = {}
         form.refresh()
 
-        let local = try Self.control(NSSwitch.self, "transcription.local", in: form.view)
+        let local = try Self.control(NSSwitch.self, "transcription.local", in: application.panel.contentView)
         #expect(local.state == .off)
 
         local.performClick(nil)
@@ -1083,81 +1077,67 @@ struct SetupTests {
             "no \(type) named \(id)")
     }
 
-    /// The bug itself, in the shape it actually happened in.
-    ///
-    /// Editing ends when a field loses focus, and a field loses focus for
-    /// reasons that are nobody's decision — the tab changed, another window
-    /// came forward, the window closed. Every one of those committed the row,
-    /// which wrote the file back exactly as it already was: `diff` said the
-    /// bytes were identical and the timestamp said somebody had just changed
-    /// a setting.
-    @Test("Leaving an untouched Advanced field writes nothing")
+    @Test("Leaving an untouched settings field writes nothing", .freshHome)
     @MainActor
     func endingEditingOnAnUntouchedRowWritesNothing() throws {
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo settings" })
-
-        // The Advanced tab is built with the window but only installed in the
-        // hierarchy while it is the one on screen, so it is reached through
-        // the tab item rather than from the content view.
-        let tabs = try #require(panel.contentView?.allDescendants
-            .compactMap { $0 as? NSTabView }.first)
-        let advanced = try #require(tabs.tabViewItems
-            .first { $0.identifier as? String == "Advanced" }?.view)
-        let fields = advanced.allDescendants
-            .compactMap { $0 as? NSTextField }
-            .filter { $0.isEditable }
-        #expect(!fields.isEmpty, "no editable rows found under Advanced")
-
+        let application = ApplicationWindow()
+        let settings = application.settings
+        defer { withExtendedLifetime(application) {} }
         let path = Config.path
         let before = try? Data(contentsOf: path)
         let stamped = { (try? FileManager.default.attributesOfItem(atPath: path.path))?
             .first { $0.key == .modificationDate }?.value as? Date }
         let stamp = stamped()
-
-        for field in fields {
-            settings.controlTextDidEndEditing(
-                Notification(name: NSControl.textDidEndEditingNotification, object: field))
+        var checked = 0
+        for destination in ApplicationNavigationState.Destination.allCases
+            where !destination.isMeetings && destination != .about {
+            application.navigate(destination)
+            let fields = settings.renderedControls.compactMap { $0 as? NSTextField }
+                .filter { $0.window === application.panel && $0.isEditable }
+            for field in fields {
+                settings.controlTextDidEndEditing(
+                    Notification(name: NSControl.textDidEndEditingNotification, object: field))
+                checked += 1
+            }
         }
-
+        #expect(checked > 0)
         #expect((try? Data(contentsOf: path)) == before, "leaving a field changed the config")
         #expect(stamped() == stamp, "leaving a field rewrote the config with the same bytes")
     }
 
-    /// The wizard answers "what is left?" in one line above its buttons. The
-    /// settings tab shows the same form and used to answer it only by being
-    /// read row by row — so the line moved to where the form is, both times.
-    @Test("The Setup tab says what is outstanding, in the wizard's own words")
+    @Test("Every settings page keeps configuration warnings visible",
+          .freshHome(config: #"{"keep_audio":"invalid","misspelled_setting":true}"#))
     @MainActor
-    func setupTabCarriesTheOutstandingLine() throws {
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime(settings) {} }
-
-        #expect(settings.outstandingLine == SetupForm().outstandingSentence)
-        #expect(!settings.outstandingLine.isEmpty)
+    func settingsPagesCarryConfigurationWarnings() throws {
+        let application = ApplicationWindow()
+        defer { withExtendedLifetime(application) {} }
+        let problems = Config.problems().map(\.explanation)
+        #expect(!problems.isEmpty)
+        for destination in ApplicationNavigationState.Destination.allCases
+            where !destination.isMeetings && destination != .about {
+            application.navigate(destination)
+            let notice = try Self.control(NSTextField.self, "settings.notice", in: application.panel.contentView)
+            #expect(!notice.isHiddenOrHasHiddenAncestor)
+            #expect(problems.allSatisfy { notice.stringValue.contains($0) })
+            #expect(notice.stringValue.contains("misspelled_setting"))
+        }
     }
 
-    /// And it has to follow. A grant given in this very window, a switch
-    /// thrown in the other one, a model that finished downloading — the form
-    /// redraws for all of them, and a line that does not redraw with it is
-    /// the same defect one level up.
-    @Test("The outstanding line is redrawn whenever the form is")
+    @Test("A restart notice survives moving to another settings page", .freshHome, .speaking(.english))
     @MainActor
-    func outstandingLineFollowsTheForm() throws {
-        let settings = SettingsWindow()
-        defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "verbemo settings" })
-
-        let truth = settings.outstandingLine
-        let label = try #require(panel.contentView?.allDescendants
-            .compactMap { $0 as? NSTextField }
-            .first { $0.stringValue == truth })
-        label.stringValue = "something that is not true"
-
-        NotificationCenter.default.post(name: Config.didChange, object: nil)
-
-        #expect(settings.outstandingLine == truth)
+    func restartNoticeFollowsSettingsNavigation() throws {
+        let application = ApplicationWindow()
+        application.navigate(.general)
+        defer { withExtendedLifetime(application) {} }
+        let language = try Self.control(NSPopUpButton.self, "interface_language", in: application.panel.contentView)
+        let russian = try #require(language.itemArray.first { $0.representedObject as? String == "ru" })
+        language.select(russian)
+        language.sendAction(language.action, to: language.target)
+        #expect(Config.interfaceLanguage() == "ru")
+        application.navigate(.recording)
+        let notice = try Self.control(NSTextField.self, "settings.notice", in: application.panel.contentView)
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(notice.stringValue.contains("next time verbemo starts"))
     }
 
     /// Both halves of the sentence matter. Somebody opens that tab to be
@@ -1171,15 +1151,22 @@ struct SetupTests {
             == "Left: microphone, system audio")
     }
 
-    @Test("The Claude card keeps the automatic fallback chain")
-    func summaryChoiceMapping() {
-        #expect(SetupSelection.summaryBackend(
-            choice: "claude-cli", keyBackend: "anthropic-api") == nil)
-        #expect(SetupSelection.summaryBackend(
-            choice: "codex-cli", keyBackend: "anthropic-api") == "codex-cli")
-        #expect(SetupSelection.summaryBackend(
-            choice: "api-key", keyBackend: "openai-api") == "openai-api")
-        #expect(SetupSelection.summaryChoice(backend: "auto") == "claude-cli")
+    @Test("Claude and Automatic are distinct summary choices", .freshHome)
+    @MainActor
+    func summaryChoiceMapping() throws {
+        let application = ApplicationWindow()
+        application.navigate(.summary)
+        defer { withExtendedLifetime(application) {} }
+        let cards = try #require(application.panel.contentView).allDescendants.compactMap { $0 as? ChoiceCard }
+        let claude = try #require(cards.first { $0.id == "claude-cli" })
+        let automatic = try #require(cards.first { $0.id == "auto" })
+        #expect(automatic.isSelected)
+        #expect(claude.accessibilityPerformPress())
+        #expect(Config.summary().backend == "claude-cli")
+        #expect(claude.isSelected && !automatic.isSelected)
+        #expect(automatic.accessibilityPerformPress())
+        #expect(Config.summary().backend == "auto")
+        #expect(automatic.isSelected && !claude.isSelected)
     }
 
     @Test("Summary key probes use each provider's authenticated models endpoint")

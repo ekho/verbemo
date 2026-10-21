@@ -17,7 +17,7 @@ final class RecordingBarView: NSStackView {
         super.init(frame: .zero)
         orientation = .horizontal
         spacing = 12
-        edgeInsets = NSEdgeInsets(top: 9, left: 20, bottom: 9, right: 20)
+        edgeInsets = NSEdgeInsets(top: 12, left: 24, bottom: 12, right: 24)
         identifier = .init("recording-bar")
         name.title = localised("New meeting", "Новая встреча")
         name.isBordered = false
@@ -36,7 +36,13 @@ final class RecordingBarView: NSStackView {
             button.target = self
             button.action = selector
         }
-        setViews([name, NSView(), time, pause, stop], in: .center)
+        let dot = NSTextField(labelWithString: "●")
+        dot.textColor = .systemRed
+        dot.setAccessibilityLabel(localised("Recording active", "Запись активна"))
+        stop.title = localised("Finish", "Завершить")
+        stop.imagePosition = .imageLeading
+        stop.contentTintColor = .systemRed
+        setViews([dot, name, NSView(), time, pause, stop], in: .center)
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         isHidden = true
     }

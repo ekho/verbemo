@@ -4,246 +4,184 @@ import Testing
 
 @testable import verbemo
 
-/// Pictures of the windows, and a listing of where every view in them ended
-/// up, for a person to look at.
-///
-/// This is the only way the project has of seeing a window whole. `swift test`
-/// can prove that a control exists and is wired to something; it cannot notice
-/// that a label's descenders are sitting on the hairline below it, that a
-/// border resolved to the other appearance's colour, or that two rows nobody
-/// meant to compare came out different heights. Those are the defects this
-/// window keeps producing, and each one was found by rendering it and looking.
-///
-/// It lives in the test target because that is the only place that can see
-/// `SetupWindow` and `SettingsWindow` at all: they are internal, and making
-/// them public so a command-line tool could open them would be widening the
-/// program to suit its instruments. It is not a test — it asserts nothing —
-/// so it is switched off unless `VERBEMO_SHOTS` names a directory to write to:
-///
-/// ```sh
-/// VERBEMO_SHOTS=/tmp/shots swift test --filter WindowShots
-/// ```
-///
-/// `VERBEMO_SHOTS_LANGUAGE=ru` takes the same pictures of the Russian windows.
-/// The comparison worth making is one language against the other from the same
-/// run: the translation is the only thing that differs, and Russian is longer
-/// than English by a fifth, so a row that has run out of lines shows up in the
-/// pair rather than in either picture alone.
-///
-/// `docs/testing/window-shots.md` says what comes out and how to read it.
+/// Offscreen pictures of the real Journal pages for human layout review.
+/// These are opt-in fixtures, not pixel assertions or GUI acceptance evidence.
+/// `docs/testing/window-shots.md` lists their output and rendering limits.
 @Suite(
     .serialized, .enabled(if: ProcessInfo.processInfo.environment["VERBEMO_SHOTS"] != nil),
     .freshHome(config: speakerShotsConfig),
     .speaking(shotsLanguage))
+@MainActor
 struct WindowShots {
     private var directory: String {
         ProcessInfo.processInfo.environment["VERBEMO_SHOTS"] ?? NSTemporaryDirectory()
     }
-
-
     private var light: NSAppearance? { NSAppearance(named: .aqua) }
     private var dark: NSAppearance? { NSAppearance(named: .darkAqua) }
 
-    @Test("The setup window, in both appearances and through a change of one")
-    @MainActor
-    func setupWindow() throws {
-        _ = NSApplication.shared
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
+    @Test("New recording with and without a calendar event, in both appearances")
+    func newRecordingSheet() async throws {
+        let now = ISO8601DateFormatter().date(from: "2026-10-21T10:00:00Z")!
+        let event = CalendarWatcher.Meeting(id: "synthetic-event", title: "Обсуждение нового сайта",
+            start: now, end: now.addingTimeInterval(2700), attendees: ["Анна", "Михаил"], link: nil,
+            looksLikeCall: true, calendarTitle: "Демонстрационный календарь")
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            let panel = try setupPanel(builtIn: appearance, keeping: &owners)
-            // The height a person actually gets, and then a window taller than
-            // the form, which is where anchoring mistakes show up.
-            panel.setContentSize(NSSize(width: 700, height: 760))
-            try write(panel, "setup-\(name)-window")
-            panel.setContentSize(NSSize(width: 640, height: 760))
-            try write(panel, "setup-\(name)-narrow")
-            panel.setContentSize(NSSize(width: 700, height: 1600))
-            try write(panel, "setup-\(name)-full")
-            panel.setContentSize(NSSize(width: 640, height: 760))
-            try scrollToDiarization(in: panel)
-            try write(panel, "setup-\(name)-narrow-diarization")
+            for enabled in [false, true] {
+                let sheet = NewRecordingSheet(calendarEnabled: enabled, now: now) { _ in (event, [event]) }
+                defer { sheet.panel.close() }
+                show(sheet.panel, in: appearance)
+                sheet.load()
+                await sheet.settled()
+                try write(sheet.panel, "new-recording-\(enabled ? "calendar" : "timestamp")-\(name)")
+            }
         }
-
-        // A window built under one appearance and shown under the other. Layer
-        // colours are resolved numbers rather than living rules, so this is
-        // the pass that catches a border still painted in the theme the Mac
-        // has left — compare these against the two above, which should be
-        // identical to the pixel.
-        let panel = try setupPanel(builtIn: light, keeping: &owners)
-        panel.setContentSize(NSSize(width: 700, height: 1600))
-        show(panel, in: dark)
-        try write(panel, "setup-switched-to-dark")
-        show(panel, in: light)
-        try write(panel, "setup-switched-back-to-light")
     }
 
-    @Test("The settings window: both tabs, both appearances, and a change of one")
-    @MainActor
-    func settingsWindow() throws {
-        _ = NSApplication.shared
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
+    @Test("First-run permissions inside Journal, in both appearances and at minimum width")
+    func setupPage() throws {
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            let panel = try settingsPanel(builtIn: appearance, keeping: &owners)
-            panel.setContentSize(NSSize(width: 700, height: 900))
-            let tabs = try tabs(of: panel)
-            tabs.selectTabViewItem(at: 0)
-            try write(panel, "settings-setup-\(name)")
-            panel.setContentSize(NSSize(width: 640, height: 900))
-            try write(panel, "settings-setup-\(name)-narrow")
-            try scrollToDiarization(in: panel)
-            try write(panel, "settings-setup-\(name)-narrow-diarization")
-            panel.setContentSize(NSSize(width: 700, height: 900))
-            tabs.selectTabViewItem(at: 1)
-            try write(panel, "settings-advanced-\(name)")
-            // The narrowest the window goes. Some settings appear nowhere but
-            // in their field's placeholder, so this is where to see one lost.
-            panel.setContentSize(NSSize(width: 640, height: 900))
-            try write(panel, "settings-advanced-\(name)-narrow")
-
-            // The Advanced tab is taller than any window it can be shown in,
-            // and what is at the bottom of it — the models on disk, which is
-            // the one block here that is not a setting — appears in no
-            // picture taken from the top.
-            panel.setContentSize(NSSize(width: 700, height: 900))
-            scrollToBottom(in: tabs.selectedTabViewItem?.view)
-            try write(panel, "settings-advanced-\(name)-bottom")
+            try withJournal(builtIn: appearance) { app, _ in
+                let setup = SetupPage()
+                defer { withExtendedLifetime(setup) {} }
+                app.presentSetup(setup)
+                try write(app.panel, "setup-permissions-\(name)")
+                app.panel.setContentSize(NSSize(width: 760, height: 680))
+                try write(app.panel, "setup-permissions-\(name)-narrow")
+            }
         }
-
-        // The setup form here is built before its window exists and then lives
-        // in someone else's, which is the arrangement most likely to leave it
-        // painted in the wrong appearance.
-        let panel = try settingsPanel(builtIn: dark, keeping: &owners)
-        panel.setContentSize(NSSize(width: 700, height: 900))
-        try tabs(of: panel).selectTabViewItem(at: 0)
-        show(panel, in: light)
-        try write(panel, "settings-setup-switched-to-light")
-        show(panel, in: dark)
-        try write(panel, "settings-setup-switched-back-to-dark")
+        try withJournal(builtIn: light) { app, _ in
+            let setup = SetupPage()
+            defer { withExtendedLifetime(setup) {} }
+            app.presentSetup(setup)
+            show(app.panel, in: dark)
+            try write(app.panel, "setup-permissions-switched-to-dark")
+            show(app.panel, in: light)
+            try write(app.panel, "setup-permissions-switched-back-to-light")
+        }
     }
 
-    @Test("Cloud-only transcription visibly disables speaker model controls")
-    @MainActor
-    func cloudOnlyWindows() throws {
-        _ = NSApplication.shared
+    @Test("Every settings page in Journal, in both appearances and at minimum width")
+    func settingsPages() throws {
+        for (name, appearance) in [("light", light), ("dark", dark)] {
+            try withJournal(builtIn: appearance) { app, _ in
+                for destination in [ApplicationNavigationState.Destination.general, .recording,
+                                    .transcription, .summary, .calendar, .storage] {
+                    app.panel.setContentSize(NSSize(width: 1340, height: 820))
+                    app.navigate(destination)
+                    try write(app.panel, "settings-\(destination.rawValue)-\(name)")
+                    app.panel.setContentSize(NSSize(width: 760, height: 680))
+                    try write(app.panel, "settings-\(destination.rawValue)-\(name)-narrow")
+                    if destination == .storage {
+                        scrollToBottom(in: app.settings.content(for: destination))
+                        try write(app.panel, "settings-storage-\(name)-narrow-bottom")
+                    }
+                }
+            }
+        }
+        try withJournal(builtIn: dark) { app, _ in
+            app.navigate(.transcription)
+            show(app.panel, in: light)
+            try write(app.panel, "settings-transcription-switched-to-light")
+            show(app.panel, in: dark)
+            try write(app.panel, "settings-transcription-switched-back-to-dark")
+        }
+    }
+
+    @Test("Cloud-only transcription explains unavailable local speaker separation")
+    func cloudOnlyPage() throws {
         try withFreshHome(config: [
             "transcription": ["enabled": true, "engine": "openai", "local_diarization": true],
         ]) { _ in
-            var owners: [Any] = []
-            defer { withExtendedLifetime(owners) {} }
             for (name, appearance) in [("light", light), ("dark", dark)] {
-                let setup = try setupPanel(builtIn: appearance, keeping: &owners)
-                setup.setContentSize(NSSize(width: 700, height: 1600))
-                try write(setup, "setup-cloud-only-\(name)")
-                let settings = try settingsPanel(builtIn: appearance, keeping: &owners)
-                settings.setContentSize(NSSize(width: 700, height: 900))
-                try write(settings, "settings-cloud-only-\(name)")
-                try scrollToDiarization(in: settings)
-                try write(settings, "settings-cloud-only-\(name)-diarization")
+                try withJournal(builtIn: appearance) { app, _ in
+                    app.navigate(.transcription)
+                    if Platform.supportsLocalModels {
+                        try scrollToCard("transcription.local-diarization", in: app.panel)
+                    }
+                    try write(app.panel, "settings-transcription-cloud-only-\(name)")
+                    app.panel.setContentSize(NSSize(width: 760, height: 680))
+                    if Platform.supportsLocalModels {
+                        try scrollToCard("transcription.local-diarization", in: app.panel)
+                    }
+                    try write(app.panel, "settings-transcription-cloud-only-\(name)-narrow")
+                }
             }
         }
     }
 
-    @Test("A long speaker-model error in narrow settings, in both appearances")
-    @MainActor
+    @Test("A long speaker-model error on the narrow transcription page",
+          .enabled(if: Platform.supportsLocalModels))
     func diarizationErrorInNarrowSettings() throws {
-        _ = NSApplication.shared
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            let panel = try settingsPanel(builtIn: appearance, keeping: &owners)
-            panel.setContentSize(NSSize(width: 640, height: 900))
-            let card = try #require(panel.contentView?.allDescendants
-                .compactMap { $0 as? ChoiceCard }
-                .first { $0.id == "diarization.nemotron-3" })
-            card.report(localised(
-                "download error: The speaker model is incomplete or corrupt: "
-                    + "Nemotron-3-Diarization.q8_0.gguf.",
-                "ошибка загрузки: The speaker model is incomplete or corrupt: "
-                    + "Nemotron-3-Diarization.q8_0.gguf."))
-            try scrollToDiarization(in: panel)
-            try write(panel, "settings-setup-\(name)-narrow-diarization-error")
-        }
-    }
-
-    @Test("Active local and speaker downloads in narrow settings, in both appearances")
-    @MainActor
-    func modelDownloadProgressInNarrowSettings() throws {
-        _ = NSApplication.shared
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
-        for (name, appearance) in [("light", light), ("dark", dark)] {
-            let panel = try settingsPanel(builtIn: appearance, keeping: &owners)
-            panel.setContentSize(NSSize(width: 640, height: 900))
-            for (id, fraction, shot) in [
-                ("parakeet", 0.37, "local"),
-                ("diarization.nemotron-3", 0.64, "diarization"),
-            ] {
-                let card = try #require(panel.contentView?.allDescendants
-                    .compactMap { $0 as? ChoiceCard }.first { $0.id == id })
-                let progress = try #require(card.allDescendants
-                    .compactMap { $0 as? ModelDownloadProgress }.first)
-                let download = try #require(card.allDescendants
-                    .compactMap { $0 as? NSButton }
-                    .first { $0.identifier?.rawValue.contains(".download.") == true })
-                card.report("")
-                download.isHidden = true
-                progress.begin()
-                progress.update(fraction)
-                try scrollToCard("choice.\(id)", in: panel)
-                try write(panel, "settings-setup-\(name)-narrow-\(shot)-progress")
-                progress.end()
-                download.isHidden = false
+            try withJournal(builtIn: appearance) { app, _ in
+                app.navigate(.transcription)
+                app.panel.setContentSize(NSSize(width: 760, height: 680))
+                let card = try #require(app.panel.contentView?.allDescendants
+                    .compactMap { $0 as? ChoiceCard }
+                    .first { $0.id == "diarization.nemotron-3" })
+                card.report(localised(
+                    "download error: The speaker model is incomplete or corrupt: "
+                        + "Nemotron-3-Diarization.q8_0.gguf.",
+                    "ошибка загрузки: The speaker model is incomplete or corrupt: "
+                        + "Nemotron-3-Diarization.q8_0.gguf."))
+                try scrollToDiarization(in: app.panel)
+                try write(app.panel, "settings-transcription-\(name)-narrow-diarization-error")
             }
         }
     }
 
-    /// The About window, which is small enough that both appearances fit in
-    /// one pass and has no state to drive it through. What there is to see is
-    /// the spacing: an icon, a name, a version and three links, centred, and
-    /// Russian is a fifth longer than English at every one of them.
-    @Test("The About window, in both appearances")
-    @MainActor
-    func aboutWindow() throws {
-        _ = NSApplication.shared
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
+    @Test("Local and speaker download progress on the narrow transcription page",
+          .enabled(if: Platform.supportsLocalModels))
+    func modelDownloadProgressInNarrowSettings() throws {
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            let panel = try aboutPanel(builtIn: appearance, keeping: &owners)
-            try write(panel, "about-\(name)")
+            try withJournal(builtIn: appearance) { app, _ in
+                app.navigate(.transcription)
+                app.panel.setContentSize(NSSize(width: 760, height: 680))
+                for (id, fraction, shot) in [
+                    ("parakeet", 0.37, "local"),
+                    ("diarization.nemotron-3", 0.64, "diarization"),
+                ] {
+                    let card = try #require(app.panel.contentView?.allDescendants
+                        .compactMap { $0 as? ChoiceCard }.first { $0.id == id })
+                    let progress = try #require(card.allDescendants
+                        .compactMap { $0 as? ModelDownloadProgress }.first)
+                    let download = try #require(card.allDescendants
+                        .compactMap { $0 as? NSButton }
+                        .first { $0.identifier?.rawValue.contains(".download.") == true })
+                    card.report("")
+                    download.isHidden = true
+                    progress.begin()
+                    progress.update(fraction)
+                    try scrollToCard("choice.\(id)", in: app.panel)
+                    try write(app.panel, "settings-transcription-\(name)-narrow-\(shot)-progress")
+                    progress.end()
+                    download.isHidden = false
+                }
+            }
         }
     }
 
-    /// Every view in the setup window with its frame, in the window's own
-    /// coordinates. This is what to measure against when a row looks a pixel
-    /// wrong: eyes are bad at 2pt and this is exact.
-    @Test("Where every view in the setup window ended up")
-    @MainActor
+    @Test("About inside Journal, in both appearances")
+    func aboutPage() throws {
+        for (name, appearance) in [("light", light), ("dark", dark)] {
+            try withJournal(builtIn: appearance) { app, _ in
+                app.navigate(.about)
+                try write(app.panel, "about-\(name)")
+            }
+        }
+    }
+
+    @Test("Every view on Journal's transcription page with its frame and control state")
     func viewTree() throws {
-        _ = NSApplication.shared
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
-        let panel = try setupPanel(builtIn: light, keeping: &owners)
-        panel.setContentSize(NSSize(width: 700, height: 1600))
-        let root = try #require(panel.contentView)
-        root.layoutSubtreeIfNeeded()
-
-        var lines: [String] = []
-        describe(root, in: root, depth: 0, into: &lines)
-        try lines.joined(separator: "\n").write(
-            toFile: "\(directory)/tree.txt", atomically: true, encoding: .utf8)
+        try withJournal(builtIn: light) { app, _ in
+            app.navigate(.transcription)
+            let root = try #require(app.panel.contentView)
+            root.layoutSubtreeIfNeeded()
+            var lines: [String] = []
+            describe(root, in: root, depth: 0, into: &lines)
+            try lines.joined(separator: "\n").write(
+                toFile: "\(directory)/tree.txt", atomically: true, encoding: .utf8)
+        }
     }
 
     /// Put every scroller in a view at the end of its content, so a picture
@@ -291,65 +229,7 @@ struct WindowShots {
         content.layoutSubtreeIfNeeded()
     }
 
-    // MARK: - the windows
-
-    /// The window objects own their views, and nothing else here holds one,
-    /// so each is handed to `owners` for the caller to keep alive.
-    @MainActor
-    private func setupPanel(
-        builtIn appearance: NSAppearance?, keeping owners: inout [Any]
-    ) throws -> NSWindow {
-        NSApp.appearance = appearance
-        var window: SetupWindow?
-        appearance?.performAsCurrentDrawingAppearance { window = SetupWindow() }
-        owners.append(try #require(window))
-        let title = localised("verbemo setup", "Первая настройка verbemo")
-        let panel = try #require(NSApp.windows.last { $0.title == title })
-        panel.appearance = appearance
-        return panel
-    }
-
-    @MainActor
-    private func settingsPanel(
-        builtIn appearance: NSAppearance?, keeping owners: inout [Any]
-    ) throws -> NSWindow {
-        NSApp.appearance = appearance
-        var window: SettingsWindow?
-        appearance?.performAsCurrentDrawingAppearance { window = SettingsWindow() }
-        owners.append(try #require(window))
-        let title = localised("verbemo settings", "Настройки verbemo")
-        let panel = try #require(NSApp.windows.last { $0.title == title })
-        panel.appearance = appearance
-        return panel
-    }
-
-    @MainActor
-    private func aboutPanel(
-        builtIn appearance: NSAppearance?, keeping owners: inout [Any]
-    ) throws -> NSWindow {
-        NSApp.appearance = appearance
-        var window: AboutWindow?
-        appearance?.performAsCurrentDrawingAppearance { window = AboutWindow() }
-        let about = try #require(window)
-        owners.append(about)
-        let panel = try #require(NSApp.windows.last { $0.title == about.title })
-        panel.appearance = appearance
-        return panel
-    }
-
-    @MainActor
-    private func tabs(of panel: NSWindow) throws -> NSTabView {
-        func find(_ view: NSView) -> NSTabView? {
-            if let tabs = view as? NSTabView { return tabs }
-            for sub in view.subviews { if let tabs = find(sub) { return tabs } }
-            return nil
-        }
-        let content = try #require(panel.contentView)
-        return try #require(find(content))
-    }
-
-    /// Hand the window to the other appearance, the way the Mac does.
-    @MainActor
+    /// Hand the existing window to the other appearance, the way the Mac does.
     private func show(_ panel: NSWindow, in appearance: NSAppearance?) {
         NSApp.appearance = appearance
         panel.appearance = appearance
@@ -436,190 +316,92 @@ private final class Ground: NSView {
     }
 }
 
-/// The two windows the suite above does not build, and the setup window at the
-/// one size a person never sees it.
-///
-/// `WindowShots` grew around the two windows that produce layout defects, and
-/// stopped there. But verbemo has five windows, and a set of pictures meant to
-/// show somebody what the program looks like — in one language beside the
-/// other — cannot be missing the one that says whether it is recording and the
-/// one that lists what it recorded. Neither needs the appearance-switch pass:
-/// that is a diagnostic for forms built before their window exists, and these
-/// two build theirs in place.
-///
-/// Same switch, same directory, same two languages:
-///
-/// ```sh
-/// VERBEMO_SHOTS=/tmp/shots swift test --filter WindowGallery
-/// ```
+/// Journal's meeting and live pages, including window chrome, over synthetic data.
 @Suite(
     .serialized, .enabled(if: ProcessInfo.processInfo.environment["VERBEMO_SHOTS"] != nil),
+    .freshHome(config: speakerShotsConfig),
     .speaking(shotsLanguage))
+@MainActor
 struct WindowGallery {
     private var directory: String {
         ProcessInfo.processInfo.environment["VERBEMO_SHOTS"] ?? NSTemporaryDirectory()
     }
-
-
     private var light: NSAppearance? { NSAppearance(named: .aqua) }
     private var dark: NSAppearance? { NSAppearance(named: .darkAqua) }
 
-    /// The setup window at exactly the height of its own form.
-    ///
-    /// The pair in `WindowShots` is deliberately the wrong height twice: 760
-    /// is what a person gets and scrolls, 1600 is taller than the form so that
-    /// anything anchored to the bottom shows itself. Neither is the picture to
-    /// hand somebody who asked what the setup screen looks like — one is cut
-    /// off and the other has a band of empty window under it. This one is
-    /// measured: the form is laid out tall, its real height read back, and the
-    /// window closed onto it, so the whole screen is in one image with no
-    /// scrollbar and nothing to spare.
-    @Test("The setup window at the full height of its form",
-          .freshHome(config: speakerShotsConfig))
-    @MainActor
-    func setupWhole() throws {
-        _ = NSApplication.shared
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
+    @Test("Journal's empty library and live transcript, in both appearances")
+    func livePage() throws {
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            NSApp.appearance = appearance
-            var window: SetupWindow?
-            appearance?.performAsCurrentDrawingAppearance { window = SetupWindow() }
-            owners.append(try #require(window))
-            let title = localised("verbemo setup", "Первая настройка verbemo")
-            let panel = try #require(NSApp.windows.last { $0.title == title })
-            panel.appearance = appearance
+            try withJournal(builtIn: appearance) { app, _ in
+                app.update(state: .idle, elapsed: nil)
+                app.updateAutoRecord(enabled: true, decision: localised("ready", "готов"))
+                try write(app.panel, "journal-empty-\(name)")
 
-            // Lay the form out somewhere it certainly fits, read what it came
-            // to, then take the window down to it. Asking a scroll view for
-            // its document's height before it has been given room to lay one
-            // out answers with the height it was given.
-            panel.setContentSize(NSSize(width: 700, height: 2000))
-            panel.contentView?.layoutSubtreeIfNeeded()
-            let content = try #require(panel.contentView)
-            let scroll = try #require(firstScrollView(in: content))
-            let document = try #require(scroll.documentView)
-            let chrome = content.bounds.height - scroll.bounds.height
-            panel.setContentSize(NSSize(
-                width: panel.contentLayoutRect.width,
-                height: ceil(document.bounds.height + chrome)))
-            try write(panel, "setup-\(name)-whole")
+                app.recordingTitle = localised("Release review", "Разбор релиза")
+                app.update(state: .recording, elapsed: "12:04")
+                app.updateLive(.init(
+                    isRecording: true, isEnabled: true, entries: Self.conversation, status: .live))
+                app.showActiveRecording()
+                try write(app.panel, "journal-live-\(name)")
+                app.panel.setContentSize(NSSize(width: 760, height: 680))
+                try write(app.panel, "journal-live-\(name)-narrow")
+            }
         }
     }
 
-    /// The status window, in the two states it is ever in.
-    ///
-    /// Idle is the one that is on screen all day, and the one whose wording
-    /// this release changed. Recording is the other shape of the window
-    /// entirely: the live transcript borrows the height while it runs, which
-    /// is the only time this window is bigger than a postage stamp.
-    @Test("The status window, idle and recording, in both appearances")
-    @MainActor
-    func statusWindow() throws {
-        _ = NSApplication.shared
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
-        for (name, appearance) in [("light", light), ("dark", dark)] {
-            NSApp.appearance = appearance
-            var window: StatusWindow?
-            appearance?.performAsCurrentDrawingAppearance { window = StatusWindow() }
-            let status = try #require(window)
-            owners.append(status)
-            let panel = try #require(NSApp.windows.last { $0.title == "verbemo" })
-            panel.appearance = appearance
-
-            status.update(state: .idle, elapsed: nil)
-            status.updateAutoRecord(enabled: true, decision: localised("ready", "готов"))
-            status.updateTranscription(localised(
-                "transcribes on this Mac", "расшифровывает на этом маке"))
-            status.updateLive(.init(
-                isRecording: false, isEnabled: true, entries: [], status: .idle))
-            try write(panel, "status-idle-\(name)", includingChrome: false)
-
-            status.update(state: .recording, elapsed: "12:04")
-            status.updateAutoRecord(
-                enabled: true,
-                decision: localised("Zoom on the mic for 12m", "Zoom на микрофоне 12 мин"))
-            status.updateLive(.init(
-                isRecording: true, isEnabled: true, entries: Self.conversation, status: .live))
-            try write(panel, "status-recording-\(name)", includingChrome: false)
-        }
-    }
-
-    /// The recordings window, over a folder made for the picture.
-    ///
-    /// Not over the real one: these files are for showing people, and the real
-    /// folder is full of the names of actual meetings. The fixture is four
-    /// sessions arranged to put every state the list can show in one frame —
-    /// finished, waiting its turn, refused, and a recording whose audio has
-    /// been cleaned out — with the newest selected so the detail side of the
-    /// window has something in it.
-    @Test("The recordings window, in both appearances")
-    @MainActor
-    func recordingsWindow() throws {
-        _ = NSApplication.shared
-
+    @Test("Meeting summary, transcript and speaker processing states inside Journal")
+    func meetingPages() throws {
         let root = try Self.fixture()
         defer { try? FileManager.default.removeItem(at: root) }
-
-        var owners: [Any] = []
-        defer { withExtendedLifetime(owners) {} }
-
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            NSApp.appearance = appearance
-            var window: RecordingsWindow?
-            appearance?.performAsCurrentDrawingAppearance { window = RecordingsWindow(root: root) }
-            let recordings = try #require(window)
-            recordings.onRetryDiarization = { _ in }
-            recordings.onSkipDiarization = { _ in }
-            owners.append(recordings)
-            let title = localised("Recordings", "Записи")
-            let panel = try #require(NSApp.windows.last { $0.title == title })
-            panel.appearance = appearance
-            panel.setContentSize(NSSize(width: 860, height: 560))
-
-            let content = try #require(panel.contentView)
-            content.layoutSubtreeIfNeeded()
-            // The detail half of the window is empty until something is
-            // selected, and an empty half is not what the window looks like.
-            if let table = firstTableView(in: content), table.numberOfRows > 0 {
+            try withJournal(builtIn: appearance, root: root) { app, library in
+                let table = try #require(library.listContentView.allDescendants
+                    .compactMap { $0 as? MeetingTableView }.first)
+                for (row, state) in [(0, "completed"), (1, "pending"), (2, "failed")] {
+                    try #require(table.numberOfRows > row)
+                    table.selectRowIndexes([row], byExtendingSelection: false)
+                    try selectResult("transcript", in: library)
+                    try write(app.panel, "journal-meeting-\(state)-\(name)")
+                }
                 table.selectRowIndexes([0], byExtendingSelection: false)
-                try write(panel, "recordings-diarization-completed-\(name)")
-                table.selectRowIndexes([1], byExtendingSelection: false)
-                try write(panel, "recordings-diarization-pending-\(name)")
-                table.selectRowIndexes([2], byExtendingSelection: false)
-                try write(panel, "recordings-diarization-failed-\(name)")
-                table.selectRowIndexes([0], byExtendingSelection: false)
+                try selectResult("summary", in: library)
+                try write(app.panel, "journal-meeting-summary-\(name)")
+                app.panel.setContentSize(NSSize(width: 760, height: 680))
+                try write(app.panel, "journal-meeting-summary-\(name)-narrow")
+                let inspector = try #require(library.toolbarContent.allDescendants
+                    .compactMap { $0 as? NSButton }
+                    .first { $0.identifier?.rawValue == "meeting.inspector" })
+                _ = NSApp.sendAction(try #require(inspector.action), to: inspector.target, from: inspector)
+                try write(app.panel, "journal-meeting-inspector-\(name)-narrow")
             }
-            try write(panel, "recordings-\(name)")
         }
     }
 
-    @Test("Recording variants at the minimum size, in both appearances")
-    @MainActor
-    func recordingsVersionsWindow() throws {
-        _ = NSApplication.shared
+    @Test("Transcript versions at Journal's minimum width, in both appearances")
+    func meetingVersions() throws {
         let root = try Self.fixture()
         defer { try? FileManager.default.removeItem(at: root) }
         let dir = root.appendingPathComponent("2026.08.20-1030")
         try TranscriptVersions.archiveCurrent(dir)
         try Transcript(engine: "whisper", model: "large-v3", created_at: "2026-08-20T12:00:00Z",
             segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000,
-                text: localised("The second transcript keeps the first result available.", "Вторая расшифровка сохраняет первый результат доступным."))]).write(to: dir)
+                text: localised("The second transcript keeps the first result available.",
+                                "Вторая расшифровка сохраняет первый результат доступным."))]).write(to: dir)
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            let window = RecordingsWindow(root: root)
-            let panel = try #require(window.view?.window)
-            panel.appearance = appearance
-            panel.setContentSize(NSSize(width: 860, height: 560))
-            let tabs = try #require(window.view?.allDescendants.compactMap { $0 as? NSTabView }.first)
-            tabs.selectTabViewItem(withIdentifier: "transcript")
-            try write(panel, "recordings-versions-\(name)")
-            withExtendedLifetime(window) {}
+            try withJournal(builtIn: appearance, root: root) { app, library in
+                app.panel.setContentSize(NSSize(width: 760, height: 680))
+                try selectResult("transcript", in: library)
+                try write(app.panel, "journal-meeting-versions-\(name)-narrow")
+            }
         }
+    }
+
+    private func selectResult(_ id: String, in library: MeetingLibraryController) throws {
+        let picker = try #require(library.contentView.allDescendants
+            .compactMap { $0 as? NSSegmentedControl }
+            .first { $0.identifier?.rawValue == "meeting.result-tabs" })
+        picker.selectedSegment = id == "transcript" ? 1 : 0
+        _ = NSApp.sendAction(try #require(picker.action), to: picker.target, from: picker)
     }
 
     // MARK: - what the pictures are of
@@ -673,13 +455,13 @@ struct WindowGallery {
             meta: [
                 "started": "2026-08-19T16:15:00Z", "duration_seconds": 1500,
                 "title": localised("Weekly with Fyodor", "Планёрка с Фёдором"),
-                "trigger": "calendar", "files": ["source": "source.m4a"],
+                "trigger": "calendar", "files": ["source": "source.caf"],
             ],
             transcript: true, speakers: false, summary: false)
         try DiarizationState(
             request: .init(engine: "parakeet", threshold: 0.6), status: .pending)
             .write(to: root.appendingPathComponent("2026.08.19-1615"))
-        try Data([0]).write(to: root.appendingPathComponent("2026.08.19-1615/source.m4a"))
+        try TestAudio.write(to: root.appendingPathComponent("2026.08.19-1615/source.caf"), seconds: 2) { _, _ in 0 }
 
         try session(
             in: root, named: "2026.08.19-0905",
@@ -687,7 +469,7 @@ struct WindowGallery {
                 "started": "2026-08-19T09:05:00Z", "duration_seconds": 480,
                 "title": localised("Call with the studio", "Звонок со студией"),
                 "trigger": "mic-activity",
-                "files": ["source": "source.m4a"],
+                "files": ["source": "source.caf"],
                 SessionState.Key.transcriptionFailed:
                     "no spoken audio in the recording",
             ],
@@ -696,8 +478,7 @@ struct WindowGallery {
             request: .init(engine: "parakeet", threshold: 0.6), status: .failed)
         failedDiarization.reason = localised("Model unavailable", "Модель недоступна")
         try failedDiarization.write(to: root.appendingPathComponent("2026.08.19-0905"))
-        try Data([0]).write(to: root
-            .appendingPathComponent("2026.08.19-0905/source.m4a"))
+        try TestAudio.write(to: root.appendingPathComponent("2026.08.19-0905/source.caf"), seconds: 2) { _, _ in 0 }
 
         try session(
             in: root, named: "2026.08.18-1400",
@@ -754,28 +535,6 @@ struct WindowGallery {
         }
     }
 
-    // MARK: - finding things in a window
-
-    @MainActor
-    private func firstScrollView(in view: NSView) -> NSScrollView? {
-        if let scroll = view as? NSScrollView { return scroll }
-        for sub in view.subviews {
-            if let scroll = firstScrollView(in: sub) { return scroll }
-        }
-        return nil
-    }
-
-    @MainActor
-    private func firstTableView(in view: NSView) -> NSTableView? {
-        if let table = view as? NSTableView { return table }
-        for sub in view.subviews {
-            if let table = firstTableView(in: sub) { return table }
-        }
-        return nil
-    }
-
-    // MARK: - taking the picture
-
     /// The same exposure as `WindowShots.write(_:_:)` — see the comment there
     /// about the background — except that it photographs the window's own
     /// frame view rather than its content view, so the title bar and the three
@@ -788,14 +547,8 @@ struct WindowGallery {
     /// binary is not an application that macOS will activate. An inactive
     /// window is a real state, and it is the one these pictures are of.
     @MainActor
-    private func write(
-        _ panel: NSWindow, _ name: String, includingChrome: Bool = true
-    ) throws {
-        // The little status card is shown without window chrome on the site;
-        // the recordings window keeps it so it still reads as a Mac app.
-        let exposed = includingChrome
-            ? panel.contentView?.superview ?? panel.contentView
-            : panel.contentView
+    private func write(_ panel: NSWindow, _ name: String) throws {
+        let exposed = panel.contentView?.superview ?? panel.contentView
         let view = try #require(exposed)
         view.layoutSubtreeIfNeeded()
         RunLoop.current.run(until: Date().addingTimeInterval(0.25))
@@ -812,6 +565,33 @@ struct WindowGallery {
         let png = try #require(shot.representation(using: .png, properties: [:]))
         try png.write(to: URL(fileURLWithPath: "\(directory)/\(name).png"))
     }
+}
+
+/// Only ApplicationWindow creates an NSWindow; every fixture uses its real pages.
+@MainActor
+private func withJournal(
+    builtIn appearance: NSAppearance?, root: URL? = nil,
+    _ body: (ApplicationWindow, MeetingLibraryController) throws -> Void
+) throws {
+    _ = NSApplication.shared
+    let previousAppearance = NSApp.appearance
+    defer { NSApp.appearance = previousAppearance }
+    NSApp.appearance = appearance
+    var window: ApplicationWindow?
+    appearance?.performAsCurrentDrawingAppearance { window = ApplicationWindow() }
+    let app = try #require(window)
+    defer { app.hide() }
+    app.panel.appearance = appearance
+    app.panel.setContentSize(NSSize(width: 1340, height: 820))
+    let pasteboard = NSPasteboard.withUniqueName()
+    defer { pasteboard.releaseGlobally() }
+    let library = MeetingLibraryController(
+        root: root ?? Home.current.url.appendingPathComponent("meetings"),
+        pasteboard: pasteboard, hostWindow: app.panel)
+    library.onRetryDiarization = { _ in }
+    library.onSkipDiarization = { _ in }
+    app.libraryProvider = { library }
+    try body(app, library)
 }
 
 private final class GalleryGround: NSView {

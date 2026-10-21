@@ -42,7 +42,7 @@ actor LiveTranscriptionCoordinator {
         }
     }
 
-    private let modelStore: LiveTranscriptionModelStore
+    private let modelStore: NemotronModelStore
     private var transcript = LiveTranscriptState()
     private var status: Status = .idle
     private var isRecording = false
@@ -67,8 +67,9 @@ actor LiveTranscriptionCoordinator {
     private var continuations: [AsyncStream<AudioPacket>.Continuation] = []
     private var managers: [Source: StreamingNemotronMultilingualAsrManager] = [:]
     private var sharedModels: SharedNemotronMultilingualModels?
+    private var sharedModelDirectory: URL?
 
-    init(modelStore: LiveTranscriptionModelStore = .init()) {
+    init(modelStore: NemotronModelStore = .init()) {
         self.modelStore = modelStore
     }
 
@@ -130,6 +131,7 @@ actor LiveTranscriptionCoordinator {
         await detached.load?.value
         for manager in detached.managers { await manager.cleanup() }
         sharedModels = nil
+        sharedModelDirectory = nil
     }
 
     /// Builds the queues and their sinks but does not hand the sinks over.
@@ -140,7 +142,10 @@ actor LiveTranscriptionCoordinator {
     /// single word had been transcribed. The recorders start feeding the
     /// queues at the moment the model starts consuming them, and not before.
     private func startPipeline(language: String, epoch: Int) {
-        guard modelStore.isReady(language: language) else {
+        let downloading: Bool
+        if case .downloading = modelStore.state(language: language) { downloading = true }
+        else { downloading = false }
+        guard modelStore.isReady(language: language) || downloading else {
             status = .modelMissing
             publish()
             return
@@ -198,15 +203,19 @@ actor LiveTranscriptionCoordinator {
         epoch: Int
     ) async {
         do {
+            // Join an explicitly requested download; starting a recording alone never downloads.
+            let directory = try await modelStore.download(language: language)
+            try Task.checkCancellation()
             let shared: SharedNemotronMultilingualModels
-            if let sharedModels {
+            if let sharedModels, sharedModelDirectory == directory {
                 shared = sharedModels
             } else {
                 shared = try await StreamingNemotronMultilingualAsrManager.preloadShared(
-                    from: modelStore.variantDirectory(language: language))
+                    from: directory)
             }
             guard transcript.epoch == epoch, transcript.isEnabled else { return }
             sharedModels = shared
+            sharedModelDirectory = directory
 
             let micManager = StreamingNemotronMultilingualAsrManager()
             let systemManager = StreamingNemotronMultilingualAsrManager()
@@ -371,7 +380,7 @@ actor LiveTranscriptionCoordinator {
                 for manager in oldManagers { await manager.cleanup() }
             }
         }
-        if releaseSharedModels { sharedModels = nil }
+        if releaseSharedModels { sharedModels = nil; sharedModelDirectory = nil }
     }
 
     private func detachPipeline() -> (

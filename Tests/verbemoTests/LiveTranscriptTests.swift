@@ -352,7 +352,7 @@ struct LiveTranscriptTests {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("verbemo-live-model-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LiveTranscriptionModelStore(root: root)
+        let store = NemotronModelStore(root: root)
 
         #expect(store.variantDirectory(language: "en-US").path.hasSuffix("latin/1120ms"))
         #expect(store.variantDirectory(language: "ru-RU").path.hasSuffix("multilingual/1120ms"))
@@ -368,6 +368,7 @@ struct LiveTranscriptTests {
             at: variant.appendingPathComponent("decoder_joint.mlmodelc"),
             withIntermediateDirectories: true)
 
+        try NemotronFixtures.install(at: variant)
         #expect(store.isReady(language: "ru-RU"))
     }
 
@@ -376,7 +377,7 @@ struct LiveTranscriptTests {
         let missingRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("verbemo-live-missing-\(UUID().uuidString)")
         let coordinator = LiveTranscriptionCoordinator(
-            modelStore: LiveTranscriptionModelStore(root: missingRoot))
+            modelStore: NemotronModelStore(root: missingRoot))
 
         let attached = OSAllocatedUnfairLock<Bool>(initialState: false)
         await coordinator.beginRecording(
@@ -399,7 +400,7 @@ struct LiveTranscriptTests {
         // mic engine and an explicitly enabled voice route after Stop.
         final class Token: Sendable {}
         let coordinator = LiveTranscriptionCoordinator(
-            modelStore: LiveTranscriptionModelStore(
+            modelStore: NemotronModelStore(
                 root: FileManager.default.temporaryDirectory
                     .appendingPathComponent("verbemo-live-release-\(UUID().uuidString)")))
 
@@ -440,30 +441,30 @@ struct LiveTranscriptTests {
 
         // Nothing said yet, but the model is loading: the box is there so the
         // first words do not push the window taller under the reader's hands.
-        #expect(StatusWindow.liveTextVisibility(
+        #expect(LiveTranscriptContent.liveTextVisibility(
             for: snapshot(recording: true, status: .loading, text: false),
             revealed: false
         ) == .init(showsTranscript: true, showsRevealLink: false))
 
-        #expect(StatusWindow.liveTextVisibility(
+        #expect(LiveTranscriptContent.liveTextVisibility(
             for: snapshot(recording: true, status: .live, text: true),
             revealed: false
         ) == .init(showsTranscript: true, showsRevealLink: false))
 
         // The meeting is over: the box goes, the link stays.
-        #expect(StatusWindow.liveTextVisibility(
+        #expect(LiveTranscriptContent.liveTextVisibility(
             for: snapshot(recording: false, status: .idle, text: true),
             revealed: false
         ) == .init(showsTranscript: false, showsRevealLink: true))
 
-        #expect(StatusWindow.liveTextVisibility(
+        #expect(LiveTranscriptContent.liveTextVisibility(
             for: snapshot(recording: false, status: .idle, text: true),
             revealed: true
         ) == .init(showsTranscript: true, showsRevealLink: true))
 
         // A recording that produced no live text at all offers nothing to
         // reveal, so the section stays a single row.
-        #expect(StatusWindow.liveTextVisibility(
+        #expect(LiveTranscriptContent.liveTextVisibility(
             for: snapshot(recording: false, status: .idle, text: false),
             revealed: true
         ) == .init(showsTranscript: false, showsRevealLink: false))
@@ -479,8 +480,9 @@ struct LiveTranscriptTests {
     func downloadedModelDualStreamIntegration() async throws {
         let audioPath = try #require(
             ProcessInfo.processInfo.environment["VERBEMO_LIVE_TEST_AUDIO"])
-        let store = LiveTranscriptionModelStore()
-        #expect(store.isReady(language: "ru-RU"))
+        let modelRoot = try #require(ProcessInfo.processInfo.environment["VERBEMO_NEMOTRON_MODEL_ROOT"])
+        let store = NemotronModelStore(root: URL(fileURLWithPath: modelRoot))
+        try #require(store.isReady(language: "ru-RU"))
 
         let updates = OSAllocatedUnfairLock<LiveTranscriptionCoordinator.Snapshot?>(
             initialState: nil)
@@ -535,8 +537,10 @@ struct LiveTranscriptTests {
                 try await Task.sleep(for: .milliseconds(50))
             }
         }
+        // Different speech on the two sides: identical speech is correctly hidden as echo.
+        let systemPath = try #require(ProcessInfo.processInfo.environment["VERBEMO_LIVE_TEST_SYSTEM_AUDIO"])
         try await feed(try readFixture(audioPath), to: sinks.mic)
-        try await feed(try readFixture(audioPath), to: sinks.system)
+        try await feed(try readFixture(systemPath), to: sinks.system)
 
         // A cold CoreML preload can take 10–15 seconds even though inference
         // itself is much faster than realtime. The recorders queue audio while
@@ -583,7 +587,7 @@ struct LiveTranscriptTests {
         try await feed(quiet, to: sinks.mic)
         try await feed(quiet, to: sinks.system)
         try await feed(try readFixture(secondPath), to: sinks.mic)
-        try await feed(try readFixture(secondPath), to: sinks.system)
+        try await feed(try readFixture(systemPath), to: sinks.system)
 
         for _ in 0..<600 {
             let counts = blocksBySpeaker(updates).mapValues(\.count)

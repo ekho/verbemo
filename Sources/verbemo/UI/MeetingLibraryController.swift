@@ -1,16 +1,8 @@
 import AppKit
-import AVKit
 
-/// The list of recordings, and what is still owed on each of them.
-///
-/// The program's other windows are about the present — am I recording, what
-/// are the settings. This one is about the archive: what has been recorded,
-/// what has been done to it, and what a person can do about the gaps. It is
-/// also the only place naming can be corrected, which is the part that can't
-/// be automated away — a model that isn't sure leaves the label alone on
-/// purpose, and this is where somebody who was there fills it in.
+/// The Journal meeting list, document and inspector hosted by ApplicationWindow.
 @MainActor
-final class RecordingsWindow: NSObject, NSTextFieldDelegate {
+final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     struct RetranscriptionEngine {
         let id: String
         let title: String
@@ -20,6 +12,7 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         .init(id: "parakeet", title: "Parakeet"),
         .init(id: "whisper", title: "Whisper"),
         .init(id: "gigaam", title: "GigaAM"),
+        .init(id: "nemotron", title: "Nemotron 3.5 ASR"),
         .init(id: "assemblyai", title: "AssemblyAI"),
         .init(id: "openai", title: "OpenAI"),
         .init(id: "elevenlabs", title: "ElevenLabs"),
@@ -27,14 +20,25 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
 
     var onImportFiles: (([URL]) -> Void)?
     var onCancelImport: (() -> Void)?
-    var onChooseImport: (() -> Void)?
     var onResumeDiarization: ((URL, DiarizationState.Request) async throws -> Void)?
     var onRetryDiarization: ((URL) async throws -> Void)?
     var onSkipDiarization: ((URL) async throws -> Void)?
     private var root: URL
     private let panel: NSWindow
-    private let embedded: Bool
     private(set) var contentView = NSView()
+    private(set) var listContentView = NSView()
+    let toolbarContent = NSStackView()
+    var onSelectMeeting: (() -> Void)?
+    var onNavigateSettings: ((ApplicationNavigationState.Destination) -> Void)?
+    var currentFilter: ApplicationNavigationState.Destination { meetingFilter }
+    private let filterPicker = NSPopUpButton()
+    private let resultPicker = NSSegmentedControl()
+    private let inspectorButton = NSButton()
+    private let pipeline = NSStackView()
+    private let route = NSTextField(wrappingLabelWithString: "")
+    private let cancelPlaceholder = JournalUnavailableView(.cancelProcessing, title: localised("Cancel processing", "Отменить обработку"))
+    private var inspectorRequested: Bool?
+    private var reloadingList = false
     private let pasteboard: NSPasteboard
     private let table = MeetingTableView()
     private var activeRecording: MeetingPresentation.ActiveRecording?
@@ -53,24 +57,19 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     private let clearSearch = NSButton()
     private let emptyView = NSStackView()
     private var meetingMenu = NSMenu()
-    private let audioPlayer = AVPlayerView()
-    private let audioSelector = NSPopUpButton()
-    private let audioRow = NSStackView()
-    private var audioFiles: [URL] = []
+    private let audioPlayer = MeetingPlaybackView()
     private let moreButton = NSButton()
     private let regenerateButton = NSButton()
     private let repeatButton = NSButton()
-    private let summaryHint = NSTextField(labelWithString: "")
-    private let transcriptHint = NSTextField(labelWithString: "")
-    private var contentCopyButtons: [NSButton] = []
-    private var librarySplit: NSSplitView?
-    private var librarySplitController: NSSplitViewController?
-    private var showsMeetingDetail = false
-    var onDetailVisibilityChange: ((Bool) -> Void)?
+    private var journalColumns: JournalColumns?
+    private var inspectorWidth: NSLayoutConstraint?
     private let scroll = NSScrollView()
     private var displayChanges: ConfigWatch.Token?
 
     private let calendarView = MeetingCalendarView()
+    let calendarPicker = CalendarEventPicker()
+    var calendarSearch: CalendarEventPicker.Loader? { didSet { calendarPicker.loadEvents = calendarSearch } }
+    var calendarResolve: CalendarEventPicker.Resolver? { didSet { calendarPicker.resolveEvent = calendarResolve } }
     private let meetingTranscript = MeetingTranscriptView()
     private var plainTranscriptScroll: NSView?
     private let detailMeta = NSTextField(labelWithString: "")
@@ -80,18 +79,8 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     private let diarizationLabel = NSTextField(labelWithString: "")
     private let retryDiarizationButton = NSButton()
     private let skipDiarizationButton = NSButton()
-    private let openingLabel = NSTextField(labelWithString: "")
     private let speakersStack = FlippedStackView()
     private let finishButton = NSButton()
-    private let retranscribeButton = NSButton()
-    private let openTranscriptButton = NSButton()
-    private let copySummaryButton = NSButton()
-    private var copyReset: Task<Void, Never>?
-    private let openFolderButton = NSButton()
-    private let deleteButton = NSButton()
-    private let importButton = NSButton()
-    private let openRootButton = NSButton()
-    private let rootPath = NSTextField(labelWithString: "")
     private let detailTabs = NSTabView()
     private let versionSelector = NSPopUpButton()
     private var versions: [TranscriptVersions.Version] = []
@@ -109,7 +98,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     private let transcriptText = NSTextView()
     private let busyLabel = NSTextField(labelWithString: "")
     private let importStatus = MediaImportStatusView()
-    private let retranscriptionMenu = NSMenu()
 
     private var items: [SessionInventory.Item] = []
     private var selected: SessionInventory.Item? {
@@ -129,117 +117,44 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var working = false { didSet { onActivityChange?() } }
 
-    init(root: URL, pasteboard: NSPasteboard = .general, hostWindow: NSWindow? = nil) {
+    init(root: URL, pasteboard: NSPasteboard = .general, hostWindow: NSWindow) {
         self.root = root
         self.pasteboard = pasteboard
-        embedded = hostWindow != nil
-        panel = hostWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+        panel = hostWindow
         super.init()
-
-        if !embedded {
-        panel.title = localised("Recordings", "Записи")
-        panel.isReleasedWhenClosed = false
-        panel.setFrameAutosaveName("name.ekho.verbemo.recordings")
-        panel.contentMinSize = NSSize(width: 860, height: 560)
-
-        }
         buildTable()
         displayChanges = ConfigWatch.Token(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.table.reloadData() } }, center: NSWorkspace.shared.notificationCenter)
         contentView = buildLayout()
-        if !embedded {
-            panel.contentView = contentView
-            if panel.frame.origin == .zero { panel.center() }
-        }
-        // The first list is read here, on the spot: the window is built once,
-        // the first time somebody asks for it, and a window that opened empty
-        // and filled in a moment later would be a first picture of it that
-        // is wrong. Every later look is `reload`, off the main thread.
+        meetingTranscript.onPlayFrom = { [weak self] seconds in self?.audioPlayer.play(from: seconds) }
+        // Populate the first view synchronously; later scans run off the main thread.
         show(SessionInventory.scan(root: root))
-    }
-
-    func show() {
-        if !panel.isVisible {
-            Analytics.track(.artifactOpened, [
-                .artifact: .text(Analytics.Artifact.recordingsWindow.rawValue),
-            ])
-        }
-        reload()
-        panel.makeKeyAndOrderFront(nil)
-    }
-
-    var isVisible: Bool { panel.isVisible }
-
-    /// The window's own content, and the list inside it, for the suite that
-    /// builds this window in both languages and looks for a sentence left
-    /// behind in one of them. The list needs its own way in: the table draws
-    /// its cells from the data source rather than from views, so a walk of
-    /// the window's subviews goes straight past every row in it.
-    var view: NSView? { contentView }
-
-    var listLines: [String] {
-        table.tableColumns.map(\.title) + items.flatMap { item in
-            table.tableColumns.map { Self.cell(item, column: $0.identifier.rawValue) ?? "" }
-        }
     }
 
     // MARK: - building
 
     private func buildTable() {
-        // The identifier is the program's name for a column and stays
-        // English; the title is what a person reads.
-        let columns: [(String, String, CGFloat)] = [
-            ("when", localised("When", "Когда"), 130),
-            ("meeting", localised("Meeting", "Встреча"), 250),
-            ("transcript", localised("Transcript", "Расшифровка"), 150),
-            ("names", localised("Names", "Имена"), 110),
-            ("summary", localised("Summary", "Сводка"), 90),
-        ]
-        for (id, title, width) in columns {
-            let column = NSTableColumn(identifier: .init(id))
-            column.title = title
-            column.width = width
-            table.addTableColumn(column)
-        }
-        if embedded {
-            for column in table.tableColumns { table.removeTableColumn(column) }
-            table.addTableColumn(NSTableColumn(identifier: .init("meeting-card")))
-            table.headerView = nil
-            table.selectionHighlightStyle = .none
-            table.backgroundColor = .windowBackgroundColor
-            table.rowHeight = 94
-            table.intercellSpacing = NSSize(width: 0, height: 7)
-            table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-            table.action = #selector(meetingClicked)
-        }
-        table.usesAlternatingRowBackgroundColors = !embedded
-        if !embedded { table.rowHeight = 22 }
+        table.addTableColumn(NSTableColumn(identifier: .init("meeting-card")))
+        table.headerView = nil
+        table.selectionHighlightStyle = .regular
+        table.backgroundColor = JournalStyle.sidebar
+        table.rowHeight = 64
+        table.intercellSpacing = NSSize(width: 0, height: 4)
+        table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        table.action = #selector(meetingClicked)
+        table.usesAlternatingRowBackgroundColors = false
         table.dataSource = self
         table.delegate = self
         table.target = self
-        table.doubleAction = embedded ? nil : #selector(openFolderClicked)
-        retranscriptionMenu.delegate = self
-        for engine in Self.retranscriptionEngines {
-            let item = NSMenuItem(
-                title: localised("Re-transcribe with ", "Расшифровать через ") + engine.title,
-                action: #selector(retranscribeWithEngine(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = engine.id
-            retranscriptionMenu.addItem(item)
-        }
-        table.menu = embedded ? meetingMenu : retranscriptionMenu
+        table.menu = meetingMenu
         meetingMenu.delegate = self
         meetingMenu.autoenablesItems = false
         table.onContext = { [weak self] row in
             guard let self, row < self.items.count else { return }
             self.table.selectRowIndexes([row], byExtendingSelection: false)
             self.showDetail()
+            self.onSelectMeeting?()
         }
 
         scroll.documentView = table
@@ -249,23 +164,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     }
 
     private func buildLayout() -> NSView {
-        detailTitle.font = .systemFont(ofSize: 16, weight: .semibold)
-        openingLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        // What was said in the meeting, which is the one thing in any of
-        // verbemo's windows that is not verbemo's to translate. Named so that the
-        // suite looking for English left in a Russian window knows to walk
-        // past it rather than report a person's own words as untranslated.
-        openingLabel.identifier = NSUserInterfaceItemIdentifier("meeting-words")
-        openingLabel.textColor = .secondaryLabelColor
-        openingLabel.lineBreakMode = .byTruncatingTail
-        openingLabel.maximumNumberOfLines = 1
-        openingLabel.isHidden = embedded
-        // NSTabView derives its minimum width from this pane's fitting size.
-        // The excerpt can truncate at any width; its full text must not become
-        // the window's minimum width, even during that fitting calculation.
-        openingLabel.setContentCompressionResistancePriority(
-            .init(NSLayoutConstraint.Priority.fittingSizeCompression.rawValue - 1),
-            for: .horizontal)
         busyLabel.font = .systemFont(ofSize: 11)
         busyLabel.textColor = .secondaryLabelColor
         diarizationLabel.font = .systemFont(ofSize: 11)
@@ -274,10 +172,11 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         diarizationLabel.maximumNumberOfLines = 3
         diarizationLabel.identifier = .init("diarization.status")
         for (button, title, action) in [
-            (retryDiarizationButton, localised("Retry speaker separation", "Повторить разделение"),
+            (retryDiarizationButton, localised("Retry diarization", "Повторить диаризацию"),
              #selector(retryDiarizationClicked)),
-            (skipDiarizationButton, localised("Skip speaker separation", "Пропустить разделение"),
+            (skipDiarizationButton, localised("Skip diarization", "Пропустить диаризацию"),
              #selector(skipDiarizationClicked)),
+            (finishButton, localised("Finish processing", "Доделать"), #selector(finishClicked)),
         ] as [(NSButton, String, Selector)] {
             button.title = title
             button.bezelStyle = .rounded
@@ -287,100 +186,32 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         retryDiarizationButton.identifier = .init("diarization.retry")
         skipDiarizationButton.identifier = .init("diarization.skip")
 
+        for (button, id, action) in [
+            (repeatButton, "meeting.retranscribe", #selector(repeatTranscriptClicked)),
+            (regenerateButton, "meeting.generate-summary", #selector(regenerateClicked)),
+        ] {
+            button.identifier = .init(id)
+            button.title = ""
+            button.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+            button.imagePosition = .imageOnly
+            button.bezelStyle = .rounded
+            button.target = self
+            button.action = action
+            button.widthAnchor.constraint(equalToConstant: 28).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        }
+
         speakersStack.orientation = .vertical
         speakersStack.alignment = .leading
         speakersStack.spacing = 6
 
-        for (button, title, action) in [
-            (importButton, localised("Import…", "Импортировать…"), #selector(chooseImportClicked)),
-            (openRootButton, localised("Open recordings folder", "Открыть папку записей"),
-             #selector(openRootClicked)),
-            (finishButton, localised("Finish processing", "Доделать"), #selector(finishClicked)),
-            (retranscribeButton,
-             localised("Re-transcribe", "Расшифровать заново"), #selector(retranscribeClicked)),
-            (openTranscriptButton,
-             localised("Open transcript", "Открыть расшифровку"), #selector(openTranscriptClicked)),
-            (copySummaryButton,
-             localised("Copy summary", "Скопировать сводку"), #selector(copySummaryClicked)),
-            (openFolderButton, localised("Open folder", "Открыть папку"), #selector(openFolderClicked)),
-            (deleteButton, localised("Delete", "Удалить"), #selector(deleteClicked)),
-        ] as [(NSButton, String, Selector)] {
-            button.title = title
-            button.bezelStyle = .rounded
-            button.target = self
-            button.action = action
-        }
-        importButton.identifier = NSUserInterfaceItemIdentifier("choose-media-import")
-        openTranscriptButton.identifier = NSUserInterfaceItemIdentifier("open-transcript")
-        copySummaryButton.identifier = .init("copy-summary")
-        copySummaryButton.keyEquivalent = "c"
-        copySummaryButton.keyEquivalentModifierMask = [.command, .shift]
-        copySummaryButton.toolTip = localised("Copy summary (⇧⌘C)", "Скопировать сводку (⇧⌘C)")
-        openRootButton.identifier = NSUserInterfaceItemIdentifier("open-recordings-folder")
-        rootPath.stringValue = root.path
-        rootPath.font = .systemFont(ofSize: 11)
-        rootPath.textColor = .secondaryLabelColor
-        rootPath.lineBreakMode = .byTruncatingMiddle
-        rootPath.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        rootPath.toolTip = root.path
-        let toolbar = NSStackView(views: [importButton, openRootButton, NSView(), rootPath])
-        toolbar.orientation = .horizontal
-        toolbar.spacing = 8
-        toolbar.heightAnchor.constraint(equalTo: importButton.heightAnchor).isActive = true
-
-        let processingButtons = NSStackView(views: (embedded ? [] : [finishButton]) + [
-            retranscribeButton, openTranscriptButton,
-            openFolderButton, deleteButton,
-        ])
-        processingButtons.orientation = .horizontal
-        processingButtons.spacing = 8
-        if !embedded { processingButtons.heightAnchor.constraint(equalTo: finishButton.heightAnchor).isActive = true }
-
-        let detailScroll = NSScrollView()
-        detailScroll.documentView = speakersStack
-        detailScroll.hasVerticalScroller = true
-        detailScroll.drawsBackground = false
-        speakersStack.translatesAutoresizingMaskIntoConstraints = false
-        detailScroll.translatesAutoresizingMaskIntoConstraints = false
-        detailScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
-        NSLayoutConstraint.activate([
-            speakersStack.leadingAnchor.constraint(
-                equalTo: detailScroll.contentView.leadingAnchor, constant: 4),
-            speakersStack.topAnchor.constraint(equalTo: detailScroll.contentView.topAnchor),
-            speakersStack.trailingAnchor.constraint(
-                equalTo: detailScroll.contentView.trailingAnchor, constant: -8),
-        ])
-
-        let speakersContent = NSStackView(views: [openingLabel, detailScroll])
-        speakersContent.orientation = .vertical
-        speakersContent.distribution = .fill
-        speakersContent.alignment = .leading
-        speakersContent.spacing = 8
-        speakersContent.edgeInsets = NSEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
-        NSLayoutConstraint.activate([
-            openingLabel.widthAnchor.constraint(equalTo: speakersContent.widthAnchor, constant: -20),
-            detailScroll.widthAnchor.constraint(equalTo: speakersContent.widthAnchor, constant: -20),
-        ])
-        // NSTabView owns its content view's frame. A stack view calculates
-        // its own frame during layout, accumulating the tab's inset on each
-        // update if used directly. Keep that layout inside a plain tab view.
-        let speakersPane = NSView()
-        speakersContent.translatesAutoresizingMaskIntoConstraints = false
-        speakersPane.addSubview(speakersContent)
-        NSLayoutConstraint.activate([
-            speakersContent.leadingAnchor.constraint(equalTo: speakersPane.leadingAnchor),
-            speakersContent.trailingAnchor.constraint(equalTo: speakersPane.trailingAnchor),
-            speakersContent.topAnchor.constraint(equalTo: speakersPane.topAnchor),
-            speakersContent.bottomAnchor.constraint(equalTo: speakersPane.bottomAnchor),
-        ])
         for (id, label, view) in [
             ("summary", localised("Summary", "Сводка"), previewScroll(summaryText)),
-            ("transcript", localised("Transcript", "Расшифровка"), embedded ? transcriptContent() : previewScroll(transcriptText)),
-            ("speakers", localised("Speakers", "Участники"), speakersPane),
+            ("transcript", localised("Transcript", "Расшифровка"), transcriptContent()),
         ] as [(String, String, NSView)] {
             let tab = NSTabViewItem(identifier: id)
             tab.label = label
-            tab.view = embedded && id != "speakers" ? textPane(id: id, content: view) : view
+            tab.view = textPane(content: view)
             detailTabs.addTabViewItem(tab)
         }
 
@@ -388,9 +219,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         versionSelector.target = self
         versionSelector.action = #selector(versionSelected(_:))
         versionSelector.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let versionActions = NSStackView(views: embedded ? [versionSelector] : [versionSelector, NSView(), copySummaryButton])
-        versionActions.orientation = .horizontal
-        versionActions.spacing = 8
         let diarizationActions = NSStackView(views: [retryDiarizationButton, skipDiarizationButton])
         diarizationActions.orientation = .horizontal
         diarizationActions.spacing = 8
@@ -399,7 +227,7 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         moreButton.isBordered = false
         moreButton.target = self
         moreButton.action = #selector(moreClicked(_:))
-        let titleRow = NSStackView(views: [detailTitle, NSView(), moreButton])
+        let titleRow = NSStackView(views: [detailTitle])
         detailTitle.identifier = .init("meeting.title")
         detailTitle.delegate = self
         detailTitle.target = self
@@ -410,130 +238,39 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         calendarView.setContentHuggingPriority(.required, for: .vertical)
         titleRow.spacing = 12
         detailTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        audioPlayer.controlsStyle = .inline
-        audioPlayer.setAccessibilityLabel(localised("Recording playback", "Прослушивание записи"))
-        audioPlayer.heightAnchor.constraint(equalToConstant: 40).isActive = true
-        audioPlayer.widthAnchor.constraint(greaterThanOrEqualToConstant: 140).isActive = true
-        audioSelector.target = self
-        audioSelector.action = #selector(audioSelected)
-        audioSelector.setAccessibilityLabel(localised("Audio track", "Аудиодорожка"))
-        audioRow.addArrangedSubview(audioSelector)
-        audioRow.addArrangedSubview(audioPlayer)
-        audioRow.spacing = 8
         openActiveButton.title = localised("Open current recording", "Открыть текущую запись")
         openActiveButton.target = self
         openActiveButton.action = #selector(openActiveRecording)
         openActiveButton.isHidden = true
-        let detail = NSStackView(views: embedded
-            ? [titleRow, detailError, detailMeta, calendarView, audioRow, openActiveButton, diarizationLabel, diarizationActions, finishButton, versionActions, detailTabs, busyLabel]
-            : [detailTitle, diarizationLabel, diarizationActions, versionActions, detailTabs, processingButtons, busyLabel])
+        detailTabs.tabViewType = .noTabsNoBorder
+        resultPicker.segmentCount = 2
+        resultPicker.setLabel(localised("Summary", "Сводка"), forSegment: 0)
+        resultPicker.setLabel(localised("Transcript", "Расшифровка"), forSegment: 1)
+        resultPicker.segmentStyle = .texturedRounded
+        resultPicker.selectedSegment = 0
+        resultPicker.target = self
+        resultPicker.action = #selector(resultSelected)
+        resultPicker.identifier = .init("meeting.result-tabs")
+        resultPicker.setAccessibilityLabel(localised("Meeting result", "Результат встречи"))
+        let versionActions = NSStackView(views: [resultPicker, NSView(), versionSelector])
+        versionActions.orientation = .horizontal
+        versionActions.spacing = 8
+        let detail = NSStackView(views: [detailMeta, titleRow, detailError, openActiveButton, audioPlayer, versionActions, detailTabs, busyLabel])
         detail.orientation = .vertical
         detail.distribution = .fill
         detail.alignment = .leading
         detail.spacing = 10
-        detail.edgeInsets = NSEdgeInsets(top: 10, left: 0, bottom: 0, right: 0)
-        if embedded {
-            titleRow.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
-            calendarView.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
-            detailMeta.textColor = .secondaryLabelColor
-            detailMeta.font = .systemFont(ofSize: 12)
-            detailTitle.font = .systemFont(ofSize: 23, weight: .semibold)
-            detailTitle.maximumNumberOfLines = 2
-            detailTitle.lineBreakMode = .byWordWrapping
-        }
+        detailMeta.textColor = .secondaryLabelColor
+        detailMeta.font = .systemFont(ofSize: 12)
+        detailTitle.font = JournalStyle.titleFont()
+        detailTitle.textColor = JournalStyle.ink
+        detailTitle.maximumNumberOfLines = 2
+        detailTitle.lineBreakMode = .byWordWrapping
         NSLayoutConstraint.activate([
-            detailTitle.widthAnchor.constraint(lessThanOrEqualTo: detail.widthAnchor),
-            diarizationLabel.widthAnchor.constraint(equalTo: detail.widthAnchor),
-            detailTabs.widthAnchor.constraint(equalTo: detail.widthAnchor),
-            versionActions.widthAnchor.constraint(equalTo: detail.widthAnchor),
             versionSelector.widthAnchor.constraint(lessThanOrEqualTo: detail.widthAnchor),
             detail.heightAnchor.constraint(greaterThanOrEqualToConstant: 260),
         ])
-        detailTabs.setContentHuggingPriority(.defaultLow, for: .vertical)
-        scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
-        let split = MeetingLibrarySplitView()
-        split.isVertical = embedded
-        split.dividerStyle = .thin
-        split.autosaveName = "name.ekho.verbemo.recordings.split"
-        split.setContentHuggingPriority(.defaultLow, for: .vertical)
-        if embedded {
-            search.placeholderString = localised("Find a meeting", "Найти встречу")
-            search.setAccessibilityLabel(localised("Find a meeting", "Найти встречу"))
-            search.target = self
-            search.action = #selector(searchChanged)
-            search.sendsSearchStringImmediately = true
-            search.sendsWholeSearchString = false
-            search.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
-            emptyLabel.identifier = .init("meeting-list.empty")
-            emptyLabel.textColor = .secondaryLabelColor
-            clearSearch.title = localised("Clear search", "Очистить поиск")
-            clearSearch.target = self
-            clearSearch.action = #selector(clearSearchClicked)
-            emptyView.setViews([emptyLabel, clearSearch, NSView()], in: .center)
-            emptyView.orientation = .vertical
-            emptyView.spacing = 12
-            emptyView.isHidden = true
-            let list = NSStackView(views: [search, scroll, emptyView])
-            list.orientation = .vertical
-            list.alignment = .leading
-            list.spacing = 12
-            list.edgeInsets = NSEdgeInsets(top: 8, left: 4, bottom: 0, right: 8)
-            search.widthAnchor.constraint(equalTo: list.widthAnchor, constant: -12).isActive = true
-            scroll.widthAnchor.constraint(equalTo: list.widthAnchor, constant: -12).isActive = true
-            emptyView.widthAnchor.constraint(equalTo: list.widthAnchor, constant: -12).isActive = true
-            list.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            let listPane = Self.frameOwnedPane(list)
-            let detailPane = Self.frameOwnedPane(detail)
-            let controller = NSSplitViewController()
-            controller.splitView = split
-            controller.view = split
-            for pane in [listPane, detailPane] {
-                let child = NSViewController()
-                child.view = pane
-                controller.addSplitViewItem(NSSplitViewItem(viewController: child))
-            }
-            librarySplitController = controller
-            librarySplit = split
-            split.onResize = { [weak self] in self?.updateCompactLayout() }
-        } else {
-            split.addArrangedSubview(scroll)
-            split.addArrangedSubview(detail)
-            split.setHoldingPriority(.defaultLow, forSubviewAt: 0)
-            split.setHoldingPriority(.defaultLow, forSubviewAt: 1)
-        }
-
-        importStatus.onCancel = { [weak self] in self?.onCancelImport?() }
-        let undo = NSButton(title: localised("Undo", "Отменить"), target: self, action: #selector(undoDeletion))
-        deletionNotice.addArrangedSubview(deletionLabel)
-        deletionNotice.addArrangedSubview(undo)
-        deletionNotice.spacing = 10
-        deletionNotice.isHidden = true
-        let content = NSStackView(views: [
-            importStatus, split, deletionNotice,
-        ])
-        if !embedded { content.insertArrangedSubview(toolbar, at: 0) }
-        content.orientation = .vertical
-        content.distribution = .fill
-        content.alignment = .leading
-        content.spacing = 10
-        content.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 6, right: 14)
-        content.translatesAutoresizingMaskIntoConstraints = false
-
-        let container = MediaDropView()
-        container.onFiles = { [weak self] urls in self?.onImportFiles?(urls) }
-        container.addSubview(content)
-        NSLayoutConstraint.activate([
-            content.topAnchor.constraint(equalTo: container.topAnchor),
-            content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            // The workspace owns the only import / new-recording toolbar.
-            importStatus.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
-            split.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
-        ])
-        if !embedded { toolbar.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28).isActive = true }
-        return container
+        return buildJournal(detail: detail, diarizationActions: diarizationActions)
     }
 
     private func transcriptContent() -> NSView {
@@ -567,19 +304,22 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     private func showCalendar(for item: SessionInventory.Item?) {
         let metadata = item.flatMap { MeetingCalendarMetadata.read(from: $0.dir) }
         calendarView.update(metadata)
-        guard let item else { detailMeta.stringValue = ""; return }
+        calendarPicker.isHidden = item == nil
+        guard let item else { calendarPicker.cancel(); detailMeta.stringValue = ""; return }
+        calendarPicker.update(date: item.started ?? Date(), snapshot: metadata, contextID: item.dir.path,
+                              enabled: activeRecording?.dir != item.dir && !working && !SessionClaim.isHeld(item.dir))
+        calendarPicker.onSelect = { [weak self] meeting in
+            try MeetingCalendarMetadata.associate(meeting, in: item.dir)
+            self?.reload()
+        }
         let duration = item.duration.map { localised("\(Int($0 / 60)) min", "\(Int($0 / 60)) мин") }
         let invited = metadata?.isConfirmed == true ? metadata.map { localised("Invited: \($0.participants.count)", "Приглашены: \($0.participants.count)") } : nil
         detailMeta.stringValue = [MeetingPresentation.date(item.started), duration, invited].compactMap { $0 }.joined(separator: " · ")
-        calendarView.onConfirm = { [weak self] in
-            try MeetingCalendarMetadata.confirm(in: item.dir)
-            self?.reload()
-        }
         calendarView.onOpen = { [weak self] in
             guard let self, let metadata, let reason = CalendarEventOpener.open(metadata) else { return }
             let alert = NSAlert(); alert.messageText = reason; alert.beginSheetModal(for: self.panel)
         }
-        calendarView.onParticipants = { [weak self] in self?.detailTabs.selectTabViewItem(withIdentifier: "speakers") }
+
     }
 
     var currentActions: MeetingActionState {
@@ -598,25 +338,57 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
 
     func applyFilter(_ filter: ApplicationNavigationState.Destination, clearSearch: Bool = false) {
         meetingFilter = filter
-        if clearSearch { search.stringValue = ""; showsMeetingDetail = false }
+        filterPicker.selectItem(at: [.allMeetings, .processing, .attention].firstIndex(of: filter) ?? 0)
+        if clearSearch { search.stringValue = "" }
         show(allItems)
     }
-    private func updateCompactLayout() {
-        guard let split = librarySplit, let controller = librarySplitController else { return }
-        let compact = split.bounds.width < 730
-        let list = controller.splitViewItems[0]
-        let detail = controller.splitViewItems[1]
-        list.minimumThickness = compact ? 0 : 220
-        list.maximumThickness = compact ? NSSplitViewItem.unspecifiedDimension : 340
-        detail.minimumThickness = compact ? 0 : 380
-        list.isCollapsed = compact && showsMeetingDetail
-        detail.isCollapsed = compact && !showsMeetingDetail
-        onDetailVisibilityChange?(showsMeetingDetail)
+    func updateCompactLayout() {
+        guard let columns = journalColumns else { return }
+        let compact = min(columns.bounds.width, max(0, panel.contentLayoutRect.width - JournalStyle.sidebarWidth)) < 850
+        let visible = inspectorRequested ?? !compact
+        inspectorWidth?.isActive = !compact
+        columns.arrangedSubviews[0].isHidden = compact && visible
+        columns.arrangedSubviews[1].isHidden = compact || !visible
+        columns.arrangedSubviews[2].isHidden = !visible
+        inspectorButton.state = visible ? .on : .off
+        inspectorButton.setAccessibilityValue(visible ? 1 : 0)
+    }
+    @objc private func toggleInspector() {
+        guard let columns = journalColumns else { return }
+        inspectorRequested = columns.arrangedSubviews[2].isHidden
+        updateCompactLayout()
+    }
+    @objc private func resultSelected() {
+        detailTabs.selectTabViewItem(withIdentifier: resultPicker.selectedSegment == 1 ? "transcript" : "summary")
+    }
+    @objc private func filterSelected() {
+        let filters: [ApplicationNavigationState.Destination] = [.allMeetings, .processing, .attention]
+        applyFilter(filters[filterPicker.indexOfSelectedItem])
+        onSelectMeeting?()
+    }
+    @objc private func processingSettings() { onNavigateSettings?(.transcription) }
+    @objc private func showCopyMenu(_ sender: NSButton) {
+        makeCopyMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    }
+    func makeCopyMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for (index, title) in [localised("Summary · Text", "Сводка · Текст"), localised("Summary · Markdown", "Сводка · Markdown"), localised("Transcript · Text", "Расшифровка · Текст"), localised("Transcript · Markdown", "Расшифровка · Markdown")].enumerated() {
+            let item = NSMenuItem(title: title, action: #selector(copyFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.isEnabled = currentActions.reason(for: index < 2 ? .copySummary : .copyTranscript) == nil
+            menu.addItem(item)
+        }
+        return menu
+    }
+    @objc private func copyFromMenu(_ sender: NSMenuItem) {
+        copyMeetingContent(transcript: sender.tag >= 2, plainText: sender.tag % 2 == 0)
     }
     @objc private func searchChanged() { show(allItems) }
     @objc private func meetingClicked() {
         if let selected, selected.dir == activeRecording?.dir { onOpenActiveRecording?(); return }
-        showsMeetingDetail = selected != nil; updateCompactLayout()
+        onSelectMeeting?()
     }
     @objc private func openActiveRecording() { onOpenActiveRecording?() }
     @objc private func moreClicked(_ sender: NSButton) {
@@ -637,36 +409,13 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         case .delete: deleteClicked()
         }
     }
-    private func textPane(id: String, content: NSView) -> NSView {
-        let isTranscript = id == "transcript"
-        let repeatAction = isTranscript ? repeatButton : regenerateButton
-        repeatAction.title = isTranscript ? localised("Transcribe again", "Расшифровать повторно") : localised("Regenerate summary", "Перегенерировать сводку")
-        repeatAction.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
-        repeatAction.imagePosition = .imageLeading
-        repeatAction.bezelStyle = .rounded
-        repeatAction.target = self
-        repeatAction.action = isTranscript ? #selector(repeatTranscriptClicked) : #selector(regenerateClicked)
-        let copies = [true, false].map { plain -> NSButton in
-            let button = NSButton(title: plain ? localised("Text", "Текст") : "Markdown", target: self, action: #selector(copyContentClicked(_:)))
-            button.bezelStyle = .rounded
-            button.tag = (isTranscript ? 2 : 0) + (plain ? 0 : 1)
-            button.image = NSImage(systemSymbolName: plain ? "doc.on.doc" : "doc.text", accessibilityDescription: nil)
-            button.imagePosition = .imageLeading
-            button.setAccessibilityLabel((isTranscript ? localised("Copy transcript as ", "Копировать расшифровку как ") : localised("Copy summary as ", "Копировать сводку как ")) + (plain ? localised("text", "текст") : "Markdown"))
-            contentCopyButtons.append(button)
-            return button
-        }
-        let actions = NSStackView(views: [repeatAction, NSView()] + copies)
-        actions.spacing = 8
-        let hint = isTranscript ? transcriptHint : summaryHint
-        hint.font = .systemFont(ofSize: 11)
-        hint.textColor = .secondaryLabelColor
-        let pane = NSStackView(views: [actions, hint, content])
+    private func textPane(content: NSView) -> NSView {
+        let pane = NSStackView(views: [content])
         pane.orientation = .vertical
         pane.alignment = .leading
         pane.spacing = 10
         pane.edgeInsets = NSEdgeInsets(top: 16, left: 10, bottom: 10, right: 10)
-        for view in [actions, hint, content] { view.widthAnchor.constraint(equalTo: pane.widthAnchor, constant: -20).isActive = true }
+        for view in pane.arrangedSubviews { view.widthAnchor.constraint(equalTo: pane.widthAnchor, constant: -20).isActive = true }
         return Self.frameOwnedPane(pane)
     }
     private static func summaryMethodName(_ backend: String) -> String {
@@ -676,28 +425,52 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         case "ollama": "Ollama"
         case "openai-api": "OpenAI API"
         case "anthropic-api": "Anthropic API"
-        case "none": localised("Disabled", "Выключено")
+        case "none": localised("Disabled", "Отключена")
         default: localised("Automatic", "Автоматически")
         }
     }
     @objc private func repeatTranscriptClicked() { guard currentActions.reason(for: .retranscribe) == nil else { return }; confirmRetranscription(engine: nil) }
     @objc private func regenerateClicked() { regenerateSummary() }
     private func regenerateSummary() {
-        guard currentActions.reason(for: .regenerateSummary) == nil, let dir = artifactDirectory else { updateButtons(); return }
-        working = true
-        updateButtons()
-        table.reloadData()
-        Task { [weak self] in
+        guard currentActions.reason(for: .regenerateSummary) == nil, let dir = artifactDirectory, panel.attachedSheet == nil else { updateButtons(); return }
+        let alert = NSAlert()
+        alert.messageText = localised("Create a new summary", "Создать новую сводку")
+        alert.informativeText = localised(
+            "Uses the selected transcript version and your configured provider. The previous summary is kept if this attempt fails.",
+            "Используется выбранная версия расшифровки и способ из настроек. Если попытка не удастся, предыдущая сводка сохранится.")
+        let method = NSTextField(wrappingLabelWithString: localised("Configured provider: ", "Способ из настроек: ") + Self.summaryMethodName(Config.summary().backend))
+        let placeholder = JournalUnavailableView(.summaryProvider, title: localised("Choose a provider for this run", "Выбрать способ только для этой сводки"))
+        let accessory = NSStackView(views: [method, placeholder])
+        accessory.orientation = .vertical
+        accessory.alignment = .leading
+        accessory.spacing = 16
+        accessory.frame = NSRect(x: 0, y: 0, width: 380, height: 126)
+        for view in accessory.arrangedSubviews { view.widthAnchor.constraint(equalTo: accessory.widthAnchor).isActive = true }
+        alert.accessoryView = accessory
+        alert.addButton(withTitle: localised("Create summary", "Создать сводку"))
+        alert.addButton(withTitle: localised("Cancel", "Отмена"))
+        alert.addButton(withTitle: localised("Summary settings", "Настройки сводки"))
+        alert.beginSheetModal(for: panel) { [weak self] response in
             guard let self else { return }
-            do { try await PostProcessor.regenerateSummary(dir) }
-            catch { await NSAlert(error: error).beginSheetModal(for: panel) }
-            working = false
-            reload()
+            if response == .alertThirdButtonReturn { self.onNavigateSettings?(.summary); return }
+            guard response == .alertFirstButtonReturn,
+                  self.artifactDirectory == dir, self.currentActions.reason(for: .regenerateSummary) == nil else { return }
+            self.working = true
+            self.updateButtons()
+            self.updateInspector()
+            self.table.reloadData()
+            Task { [weak self] in
+                guard let self else { return }
+                do { try await PostProcessor.regenerateSummary(dir) }
+                catch { await NSAlert(error: error).beginSheetModal(for: panel) }
+                working = false
+                reload()
+            }
         }
     }
     func beginRenamingMeeting() {
         guard let item = selected else { return }
-        showsMeetingDetail = true
+        if journalColumns?.arrangedSubviews.first?.isHidden == true { inspectorRequested = false }
         updateCompactLayout()
         renamingSession = item.dir
         detailTitle.stringValue = item.title ?? item.name
@@ -739,7 +512,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     func controlTextDidEndEditing(_ notification: Notification) {
         if notification.object as? NSTextField === detailTitle, renamingSession != nil { saveMeetingTitle() }
     }
-    @objc private func copyContentClicked(_ sender: NSButton) { copyMeetingContent(transcript: sender.tag >= 2, plainText: sender.tag % 2 == 0) }
     private func copyMeetingContent(transcript: Bool, plainText: Bool) {
         guard currentActions.reason(for: transcript ? .copyTranscript : .copySummary) == nil,
               let dir = artifactDirectory else { updateButtons(); return }
@@ -761,7 +533,7 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         text.font = .systemFont(ofSize: 13)
         text.textColor = .labelColor
         text.drawsBackground = false
-        text.textContainerInset = NSSize(width: 12, height: 12)
+        text.textContainerInset = NSSize(width: 0, height: 12)
         text.isVerticallyResizable = true
         text.isHorizontallyResizable = false
         text.autoresizingMask = [.width]
@@ -777,8 +549,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     /// Show another recordings folder: the one Setup has just moved verbemo to.
     func setRoot(_ folder: URL) {
         root = folder
-        rootPath.stringValue = folder.path
-        rootPath.toolTip = folder.path
         table.deselectAll(nil)
         reload()
     }
@@ -840,19 +610,19 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     func refresh() { reload() }
 
     private func show(_ found: [SessionInventory.Item]) {
+        reloadingList = true
+        defer { reloadingList = false }
         let previous = selected?.dir
         allItems = found.filter { $0.dir != activeRecording?.dir }
         let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
-        items = inventory.filter { !deletion.isPending($0.dir) && (!embedded || MeetingPresentation.matches($0, filter: meetingFilter, query: search.stringValue, active: activeRecording)) }
-        if embedded {
-            emptyView.isHidden = !items.isEmpty
-            scroll.isHidden = items.isEmpty
-            clearSearch.isHidden = search.stringValue.isEmpty
-            emptyLabel.stringValue = !search.stringValue.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
-                : meetingFilter == .processing ? localised("Nothing is being processed right now.", "Сейчас ничего не обрабатывается.")
-                : meetingFilter == .attention ? localised("No meetings need your attention.", "Нет встреч, требующих действий.")
-                : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
-        }
+        items = inventory.filter { !deletion.isPending($0.dir) && MeetingPresentation.matches($0, filter: meetingFilter, query: search.stringValue, active: activeRecording) }
+        emptyView.isHidden = !items.isEmpty
+        scroll.isHidden = items.isEmpty
+        clearSearch.isHidden = search.stringValue.isEmpty
+        emptyLabel.stringValue = !search.stringValue.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
+            : meetingFilter == .processing ? localised("Nothing is being processed right now.", "Сейчас ничего не обрабатывается.")
+            : meetingFilter == .attention ? localised("No meetings need your attention.", "Нет встреч, требующих действий.")
+            : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
         table.reloadData()
         if let previous, let row = items.firstIndex(where: { $0.dir == previous }) {
             table.selectRowIndexes([row], byExtendingSelection: false)
@@ -864,12 +634,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     }
     @objc private func clearSearchClicked() { search.stringValue = ""; show(allItems) }
 
-    @objc private func audioSelected() {
-        audioPlayer.player?.pause()
-        let index = audioSelector.indexOfSelectedItem
-        audioPlayer.player = audioFiles.indices.contains(index) ? AVPlayer(url: audioFiles[index]) : nil
-    }
-
     @objc private func versionSelected(_ sender: NSPopUpButton) {
         versionKey = selectedVersion.map(key)
         showDetail()
@@ -877,7 +641,14 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
 
     private func showDetail() {
         openActiveButton.isHidden = true
-        detailTabs.isHidden = false
+        resultPicker.isHidden = selected == nil
+        detailTabs.isHidden = selected == nil
+        if renamingSession != selected?.dir { cancelTitleEdit() }
+        speakersStack.arrangedSubviews.forEach {
+            speakersStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        defer { updateInspector() }
         if let activeRecording, selected?.dir == activeRecording.dir {
             showCalendar(for: selected)
             detailTitle.stringValue = activeRecording.title
@@ -885,37 +656,23 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
             versions = []
             versionSelector.removeAllItems()
             versionSelector.isHidden = true
-            audioRow.isHidden = true
+            audioPlayer.setMeeting(nil)
             detailTabs.isHidden = true
             diarizationLabel.isHidden = true
             retryDiarizationButton.isHidden = true
             skipDiarizationButton.isHidden = true
-            openTranscriptButton.isHidden = true
+            finishButton.isHidden = true
+            finishButton.isEnabled = false
             summaryText.string = ""
             transcriptText.string = ""
             openActiveButton.isHidden = false
             busyLabel.stringValue = activeRecording.paused ? localised("Recording paused", "Запись приостановлена") : localised("Recording in progress", "Идёт запись")
             return
         }
-        openTranscriptButton.isHidden = embedded
-        if embedded {
-            showCalendar(for: selected)
-            meetingTranscript.isHidden = true
-            plainTranscriptScroll?.isHidden = false
-        }
-        if embedded {
-            let files = selected.map { MeetingPresentation.audioFiles($0.dir) } ?? []
-            if files != audioFiles {
-                audioPlayer.player?.pause()
-                audioFiles = files
-                audioSelector.removeAllItems()
-                audioSelector.addItems(withTitles: files.map(\.lastPathComponent))
-                audioSelected()
-            }
-            audioRow.isHidden = files.isEmpty
-        }
-        copyReset?.cancel()
-        copySummaryButton.title = localised("Copy summary", "Скопировать сводку")
+        showCalendar(for: selected)
+        meetingTranscript.isHidden = true
+        plainTranscriptScroll?.isHidden = false
+        audioPlayer.setMeeting(selected?.dir)
         if versionSession != selected?.dir {
             versionSession = selected?.dir
             versionKey = nil
@@ -935,15 +692,10 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         versionSelector.isHidden = versions.count < 2
         versionKey = selectedVersion.map(key)
 
-        speakersStack.arrangedSubviews.forEach {
-            speakersStack.removeArrangedSubview($0)
-            $0.removeFromSuperview()
-        }
         guard let item = selected else {
             detailTitle.stringValue = items.isEmpty
                 ? localised("No recordings yet", "Записей пока нет")
                 : localised("Select a recording", "Выберите запись")
-            openingLabel.stringValue = ""
             summaryText.string = ""
             transcriptText.string = ""
             diarizationLabel.isHidden = true
@@ -953,14 +705,12 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
             return
         }
 
-        if renamingSession != item.dir { cancelTitleEdit() }
         if renamingSession == nil { detailTitle.stringValue = item.title ?? item.name }
         detailTitle.toolTip = item.title ?? item.name
         updateDiarization(for: item)
         let dir = artifactDirectory ?? item.dir
         if let request = selectedVersion, request.isRequest {
             summaryText.string = ""
-            openingLabel.stringValue = ""
             transcriptText.string = request.title
             if case .failed(let reason) = request.state { transcriptText.string += "\n\n" + reason }
             summaryText.identifier = nil
@@ -978,40 +728,27 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
                 "This summary belongs to the previous transcript.\n\n",
                 "Это сводка предыдущей расшифровки.\n\n") + summaryPreview
         }
-        summaryText.textStorage?.setAttributedString(MarkdownPreview.render(summaryPreview))
+        summaryText.textStorage?.setAttributedString(MarkdownPreview.render(summaryPreview, fontSize: 15))
         let transcript = PostProcessor.readTranscript(dir)
         let markdown = try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)
         let transcriptPreview = markdown ?? transcript?.rendered(
             title: item.title ?? item.name, names: SpeakerNames.read(from: dir))
             ?? localised("No transcript yet.", "Расшифровки пока нет.")
-        transcriptText.textStorage?.setAttributedString(MarkdownPreview.render(transcriptPreview))
+        transcriptText.textStorage?.setAttributedString(MarkdownPreview.render(transcriptPreview, fontSize: 15))
         transcriptText.identifier = markdown != nil || transcript != nil ? .init("meeting-words") : nil
         for text in [summaryText, transcriptText] { text.scrollToBeginningOfDocument(nil) }
         guard let transcript else {
-            openingLabel.stringValue = item.transcript == .pending
-                ? localised("Not transcribed yet.", "Ещё не расшифровано.")
-                : localised(
-                    "No transcript — nothing to name.",
-                    "Расшифровки нет — некому давать имена.")
             updateButtons()
             return
         }
 
         let names = SpeakerNames.read(from: dir)
         var participantChoices: [CalendarParticipant] = []
-        if embedded, let calendar = MeetingCalendarMetadata.read(from: item.dir), calendar.isConfirmed {
-            let invited = NSTextField(wrappingLabelWithString: localised("Invited from Calendar — attendance is not confirmed", "Приглашённые из календаря — присутствие не подтверждено"))
-            invited.font = .systemFont(ofSize: 13, weight: .semibold)
-            speakersStack.addArrangedSubview(invited)
-            for person in calendar.participants {
-                let label = NSTextField(wrappingLabelWithString: person.name + (person.email.map { " · " + $0 } ?? "") + (person.organizer == true ? localised(" · Organizer", " · Организатор") : ""))
-                label.isSelectable = true
-                speakersStack.addArrangedSubview(label)
-            }
+        if let calendar = MeetingCalendarMetadata.read(from: item.dir), calendar.isConfirmed {
             let diarized = DiarizationState.read(dir).map { $0.status == .completed } ?? (!Config.localEngines.contains(transcript.engine) || Set(transcript.segments.map(\.speaker)).count > 2)
             if diarized {
                 participantChoices = calendar.participants
-                meetingTranscript.update(transcript: transcript, names: names, participants: calendar.participants, canEdit: !working && !SessionClaim.isHeld(item.dir) && DiarizationState.persisted(in: dir).isFinal)
+                meetingTranscript.update(transcript: transcript, names: names, participants: calendar.participants, canEdit: !working && !SessionClaim.isHeld(item.dir) && DiarizationState.persisted(in: dir).isFinal, canPlay: !audioPlayer.isHidden)
                 meetingTranscript.onMap = { [weak self] speaker, participant in
                     try PostProcessor.setSpeakerParticipant(speaker, participant: participant, in: dir)
                     self?.showDetail()
@@ -1020,10 +757,13 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
                 plainTranscriptScroll?.isHidden = true
             }
         }
-        openingLabel.stringValue = SessionInventory.opening(of: transcript, names: names)
-            .replacingOccurrences(of: "\n", with: " · ")
+        meetingTranscript.update(transcript: transcript, names: names, participants: participantChoices, canEdit: !working && !SessionClaim.isHeld(item.dir) && DiarizationState.persisted(in: dir).isFinal, canPlay: !audioPlayer.isHidden)
+        meetingTranscript.isHidden = false
+        plainTranscriptScroll?.isHidden = true
         for sample in SessionInventory.samples(transcript: transcript, names: names) {
-            speakersStack.addArrangedSubview(speakerRow(sample, in: dir, transcript: transcript, names: names, participants: participantChoices))
+            let row = speakerRow(sample, in: dir, transcript: transcript, names: names, participants: participantChoices)
+            speakersStack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
         }
         updateButtons()
     }
@@ -1035,19 +775,17 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     /// is what identifies a person by what they were talking about when nobody
     /// said any names at all.
     private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
-        let speaker = embedded ? MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments) : SpeakerNames.described(label: sample.label)
+        let speaker = MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments)
         let label = NSTextField(labelWithString: speaker)
         label.font = .systemFont(ofSize: 12, weight: .medium)
-        label.widthAnchor.constraint(equalToConstant: 80).isActive = true
 
         let field = NSTextField(string: sample.name ?? "")
         field.placeholderString = localised("name", "имя")
-        field.widthAnchor.constraint(equalToConstant: 160).isActive = true
         field.target = self
         field.action = #selector(nameEdited(_:))
         field.identifier = .init("\(dir.path)\n\(sample.label)")
         field.setAccessibilityLabel(localised("Name for \(speaker)", "Имя для \(speaker)"))
-        if embedded && !participants.isEmpty {
+        if !participants.isEmpty {
             field.isHidden = names?.speakers[sample.label]?.participantID != nil
             field.placeholderString = localised("Name without Calendar", "Имя без календаря")
         }
@@ -1060,8 +798,9 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         provenance.textColor = .tertiaryLabelColor
 
         let head = NSStackView(views: [label, field, provenance])
-        head.orientation = .horizontal
-        head.spacing = 8
+        head.orientation = .vertical
+        head.alignment = .leading
+        head.spacing = 6
 
         let quotes = NSTextField(wrappingLabelWithString: [
             sample.first.isEmpty
@@ -1078,8 +817,8 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         let row = NSStackView(views: [head])
         row.orientation = .vertical
         row.alignment = .leading
-        row.spacing = embedded ? 6 : 2
-        if embedded && !participants.isEmpty {
+        row.spacing = 6
+        if !participants.isEmpty {
             let picker = NSPopUpButton()
             MeetingTranscriptView.configureParticipants(picker, speaker: sample.label, names: names, participants: participants, fallback: speaker)
             picker.identifier = .init("participant\n\(dir.path)\n\(sample.label)")
@@ -1092,7 +831,10 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
             picker.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor).isActive = true
         }
         row.addArrangedSubview(quotes)
-        return row
+        for view in [head, field, quotes] { view.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true }
+        field.isEnabled = !working && !SessionClaim.isHeld(selected?.dir ?? dir) && DiarizationState.persisted(in: dir).isFinal
+        return MeetingSpeakerView(title: sample.name ?? speaker, subtitle: speaker,
+                                  unknown: SpeakerNames.isUnknown(sample.label), editor: row)
     }
     @objc private func participantChanged(_ sender: NSPopUpButton) {
         guard sender.isEnabled, let fields = sender.identifier?.rawValue.components(separatedBy: "\n"), fields.count == 3 else { return }
@@ -1115,15 +857,7 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         finishButton.isEnabled = !working && (selectedVersion?.isRequest == true
             ? item?.transcript.isOutstanding ?? false
             : artifactDirectory.map { !PostProcessor.outstanding($0, retryFailed: true).isEmpty } ?? item?.isOutstanding ?? false)
-        if embedded { finishButton.isHidden = !finishButton.isEnabled }
-        retranscribeButton.isEnabled = !working && (item?.hasAudio ?? false)
-        openTranscriptButton.isEnabled = selectedVersion?.isRequest != true && (artifactDirectory.map {
-            PostProcessor.readTranscript($0) != nil || FileManager.default.fileExists(
-                atPath: $0.appendingPathComponent("transcript.md").path)
-        } ?? false)
-        copySummaryButton.isEnabled = summaryToCopy != nil
-        openFolderButton.isEnabled = item != nil
-        deleteButton.isEnabled = !working && item != nil
+        finishButton.isHidden = !finishButton.isEnabled
         let state = item.flatMap { DiarizationState.read($0.dir) }
         let actionable = !working && item?.unreadableDiarization != true
             && state?.retainsAudio == true && state?.status != .running
@@ -1131,27 +865,23 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         skipDiarizationButton.isEnabled = actionable && onSkipDiarization != nil
         busyLabel.isHidden = !working
         busyLabel.stringValue = working ? localised("working…", "работаю…") : ""
-        if embedded {
-            let state = currentActions
-            regenerateButton.isEnabled = state.reason(for: .regenerateSummary) == nil
-            regenerateButton.toolTip = state.reason(for: .regenerateSummary)
-            repeatButton.isEnabled = state.reason(for: .retranscribe) == nil
-            repeatButton.toolTip = state.reason(for: .retranscribe)
-            for button in contentCopyButtons {
-                button.isEnabled = state.reason(for: button.tag < 2 ? .copySummary : .copyTranscript) == nil
-            }
-            summaryHint.stringValue = Self.summaryMethodName(Config.summary().backend)
-            transcriptHint.stringValue = RecordingsEngineName.name(Config.transcriptionLocalEngine())
-                + (Config.localDiarizationEnabled() ? " · " + Config.diarizationModel().title : "")
-        }
+        let actions = currentActions
+        let summaryAction = summaryToCopy == nil ? localised("Generate summary", "Создать сводку") : localised("Regenerate summary", "Перегенерировать сводку")
+        let transcriptAction = localised("Transcribe again", "Расшифровать повторно")
+        regenerateButton.setAccessibilityLabel(summaryAction)
+        regenerateButton.isEnabled = actions.reason(for: .regenerateSummary) == nil
+        regenerateButton.toolTip = actions.reason(for: .regenerateSummary) ?? summaryAction
+        repeatButton.setAccessibilityLabel(transcriptAction)
+        repeatButton.isEnabled = actions.reason(for: .retranscribe) == nil
+        repeatButton.toolTip = actions.reason(for: .retranscribe) ?? transcriptAction
     }
 
     private func updateDiarization(for item: SessionInventory.Item) {
         if item.unreadableDiarization {
             diarizationLabel.isHidden = false
             diarizationLabel.stringValue = localised(
-                "Speaker separation: saved model request cannot be read. Processing is blocked.",
-                "Разделение говорящих: не удалось прочитать сохранённый запрос модели. Обработка заблокирована.")
+                "Diarization: saved model request cannot be read. Processing is blocked.",
+                "Диаризация: не удалось прочитать сохранённый запрос модели. Обработка заблокирована.")
             diarizationLabel.toolTip = diarizationLabel.stringValue
             retryDiarizationButton.isHidden = true
             skipDiarizationButton.isHidden = true
@@ -1169,7 +899,7 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         let actions = state.retainsAudio && state.status != .running
         retryDiarizationButton.isHidden = !actions
         let needsModel = !DiarizationModelStore.isReady(at: DiarizationModelStore.shared(for: state.request.model).directory, model: state.request.model)
-        retryDiarizationButton.title = needsModel ? localised("Download and continue", "Скачать и продолжить") : localised("Retry speaker separation", "Повторить разделение")
+        retryDiarizationButton.title = needsModel ? localised("Download and continue", "Скачать и продолжить") : localised("Retry diarization", "Повторить диаризацию")
         skipDiarizationButton.isHidden = !actions
     }
 
@@ -1180,12 +910,12 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         case .running: stage = localised("running", "выполняется")
         case .deferred: stage = localised("waiting for model", "ожидает модель")
         case .failed: stage = localised("failed", "ошибка")
-        case .partial: stage = localised("incomplete", "не завершено")
-        case .completed: stage = localised("complete", "готово")
-        case .skipped: stage = localised("skipped", "пропущено")
+        case .partial: stage = localised("incomplete", "не завершена")
+        case .completed: stage = localised("complete", "готова")
+        case .skipped: stage = localised("skipped", "пропущена")
         case .notApplicable: stage = localised("not applicable", "не применяется")
         }
-        var parts = [localised("Speaker separation: ", "Разделение говорящих: ") + stage]
+        var parts = [localised("Diarization: ", "Диаризация: ") + stage]
         if state.confirmedSpeakers > 0 {
             parts.append(localised("\(state.confirmedSpeakers) confirmed speakers",
                                    "подтверждённых говорящих: \(state.confirmedSpeakers)"))
@@ -1229,14 +959,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
             working = false
             reload()
         }
-    }
-
-    /// The row-level action belongs only beside a failed transcript whose
-    /// source audio still exists. A generic action column would put buttons
-    /// beside healthy rows and make the failure harder, not easier, to act on.
-    static func inlineRetranscribeTitle(for item: SessionInventory.Item) -> String? {
-        guard case .failed = item.transcript, item.hasAudio else { return nil }
-        return localised("Re-transcribe", "Расшифровать заново")
     }
 
     // MARK: - actions
@@ -1384,16 +1106,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
         alert.beginSheetModal(for: panel)
     }
 
-    /// Confirm recognition because a cloud engine can incur a charge. Existing
-    /// results survive both successful and failed attempts.
-    @objc private func retranscribeClicked() {
-        confirmRetranscription(engine: nil)
-    }
-
-    @objc private func retranscribeWithEngine(_ sender: NSMenuItem) {
-        confirmRetranscription(engine: sender.representedObject as? String)
-    }
-
     private func confirmRetranscription(engine: String?) {
         guard let item = selected, item.hasAudio else { return }
         let alert = NSAlert()
@@ -1409,12 +1121,29 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
             Из звука будет сделана новая расшифровка. Нынешняя расшифровка, имена \
             участников и сводка сохранятся отдельным вариантом.
             """)
+        let enginePicker = NSPopUpButton()
+        enginePicker.addItem(withTitle: localised("Use transcription settings", "По настройкам расшифровки"))
+        for choice in Self.retranscriptionEngines {
+            let locality = Config.localEngines.contains(choice.id) ? localised(" · on Mac", " · на Mac") : localised(" · sends audio to cloud", " · аудио отправляется в облако")
+            enginePicker.addItem(withTitle: choice.title + locality)
+            enginePicker.lastItem?.representedObject = choice.id
+        }
+        if let engine, let index = enginePicker.itemArray.firstIndex(where: { $0.representedObject as? String == engine }) { enginePicker.selectItem(at: index) }
+        enginePicker.setAccessibilityLabel(localised("Transcription engine", "Способ распознавания"))
+        let missing = JournalUnavailableView(.diarizationChoice, title: localised("Diarization model for this run", "Модель диаризации для этого запуска"))
+        let accessory = NSStackView(views: [enginePicker, missing])
+        accessory.orientation = .vertical
+        accessory.alignment = .leading
+        accessory.spacing = 16
+        accessory.frame = NSRect(x: 0, y: 0, width: 390, height: 132)
+        for view in accessory.arrangedSubviews { view.widthAnchor.constraint(equalTo: accessory.widthAnchor).isActive = true }
+        alert.accessoryView = accessory
         alert.addButton(withTitle: localised("Transcribe again", "Расшифровать заново"))
         alert.addButton(withTitle: localised("Cancel", "Отмена"))
         Task { @MainActor in
             guard panel.attachedSheet == nil else { return }
             guard await alert.beginSheetModal(for: panel) == .alertFirstButtonReturn else { return }
-            if let why = Self.markForRetranscription(item.dir, engine: engine) {
+            if let why = Self.markForRetranscription(item.dir, engine: enginePicker.selectedItem?.representedObject as? String) {
                 say(why, about: item)
                 return
             }
@@ -1442,22 +1171,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
             return retranscriptionRefusal(for: dir) ?? nothingOwedLine
         }
         return nil
-    }
-
-    @objc private func inlineRetranscribeClicked(_ sender: NSButton) {
-        guard sender.tag >= 0, sender.tag < items.count else { return }
-        table.selectRowIndexes(IndexSet(integer: sender.tag), byExtendingSelection: false)
-        showDetail()
-        retranscribeClicked()
-    }
-
-    @objc private func chooseImportClicked() { onChooseImport?() }
-
-    @objc private func openRootClicked() {
-        Analytics.track(.artifactOpened, [
-            .artifact: .text(Analytics.Artifact.recordingsRoot.rawValue),
-        ])
-        NSWorkspace.shared.open(root)
     }
 
     @objc private func openTranscriptClicked() {
@@ -1496,43 +1209,6 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
               let text = try? String(contentsOf: dir.appendingPathComponent("summary.md"), encoding: .utf8),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return text
-    }
-
-    @objc private func copySummaryClicked() {
-        guard let summary = summaryToCopy else {
-            updateButtons()
-            return
-        }
-        guard Self.copy(summary: summary, to: pasteboard) else { return }
-        copyReset?.cancel()
-        let title = localised("Copy summary", "Скопировать сводку")
-        copySummaryButton.title = localised("Copied", "Скопировано")
-        copyReset = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled else { return }
-            self?.copySummaryButton.title = title
-        }
-    }
-
-    @discardableResult
-    static func copy(
-        summary: String, to pasteboard: NSPasteboard,
-        rtf: (NSAttributedString) throws -> Data = { rendered in
-            try rendered.data(from: NSRange(location: 0, length: rendered.length),
-                              documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
-        }
-    ) -> Bool {
-        let rendered = NSMutableAttributedString(attributedString: MarkdownPreview.render(summary))
-        let range = NSRange(location: 0, length: rendered.length)
-        // Normalize paragraph boundaries as NSTextStorage does for the preview.
-        rendered.fixAttributes(in: range)
-        // A preview's dynamic label colour becomes fixed in RTF, including white from a dark window.
-        rendered.removeAttribute(.foregroundColor, range: range)
-        let data = try? rtf(rendered)
-        pasteboard.declareTypes(data == nil ? [.string] : [.string, .rtf], owner: nil)
-        guard pasteboard.setString(summary, forType: .string) else { return false }
-        if let data { pasteboard.setData(data, forType: .rtf) }
-        return true
     }
 
     static func readableTranscript(in dir: URL) -> URL? {
@@ -1630,88 +1306,280 @@ final class RecordingsWindow: NSObject, NSTextFieldDelegate {
     /// Called when a session is queued for transcription again, so the daemon
     /// can pick it up without waiting for the next launch.
     var onRetranscribe: ((URL) -> Void)?
+    private static func transcriptionModelName(_ engine: String) -> String {
+        switch engine {
+        case "parakeet": "Parakeet \(Config.transcriptionModel())"
+        case "whisper": "Whisper large-v3-turbo"
+        case "gigaam": "GigaAM v3"
+        case "nemotron": "Nemotron 3.5 ASR · 1120 ms"
+        case "openai": "OpenAI · \(Config.openAITranscriptionModel())"
+        case "elevenlabs": "ElevenLabs · scribe_v2"
+        case "assemblyai": "AssemblyAI" + (Config.assemblyAISpeechModel().map { " · " + $0 } ?? "")
+        default: RecordingsEngineName.name(engine)
+        }
+    }
+
 }
 
-extension RecordingsWindow: NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        if embedded && menu === meetingMenu {
-            let rendered = MeetingActionsMenu.make(state: currentActions, target: self, action: #selector(meetingAction(_:)))
-            menu.removeAllItems()
-            for item in rendered.items { rendered.removeItem(item); menu.addItem(item) }
-            return
-        }
-        let enabled = selected?.hasAudio == true && !working
-        for item in menu.items { item.isEnabled = enabled }
+        guard menu === meetingMenu else { return }
+        let rendered = MeetingActionsMenu.make(state: currentActions, target: self, action: #selector(meetingAction(_:)))
+        menu.removeAllItems()
+        for item in rendered.items { rendered.removeItem(item); menu.addItem(item) }
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
 
     func tableView(
         _ tableView: NSTableView,
-        objectValueFor tableColumn: NSTableColumn?,
-        row: Int
-    ) -> Any? {
-        guard row < items.count, let column = tableColumn?.identifier.rawValue else { return nil }
-        return Self.cell(items[row], column: column)
-    }
-
-    func tableView(
-        _ tableView: NSTableView,
         viewFor tableColumn: NSTableColumn?,
         row: Int
     ) -> NSView? {
-        guard row < items.count, let column = tableColumn?.identifier.rawValue else { return nil }
-        let item = items[row]
-        if embedded { return MeetingListView(item: item, active: activeRecording) }
-        let label = NSTextField(labelWithString: Self.cell(item, column: column) ?? "")
-        label.lineBreakMode = .byTruncatingTail
-
-        guard column == "transcript", let title = Self.inlineRetranscribeTitle(for: item) else {
-            return label
-        }
-
-        let retry = NSButton(
-            title: title, target: self, action: #selector(inlineRetranscribeClicked(_:)))
-        retry.bezelStyle = .rounded
-        retry.controlSize = .mini
-        retry.tag = row
-
-        let cell = NSStackView(views: [label, retry])
-        cell.orientation = .horizontal
-        cell.alignment = .centerY
-        cell.spacing = 6
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        retry.setContentCompressionResistancePriority(.required, for: .horizontal)
-        return cell
+        guard items.indices.contains(row) else { return nil }
+        return MeetingListView(item: items[row], active: activeRecording)
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         showDetail()
+        if !reloadingList { onSelectMeeting?() }
+    }
+}
+
+@MainActor
+private extension MeetingLibraryController {
+    func buildJournal(detail: NSStackView, diarizationActions: NSStackView) -> NSView {
+        search.placeholderString = localised("Find a meeting", "Найти встречу")
+        search.setAccessibilityLabel(localised("Find a meeting", "Найти встречу"))
+        search.target = self
+        search.action = #selector(searchChanged)
+        search.sendsSearchStringImmediately = true
+        search.sendsWholeSearchString = false
+        search.focusRingType = .default
+        for filter in [ApplicationNavigationState.Destination.allMeetings, .processing, .attention] {
+            filterPicker.addItem(withTitle: filter == .allMeetings ? localised("All", "Все") : filter.title)
+        }
+        filterPicker.isBordered = false
+        filterPicker.font = .systemFont(ofSize: 11)
+        filterPicker.target = self
+        filterPicker.action = #selector(filterSelected)
+        filterPicker.setAccessibilityLabel(localised("Filter meetings", "Фильтр встреч"))
+        filterPicker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let listHeading = NSStackView(views: [JournalStyle.caption(localised("MEETINGS", "ВСТРЕЧИ")), NSView(), filterPicker])
+        emptyLabel.identifier = .init("meeting-list.empty")
+        emptyLabel.font = .systemFont(ofSize: 12)
+        emptyLabel.textColor = JournalStyle.muted
+        clearSearch.title = localised("Clear search", "Очистить поиск")
+        clearSearch.target = self
+        clearSearch.action = #selector(clearSearchClicked)
+        emptyView.setViews([emptyLabel, clearSearch, NSView()], in: .center)
+        emptyView.orientation = .vertical
+        emptyView.spacing = 12
+        emptyView.isHidden = true
+        scroll.drawsBackground = false
+        scroll.autohidesScrollers = true
+        scroll.setContentHuggingPriority(.init(1), for: .vertical)
+        let list = NSStackView(views: [search, listHeading, scroll, emptyView])
+        list.orientation = .vertical
+        list.distribution = .fill
+        list.alignment = .leading
+        list.spacing = 16
+        for view in list.arrangedSubviews { view.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true }
+        listContentView = Self.frameOwnedPane(list)
+
+        let copy = NSButton(title: localised("Copy", "Копировать"), target: self, action: #selector(showCopyMenu(_:)))
+        copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+        copy.imagePosition = .imageLeading
+        copy.isBordered = false
+        copy.font = .systemFont(ofSize: 12)
+        copy.identifier = .init("meeting.copy")
+        inspectorButton.image = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: nil)
+        inspectorButton.setAccessibilityLabel(localised("Show or hide meeting details", "Показать или скрыть детали встречи"))
+        inspectorButton.identifier = .init("meeting.inspector")
+        inspectorButton.isBordered = false
+        inspectorButton.target = self
+        inspectorButton.action = #selector(toggleInspector)
+        toolbarContent.setViews([copy, moreButton, inspectorButton], in: .center)
+        toolbarContent.spacing = 20
+        detail.edgeInsets = NSEdgeInsets(top: 36, left: 40, bottom: 18, right: 40)
+        // The document's arranged views fill its readable column, without setting a window minimum.
+        for constraint in detail.constraints where constraint.firstAttribute == .width { constraint.isActive = false }
+        for view in detail.arrangedSubviews { view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -80).isActive = true }
+        detailTitle.maximumNumberOfLines = 2
+        detailMeta.textColor = JournalStyle.muted
+        detail.setCustomSpacing(12, after: detailMeta)
+        detail.setCustomSpacing(24, after: detail.arrangedSubviews[1])
+        detailTabs.setContentHuggingPriority(.init(1), for: .vertical)
+        versionSelector.font = .systemFont(ofSize: 11)
+        versionSelector.isBordered = false
+        versionSelector.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+
+        pipeline.orientation = .vertical
+        pipeline.alignment = .leading
+        pipeline.spacing = 12
+        route.identifier = .init("meeting.processing-configuration")
+        route.font = .systemFont(ofSize: 11)
+        route.textColor = JournalStyle.muted
+        let settings = NSButton(title: localised("Settings →", "Настройки →"), target: self, action: #selector(processingSettings))
+        settings.identifier = .init("meeting.processing-settings")
+        settings.isBordered = false
+        settings.alignment = .left
+        settings.font = .systemFont(ofSize: 11)
+        let inspector = FlippedStackView(views: [
+            JournalStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")),
+            JournalStyle.caption(localised("SPEAKERS", "УЧАСТНИКИ")), speakersStack,
+            SetupLayout.hairline(), JournalStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
+            calendarPicker,
+            SetupLayout.hairline(), JournalStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
+            diarizationLabel, diarizationActions, finishButton, cancelPlaceholder,
+            SetupLayout.hairline(), JournalStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
+        ])
+        inspector.orientation = .vertical
+        inspector.alignment = .leading
+        inspector.spacing = 18
+        inspector.edgeInsets = NSEdgeInsets(top: 30, left: 22, bottom: 24, right: 22)
+        for view in inspector.arrangedSubviews { view.widthAnchor.constraint(equalTo: inspector.widthAnchor, constant: -44).isActive = true }
+        diarizationActions.orientation = .vertical
+        diarizationActions.alignment = .leading
+        for button in [retryDiarizationButton, skipDiarizationButton, finishButton] { button.font = .systemFont(ofSize: 11) }
+        let inspectorScroll = SetupLayout.scroller(around: inspector)
+        let inspectorSurface = JournalSurface(JournalStyle.inset)
+        inspectorSurface.identifier = .init("meeting.inspector-content")
+        inspectorScroll.translatesAutoresizingMaskIntoConstraints = false
+        inspectorSurface.addSubview(inspectorScroll)
+        NSLayoutConstraint.activate([
+            inspectorScroll.leadingAnchor.constraint(equalTo: inspectorSurface.leadingAnchor), inspectorScroll.trailingAnchor.constraint(equalTo: inspectorSurface.trailingAnchor),
+            inspectorScroll.topAnchor.constraint(equalTo: inspectorSurface.topAnchor), inspectorScroll.bottomAnchor.constraint(equalTo: inspectorSurface.bottomAnchor),
+        ])
+        let document = Self.frameOwnedPane(detail)
+        document.identifier = .init("meeting.document")
+        let divider = NSBox(); divider.boxType = .separator
+        divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        let columns = JournalColumns(views: [document, divider, inspectorSurface])
+        columns.identifier = .init("meeting.columns")
+        columns.orientation = .horizontal
+        columns.alignment = .top
+        columns.distribution = .fill
+        columns.spacing = 0
+        for view in columns.arrangedSubviews { view.heightAnchor.constraint(equalTo: columns.heightAnchor).isActive = true }
+        inspectorWidth = inspectorSurface.widthAnchor.constraint(equalToConstant: 270)
+        journalColumns = columns
+        columns.onResize = { [weak self] in self?.updateCompactLayout() }
+        columns.setContentHuggingPriority(.init(1), for: .vertical)
+        importStatus.onCancel = { [weak self] in self?.onCancelImport?() }
+        let undo = NSButton(title: localised("Undo", "Отменить"), target: self, action: #selector(undoDeletion))
+        deletionNotice.setViews([deletionLabel, undo], in: .center)
+        deletionNotice.spacing = 10
+        deletionNotice.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)
+        deletionNotice.isHidden = true
+        let content = NSStackView(views: [importStatus, columns, deletionNotice])
+        content.orientation = .vertical
+        content.distribution = .fill
+        content.spacing = 0
+        content.alignment = .leading
+        for view in content.arrangedSubviews { view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true }
+        let container = MediaDropView()
+        container.onFiles = { [weak self] in self?.onImportFiles?($0) }
+        let frame = Self.frameOwnedPane(content)
+        frame.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(frame)
+        NSLayoutConstraint.activate([
+            frame.leadingAnchor.constraint(equalTo: container.leadingAnchor), frame.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            frame.topAnchor.constraint(equalTo: container.topAnchor), frame.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
     }
 
-    /// One cell, as words. Apart from the data source this is what
-    /// `listLines` reads, so that the suite and the window cannot disagree
-    /// about what a row says.
-    static func cell(_ item: SessionInventory.Item, column: String) -> String? {
-        switch column {
-        case "when":
-            return item.started.map { SessionInventory.Item.stamp.string(from: $0) } ?? item.name
-        case "meeting":
-            let length = item.duration.map {
-                localised(" · \(Int($0 / 60))m", " · \(Int($0 / 60)) мин")
-            } ?? ""
-            return (item.title ?? item.name) + length
-        case "transcript":
-            return item.transcript.described + (item.engine.map { " (\($0))" } ?? "")
-        case "names":
-            guard let counts = item.namedSpeakers, counts.total > 0 else {
-                return item.speakers.described
+    func updateInspector() {
+        pipeline.arrangedSubviews.forEach { pipeline.removeArrangedSubview($0); $0.removeFromSuperview() }
+        if let item = selected {
+            for stage in MeetingPresentation.stages(item, active: activeRecording).filter({ $0.symbol != "calendar" }) {
+                let image = MeetingListView.icon(stage)
+                let title = stage.symbol == "mic" && activeRecording?.dir != item.dir && !item.hasAudio ? localised("Audio not retained", "Аудио не сохранено") : stage.title
+                let label = NSTextField(wrappingLabelWithString: (stage.state == .pending ? localised("Waiting: ", "Ожидание: ") : "") + title)
+                label.font = .systemFont(ofSize: 11)
+                label.setContentHuggingPriority(.init(1), for: .horizontal)
+                label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+                let row = NSStackView(views: [image, label])
+                row.spacing = 10
+                if stage.symbol == "doc.text" {
+                    row.identifier = .init("meeting.processing-transcript")
+                    row.addArrangedSubview(repeatButton)
+                } else if stage.symbol == "checklist" {
+                    row.identifier = .init("meeting.processing-summary")
+                    row.addArrangedSubview(regenerateButton)
+                }
+                pipeline.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: pipeline.widthAnchor).isActive = true
             }
-            return "\(counts.named)/\(counts.total)"
-        case "summary":
-            return item.summary.described
-        default:
-            return nil
         }
+        if speakersStack.arrangedSubviews.isEmpty {
+            let message = NSTextField(wrappingLabelWithString: localised("Speakers appear after transcription.", "Участники появятся после расшифровки."))
+            message.font = .systemFont(ofSize: 12)
+            message.textColor = JournalStyle.muted
+            speakersStack.addArrangedSubview(message)
+            message.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
+        }
+        updateButtons()
+        cancelPlaceholder.isHidden = !(working || selected.map { SessionClaim.isHeld($0.dir) } == true)
+        let choice = TranscriptionChoice.read(engine: Config.transcriptionEngine(),
+            cloudProvider: Config.transcriptionCloudProvider(), enabled: Config.transcriptionEnabled(),
+            localModels: Platform.supportsLocalModels, localEngine: Config.transcriptionLocalEngine())
+        let transcription = [choice.cloud ? Self.transcriptionModelName(choice.provider) : nil,
+                             choice.local ? Self.transcriptionModelName(choice.localEngine) : nil].compactMap { $0 }
+        let diarization = [choice.cloud ? localised("Built into ", "Встроенная в ") + RecordingsEngineName.name(choice.provider) : nil,
+                           choice.local && Config.localDiarizationEnabled() ? Config.diarizationModel().title : nil].compactMap { $0 }
+        let disabled = localised("Disabled", "Отключена")
+        route.stringValue = localised("Transcription: ", "Расшифровка: ") + (transcription.isEmpty ? disabled : transcription.joined(separator: " → "))
+            + "\n" + localised("Diarization: ", "Диаризация: ") + (diarization.isEmpty ? disabled : diarization.joined(separator: " / "))
+            + "\n" + localised("Summary: ", "Сводка: ") + (Config.summary().enabled ? Self.summaryMethodName(Config.summary().backend) : disabled)
+    }
+
+}
+
+extension MeetingLibraryController {
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        62
+    }
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        JournalMeetingRow()
+    }
+}
+
+@MainActor
+private final class JournalMeetingRow: NSTableRowView {
+    private var hover = false
+    private var tracking: NSTrackingArea?
+    override var interiorBackgroundStyle: NSView.BackgroundStyle { .normal }
+    override func drawBackground(in dirtyRect: NSRect) {
+        super.drawBackground(in: dirtyRect)
+        if hover && !isSelected { drawHighlight(JournalStyle.selection.withAlphaComponent(0.5)) }
+    }
+    override func drawSelection(in dirtyRect: NSRect) {
+        drawHighlight(JournalStyle.selection)
+    }
+    private func drawHighlight(_ color: NSColor) {
+        color.setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6).fill()
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { hover = true; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hover = false; needsDisplay = true }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+}
+
+@MainActor
+private final class JournalColumns: NSStackView {
+    var onResize: (() -> Void)?
+    private var lastWidth: CGFloat = -1
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if lastWidth != newSize.width { lastWidth = newSize.width; onResize?() }
     }
 }

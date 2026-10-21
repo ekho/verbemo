@@ -4,25 +4,31 @@ import Testing
 @testable import verbemo
 
 @Suite(.serialized, .freshHome(config: #"{"speaker_names":{"enabled":false},"summary":{"enabled":false}}"#))
+@MainActor
 struct RecordingsCopySummaryTests {
-    @Test("Copy is unavailable without a selected recording")
-    @MainActor
+    private func invoke(_ item: NSMenuItem) throws {
+        #expect(NSApp.sendAction(try #require(item.action), to: item.target, from: item))
+    }
+
+    @Test("Copy menu actions are unavailable without a selected recording")
     func noRecording() throws {
-        _ = NSApplication.shared
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
-        let window = RecordingsWindow(root: Home.current.url, pasteboard: pasteboard)
-        let button = try #require(window.view?.allDescendants.compactMap { $0 as? NSButton }.first {
-            $0.identifier?.rawValue == "copy-summary"
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: Home.current.url, pasteboard: pasteboard, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let button = try #require(library.toolbarContent.allDescendants.compactMap { $0 as? NSButton }.first {
+            $0.identifier?.rawValue == "meeting.copy"
         })
-        #expect(!button.isEnabled)
-        withExtendedLifetime(window) {}
+        #expect(button.target === library)
+        #expect(button.action != nil)
+        #expect(library.makeCopyMenu().items.allSatisfy { !$0.isEnabled })
     }
 
     @Test("Copy follows current and archived versions and refuses a pending request")
-    @MainActor
     func selectedVersion() async throws {
-        _ = NSApplication.shared
         let root = Home.current.url.appendingPathComponent("recordings")
         let session = root.appendingPathComponent("2026-10-20-meeting")
         let archive = session.appendingPathComponent("transcripts/old")
@@ -38,56 +44,49 @@ struct RecordingsCopySummaryTests {
         try Data("gigaam".utf8).write(to: session.appendingPathComponent(TranscriptVersions.requestFile))
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
-        let window = RecordingsWindow(root: root, pasteboard: pasteboard)
-        let views = try #require(window.view).allDescendants
-        let button = try #require(views.compactMap { $0 as? NSButton }.first {
-            $0.identifier?.rawValue == "copy-summary"
-        })
-        let selector = try #require(views.compactMap { $0 as? NSPopUpButton }.first {
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, pasteboard: pasteboard, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let selector = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }.first {
             $0.identifier?.rawValue == "transcript-versions"
         })
         #expect(selector.numberOfItems == 3)
         #expect(selector.indexOfSelectedItem == 1)
-        #expect(button.isEnabled)
-        #expect(button.keyEquivalent == "c")
-        #expect(button.keyEquivalentModifierMask == [.command, .shift])
-        // performClick's animation can stop the async Swift Testing runner's main run loop.
-        #expect(button.sendAction(button.action, to: button.target))
+        let copy = library.makeCopyMenu().items[1]
+        #expect(copy.isEnabled)
+        try invoke(copy)
         #expect(pasteboard.string(forType: .string) == "## Current\n\n- New result\n")
-        #expect(button.title == "Copied")
         selector.selectItem(at: 0)
         selector.sendAction(selector.action, to: selector.target)
-        #expect(button.title == "Copy summary")
-        #expect(button.sendAction(button.action, to: button.target))
+        try invoke(copy)
         #expect(pasteboard.string(forType: .string) == "## Archived\n\n- Old result\n")
-        window.show()
-        await window.settled()
+        library.refresh()
+        await library.settled()
         #expect(selector.indexOfSelectedItem == 0)
         selector.selectItem(at: 2)
         selector.sendAction(selector.action, to: selector.target)
-        #expect(!button.isEnabled)
-        // Even a stale action must not copy the completed result beside this request.
-        button.sendAction(button.action, to: button.target)
+        #expect(library.makeCopyMenu().items.allSatisfy { !$0.isEnabled })
+        // A menu opened for a completed version cannot copy after the selection changes.
+        try invoke(copy)
         #expect(pasteboard.string(forType: .string) == "## Archived\n\n- Old result\n")
         selector.selectItem(at: 0)
         selector.sendAction(selector.action, to: selector.target)
         try FileManager.default.removeItem(at: archive.appendingPathComponent("summary.md"))
-        #expect(button.sendAction(button.action, to: button.target))
-        #expect(!button.isEnabled)
+        try invoke(copy)
+        #expect(!library.makeCopyMenu().items[1].isEnabled)
         #expect(pasteboard.string(forType: .string) == "## Archived\n\n- Old result\n")
-        window.show()
-        await window.settled()
-        #expect(!button.isEnabled)
+        library.refresh()
+        await library.settled()
+        #expect(!library.makeCopyMenu().items[1].isEnabled)
         selector.selectItem(at: 1)
         selector.sendAction(selector.action, to: selector.target)
-        #expect(button.isEnabled)
-        withExtendedLifetime(window) {}
+        #expect(library.makeCopyMenu().items[1].isEnabled)
     }
 
     @Test("Missing, empty and unreadable summaries disable copying", arguments: ["missing", "empty", "blank", "invalid", "denied"])
-    @MainActor
     func unavailableSummary(_ state: String) throws {
-        _ = NSApplication.shared
         let root = Home.current.url.appendingPathComponent("recordings")
         let dir = root.appendingPathComponent("meeting")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -108,88 +107,58 @@ struct RecordingsCopySummaryTests {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setString("Keep clipboard", forType: .string)
-        let window = RecordingsWindow(root: root, pasteboard: pasteboard)
-        let button = try #require(window.view?.allDescendants.compactMap { $0 as? NSButton }.first {
-            $0.identifier?.rawValue == "copy-summary"
-        })
-        #expect(!button.isEnabled)
-        button.sendAction(button.action, to: button.target)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, pasteboard: pasteboard, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let copy = library.makeCopyMenu().items[1]
+        #expect(!copy.isEnabled)
+        try invoke(copy)
         #expect(pasteboard.string(forType: .string) == "Keep clipboard")
-        withExtendedLifetime(window) {}
     }
 
-    @Test("Copy offers Markdown and formatted RTF without a fixed text colour", arguments: [NSAppearance.Name.aqua, .darkAqua])
-    @MainActor
-    func pasteboardFormats(_ appearance: NSAppearance.Name) throws {
-        let pasteboard = NSPasteboard.withUniqueName()
-        defer { pasteboard.releaseGlobally() }
-        let markdown = "## Решения\n\n- **First**\n- Second\n"
-        try #require(NSAppearance(named: appearance)).performAsCurrentDrawingAppearance {
-            #expect(RecordingsWindow.copy(summary: markdown, to: pasteboard))
-        }
-        #expect(pasteboard.string(forType: .string) == markdown)
-        let rtf = try #require(pasteboard.data(forType: .rtf))
-        let pasted = try NSAttributedString(data: rtf,
-            options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil)
-        #expect(pasted.string == "Решения\n• First\n• Second")
-        let first = (pasted.string as NSString).range(of: "First")
-        let font = try #require(pasted.attribute(.font, at: first.location, effectiveRange: nil) as? NSFont)
-        #expect(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
-        // Cocoa writes a default colour table even for uncoloured text; cf0 is automatic.
-        #expect(String(decoding: rtf, as: UTF8.self).range(of: #"\\cf[1-9]"#,
-                                                        options: .regularExpression) == nil)
-    }
-
-    @Test("A failed RTF conversion still replaces the clipboard with Markdown")
-    @MainActor
-    func textFallback() {
+    @Test("The copy menu offers plain text and Markdown and clears stale rich text")
+    func pasteboardFormats() throws {
+        let root = Home.current.url.appendingPathComponent("recordings")
+        let dir = root.appendingPathComponent("meeting")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: dir.appendingPathComponent("meta.json"))
+        let markdown = "## Решения\n\n- **First**\n  - Nested\n"
+        try Data(markdown.utf8).write(to: dir.appendingPathComponent("summary.md"))
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setData(Data("old".utf8), forType: .rtf)
-        #expect(RecordingsWindow.copy(summary: "# Plain fallback", to: pasteboard, rtf: { _ in
-            throw CocoaError(.fileWriteUnknown)
-        }))
-        #expect(pasteboard.string(forType: .string) == "# Plain fallback")
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, pasteboard: pasteboard, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let menu = library.makeCopyMenu()
+        try invoke(menu.items[0])
+        #expect(pasteboard.string(forType: .string) == "Решения\n• First\n• Nested")
         #expect(pasteboard.data(forType: .rtf) == nil)
+        try invoke(menu.items[1])
+        #expect(pasteboard.string(forType: .string) == markdown)
     }
 
-    @Test("Copied RTF preserves nested paragraph indentation")
-    @MainActor
-    func richTextListIndents() throws {
-        let pasteboard = NSPasteboard.withUniqueName()
-        defer { pasteboard.releaseGlobally() }
-        RecordingsWindow.copy(summary: "- Stages:\n  1. Upload\n  2. Generate\n\nTail", to: pasteboard)
-        let rtf = try #require(pasteboard.data(forType: .rtf))
-        let pasted = try NSAttributedString(data: rtf,
-            options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil)
-        let range = (pasted.string as NSString).range(of: "1. Upload")
-        try #require(range.location != NSNotFound)
-        let paragraph = try #require(pasted.attribute(.paragraphStyle, at: range.location,
-                                                      effectiveRange: nil) as? NSParagraphStyle)
-        #expect(paragraph.firstLineHeadIndent == 20)
-        #expect(paragraph.headIndent == 40)
-    }
-
-    @Test("The copy action confirms in the interface language", arguments: InterfaceLanguage.allCases)
-    @MainActor
-    func localizedConfirmation(_ language: InterfaceLanguage) throws {
+    @Test("The copy button and menu use the interface language", arguments: InterfaceLanguage.allCases)
+    func localizedCopyMenu(_ language: InterfaceLanguage) throws {
         try InterfaceLanguage.$scoped.withValue(language) {
-            _ = NSApplication.shared
-            let root = Home.current.url.appendingPathComponent("recordings")
-            let session = root.appendingPathComponent("meeting")
-            try FileManager.default.createDirectory(at: session, withIntermediateDirectories: true)
-            try Data("{}".utf8).write(to: session.appendingPathComponent("meta.json"))
-            try Data("Summary".utf8).write(to: session.appendingPathComponent("summary.md"))
             let pasteboard = NSPasteboard.withUniqueName()
             defer { pasteboard.releaseGlobally() }
-            let window = RecordingsWindow(root: root, pasteboard: pasteboard)
-            let button = try #require(window.view?.allDescendants.compactMap { $0 as? NSButton }.first {
-                $0.identifier?.rawValue == "copy-summary"
+            let app = ApplicationWindow()
+            let library = MeetingLibraryController(root: Home.current.url, pasteboard: pasteboard, hostWindow: app.panel)
+            app.libraryProvider = { library }
+            app.navigate(.allMeetings)
+            defer { withExtendedLifetime(app) {} }
+            let button = try #require(library.toolbarContent.allDescendants.compactMap { $0 as? NSButton }.first {
+                $0.identifier?.rawValue == "meeting.copy"
             })
-            #expect(button.title == (language == .english ? "Copy summary" : "Скопировать сводку"))
-            #expect(button.sendAction(button.action, to: button.target))
-            #expect(button.title == (language == .english ? "Copied" : "Скопировано"))
-            withExtendedLifetime(window) {}
+            #expect(button.title == (language == .english ? "Copy" : "Копировать"))
+            #expect(library.makeCopyMenu().items.map(\.title) == (language == .english
+                ? ["Summary · Text", "Summary · Markdown", "Transcript · Text", "Transcript · Markdown"]
+                : ["Сводка · Текст", "Сводка · Markdown", "Расшифровка · Текст", "Расшифровка · Markdown"]))
         }
     }
 }

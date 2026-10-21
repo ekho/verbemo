@@ -18,7 +18,7 @@ import Foundation
 /// connection the person was trying to spare — and the space they thought
 /// they had freed is gone again without anybody being told.
 struct ModelStorage {
-    enum StorageError: Error { case useDiarizationStore }
+    enum StorageError: Error { case useDiarizationStore, useNemotronStore }
     /// One model, as a person is shown it.
     struct Model: Equatable {
         /// Which switch in the setup form asks for this model. The version is
@@ -28,7 +28,7 @@ struct ModelStorage {
             case parakeet
             case whisper
             case gigaAM
-            case live
+            case nemotron
             case diarization
         }
 
@@ -62,14 +62,14 @@ struct ModelStorage {
         }
     }
 
-    private let live: LiveTranscriptionModelStore
+    private let live: NemotronModelStore
     private let whisper: WhisperModelStore
     private let gigaAM: GigaAMModelStore
     private let parakeetCache: @Sendable (AsrModelVersion) -> URL
     private let diarizationDirectory: URL
 
     init(
-        live: LiveTranscriptionModelStore = LiveTranscriptionModelStore(),
+        live: NemotronModelStore = NemotronModelStore(),
         whisper: WhisperModelStore = WhisperModelStore(),
         gigaAM: GigaAMModelStore = GigaAMModelStore(),
         diarizationDirectory: URL = DiarizationModelStore.shared.directory,
@@ -99,7 +99,7 @@ struct ModelStorage {
         }
         models.append(whisperModel())
         models.append(gigaAMModel())
-        models.append(liveModel())
+        models.append(nemotronModel())
         models.append(contentsOf: DiarizationModel.allCases.map(diarizationModel))
         return models
     }
@@ -109,7 +109,7 @@ struct ModelStorage {
         switch model.kind {
         case .parakeet:
             return AsrModels.modelsExist(at: model.directory, version: model.name.hasSuffix("v2") ? .v2 : .v3)
-        case .live:
+        case .nemotron:
             return live.isReady(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
         case .whisper, .gigaAM, .diarization:
             return model.isDownloaded
@@ -144,10 +144,10 @@ struct ModelStorage {
             advertisedBytes: Int(GigaAMModelStore.advertisedDownloadBytes))
     }
 
-    func liveModel() -> Model {
+    func nemotronModel() -> Model {
         Model(
-            kind: .live,
-            name: "NVIDIA nemotron",
+            kind: .nemotron,
+            name: NemotronModelStore.title,
             directory: live.modelDirectory,
             bytes: Self.bytes(of: live.modelDirectory),
             advertisedBytes: 600 * 1_048_576)
@@ -178,6 +178,7 @@ struct ModelStorage {
     /// the state its downloader is worst at recovering from.
     func delete(_ model: Model) throws {
         if model.kind == .diarization { throw StorageError.useDiarizationStore }
+        if model.kind == .nemotron { throw StorageError.useNemotronStore }
         guard FileManager.default.fileExists(atPath: model.directory.path) else { return }
         try FileManager.default.removeItem(at: model.directory)
     }
@@ -208,15 +209,19 @@ struct ModelStorage {
             case .parakeet: deleted = "parakeet"
             case .whisper: deleted = "whisper"
             case .gigaAM: deleted = "gigaam"
-            case .live, .diarization: preconditionFailure("handled below")
+            case .nemotron, .diarization: preconditionFailure("handled below")
             }
             guard choice.local, choice.localEngine == deleted else { return [] }
             return TranscriptionChoice(
                 cloud: choice.cloud, local: false,
                 provider: choice.provider, localEngine: choice.localEngine)
                 .updates
-        case .live:
-            return liveEnabled ? [(["live_transcription", "enabled"], nil)] : []
+        case .nemotron:
+            var updates: [(path: [String], value: Any?)] = liveEnabled ? [(["live_transcription", "enabled"], nil)] : []
+            if choice.local, choice.localEngine == "nemotron" {
+                updates += TranscriptionChoice(cloud: choice.cloud, local: false, provider: choice.provider, localEngine: choice.localEngine).updates
+            }
+            return updates
         }
     }
 
