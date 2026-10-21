@@ -16,6 +16,7 @@ final class ApplicationWindow: NSObject {
     private lazy var live = LiveTranscriptContent()
     private lazy var liveView: LiveTranscriptView = {
         let view = LiveTranscriptView(content: live.contentView)
+        view.readAudioLevels = { [weak self] in self?.readAudioLevels?() ?? (.off, .off) }
         view.onRename = { [weak self] name in
             guard let self, let rename = self.onRenameRecording else { throw CocoaError(.fileNoSuchFile) }
             try rename(name)
@@ -24,6 +25,7 @@ final class ApplicationWindow: NSObject {
         return view
     }()
     var isProcessing: (() -> Bool)?
+    var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
     var onRenameRecording: ((String) throws -> Void)?
     lazy var settings: SettingsController = {
         let settings = SettingsController(hostWindow: panel)
@@ -214,6 +216,7 @@ final class ApplicationWindow: NSObject {
     func update(state: MenuBarController.State, elapsed: String?) {
         let wasRecording = recordingBarIsVisible
         recordingBar.update(state: state, elapsed: elapsed)
+        liveView.refreshAudioLevels()
         if wasRecording && state == .idle && showingLive { navigate(.allMeetings) }
         sidebar.updateRecording(state != .idle)
         if state != .idle { recordingSheet?.cancel() }

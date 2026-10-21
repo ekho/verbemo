@@ -15,6 +15,7 @@ final class FakeMicRecorder: MicTrackRecorder {
     var firstBufferAt: Date?
     var lastSoundAt: Date?
     var levelMeasurable = true
+    var audioLevel: AudioMeter.Reading = .unavailable
     var isMuted = false
     var capture = MicRecorder.Capture(
         requestedVoiceProcessing: false, initialVoiceProcessing: false,
@@ -43,6 +44,7 @@ final class FakeSystemRecorder: SystemTrackRecorder {
     var firstBufferAt: Date?
     var lastSoundAt: Date?
     var levelMeasurable = true
+    var audioLevel: AudioMeter.Reading = .unavailable
     var isMuted = false
 
     func start(writingTo url: URL, scope: SystemAudioRecorder.Scope) throws {

@@ -46,7 +46,7 @@ class JournalSurface: NSView {
 @MainActor
 final class JournalUnavailableView: NSStackView {
     enum Feature: Int, CaseIterable {
-        case audioLevels = 26, summaryProvider = 28, diarizationChoice, cancelProcessing
+        case summaryProvider = 28, diarizationChoice, cancelProcessing
     }
     let feature: Feature
     init(_ feature: Feature, title: String? = nil) {

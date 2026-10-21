@@ -353,6 +353,10 @@ final class RecordingSession {
 
     // MARK: - levels
 
+    var audioLevels: (mic: AudioMeter.Reading, system: AudioMeter.Reading) {
+        (mic.audioLevel, system.audioLevel)
+    }
+
     /// When either track last carried something audible. The auto-record
     /// controller's silence backstop reads this; nil means nothing has been
     /// heard on that track yet.

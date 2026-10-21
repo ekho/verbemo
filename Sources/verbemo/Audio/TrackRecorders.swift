@@ -16,6 +16,7 @@ protocol MicTrackRecorder: AnyObject {
     var firstBufferAt: Date? { get }
     var lastSoundAt: Date? { get }
     var levelMeasurable: Bool { get }
+    var audioLevel: AudioMeter.Reading { get }
     var isMuted: Bool { get set }
     var capture: MicRecorder.Capture { get }
     var restarts: [MicRecorder.Restart] { get }
@@ -33,6 +34,7 @@ protocol SystemTrackRecorder: AnyObject {
     var firstBufferAt: Date? { get }
     var lastSoundAt: Date? { get }
     var levelMeasurable: Bool { get }
+    var audioLevel: AudioMeter.Reading { get }
     var isMuted: Bool { get set }
     func installLiveAudioSink(_ sink: LiveAudioBufferRelay.Sink?)
     func setLiveAudioPaused(_ paused: Bool)

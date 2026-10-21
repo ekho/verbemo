@@ -63,6 +63,7 @@ final class SystemAudioRecorder {
         var firstBufferAt: Date?
         var lastSoundAt: Date?
         var levelMeasurable = true
+        var meter = AudioMeter()
         var muted = false
     }
     private let state = OSAllocatedUnfairLock(initialState: LockedState())
@@ -74,11 +75,16 @@ final class SystemAudioRecorder {
     /// False once a buffer arrived in a sample format we can't measure.
     var levelMeasurable: Bool { state.withLock { $0.levelMeasurable } }
 
+    var audioLevel: AudioMeter.Reading {
+        let running = isRecording
+        return state.withLock { $0.meter.read(running: running, paused: $0.muted) }
+    }
+
     /// While muted the tap keeps running and silence is written instead of the
     /// audio, so the track stays wall-clock aligned across a pause.
     var isMuted: Bool {
         get { state.withLock { $0.muted } }
-        set { state.withLock { $0.muted = newValue } }
+        set { state.withLock { $0.muted = newValue; $0.meter.reset() } }
     }
 
     private var file: AVAudioFile? {
@@ -98,6 +104,7 @@ final class SystemAudioRecorder {
     /// already written).
     func start(writingTo url: URL, scope: Scope = .everything) throws {
         guard !isRecording else { return }
+        state.withLock { $0.meter.reset() }
 
         let (description, objects) = Self.describe(scope)
         self.scope = objects.isEmpty ? .everything : scope
@@ -179,6 +186,7 @@ final class SystemAudioRecorder {
         }
         tappedObjects = objects
         scope = newScope
+        state.withLock { $0.meter.reset() }
         FileHandle.standardError.write(Data(
             "system tap: now following \(objects.count) process(es)\n".utf8
         ))
@@ -296,7 +304,9 @@ final class SystemAudioRecorder {
     /// substituting silence while paused.
     private func writeTracked(_ buffer: AVAudioPCMBuffer, to file: AVAudioFile) {
         let peak = AudioLevel.peak(of: buffer)
+        let hasFrames = buffer.frameLength > 0
         let muted: Bool = state.withLock { s in
+            if !s.muted, hasFrames { s.meter.record(peak: peak) }
             if let peak {
                 if peak >= AudioLevel.speechThreshold { s.lastSoundAt = Date() }
             } else {
@@ -334,5 +344,6 @@ final class SystemAudioRecorder {
             tapID = AudioObjectID(kAudioObjectUnknown)
         }
         file = nil
+        state.withLock { $0.meter.reset() }
     }
 }
