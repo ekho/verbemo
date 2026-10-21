@@ -8,6 +8,7 @@ final class ApplicationWindow: NSObject {
     private let recordingBar = RecordingBarView()
     private let toolbar = NSStackView()
     private let title = NSButton()
+    private let heading = NSTextField(labelWithString: "")
     private let actions = NSStackView()
     private let start = NSButton()
     private let contentHost = NSView()
@@ -66,6 +67,8 @@ final class ApplicationWindow: NSObject {
         recordingBar.onPause = { [weak self] in self?.pauseRecording() }
         recordingBar.onStop = { [weak self] in self?.stopRecording() }
         title.isBordered = false
+        heading.font = .systemFont(ofSize: 22, weight: .semibold)
+        heading.textColor = .labelColor
         title.alignment = .left
         title.font = .systemFont(ofSize: 22, weight: .semibold)
         title.target = self
@@ -87,7 +90,7 @@ final class ApplicationWindow: NSObject {
         actions.spacing = 8
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        toolbar.setViews([title, spacer, actions], in: .center)
+        toolbar.setViews([heading, title, spacer, actions], in: .center)
         toolbar.distribution = .fill
         toolbar.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)
         toolbar.heightAnchor.constraint(equalToConstant: 60).isActive = true
@@ -136,7 +139,7 @@ final class ApplicationWindow: NSObject {
         sidebar.select(destination)
         toolbar.isHidden = destination == .about
         title.title = destination.title
-        title.isEnabled = destination.isMeetings && destination != .allMeetings
+        updateHeading(canReturn: destination.isMeetings && destination != .allMeetings)
         actions.isHidden = destination != .allMeetings
         let content: NSView
         if destination.isMeetings, let library = libraryProvider?() {
@@ -144,7 +147,7 @@ final class ApplicationWindow: NSObject {
             library.applyFilter(destination)
             library.onDetailVisibilityChange = { [weak self] visible in
                 guard let self, self.navigation.destination.isMeetings else { return }
-                self.title.isEnabled = self.showingLive || visible || self.navigation.destination != .allMeetings
+                self.updateHeading(canReturn: self.showingLive || visible || self.navigation.destination != .allMeetings)
             }
             content = library.contentView
         } else if destination == .about {
@@ -166,6 +169,19 @@ final class ApplicationWindow: NSObject {
             view.leadingAnchor.constraint(equalTo: contentHost.leadingAnchor), view.trailingAnchor.constraint(equalTo: contentHost.trailingAnchor),
         ])
     }
+    private func updateHeading(canReturn: Bool) {
+        heading.stringValue = title.title
+        heading.isHidden = canReturn
+        title.isHidden = !canReturn
+        title.isEnabled = true
+    }
+    func presentSetup(_ setup: SetupWindow) {
+        showingLive = false
+        toolbar.isHidden = true
+        actions.isHidden = true
+        mount(setup.contentView)
+        setup.show()
+    }
     func showActiveRecording() {
         guard recordingBarIsVisible else { return }
         showingLive = true
@@ -174,7 +190,7 @@ final class ApplicationWindow: NSObject {
         navigation.resultTab = "transcript"
         toolbar.isHidden = false
         title.title = ApplicationNavigationState.Destination.allMeetings.title
-        title.isEnabled = true
+        updateHeading(canReturn: true)
         actions.isHidden = false
         sidebar.select(.allMeetings)
         mount(liveView)

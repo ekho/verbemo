@@ -27,6 +27,7 @@ final class CalendarWatcher {
         var agenda: String? = nil
         var participants: [CalendarParticipant] = []
         var hasPersistentID = true
+        var timeZoneIdentifier: String? = nil
     }
 
     private static let matchWindow: TimeInterval = 8 * 60
@@ -137,7 +138,8 @@ final class CalendarWatcher {
                     email: participant.url.scheme == "mailto" ? participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "") : nil,
                     organizer: participant.url == event.organizer?.url)
             },
-            hasPersistentID: event.eventIdentifier?.isEmpty == false
+            hasPersistentID: event.eventIdentifier?.isEmpty == false,
+            timeZoneIdentifier: event.timeZone?.identifier
         )
     }
 

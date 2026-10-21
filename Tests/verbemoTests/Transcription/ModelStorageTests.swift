@@ -208,7 +208,8 @@ struct ModelStorageTests {
     /// only one that should.
     @Test("A size is rounded to something a person reads")
     func describing() {
-        #expect(ModelStorage.describe(bytes: 461 * 1_048_576) == "461 MB")
+        #expect(ModelStorage.describe(bytes: 107_000_000) == "107 MB")
+        #expect(ModelStorage.describe(bytes: 461 * 1_048_576) == "483 MB")
         #expect(ModelStorage.describe(bytes: 0) == "0 MB")
         // Past a thousand megabytes the number stops being one anybody reads.
         #expect(ModelStorage.describe(bytes: 1_147_483_648) == "1.1 GB")

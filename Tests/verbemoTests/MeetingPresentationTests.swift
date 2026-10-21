@@ -63,7 +63,7 @@ struct MeetingMenuTests {
             hasAudio: true, isRecording: false, isBusy: false,
             configReadable: true, transcriptionEnabled: true, summaryEnabled: true)
         let menu = MeetingActionsMenu.make(state: state, target: NSObject(), action: NSSelectorFromString("run:"))
-        #expect(menu.items.map(\.title) == ["Переименовать", "Копировать транскрипцию", "Расшифровать повторно", "Копировать сводку", "Перегенерировать сводку", "Открыть папку в Finder", "", "Удалить"])
+        #expect(menu.items.map(\.title) == ["Переименовать", "Копировать транскрипцию", "Расшифровать повторно", "Копировать сводку", "Перегенерировать сводку", "Открыть папку в Finder", "Открыть во внешнем редакторе", "", "Удалить"])
         #expect(!menu.items[1].isEnabled)
         #expect(menu.items[2].isEnabled)
         #expect(!menu.items[3].isEnabled)

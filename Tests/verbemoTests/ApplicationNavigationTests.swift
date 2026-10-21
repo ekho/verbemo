@@ -46,7 +46,7 @@ struct ApplicationWindowTests {
         #expect(library.contentView.bounds.width >= available - 2)
         let split = try #require(library.contentView.allDescendants.compactMap { $0 as? NSSplitView }.first)
         #expect(split.bounds.width >= available - 32)
-        let heading = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.font?.pointSize == 22 })
+        let heading = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSTextField }.first { $0.font?.pointSize == 22 && !$0.isHiddenOrHasHiddenAncestor })
         #expect(heading.bounds.width >= heading.fittingSize.width)
     }
     @Test(.freshHome) func reopeningRefreshesMeetingsChangedWhileHidden() async throws {

@@ -237,11 +237,13 @@ final class AppController {
     /// Built on first use, like the others, and for a stronger reason: most
     /// copies of verbemo will never be asked who wrote them.
     private lazy var setupWindow: SetupWindow = {
-        let setup = SetupWindow()
+        let setup = SetupWindow(hostWindow: window.panel)
         setup.isRecording = { [weak self] in self?.isRecording == true }
         setup.onFinished = { [weak self] in
             self?.startAutomaticFeatures(requestCalendarAccess: false)
             self?.offerSetup()
+            self?.window.navigate(.allMeetings)
+            self?.window.bringToFront()
         }
         return setup
     }()
@@ -1049,7 +1051,7 @@ final class AppController {
     func showSetup() {
         NSApp.activate(ignoringOtherApps: true)
         offerSetup()
-        setupWindow.show()
+        window.presentSetup(setupWindow)
     }
 
     /// Offer the wizard in both menus, or in neither.

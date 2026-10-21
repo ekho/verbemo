@@ -9,6 +9,7 @@ enum MeetingActionsMenu {
             localised("Rename", "Переименовать"), localised("Copy transcript", "Копировать транскрипцию"),
             localised("Transcribe again", "Расшифровать повторно"), localised("Copy summary", "Копировать сводку"),
             localised("Regenerate summary", "Перегенерировать сводку"), localised("Open folder in Finder", "Открыть папку в Finder"),
+            localised("Open in external editor", "Открыть во внешнем редакторе"),
             localised("Delete", "Удалить"),
         ]
         for (kind, title) in zip(MeetingActionState.Action.allCases, titles) {

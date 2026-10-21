@@ -32,6 +32,7 @@ struct MeetingContext {
     var calendarEventID: String?
     var calendarAssociation: String?
     var calendarTitle: String?
+    var calendarTimeZoneIdentifier: String?
     var agenda: String?
     var participants: [CalendarParticipant] = []
 
@@ -71,6 +72,7 @@ struct MeetingContext {
             calendarEventID = meeting.hasPersistentID ? meeting.id : ""
             calendarAssociation = confirmed && meeting.hasPersistentID ? "confirmed" : "candidate"
             calendarTitle = meeting.calendarTitle
+            calendarTimeZoneIdentifier = meeting.timeZoneIdentifier
             agenda = meeting.agenda
             participants = meeting.participants
         }
@@ -104,6 +106,7 @@ struct MeetingContext {
             calendar["association"] = calendarAssociation
         }
         if let calendarTitle { calendar["calendar_title"] = calendarTitle }
+        if let calendarTimeZoneIdentifier { calendar["time_zone"] = calendarTimeZoneIdentifier }
         if let agenda { calendar["agenda"] = agenda }
         if !participants.isEmpty, let data = try? JSONEncoder().encode(participants),
            let values = try? JSONSerialization.jsonObject(with: data) { calendar["participants"] = values }

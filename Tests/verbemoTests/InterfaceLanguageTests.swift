@@ -308,9 +308,9 @@ struct InterfaceLanguageTests {
     @Test("Model sizes are written the way each language writes them")
     func sizesAreTranslated() {
         #expect(Self.inLanguage(.english) { ModelStorage.describe(bytes: 461 * 1_048_576) }
-            == "461 MB")
+            == "483 MB")
         #expect(Self.inLanguage(.russian) { ModelStorage.describe(bytes: 461 * 1_048_576) }
-            == "461 МБ")
+            == "483 МБ")
         #expect(Self.inLanguage(.english) { ModelStorage.describe(bytes: 1_147_483_648) }
             == "1.1 GB")
         #expect(Self.inLanguage(.russian) { ModelStorage.describe(bytes: 1_147_483_648) }

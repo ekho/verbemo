@@ -20,13 +20,19 @@ final class SetupWindow: NSObject, NSWindowDelegate {
     var onFinished: (() -> Void)?
 
     private let panel: NSWindow
-    private let form = SetupForm()
+    private let embedded: Bool
+    private let form: SetupForm
+    private(set) var contentView = NSView()
     private let footerNote = NSTextField(labelWithString: "")
     private let primary = NSButton(
         title: localised("Done", "Готово"), target: nil, action: nil)
 
-    override init() {
-        panel = NSWindow(
+    override convenience init() { self.init(hostWindow: nil) }
+
+    init(hostWindow: NSWindow?) {
+        embedded = hostWindow != nil
+        form = SetupForm(forSettings: false, permissionsOnly: embedded)
+        panel = hostWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
@@ -34,10 +40,12 @@ final class SetupWindow: NSObject, NSWindowDelegate {
         )
         super.init()
 
+        if !embedded {
         panel.title = localised("verbemo setup", "Первая настройка verbemo")
         panel.isReleasedWhenClosed = false
         panel.delegate = self
         panel.minSize = NSSize(width: 640, height: 460)
+        }
         // Rows and cards come and go as the form redraws; the Tab order has
         // to follow them, or a choice card that appeared after the window
         // opened could never be reached from the keyboard.
@@ -52,6 +60,7 @@ final class SetupWindow: NSObject, NSWindowDelegate {
         let later = NSButton(
             title: localised("Later", "Позже"), target: self, action: #selector(laterClicked))
         later.bezelStyle = .rounded
+        later.identifier = .init("setup.later")
         primary.bezelStyle = .rounded
         primary.keyEquivalent = "\r"
         primary.target = self
@@ -82,8 +91,8 @@ final class SetupWindow: NSObject, NSWindowDelegate {
             footer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
         ])
-        panel.contentView = content
-        panel.center()
+        contentView = content
+        if !embedded { panel.contentView = content; panel.center() }
 
         form.onStateChange = { [weak self] in self?.updateFooter() }
         updateFooter()
@@ -95,7 +104,7 @@ final class SetupWindow: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    var isVisible: Bool { panel.isVisible }
+    var isVisible: Bool { panel.isVisible && (!embedded || contentView.window === panel) }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         finish()
@@ -123,7 +132,7 @@ final class SetupWindow: NSObject, NSWindowDelegate {
     private func finish() {
         SetupState.markCompleted()
         form.stop()
-        panel.orderOut(nil)
+        if !embedded { panel.orderOut(nil) }
         onFinished?()
     }
 
