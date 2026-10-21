@@ -11,10 +11,8 @@ import Foundation
 /// returns, which is why both are `.mixed` engines and share everything
 /// downstream.
 ///
-/// Two things about the API leak into the code. Requests are capped at 25 MB,
-/// which the mix passes at around 55 minutes, so a long meeting is cut into
-/// pieces and the timings shifted back onto the session clock; the person who
-/// recorded it never hears about any of this. And `chunking_strategy` is
+/// Uploads are bounded by size and a defensive duration cap (see below),
+/// with timings shifted back onto the session clock. `chunking_strategy` is
 /// required for anything over 30 seconds — the API refuses outright without
 /// it, so it is always sent.
 ///
@@ -25,6 +23,8 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
     enum EngineError: TranscriptionFailure, CustomStringConvertible {
         case noAPIKey
         case empty
+        case invalidAudio
+        case uploadLimit
 
         /// Only "there was no speech in this audio" is permanent; a silent
         /// recording will still be silent tomorrow. HTTP answers are
@@ -46,6 +46,10 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
                     + " (chmod 600) or set OPENAI_API_KEY"
             case .empty:
                 return "openai returned no speech"
+            case .invalidAudio:
+                return "openai needs readable audio with a positive finite duration and upload limits"
+            case .uploadLimit:
+                return "openai audio exceeds the upload limits after encoding"
             }
         }
     }
@@ -54,6 +58,12 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
     /// The API's own per-request ceiling. Not a guess: 25 MB is what the
     /// documentation states and what a larger file is refused with.
     static let defaultRequestLimit: Int64 = 25 * 1_048_576
+
+    /// Defensive, not a documented API contract: amanu PR #18 reported a
+    /// 1400s rejection. Cut at 1390s to leave 10s for AAC padding. Official
+    /// docs checked 2026-10-22 only establish 25 MB; see docs/testing/openai-duration-cap.md.
+    static let defaultDurationLimit: TimeInterval = 1390
+    private static let durationSlack: TimeInterval = 10
 
     nonisolated let name = "openai"
     nonisolated let model: String
@@ -69,12 +79,14 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
     /// against real audio and the real API without a meeting long enough to
     /// pass 25 MB — an hour of it, every time anyone wanted to check.
     private let requestLimit: Int64
+    private let durationLimit: TimeInterval
     private let http: CloudHTTP
 
     /// Throws rather than failing at transcribe time — a missing key should
     /// show up in the log the moment the engine is picked, not an upload later.
     init(
         requestLimit: Int64 = OpenAITranscriptionEngine.defaultRequestLimit,
+        durationLimit: TimeInterval = OpenAITranscriptionEngine.defaultDurationLimit,
         apiKey: String? = nil,
         session: URLSession = .shared,
         retry: CloudHTTP.RetryPolicy = .standard,
@@ -85,6 +97,7 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
         expected = MeetingLanguages.expected(primary: Config.transcriptionLanguage())
         model = Config.openAITranscriptionModel()
         self.requestLimit = requestLimit
+        self.durationLimit = durationLimit
         http = CloudHTTP(service: .openAI, session: session, retry: retry, sleep: sleep)
     }
 
@@ -100,7 +113,7 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
 
         var segments: [TranscriptSegment] = []
         for (index, slice) in slices.enumerated() {
-            let cache = cacheURL(in: dir, audio: audio, piece: index, of: slices.count)
+            let cache = cacheURL(in: dir, audio: audio, slice: slice, piece: index, of: slices.count)
             let response: Response
             if let cached = try? Data(contentsOf: cache),
                let decoded = try? JSONDecoder().decode(Response.self, from: cached) {
@@ -130,15 +143,42 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
     // MARK: - slicing
 
     private func sliced(_ audio: URL) async throws -> [AudioSlicer.Slice] {
-        let whole = [AudioSlicer.Slice(url: audio, offset: 0)]
-        let attributes = try? FileManager.default.attributesOfItem(atPath: audio.path)
-        guard let bytes = attributes?[.size] as? Int64, bytes > requestLimit else {
-            return whole
+        let attributes = try FileManager.default.attributesOfItem(atPath: audio.path)
+        let bytes = attributes[.size] as? Int64 ?? 0
+        let duration = Self.duration(of: audio)
+        let slices: [AudioSlicer.Slice]
+        if let length = try Self.pieceLength(
+            bytes: bytes, duration: duration, requestLimit: requestLimit, durationLimit: durationLimit
+        ) {
+            slices = try await AudioSlicer.slice(audio, every: length, into: Self.sliceDirectory(audio))
+        } else {
+            slices = [AudioSlicer.Slice(url: audio, offset: 0, duration: duration)]
         }
-        guard let length = AudioSlicer.sliceLength(
-            bytes: bytes, duration: Self.duration(of: audio), limit: requestLimit
-        ) else { return whole }
-        return try await AudioSlicer.slice(audio, every: length, into: Self.sliceDirectory(audio))
+        // Average source bitrate is only an estimate; check the encoded files before any upload.
+        for slice in slices {
+            let size = try slice.url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            let encodedDuration = try await AVURLAsset(url: slice.url).load(.duration).seconds
+            guard size > 0, encodedDuration.isFinite, encodedDuration > 0 else {
+                throw EngineError.invalidAudio
+            }
+            guard size <= requestLimit, encodedDuration <= durationLimit + Self.durationSlack else {
+                throw EngineError.uploadLimit
+            }
+        }
+        return slices
+    }
+
+    /// Adapted from Dmitry Tsoy's Amanu PR #18: the tighter ceiling wins (see docs/history/openai-duration-cap-upstream.md).
+    static func pieceLength(
+        bytes: Int64, duration: TimeInterval,
+        requestLimit: Int64 = defaultRequestLimit,
+        durationLimit: TimeInterval = defaultDurationLimit
+    ) throws -> TimeInterval? {
+        guard bytes > 0, requestLimit > 0, duration.isFinite, duration > 0,
+              durationLimit.isFinite, durationLimit > 0 else { throw EngineError.invalidAudio }
+        let bySize = AudioSlicer.sliceLength(bytes: bytes, duration: duration, limit: requestLimit)
+        guard bySize != nil || duration > durationLimit else { return nil }
+        return min(bySize ?? durationLimit, durationLimit)
     }
 
     private static func sliceDirectory(_ audio: URL) -> URL {
@@ -190,14 +230,14 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
     // MARK: - shaping
 
     /// Where one piece's response is cached: named for the model, the
-    /// language sent, the request limit that decided the cut, and which piece
-    /// of how many it is.
-    func cacheURL(in dir: URL, audio: URL, piece index: Int, of count: Int) -> URL {
+    /// language sent, and actual source boundaries. A changed cut must never
+    /// reuse a response just because the piece number and count still match.
+    func cacheURL(in dir: URL, audio: URL, slice: AudioSlicer.Slice, piece index: Int, of count: Int) -> URL {
         ProviderCache.url(
             in: dir, provider: .openAI,
             parts: [
                 audio.lastPathComponent, model, Self.languageField(for: expected) ?? "detect",
-                "\(requestLimit)", "\(count)",
+                "\(requestLimit)", "\(count)", "slices-v2", "\(slice.offset)", "\(slice.duration)",
             ],
             suffix: count > 1 ? "\(index + 1)" : nil)
     }
