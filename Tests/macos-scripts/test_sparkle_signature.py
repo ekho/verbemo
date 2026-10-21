@@ -28,5 +28,3 @@ class SparkleSignatureTests(unittest.TestCase):
                 self.assertEqual(result.returncode, expected, result.stderr)
                 if expected:
                     self.assertIn('public/private key mismatch', result.stderr)
-
-
