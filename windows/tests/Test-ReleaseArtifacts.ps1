@@ -12,6 +12,7 @@ $out = Join-Path ([IO.Path]::GetTempPath()) "verbemo-preflight-$([Guid]::NewGuid
 # These fail before invoking dotnet, vpk, native builds or opening the output directory.
 Assert-Rejected { & $build -Version '999.0.0' -SourceCommit ('a' * 40) -OutputDirectory $out } 'must match VERSION'
 Assert-Rejected { & $build -Version $version -SourceCommit ('a' * 40) -OutputDirectory $out } 'own certificate'
+Assert-Rejected { & $build -Version $version -SourceCommit ('a' * 40) -OutputDirectory $out -SkipTests } 'restricted to development'
 if (Test-Path $out) { throw 'Rejected release preflight created output.' }
 [void][IO.Directory]::CreateDirectory($out)
 try {
@@ -19,7 +20,7 @@ try {
     Assert-Rejected { & $build -Version $version -SourceCommit ('a' * 40) -OutputDirectory $out -Development } 'must be new'
     if ([IO.File]::ReadAllText((Join-Path $out 'keep.txt')) -ne 'existing release') { throw 'Existing output was changed.' }
 } finally { Remove-Item -LiteralPath $out -Recurse -Force }
-Write-Host '3 release preflight tests passed.'
+Write-Host '4 release preflight tests passed.'
 
 # Synthetic archives exercise the verifier's coverage and fail-closed policy only.
 # They do not establish an actual signed release or certificate trust.

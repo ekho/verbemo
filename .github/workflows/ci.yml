@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [master]
+  workflow_dispatch:
   pull_request:
     branches: [master]
 
@@ -14,16 +15,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: macos-26
-    timeout-minutes: 30
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      artifact_id: ${{ steps.artifacts.outputs.artifact-id }}
+      macos_test: ${{ steps.changes.outputs.macos_test }}
+      macos_build: ${{ steps.changes.outputs.macos_build }}
+      windows_test: ${{ steps.changes.outputs.windows_test }}
+      windows_build: ${{ steps.changes.outputs.windows_build }}
+      scripts: ${{ steps.changes.outputs.scripts }}
+      macos_scripts: ${{ steps.changes.outputs.macos_scripts }}
+      landing: ${{ steps.changes.outputs.landing }}
+      automation: ${{ steps.changes.outputs.automation }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source checkout
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual=$(git rev-parse HEAD)
+          shallow=$(git rev-parse --is-shallow-repository)
+          printf 'Expected source: %s\nActual source: %s\nShallow: %s\n' "$EXPECTED_SOURCE_COMMIT" "$actual" "$shallow"
+          test "$actual" = "$EXPECTED_SOURCE_COMMIT"
+          test "$shallow" = false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Select affected checks
+        id: changes
+        run: python3 scripts/ci_changes.py
+      - name: Full independent product guard
+        run: python3 Tests/scripts/test_independent_product.py --all
+
+  checks:
+    name: Shared scripts and landing
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.landing == 'true' || needs.changes.outputs.automation == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - name: Verify source checkout
         shell: bash
         env:
@@ -50,9 +91,55 @@ jobs:
           print(json.dumps({'repository': repo.get('full_name'), 'permissions': repo.get('permissions')}), flush=True)
           api.require_repository()
           PY
+      - uses: actions/setup-node@v6
+        if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.automation == 'true'
+        with:
+          node-version: '24'
+      - name: Release-script and workflow tests
+        if: needs.changes.outputs.scripts == 'true'
+        run: |
+          python3 -m pip install PyYAML==6.0.3
+          python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
+          python3 -m unittest discover -s windows/tests -p 'test_*.py'
+      - name: Landing checks
+        if: needs.changes.outputs.landing == 'true'
+        run: python3 landing/tests/check.py
+      - name: Automatic version and changelog tests
+        if: needs.changes.outputs.automation == 'true'
+        run: |
+          npm --prefix scripts/release-automation ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+          npm --prefix scripts/release-automation test
+
+  test:
+    name: macOS tests
+    needs: changes
+    if: needs.changes.outputs.macos_test == 'true' || needs.changes.outputs.macos_scripts == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source checkout
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual=$(git rev-parse HEAD)
+          shallow=$(git rev-parse --is-shallow-repository)
+          printf 'Expected source: %s\nActual source: %s\nShallow: %s\n' "$EXPECTED_SOURCE_COMMIT" "$actual" "$shallow"
+          test "$actual" = "$EXPECTED_SOURCE_COMMIT"
+          test "$shallow" = false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Build and verify LocalVQE assets
+        if: needs.changes.outputs.macos_test == 'true'
         run: make verify-localvqe
       - name: Swift tests
+        if: needs.changes.outputs.macos_test == 'true'
         # UI suites share NSApplication windows and configuration state.
         # A suite's .serialized trait does not serialize it against other suites.
         run: |
@@ -65,6 +152,37 @@ jobs:
           # them run here whether or not they are found: a missing asset is
           # a failure on CI rather than the skip it is on a fresh checkout.
           VERBEMO_REQUIRE_LOCALVQE: "1"
+      - name: macOS packaging script tests
+        if: needs.changes.outputs.macos_scripts == 'true'
+        run: python3 -m unittest discover -s Tests/macos-scripts -p 'test_*.py'
+
+  macos-build:
+    name: macOS build
+    needs: changes
+    if: needs.changes.outputs.macos_build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 120
+    outputs:
+      artifact_id: ${{ steps.artifacts.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source checkout
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual=$(git rev-parse HEAD)
+          shallow=$(git rev-parse --is-shallow-repository)
+          printf 'Expected source: %s\nActual source: %s\nShallow: %s\n' "$EXPECTED_SOURCE_COMMIT" "$actual" "$shallow"
+          test "$actual" = "$EXPECTED_SOURCE_COMMIT"
+          test "$shallow" = false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Universal preview build without release credentials
         run: |
           bash scripts/build-macos-preview.sh --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/verbemo-macos-preview"
@@ -77,29 +195,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Landing checks
-        run: python3 landing/tests/check.py
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-      - name: Automatic version and changelog tests
-        run: |
-          npm --prefix scripts/release-automation ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
-          npm --prefix scripts/release-automation test
-      - name: Release-script tests
-        run: python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
-      - name: Workflow tests
-        run: |
-          python3 -m pip install PyYAML==6.0.3
-          python3 -m unittest discover -s windows/tests -p 'test_*.py'
-      - name: Full independent product guard
-        run: python3 Tests/scripts/test_independent_product.py --all
-
   windows:
-    outputs:
-      artifact_id: ${{ steps.artifacts.outputs.artifact-id }}
+    name: Windows tests
+    needs: changes
+    if: needs.changes.outputs.windows_test == 'true'
     runs-on: windows-2025
-    timeout-minutes: 120
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
@@ -129,12 +230,16 @@ jobs:
         run: |
           & windows/tests/Test-ReleaseInstallerName.ps1
           & windows/tests/Test-ReleaseArtifacts.ps1
-      - name: Build and test Windows without release credentials
+      - name: Windows Core and Live tests
         shell: pwsh
         run: |
-          $version = (Get-Content VERSION -Raw).Trim()
-          $commit = (git rev-parse HEAD).Trim()
-          & windows/scripts/Build-Release.ps1 -Version $version -SourceCommit $commit -OutputDirectory (Join-Path $env:RUNNER_TEMP 'verbemo-development') -Development
+          $ErrorActionPreference = 'Stop'
+          dotnet restore windows/Verbemo.Windows.slnx
+          if ($LASTEXITCODE -ne 0) { throw 'Could not restore the Windows solution.' }
+          foreach ($project in @('Verbemo.Core.Tests', 'Verbemo.Live.Tests')) {
+            dotnet test "windows/tests/$project/$project.csproj" --configuration Release --no-restore
+            if ($LASTEXITCODE -ne 0) { throw "$project failed." }
+          }
       - name: Repeat hook lifecycle regression 20 times
         shell: pwsh
         run: |
@@ -144,6 +249,45 @@ jobs:
             dotnet test windows/tests/Verbemo.Live.Tests/Verbemo.Live.Tests.csproj -c Release --no-build --filter FullyQualifiedName~ProcessingHookTests
             if ($LASTEXITCODE -ne 0) { throw "Hook lifecycle run $attempt failed" }
           }
+
+  windows-build:
+    name: Windows build
+    needs: [changes, windows]
+    if: needs.changes.outputs.windows_build == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 120
+    outputs:
+      artifact_id: ${{ steps.artifacts.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source checkout
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect source commit' }
+          $shallow = git rev-parse --is-shallow-repository
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect source history' }
+          Write-Output "Expected source: $env:EXPECTED_SOURCE_COMMIT"
+          Write-Output "Actual source: $actual"
+          Write-Output "Shallow: $shallow"
+          if ($actual -cne $env:EXPECTED_SOURCE_COMMIT) { throw 'Source commit mismatch' }
+          if ($shallow -cne 'false') { throw 'Source history is shallow' }
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Build Windows without release credentials
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $commit = (git rev-parse HEAD).Trim()
+          & windows/scripts/Build-Release.ps1 -Version $version -SourceCommit $commit -OutputDirectory (Join-Path $env:RUNNER_TEMP 'verbemo-development') -Development -SkipTests
       - name: Verify packaged native CPU and Unicode paths
         shell: pwsh
         run: |
@@ -170,7 +314,8 @@ jobs:
           retention-days: 7
 
   preview:
-    needs: [test, windows]
+    needs: [macos-build, windows-build]
+    if: needs['macos-build'].result == 'success' && needs['windows-build'].result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -190,9 +335,28 @@ jobs:
           test "$shallow" = false
       - uses: actions/download-artifact@v5
         with:
-          artifact-ids: ${{ needs.test.outputs.artifact_id }},${{ needs.windows.outputs.artifact_id }}
+          artifact-ids: ${{ needs.macos-build.outputs.artifact_id }},${{ needs.windows-build.outputs.artifact_id }}
           merge-multiple: true
           path: ${{ runner.temp }}/preview-artifacts
       - name: Validate both unsigned preview platform sets
         run: |
           python3 scripts/release.py prepare --artifacts "$RUNNER_TEMP/preview-artifacts" --version "$(cat VERSION)" --source-commit "$(git rev-parse HEAD)" --build-number "$(git rev-list --count HEAD)" --prerelease --dry-run
+
+  result:
+    name: CI result
+    if: always()
+    needs: [changes, checks, test, windows, macos-build, windows-build, preview]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every selected check to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, sys
+          results = json.loads(os.environ['NEEDS'])
+          for name, job in results.items():
+              print(f"{name}: {job['result']}")
+          sys.exit(any(job['result'] not in ('success', 'skipped') for job in results.values()))
+          PYTHON

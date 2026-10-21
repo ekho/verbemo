@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory = $true)] [string] $OutputDirectory,
     [string] $CertificatePath,
     [string] $CertificatePassword,
-    [switch] $Development
+    [switch] $Development,
+    [switch] $SkipTests
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -13,6 +14,7 @@ $root = [IO.Path]::GetFullPath((Join-Path $windowsRoot '..'))
 $sourceVersion = (Get-Content -LiteralPath (Join-Path $root 'VERSION') -Raw).Trim()
 if ($Version -ne $sourceVersion) { throw "Package version must match VERSION ($sourceVersion)." }
 if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'Invalid release VERSION.' }
+if ($SkipTests -and -not $Development) { throw 'Skipping tests is restricted to development CI builds.' }
 if (-not $Development -and -not $CertificatePath) { throw 'Release mode requires your own certificate PFX; use -Development for unsigned local validation.' }
 if ($Development -and ($CertificatePath -or $CertificatePassword)) { throw 'Development builds do not accept release credentials.' }
 if (Test-Path -LiteralPath $OutputDirectory) { throw 'OutputDirectory must be new; previous release files must not be mixed.' }
@@ -57,9 +59,11 @@ try {
     & (Join-Path $windowsRoot 'tests/Test-ReleaseInstallerName.ps1')
     dotnet restore (Join-Path $windowsRoot 'Verbemo.Windows.slnx')
     if ($LASTEXITCODE -ne 0) { throw 'Could not restore the Windows solution.' }
-    foreach ($project in @('Verbemo.Core.Tests', 'Verbemo.Live.Tests')) {
-        dotnet test (Join-Path $windowsRoot "tests/$project/$project.csproj") --configuration Release --no-restore
-        if ($LASTEXITCODE -ne 0) { throw "$project failed." }
+    if (-not $SkipTests) {
+        foreach ($project in @('Verbemo.Core.Tests', 'Verbemo.Live.Tests')) {
+            dotnet test (Join-Path $windowsRoot "tests/$project/$project.csproj") --configuration Release --no-restore
+            if ($LASTEXITCODE -ne 0) { throw "$project failed." }
+        }
     }
     dotnet publish (Join-Path $windowsRoot 'src/Verbemo.App/Verbemo.App.csproj') --configuration Release --runtime win-x64 --self-contained true --property:Version=$Version --output $publishDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Could not publish the Windows app.' }
