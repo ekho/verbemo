@@ -104,6 +104,18 @@ struct ModelStorage {
         return models
     }
 
+    /// Files can occupy disk before the model is ready to load.
+    func isReady(_ model: Model) -> Bool {
+        switch model.kind {
+        case .parakeet:
+            return AsrModels.modelsExist(at: model.directory, version: model.name.hasSuffix("v2") ? .v2 : .v3)
+        case .live:
+            return live.isReady(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
+        case .whisper, .gigaAM, .diarization:
+            return model.isDownloaded
+        }
+    }
+
     func parakeet(version: AsrModelVersion) -> Model {
         let directory = parakeetCache(version)
         return Model(
@@ -212,11 +224,11 @@ struct ModelStorage {
     /// and the decimal separator the window's language uses rather than the
     /// one `String(format:)` picks.
     static func describe(bytes: Int) -> String {
-        let megabytes = Double(bytes) / 1_048_576
-        guard megabytes >= 1024 else {
+        let megabytes = Double(bytes) / 1_000_000
+        guard megabytes >= 1000 else {
             return localised("\(Int(megabytes.rounded())) MB", "\(Int(megabytes.rounded())) МБ")
         }
-        let gigabytes = String(format: "%.1f", megabytes / 1024)
+        let gigabytes = String(format: "%.1f", megabytes / 1000)
         return localised(
             "\(gigabytes) GB",
             gigabytes.replacingOccurrences(of: ".", with: ",") + " ГБ")

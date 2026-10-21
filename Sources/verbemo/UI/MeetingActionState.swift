@@ -3,7 +3,7 @@ import Foundation
 /// One availability decision shared by menu items and content buttons.
 struct MeetingActionState {
     enum Action: String, CaseIterable {
-        case rename, copyTranscript, retranscribe, copySummary, regenerateSummary, openFolder, delete
+        case rename, copyTranscript, retranscribe, copySummary, regenerateSummary, openFolder, openTranscript, delete
     }
     var transcriptReady: Bool
     var summaryReady: Bool
@@ -18,7 +18,7 @@ struct MeetingActionState {
     func reason(for action: Action) -> String? {
         switch action {
         case .rename: return nil
-        case .copyTranscript:
+        case .copyTranscript, .openTranscript:
             return transcriptReady ? nil : localised("The transcript is not ready.", "Расшифровка ещё не готова.")
         case .copySummary:
             return summaryReady ? nil : localised("No summary is available.", "Сводка ещё не готова.")

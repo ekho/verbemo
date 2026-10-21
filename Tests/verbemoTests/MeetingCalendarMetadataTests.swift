@@ -20,11 +20,13 @@ struct MeetingCalendarMetadataTests {
         #expect(meta.eventURL == nil)
     }
     @Test @MainActor func recordingTriggerDecidesWhetherTheEventIsConfirmed() {
-        let event = CalendarWatcher.Meeting(id: "event", title: "Planning", start: Date(), end: Date().addingTimeInterval(600), attendees: ["Anna"], link: "https://call.example", looksLikeCall: true)
+        var event = CalendarWatcher.Meeting(id: "event", title: "Planning", start: Date(), end: Date().addingTimeInterval(600), attendees: ["Anna"], link: "https://call.example", looksLikeCall: true)
+        event.timeZoneIdentifier = "America/New_York"
         let candidate = MeetingContext(meeting: event, app: nil)
         let linked = MeetingContext(meeting: event, app: nil, confirmed: true)
         #expect(MeetingCalendarMetadata(candidate.metaFields["calendar"] as? [String: Any] ?? [:])?.isConfirmed == false)
         #expect(MeetingCalendarMetadata(linked.metaFields["calendar"] as? [String: Any] ?? [:])?.isConfirmed == true)
+        #expect(MeetingCalendarMetadata(linked.metaFields["calendar"] as? [String: Any] ?? [:])?.timeZoneIdentifier == "America/New_York")
     }
 }
 

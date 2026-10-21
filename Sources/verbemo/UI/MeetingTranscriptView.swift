@@ -47,15 +47,8 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.time.stringValue = String(format: "%02d:%02d", segment.start_ms / 60_000, (segment.start_ms / 1000) % 60)
         cell.body.stringValue = segment.text
         cell.body.preferredMaxLayoutWidth = max(160, tableView.tableColumns[0].width - 20)
-        cell.person.removeAllItems()
-        let fallback = names?.speakers[segment.speaker]?.name ?? SpeakerNames.described(label: segment.speaker)
-        cell.person.addItem(withTitle: fallback + localised(" · not matched", " · не сопоставлен"))
-        for participant in participants {
-            cell.person.addItem(withTitle: participant.name + (participant.email.map { " · " + $0 } ?? ""))
-            cell.person.lastItem?.representedObject = participant.id
-        }
-        if let current = names?.speakers[segment.speaker]?.participantID,
-           let index = cell.person.itemArray.firstIndex(where: { $0.representedObject as? String == current }) { cell.person.selectItem(at: index) }
+        Self.configureParticipants(cell.person, speaker: segment.speaker, names: names,
+                                   participants: participants, fallback: Self.speakerTitle(segment.speaker, in: segments))
         cell.person.tag = row
         cell.person.target = self
         cell.person.action = #selector(mapped(_:))
@@ -68,7 +61,25 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let id = sender.selectedItem?.representedObject as? String
         let participant = participants.first { $0.id == id }
         do { try onMap?(segments[sender.tag].speaker, participant) }
-        catch { NSAlert(error: error).runModal(); table.reloadData() }
+        catch { if let window { NSAlert(error: error).beginSheetModal(for: window) }; table.reloadData() }
+    }
+    static func speakerTitle(_ speaker: String, in segments: [Transcript.Segment]) -> String {
+        if SpeakerNames.isUnknown(speaker) { return SpeakerNames.described(label: speaker) }
+        var labels: [String] = []
+        for segment in segments where !SpeakerNames.isUnknown(segment.speaker) && !labels.contains(segment.speaker) { labels.append(segment.speaker) }
+        let number = (labels.firstIndex(of: speaker) ?? 0) + 1
+        return localised("Speaker \(number)", "Говорящий \(number)")
+    }
+    static func configureParticipants(_ popup: NSPopUpButton, speaker: String, names: SpeakerNames?, participants: [CalendarParticipant], fallback: String) {
+        popup.removeAllItems()
+        let entry = names?.speakers[speaker]
+        let manual = entry?.participantID == nil ? entry?.name : entry?.manualName
+        popup.addItem(withTitle: (manual ?? fallback) + localised(" · not matched", " · не сопоставлен"))
+        for participant in participants {
+            popup.addItem(withTitle: participant.name + (participant.email.map { " · " + $0 } ?? ""))
+            popup.lastItem?.representedObject = participant.id
+        }
+        if let id = entry?.participantID, let index = popup.itemArray.firstIndex(where: { $0.representedObject as? String == id }) { popup.selectItem(at: index) }
     }
 }
 

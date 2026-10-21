@@ -33,7 +33,7 @@ struct SetupFormBehaviourTests {
         #expect(Config.diarizationModel() == .lsEendAMI)
         #expect(Self.labels(in: cards[0]).joined(separator: " ").contains("107 MB"))
         #expect(Self.labels(in: cards[1]).joined(separator: " ").contains("45 MB"))
-        #expect(Self.labels(in: cards[2]).joined(separator: " ").contains("21 MB"))
+        #expect(Self.labels(in: cards[2]).joined(separator: " ").contains("22 MB"))
         toggle.performClick(nil)
         #expect(cards.allSatisfy { !$0.isEnabled })
         #expect(Config.diarizationModel() == .lsEendAMI, "turning the feature off lost the selected model")
@@ -157,7 +157,7 @@ struct SetupFormBehaviourTests {
         let form = SetupForm()
         defer { form.stop() }
         for (id, name) in [
-            ("parakeet", "Parakeet v3"),
+            ("parakeet", "Parakeet"),
             ("whisper", "Whisper large-v3-turbo"),
             ("gigaam", "GigaAM v3"),
             ("diarization.nemotron-3", "Nemotron 3"),

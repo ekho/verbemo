@@ -20,6 +20,7 @@ final class ChoiceCard: NSView, LayerTinted {
 
     private let radio = NSImageView()
     private let titleLabel: NSTextField
+    private let detailLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private var linkButton: NSButton?
     private var selected = false
@@ -68,8 +69,15 @@ final class ChoiceCard: NSView, LayerTinted {
     /// What the card is called, and what it says beneath that — the words a
     /// screen reader has to say for it, since the labels themselves are not
     /// what gets focus.
-    private let title: String
-    private let detail: String
+    private var title: String
+    private var detail: String
+
+    func describe(title: String, detail: String) {
+        self.title = title
+        self.detail = detail
+        titleLabel.stringValue = title
+        detailLabel.stringValue = detail
+    }
 
     var isSelected: Bool {
         get { selected }
@@ -106,7 +114,7 @@ final class ChoiceCard: NSView, LayerTinted {
         heading.alignment = .firstBaseline
         heading.spacing = 7
 
-        let detailLabel = NSTextField(labelWithString: detail)
+        detailLabel.stringValue = detail
         detailLabel.font = SetupLayout.detailFont
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.lineBreakMode = compact ? .byTruncatingTail : .byWordWrapping

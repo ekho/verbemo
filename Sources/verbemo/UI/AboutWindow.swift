@@ -96,7 +96,7 @@ final class AboutWindow: NSObject {
             tagline.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
-        let content = NSView()
+        let content = FlippedStackView()
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),

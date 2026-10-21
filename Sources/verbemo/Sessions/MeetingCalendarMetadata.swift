@@ -18,6 +18,7 @@ struct MeetingCalendarMetadata {
     let participants: [CalendarParticipant]
     let start: String?
     let end: String?
+    let timeZoneIdentifier: String?
     var isConfirmed: Bool { association == "confirmed" && eventID?.isEmpty == false }
 
     init?(_ json: [String: Any]) {
@@ -32,6 +33,7 @@ struct MeetingCalendarMetadata {
         agenda = notes?.isEmpty == false ? notes : nil
         start = json["scheduled_start"] as? String
         end = json["scheduled_end"] as? String
+        timeZoneIdentifier = json["time_zone"] as? String
         if let values = json["participants"] as? [[String: Any]], let data = try? JSONSerialization.data(withJSONObject: values),
            let decoded = try? JSONDecoder().decode([CalendarParticipant].self, from: data) {
             var ids: Set<String> = []

@@ -258,19 +258,27 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
 
     private let forSettings: Bool
+    private let permissionsOnly: Bool
+    private let parakeetVersion = NSPopUpButton()
+    private var cloudOptions: NSView?
+    private var localOptionsView: NSView?
+    private var summaryOptions: NSView?
+    private var summaryKeyFields: NSView?
+    private var summaryOllamaFields: NSView?
     private(set) var settingsPages: [ApplicationNavigationState.Destination: FlippedStackView] = [:]
     static var settingsCoveredPaths: Set<String> {
         var paths: Set<String> = ["auto_record.enabled", "recordings_dir", "keep_audio", "menu_bar_icon", "dock_icon",
             "transcription.enabled", "transcription.engine", "transcription.cloud", "summary.enabled", "summary.backend",
             "summary.openai_base_url", "summary.openai_model", "summary.openai_compatible", "summary.ollama_base_url", "summary.ollama_model"]
         if Platform.supportsLocalModels {
-            paths.formUnion(["transcription.local_engine", "transcription.local_diarization", "transcription.diarization_model", "live_transcription.enabled"])
+            paths.formUnion(["transcription.local_engine", "transcription.model", "transcription.local_diarization", "transcription.diarization_model", "live_transcription.enabled"])
         }
         return paths
     }
     override convenience init() { self.init(forSettings: false) }
-    init(forSettings: Bool) {
+    init(forSettings: Bool, permissionsOnly: Bool = false) {
         self.forSettings = forSettings
+        self.permissionsOnly = permissionsOnly
         super.init()
 
         let form = view
@@ -284,7 +292,15 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         micRow.identifier = NSUserInterfaceItemIdentifier("access.microphone")
         audioRow.identifier = NSUserInterfaceItemIdentifier("access.system-audio")
         calendarRow.identifier = NSUserInterfaceItemIdentifier("access.calendar")
-        if forSettings {
+        if permissionsOnly {
+            let intro = SetupLayout.detail(localised(
+                "Allow the microphone and test call audio before your first recording. Models and optional Calendar access are available in Settings.",
+                "Перед первой записью разрешите микрофон и проверьте звук звонка. Модели и необязательный доступ к календарю доступны в настройках."), lines: 4)
+            for child in [intro, SetupLayout.box([micRow, audioRow])] {
+                form.addArrangedSubview(child)
+                child.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
+            }
+        } else if forSettings {
             func page(_ destination: ApplicationNavigationState.Destination, _ content: [NSView]) {
                 let page = FlippedStackView(views: content)
                 page.orientation = .vertical
@@ -395,6 +411,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             watchParakeetSize()
         }
         refresh()
+        if permissionsOnly { return }
         // Detection runs off the main thread: finding `claude` can mean
         // starting the login shell, and a form that freezes while it asks
         // would be a worse first impression than one that fills in.
@@ -442,25 +459,21 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised("In the cloud", "В облаке")),
             detail: SetupLayout.detail(
                 localised(
-                    "Audio is uploaded to the provider's servers. Better on Russian, "
-                        + "and tells apart multiple speakers.",
-                    "Звук уходит на серверы провайдера. Лучше слышит русский "
-                        + "и различает нескольких говорящих."),
+                    "Audio is sent to the selected provider for transcription and speaker separation.",
+                    "Звук отправляется выбранному провайдеру для расшифровки и разделения говорящих."),
                 lines: 2, width: 440),
             trailing: [cloudStatus])
 
         localSwitch.target = self
         localSwitch.action = #selector(localToggled)
         let localChoices = [
-            ("parakeet", "Parakeet v3", localised(
-                "Fastest · about \(Self.parakeetMegabytes) MB",
-                "Самая быстрая · около \(Self.parakeetMegabytes) МБ")),
+            ("parakeet", "Parakeet", localised("Local speech recognition", "Локальное распознавание речи")),
             ("whisper", "Whisper large-v3-turbo", localised(
-                "Best multilingual accuracy · about 550 MB",
-                "Лучшая точность на разных языках · около 550 МБ")),
+                "Multilingual recognition · about \(ModelStorage.describe(bytes: modelStorage.whisperModel().advertisedBytes))",
+                "Многоязычное распознавание · около \(ModelStorage.describe(bytes: modelStorage.whisperModel().advertisedBytes))")),
             ("gigaam", "GigaAM v3", localised(
-                "Alternative for Russian · about 260 MB",
-                "Альтернатива для русского · около 260 МБ")),
+                "Alternative for Russian · about \(ModelStorage.describe(bytes: modelStorage.gigaAMModel().advertisedBytes))",
+                "Альтернатива для русского · около \(ModelStorage.describe(bytes: modelStorage.gigaAMModel().advertisedBytes))")),
         ]
         let localCards = localChoices.map { id, title, detail in
             let download = SetupLayout.actionButton(
@@ -473,8 +486,16 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 model: title, identifier: "transcription.cancel.\(id)",
                 target: self, action: #selector(cancelLocalClicked(_:)))
             localDownloadProgress[id] = progress
-            return ChoiceCard(id: id, title: title, detail: detail,
-                              accessories: [download, progress])
+            var accessories: [NSView] = [download, progress]
+            if forSettings && id == "parakeet" {
+                parakeetVersion.addItems(withTitles: ["v3", "v2"])
+                parakeetVersion.identifier = .init("transcription.model")
+                parakeetVersion.setAccessibilityLabel(localised("Parakeet version", "Версия Parakeet"))
+                parakeetVersion.target = self
+                parakeetVersion.action = #selector(parakeetVersionChanged)
+                accessories.insert(parakeetVersion, at: 0)
+            }
+            return ChoiceCard(id: id, title: title, detail: detail, accessories: accessories)
         }
         localEngineCards.adopt(localCards)
         localEngineCards.onChange = { [weak self] id in self?.localEnginePicked(id) }
@@ -484,8 +505,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised("On this Mac", "На этом маке")),
             detail: SetupLayout.detail(
                 localised(
-                    "Nothing leaves the machine; local transcripts label speakers as me / them.",
-                    "С мака ничего не уходит; локальные расшифровки помечают спикеров как «я»/«они»."),
+                    "Audio is processed on this Mac. Speaker separation can be enabled below.",
+                    "Звук обрабатывается на этом Mac. Разделение говорящих можно включить ниже."),
                 lines: 2, width: 440),
             trailing: [])
 
@@ -493,6 +514,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         localOptions.orientation = .vertical
         localOptions.alignment = .leading
         localOptions.spacing = 9
+        localOptionsView = localOptions
         localOptions.edgeInsets = NSEdgeInsets(top: 0, left: 58, bottom: 13, right: 14)
         for option in localOptions.arrangedSubviews {
             option.widthAnchor.constraint(
@@ -562,6 +584,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         keyLine.setViews([cloudKey, cloudKeyStatus, NSView()], in: .leading)
 
         let stack = NSStackView(views: [choiceCards(providerCards.cards), keyLine])
+        cloudOptions = stack
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
@@ -638,6 +661,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         liveStatus.font = SetupLayout.statusFont
         liveStatus.textColor = .secondaryLabelColor
         liveStatus.lineBreakMode = .byTruncatingTail
+        let size = ModelStorage.describe(bytes: modelStorage.liveModel().advertisedBytes)
 
         return SetupLayout.row(
             leading: liveTranscription,
@@ -646,10 +670,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 "Показывать расшифровку прямо во время встречи")),
             detail: SetupLayout.detail(
                 localised(
-                    "A 600 MB NVIDIA model downloads once. Nothing leaves this Mac, "
-                        + "and the final transcript is still parakeet's.",
-                    "Один раз скачается модель NVIDIA, 600 МБ. С мака ничего не уходит, "
-                        + "итоговую расшифровку всё равно делает parakeet."),
+                    "A \(size) NVIDIA model downloads once. Live recognition stays on this Mac. After the meeting, the selected transcription service produces the final transcript.",
+                    "Один раз скачается модель NVIDIA, \(size). Текущий текст распознаётся на этом Mac. После встречи окончательную расшифровку подготовит выбранный сервис."),
                 lines: 2, width: 520),
             trailing: [liveStatus])
     }
@@ -668,11 +690,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 identifier: "transcription.diarization.cancel.\(model.rawValue)",
                 target: self, action: #selector(cancelDiarizationClicked(_:)))
             diarizationDownloadProgress[model] = progress
-            let size = Int((Double(model.advertisedBytes)
-                / (model == .community1 ? 1_048_576 : 1_000_000)).rounded())
+            let size = ModelStorage.describe(bytes: model.advertisedBytes)
             let detail = localised(
-                "(\(model.detailEnglish))\n\(model == .nemotron3 ? "Recommended · " : "")about \(size) MB",
-                "(\(model.detailRussian))\n\(model == .nemotron3 ? "Рекомендуется · " : "")около \(size) МБ")
+                "(\(model.detailEnglish))\n\(model == .nemotron3 ? "Recommended · " : "")about \(size)",
+                "(\(model.detailRussian))\n\(model == .nemotron3 ? "Рекомендуется · " : "")около \(size)")
             let card = ChoiceCard(id: "diarization.\(model.rawValue)", title: model.title,
                                   detail: detail, accessories: [download, progress])
             return card
@@ -927,14 +948,15 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         summaryOpenAIOptions.addArrangedSubview(baseURLRow)
         summaryOpenAIOptions.addArrangedSubview(summaryFieldRow(
             localised("Model", "Модель"), summaryOpenAIModel))
+        let keyFields = SetupLayout.group([keyProvider, summaryKey, summaryOpenAIOptions, summaryKeyStatus, summaryKeyLink])
+        summaryKeyFields = keyFields
         let key = ChoiceCard(
             id: "api-key",
             title: localised("My own key", "Свой ключ"),
             detail: localised(
                 "Billed per meeting, needs no CLI.",
                 "Оплата за встречу, без CLI."),
-            accessories: [keyProvider, summaryKey, summaryOpenAIOptions,
-                          summaryKeyStatus, summaryKeyLink])
+            accessories: [keyFields])
 
         // Ollama is a fallback, not a fourth peer: a whole card beside the
         // three real choices reads as a recommendation, and its summaries are
@@ -948,6 +970,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         ollamaOptions.orientation = .vertical
         ollamaOptions.alignment = .leading
         ollamaOptions.spacing = 6
+        summaryOllamaFields = ollamaOptions
         let ollama = ChoiceCard(
             id: "ollama",
             title: "Ollama",
@@ -978,9 +1001,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 "Claude, Codex и API-модели получают данные встречи. Ollama остаётся на этом маке только с localhost URL."),
             lines: 2,
             width: 520)
-        return SetupLayout.group(
+        let options = SetupLayout.group(
             [choiceCards(forSettings ? [automatic, claude, codex, key] : [claude, codex, key]), ollama] + (forSettings ? [none] : []) + [disclosure],
             spacing: SetupLayout.cardGap)
+        summaryOptions = options
+        return options
     }
 
     /// The two places a person can find a running verbemo, each of which can be
@@ -1229,8 +1254,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                     Task { @MainActor in
                         self?.liveDownloadProgress.update(fraction)
                         self?.liveStatus.stringValue = localised(
-                            "downloading — \(Int(fraction * 100))% of about 600 MB",
-                            "скачивание — \(Int(fraction * 100))% из примерно 600 МБ")
+                            "downloading — \(Int(fraction * 100))%",
+                            "скачивание — \(Int(fraction * 100))%")
                     }
                 }
                 if liveModelStore.isReady(language: prompt) {
@@ -1342,6 +1367,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
     /// Register with Login Items, the way every other application does.
     private func startAtLogin() {
+        if [.enabled, .needsApproval].contains(LoginItem.status()) {
+            LoginItem.openSettings()
+            return
+        }
         if isRecording?() == true {
             report(launchRow, localised(
                 "not while a recording is running — stop it and try again",
@@ -1870,7 +1899,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     func refresh() {
         switch LoginItem.status() {
         case .enabled:
-            launchRow.update(.granted, note: localised("on", "включено"))
+            launchRow.update(.granted, note: localised("on", "включено"),
+                             action: forSettings ? localised("Manage in macOS…", "Управлять в macOS…") : nil)
         case .needsApproval:
             launchRow.update(
                 .denied,
@@ -1935,8 +1965,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             liveStatus.textColor = .systemGreen
         } else if !liveDownloading, Config.liveTranscriptionEnabled(), liveStatus.stringValue.isEmpty {
             liveStatus.stringValue = localised(
-                "about 600 MB — downloads when switched on",
-                "около 600 МБ — скачается при включении")
+                "about \(ModelStorage.describe(bytes: modelStorage.liveModel().advertisedBytes)) — downloads when switched on",
+                "около \(ModelStorage.describe(bytes: modelStorage.liveModel().advertisedBytes)) — скачается при включении")
         } else if !Config.liveTranscriptionEnabled() {
             liveStatus.stringValue = localised("optional", "по желанию")
         }
@@ -1959,6 +1989,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         if summaryOllamaModel.currentEditor() == nil { summaryOllamaModel.stringValue = summary.ollamaModel }
         showKeyProvider()
         for card in summaryCards.cards { card.isEnabled = summariesEnabled }
+        if forSettings {
+            summaryOptions?.isHidden = !summariesEnabled
+            summaryKeyFields?.isHidden = !backendIsKey && summary.backend != "auto"
+            summaryOllamaFields?.isHidden = summary.backend != "ollama" && summary.backend != "auto"
+        }
 
         menuBarIcon.state = Config.menuBarIcon() ? .on : .off
         dockIcon.state = Config.dockIcon() ? .on : .off
@@ -1988,6 +2023,16 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
 
         cloudSwitch.state = choice.cloud ? .on : .off
+        if forSettings {
+            cloudOptions?.isHidden = !choice.cloud && pendingProvider == nil
+            localOptionsView?.isHidden = !choice.local
+        }
+        let version = Config.transcriptionModel() == "v2" ? "v2" : "v3"
+        parakeetVersion.selectItem(withTitle: version)
+        parakeetVersion.isEnabled = parakeetDownload == nil && !Config.settingsUnknown
+        let languages = version == "v2" ? localised("English", "Английский язык") : localised("25 European languages", "25 европейских языков")
+        let size = ModelStorage.describe(bytes: modelStorage.parakeet(version: ParakeetEngine.configuredVersion()).advertisedBytes)
+        localEngineCards.card("parakeet")?.describe(title: "Parakeet \(version)", detail: languages + localised(" · about ", " · около ") + size)
         // The card under the key field is the one being answered, so a
         // provider waiting for a key is the one shown chosen.
         providerCards.select(pendingProvider ?? provider)
@@ -2059,6 +2104,12 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
     }
 
+    @objc private func parakeetVersionChanged() {
+        guard parakeetDownload == nil, !Config.settingsUnknown else { refresh(); return }
+        write(["transcription", "model"], parakeetVersion.titleOfSelectedItem == "v2" ? "v2" : nil)
+        refresh()
+    }
+
     private func localModel(_ id: String) -> ModelStorage.Model {
         switch id {
         case "whisper": return modelStorage.whisperModel()
@@ -2102,13 +2153,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             case .diarization: downloading = downloadingDiarizationModel == model.diarizationModel; error = model.diarizationModel.flatMap { diarizationErrors[$0] }
             case .live: downloading = liveDownloading; error = liveStatus.stringValue
             }
-            let ready: Bool
-            switch model.kind {
-            case .diarization: ready = DiarizationModelStore.isReady(at: model.directory, model: model.diarizationModel ?? .community1)
-            case .parakeet: ready = parakeetIsHere()
-            case .whisper, .gigaAM: ready = model.isDownloaded
-            case .live: ready = liveModelStore.isReady(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
-            }
+            let ready = modelStorage.isReady(model)
             entry.button.isHidden = ready || downloading
             entry.button.isEnabled = !Config.settingsUnknown && !(model.kind == .diarization && diarizationDownloadTask != nil)
             entry.note.stringValue = error ?? ""
@@ -2162,7 +2207,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private func highlightNextGrant() {
         let rows = [launchRow, micRow, audioRow, calendarRow]
         let pending: AccessRow?
-        if SetupPermissions.needsStartAtLogin {
+        if !permissionsOnly && SetupPermissions.needsStartAtLogin {
             pending = launchRow
         } else if SetupPermissions.microphone() != .granted {
             pending = micRow
@@ -2182,17 +2227,17 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let prompt = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
         let live = Config.liveTranscriptionEnabled()
         return SetupProgress(SetupProgress.Machine(
-            loginItem: LoginItem.status(),
+            loginItem: permissionsOnly ? .enabled : LoginItem.status(),
             microphone: SetupPermissions.microphone(),
             systemAudio: systemAudio,
-            missingLocalModel: localModelIsWantedAndMissing
+            missingLocalModel: !permissionsOnly && localModelIsWantedAndMissing
                 ? transcriptionChoice.localEngine : nil,
             localModelDownloading: parakeetDownload != nil || whisperDownloadTask != nil
                 || gigaAMDownloadTask != nil,
-            liveModelWanted: live,
+            liveModelWanted: !permissionsOnly && live,
             liveModelReady: live && liveModelStore.isReady(language: prompt),
             liveModelDownloading: liveDownloading,
-            summaryToolMissing: chosenSummaryIsMissing))
+            summaryToolMissing: !permissionsOnly && chosenSummaryIsMissing))
     }
 
     /// What the setup window's primary button will do, or nil when there is

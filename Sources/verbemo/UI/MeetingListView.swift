@@ -112,8 +112,8 @@ final class MeetingTableView: NSTableView {
 final class MeetingLibrarySplitView: NSSplitView {
     var onResize: (() -> Void)?
     private var lastWidth: CGFloat = -1
-    override func layout() {
-        super.layout()
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
         if lastWidth != bounds.width { lastWidth = bounds.width; onResize?() }
     }
 }

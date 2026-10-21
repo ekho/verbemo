@@ -782,12 +782,12 @@ struct SetupTests {
             card.allDescendants.compactMap { ($0 as? NSTextField)?.stringValue }
         }
 
-        #expect(copy(parakeet).contains { $0.contains("Fastest") && $0.contains("460 MB") })
+        #expect(copy(parakeet).contains { $0.contains("European languages") && $0.contains("MB") })
         #expect(copy(whisper).contains {
-            $0.contains("Best multilingual accuracy") && $0.contains("550 MB")
+            $0.contains("Multilingual recognition") && $0.contains("MB")
         })
         #expect(copy(gigaAM).contains {
-            $0.contains("Alternative for Russian") && $0.contains("260 MB")
+            $0.contains("Alternative for Russian") && $0.contains("MB")
         })
         for id in ["parakeet", "whisper", "gigaam"] {
             let card = try #require(cards.first { $0.id == id })

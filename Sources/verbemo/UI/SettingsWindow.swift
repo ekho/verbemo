@@ -406,7 +406,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         modelsTotal.lineBreakMode = .byTruncatingMiddle
 
         return [
-            sectionHeader(localised("Models on disk", "Модели на диске")),
+            sectionHeader(localised("Model files", "Файлы моделей")),
             modelsTotal,
             modelsBox,
         ]
@@ -426,23 +426,28 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
 
         shownModels = modelStorage.all()
         let total = modelStorage.total(shownModels)
-        let hasIncompleteDiarizer = shownModels.contains {
-            $0.kind == .diarization && !$0.isDownloaded
+        let hasIncompleteModel = shownModels.contains {
+            !modelStorage.isReady($0)
                 && FileManager.default.fileExists(atPath: $0.directory.path)
         }
-        modelsTotal.stringValue = total == 0 && hasIncompleteDiarizer
-            ? localised("An incomplete speaker model cache is present.",
-                        "Найдена неполная папка модели разделения говорящих.")
+        modelsTotal.stringValue = total == 0 && hasIncompleteModel
+            ? localised("An incomplete model cache is present.",
+                        "Найдена неполная папка модели.")
             : total == 0
             ? localised(
-                "Nothing downloaded yet. The setup tab is where they are fetched.",
-                "Пока ничего не скачано. Скачиваются они на вкладке настройки.")
+                "No models installed. Download one from the list below.",
+                "Модели пока не установлены. Их можно скачать из списка ниже.")
             : localised("\(ModelStorage.describe(bytes: total)) in total · ",
                         "всего \(ModelStorage.describe(bytes: total)) · ")
                 + friendlyPath(shownModels[0].directory.deletingLastPathComponent())
 
-        for (index, model) in shownModels.enumerated() {
-            modelsBox.addArrangedSubview(modelRow(model, tag: index))
+        for installed in [true, false] {
+            modelsBox.addArrangedSubview(sectionHeader(installed ? localised("Installed", "Установлено") : localised("Available to download", "Доступно для загрузки")))
+            let entries = shownModels.enumerated().filter { modelStorage.isReady($0.element) == installed }
+            if installed && entries.isEmpty {
+                modelsBox.addArrangedSubview(SetupLayout.detail(localised("No installed models.", "Установленных моделей нет.")))
+            }
+            for (index, model) in entries { modelsBox.addArrangedSubview(modelRow(model, tag: index)) }
         }
     }
 
@@ -450,8 +455,8 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         let name = NSTextField(labelWithString: model.name)
         name.lineBreakMode = .byTruncatingTail
 
-        let ready = model.isDownloaded
-        let partial = model.kind == .diarization && !ready
+        let ready = modelStorage.isReady(model)
+        let partial = !ready
             && FileManager.default.fileExists(atPath: model.directory.path)
         let description: String
         if ready {
@@ -562,84 +567,64 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     }
 
     @objc private func deleteModelClicked(_ sender: NSButton) {
-        guard sender.tag < shownModels.count else { return }
+        guard shownModels.indices.contains(sender.tag), panel.attachedSheet == nil else { return }
         let model = shownModels[sender.tag]
         if embedded, let reason = modelDeletionReason(model) {
-            let alert = NSAlert(); alert.messageText = reason; alert.runModal(); return
+            let alert = NSAlert()
+            alert.messageText = reason
+            alert.beginSheetModal(for: panel)
+            return
         }
-        let choice = TranscriptionChoice.read(
-            engine: Config.transcriptionEngine(),
-            cloudProvider: Config.transcriptionCloudProvider(),
-            enabled: Config.transcriptionEnabled(),
-            localModels: Platform.supportsLocalModels,
+        let previewChoice = TranscriptionChoice.read(
+            engine: Config.transcriptionEngine(), cloudProvider: Config.transcriptionCloudProvider(),
+            enabled: Config.transcriptionEnabled(), localModels: Platform.supportsLocalModels,
             localEngine: Config.transcriptionLocalEngine())
-        let updates = ModelStorage.updatesAfterDeleting(
-            model.kind, choice: choice, liveEnabled: Config.liveTranscriptionEnabled(),
+        let previewUpdates = ModelStorage.updatesAfterDeleting(
+            model.kind, choice: previewChoice, liveEnabled: Config.liveTranscriptionEnabled(),
             diarizationEnabled: Config.localDiarizationEnabled(),
             deletedDiarizationModel: model.diarizationModel ?? .community1,
             selectedDiarizationModel: Config.diarizationModel())
-
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = localised("Delete \(model.name)?", "Удалить \(model.name)?")
-        alert.informativeText = Self.consequence(
-            of: model, choice: choice, switchesOff: !updates.isEmpty)
+        alert.informativeText = Self.consequence(of: model, choice: previewChoice, switchesOff: !previewUpdates.isEmpty)
         alert.addButton(withTitle: localised("Delete", "Удалить"))
         alert.addButton(withTitle: localised("Cancel", "Отмена"))
         alert.buttons.first?.hasDestructiveAction = true
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        if embedded, let reason = modelDeletionReason(model) {
-            let failure = NSAlert(); failure.messageText = reason; failure.runModal(); return
-        }
-        if model.kind == .diarization {
-            sender.isEnabled = false
-            Task { @MainActor [weak self] in
-                do {
-                    try await DiarizationModelStore.shared(
-                        for: model.diarizationModel ?? .community1).delete()
-                    let currentUpdates = ModelStorage.updatesAfterDeleting(
-                        .diarization, choice: choice,
-                        liveEnabled: Config.liveTranscriptionEnabled(),
-                        diarizationEnabled: Config.localDiarizationEnabled(),
-                        deletedDiarizationModel: model.diarizationModel ?? .community1,
-                        selectedDiarizationModel: Config.diarizationModel())
-                    for update in currentUpdates {
-                        Config.update(path: update.path, value: update.value)
-                    }
-                } catch {
-                    let failed = NSAlert()
-                    failed.alertStyle = .warning
-                    failed.messageText = localised(
-                        "Couldn't delete \(model.name)", "Не удалось удалить \(model.name)")
-                    failed.informativeText = error.localizedDescription
-                    failed.runModal()
-                }
-                self?.refreshModels()
-                self?.setup.refresh()
+        Task { @MainActor [self] in
+            guard panel.attachedSheet == nil,
+                  await alert.beginSheetModal(for: panel) == .alertFirstButtonReturn else { return }
+            if embedded, let reason = modelDeletionReason(model) {
+                let failure = NSAlert()
+                failure.messageText = reason
+                failure.beginSheetModal(for: panel, completionHandler: nil)
+                return
             }
-            return
-        }
-
-        do {
-            try modelStorage.delete(model)
-        } catch {
-            let failed = NSAlert()
-            failed.alertStyle = .warning
-            failed.messageText = localised(
-                "Couldn't delete \(model.name)", "Не удалось удалить \(model.name)")
-            failed.informativeText = error.localizedDescription
-            failed.runModal()
+            do {
+                if model.kind == .diarization {
+                    try await DiarizationModelStore.shared(for: model.diarizationModel ?? .community1).delete()
+                } else {
+                    try modelStorage.delete(model)
+                }
+                // Re-read after confirmation/deletion: configuration can change while a sheet is open.
+                let choice = TranscriptionChoice.read(
+                    engine: Config.transcriptionEngine(), cloudProvider: Config.transcriptionCloudProvider(),
+                    enabled: Config.transcriptionEnabled(), localModels: Platform.supportsLocalModels,
+                    localEngine: Config.transcriptionLocalEngine())
+                let updates = ModelStorage.updatesAfterDeleting(
+                    model.kind, choice: choice, liveEnabled: Config.liveTranscriptionEnabled(),
+                    diarizationEnabled: Config.localDiarizationEnabled(),
+                    deletedDiarizationModel: model.diarizationModel ?? .community1,
+                    selectedDiarizationModel: Config.diarizationModel())
+                for update in updates { Config.update(path: update.path, value: update.value) }
+            } catch {
+                let failed = NSAlert(error: error)
+                failed.messageText = localised("Couldn't delete \(model.name)", "Не удалось удалить \(model.name)")
+                failed.beginSheetModal(for: panel, completionHandler: nil)
+            }
             refreshModels()
-            return
+            setup.refresh()
         }
-        // After the files, not before: a switch turned off for a deletion
-        // that then failed would leave the person worse off than they were.
-        for update in updates { Config.update(path: update.path, value: update.value) }
-        // A write redraws every surface, this one included — but only if
-        // there was one, and turning nothing off is the ordinary case.
-        if updates.isEmpty { refreshModels() }
-        setup.refresh()
     }
 
     /// What the person is about to lose, and what will change because of it.
@@ -729,6 +714,11 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         ])
 
         var helpText = entry.help
+        if embedded && entry.path == ["interface_language"] {
+            helpText = localised("System follows macOS. Meeting and summary languages are configured separately.", "Системный язык следует настройке macOS. Язык встреч и сводки настраивается отдельно.")
+        } else if embedded && entry.path == ["system_audio"] {
+            helpText = localised("Choose only call audio, or all audio including music and notifications.", "Можно записывать только звук звонка или весь звук Mac, включая музыку и уведомления.")
+        }
         if entry.needsRestart {
             helpText += localised(
                 " Takes effect at the next launch.", " Подействует при следующем запуске.")
@@ -764,11 +754,19 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         case .choice(let options):
             let popup = NSPopUpButton()
             popup.addItems(withTitles: options)
-            if embedded && entry.path == ["interface_theme"] {
+            if embedded {
                 for item in popup.itemArray {
                     let raw = item.title
                     item.representedObject = raw
-                    item.title = raw == "system" ? localised("System", "Системная") : raw == "light" ? localised("Light", "Светлая") : localised("Dark", "Тёмная")
+                    switch entry.path {
+                    case ["interface_theme"]:
+                        item.title = raw == "system" ? localised("System", "Системная") : raw == "light" ? localised("Light", "Светлая") : localised("Dark", "Тёмная")
+                    case ["interface_language"]:
+                        item.title = raw == "auto" ? localised("System", "Как в системе") : raw == "ru" ? "Русский" : "English"
+                    case ["system_audio"]:
+                        item.title = raw == "app" ? localised("Call application", "Приложение звонка") : localised("All Mac audio", "Весь звук Mac")
+                    default: break
+                    }
                 }
             }
             popup.target = self
@@ -817,7 +815,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
             case .choice:
                 let selected = stored as? String ?? row.entry.defaultValue as? String
                 if let selected, let popup = row.control as? NSPopUpButton {
-                    if row.entry.path == ["interface_theme"], let index = popup.itemArray.firstIndex(where: { $0.representedObject as? String == selected }) { popup.selectItem(at: index) }
+                    if let index = popup.itemArray.firstIndex(where: { $0.representedObject as? String == selected }) { popup.selectItem(at: index) }
                     else { popup.selectItem(withTitle: selected) }
                 }
             case .list:
@@ -846,9 +844,10 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
 
     private func providerIsSelected(_ path: [String]) -> Bool {
         if path.first == "transcription", path.count > 2 {
-            return path[1] == Config.transcriptionCloudProvider()
+            return Config.transcriptionEnabled() && path[1] == Config.transcriptionCloudProvider()
         }
         guard path.first == "summary", let leaf = path.last else { return true }
+        if !Config.summary().enabled || Config.summary().backend == "none" { return false }
         let backend = Config.summary().backend
         if leaf.hasPrefix("ollama_") { return backend == "ollama" || backend == "auto" }
         if leaf.hasPrefix("openai_") { return backend == "openai-api" || backend == "auto" }
