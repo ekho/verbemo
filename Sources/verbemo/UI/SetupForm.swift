@@ -111,7 +111,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let providerCards = ChoiceGroup()
     private var cloudKeys: [String: NSSecureTextField] = [:]
     private var cloudKeyStatuses: [String: NSTextField] = [:]
-    private var cloudKeyChecks: [String: UUID] = [:]
+    private var cloudKeyChecks: [String: (operation: UUID, key: String, slot: Credentials.Slot)] = [:]
     /// The provider waiting for a key. Set when a card or the switch is
     /// clicked for a service with no key yet. Cloud processing waits for a
     /// validated key; switching from local mode first disables that mode.
@@ -1653,10 +1653,12 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             status.stringValue = Credentials.notOursToWrite(slot)
             return
         }
+        // Collapsing the cloud section can submit the focused key again while its check is pending.
+        if let pending = cloudKeyChecks[target], pending.key == key, pending.slot == slot { return }
         let operation = UUID()
-        cloudKeyChecks[target] = operation
+        cloudKeyChecks[target] = (operation, key, slot)
         defer {
-            if cloudKeyChecks[target] == operation { cloudKeyChecks[target] = nil }
+            if cloudKeyChecks[target]?.operation == operation { cloudKeyChecks[target] = nil }
         }
         status.stringValue = Self.checkingKey
 
@@ -1669,7 +1671,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         default: service = .assemblyAI
         }
         let verdict = await checkKey(Credentials.Check(service: service, key: key))
-        guard cloudKeyChecks[target] == operation else { return }
+        guard cloudKeyChecks[target]?.operation == operation else { return }
         guard field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) == key else {
             status.stringValue = ""
             status.isHidden = true

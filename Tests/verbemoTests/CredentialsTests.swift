@@ -295,7 +295,8 @@ struct CredentialsTests {
             let cards = page.allDescendants.compactMap { $0 as? ChoiceCard }
             #expect(try #require(cards.first { $0.id == "elevenlabs" }).accessibilityPerformPress())
             let started = Gate(), release = Gate()
-            form.checkKey = { _ in started.open(); await release.pass(); return .works }
+            var checks = 0
+            form.checkKey = { _ in checks += 1; started.open(); await release.pass(); return .works }
             try Self.field("transcription.key.elevenlabs", in: form).stringValue = "elevenlabs-key"
             let check = Task { await form.saveCloudKey(for: "elevenlabs") }
             await started.pass()
@@ -309,6 +310,7 @@ struct CredentialsTests {
             }
             release.open()
             await check.value
+            #expect(checks == 1, "Ending field editing must not restart the same key check")
             #expect(Config.elevenLabsKey() == "elevenlabs-key")
             #expect(Config.assemblyAIKey() == "assembly-key")
             #expect(Config.openAIKey() == "openai-key")
