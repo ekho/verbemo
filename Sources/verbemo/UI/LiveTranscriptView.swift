@@ -2,6 +2,10 @@ import AppKit
 
 @MainActor
 final class LiveTranscriptView: NSView, NSTextFieldDelegate {
+    var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
+    private let micLevel = AudioLevelView(title: localised("Microphone", "Микрофон"), source: "mic")
+    private let systemLevel = AudioLevelView(title: localised("Computer audio", "Звук компьютера"), source: "system")
+    private var levelTimer: Timer?
     var onRename: ((String) throws -> Void)?
     private let name = NSTextField()
     private var savedTitle = ""
@@ -33,8 +37,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         sourceNote.font = .systemFont(ofSize: 11)
         sourceNote.textColor = .secondaryLabelColor
         let sources = NSStackView(views: [
-            JournalUnavailableView(.audioLevels, title: localised("Microphone · input level", "Микрофон · уровень звука")),
-            JournalUnavailableView(.audioLevels, title: localised("Computer audio · input level", "Звук компьютера · уровень звука")),
+            micLevel, systemLevel,
         ])
         sources.distribution = .fillEqually
         sources.spacing = 24
@@ -58,6 +61,30 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         content.setContentHuggingPriority(.defaultLow, for: .vertical)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        levelTimer?.invalidate()
+        levelTimer = nil
+        refreshAudioLevels()
+        guard window != nil else { return }
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.window?.isVisible == true else { return }
+                self.refreshAudioLevels()
+            }
+        }
+        timer.tolerance = 0.02
+        RunLoop.main.add(timer, forMode: .common)
+        levelTimer = timer
+    }
+
+    func refreshAudioLevels() {
+        let levels = readAudioLevels?() ?? (.off, .off)
+        micLevel.update(levels.0)
+        systemLevel.update(levels.1)
+    }
+
     func controlTextDidEndEditing(_ notification: Notification) {
         let proposed = name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard proposed != savedTitle else { return }

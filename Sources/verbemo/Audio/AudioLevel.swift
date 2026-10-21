@@ -57,8 +57,12 @@ enum AudioLevel {
         if let data = buffer.floatChannelData {
             var peak: Float = 0
             for channel in 0..<channels {
-                let samples = data[channel]
-                for i in 0..<frames { peak = max(peak, abs(samples[i])) }
+                let samples = buffer.format.isInterleaved ? data[0] + channel : data[channel]
+                for i in 0..<frames {
+                    let sample = samples[i * buffer.stride]
+                    guard sample.isFinite else { return nil }
+                    peak = max(peak, abs(sample))
+                }
             }
             return peak
         }
@@ -68,8 +72,8 @@ enum AudioLevel {
             // land in the capture callback on the first clipped sample.
             var peak: UInt16 = 0
             for channel in 0..<channels {
-                let samples = data[channel]
-                for i in 0..<frames { peak = max(peak, samples[i].magnitude) }
+                let samples = buffer.format.isInterleaved ? data[0] + channel : data[channel]
+                for i in 0..<frames { peak = max(peak, samples[i * buffer.stride].magnitude) }
             }
             return min(1, Float(peak) / Float(Int16.max))
         }
@@ -86,15 +90,12 @@ enum AudioLevel {
         ) else { return nil }
         silent.frameLength = buffer.frameLength
 
-        let frames = Int(buffer.frameLength)
-        let channels = Int(buffer.format.channelCount)
-        if let data = silent.floatChannelData {
-            for channel in 0..<channels { data[channel].update(repeating: 0, count: frames) }
-        } else if let data = silent.int16ChannelData {
-            for channel in 0..<channels { data[channel].update(repeating: 0, count: frames) }
-        } else if let data = silent.int32ChannelData {
-            for channel in 0..<channels { data[channel].update(repeating: 0, count: frames) }
-        } else {
+        switch buffer.format.commonFormat {
+        case .pcmFormatFloat32, .pcmFormatInt16, .pcmFormatInt32:
+            for audio in UnsafeMutableAudioBufferListPointer(silent.mutableAudioBufferList) {
+                if let data = audio.mData { memset(data, 0, Int(audio.mDataByteSize)) }
+            }
+        default:
             // Unknown sample format: writing a buffer of uninitialized memory
             // would be worse than writing nothing at all.
             return nil

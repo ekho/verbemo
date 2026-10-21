@@ -144,6 +144,7 @@ final class MicRecorder: @unchecked Sendable {
         var lastBufferAt: Date?
         var lastSoundAt: Date?
         var levelMeasurable = true
+        var meter = AudioMeter()
         var muted = false
         /// Every restart, and the dead span still open. Opened on the main
         /// thread when capture is torn down, closed by the tap callback whose
@@ -189,6 +190,11 @@ final class MicRecorder: @unchecked Sendable {
     /// callers must then treat "silent" as "unknown" rather than as silence.
     var levelMeasurable: Bool { state.withLock { $0.levelMeasurable } }
 
+    var audioLevel: AudioMeter.Reading {
+        let running = isRecording
+        return state.withLock { $0.meter.read(running: running, paused: $0.muted) }
+    }
+
     /// Every route change this session survived, in order. Read on stop, for
     /// meta.json.
     var restarts: [Restart] { state.withLock { $0.log.entries } }
@@ -198,7 +204,7 @@ final class MicRecorder: @unchecked Sendable {
     /// after the pause stay true, and nothing said in the room is recorded.
     var isMuted: Bool {
         get { state.withLock { $0.muted } }
-        set { state.withLock { $0.muted = newValue } }
+        set { state.withLock { $0.muted = newValue; $0.meter.reset() } }
     }
 
     // Main-thread only: the observer is registered on the main queue and
@@ -360,7 +366,7 @@ final class MicRecorder: @unchecked Sendable {
         lastBufferAt = nil
         // Nothing will arrive to close an open gap now, and the track ends
         // where the audio ended.
-        state.withLock { $0.log.abandon() }
+        state.withLock { $0.log.abandon(); $0.meter.reset() }
         attachedReusingFile = false
         liveAudio.install(nil)
     }
@@ -383,6 +389,7 @@ final class MicRecorder: @unchecked Sendable {
     /// follows the open file rather than the new device, and a failure here
     /// leaves that file alone.
     private func attach(voiceProcessing: Bool, reusingFile: Bool = false) throws {
+        state.withLock { $0.meter.reset() }
         engine = AVAudioEngine()
         let input = engine.inputNode
         bindInputDevice(of: input)
@@ -536,7 +543,9 @@ final class MicRecorder: @unchecked Sendable {
     private func writeTracked(_ buffer: AVAudioPCMBuffer, to writer: TrackWriter) {
         let silence = pendingGap(before: buffer, rate: writer.file.processingFormat.sampleRate)
         let peak = AudioLevel.peak(of: buffer)
+        let hasFrames = buffer.frameLength > 0
         let muted: Bool = state.withLock { s in
+            if !s.muted, hasFrames { s.meter.record(peak: peak) }
             if let peak {
                 if peak >= AudioLevel.speechThreshold { s.lastSoundAt = Date() }
             } else {

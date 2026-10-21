@@ -394,6 +394,7 @@ final class AppController {
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.update(state: .idle, elapsed: nil)
         menuBar.updatesAvailable(updates.isAvailable)
+        window.readAudioLevels = { [weak self] in self?.session?.audioLevels ?? (.off, .off) }
 
         window.libraryProvider = { [weak self] in self?.recordings }
         window.onRenameRecording = { [weak self] name in

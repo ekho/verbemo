@@ -340,15 +340,6 @@ struct JournalWorkspaceTests {
         #expect(!texts.contains("Файлы в папке встреч"))
     }
 
-    @Test(.freshHome, .speaking(.russian)) func liveMetersExplicitlyReportMissingFunctionality() throws {
-        let app = ApplicationWindow()
-        app.update(state: .recording, elapsed: "00:01")
-        app.showActiveRecording()
-        defer { app.hide() }
-        let fields = try #require(app.panel.contentView).allDescendants.compactMap { $0 as? NSTextField }
-        #expect(fields.filter { $0.stringValue == "Функция пока не реализована" }.count == 2)
-    }
-
     @Test(.freshHome) func documentAndInspectorRemainReachableAtNarrowWidth() throws {
         let dir = Home.current.url.appendingPathComponent("meeting")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
