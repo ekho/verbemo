@@ -53,12 +53,13 @@ struct MeetingCalendarMetadata {
         // New notes and email fields are deliberately absent from model context.
         return json?["attendees"] as? [String] ?? []
     }
-    static func confirm(in dir: URL) throws {
+    static func associate(_ meeting: CalendarWatcher.Meeting?, in dir: URL) throws {
+        if let meeting, !meeting.hasPersistentID || meeting.id.isEmpty { throw CalendarSelectionError.missingEvent }
         try SessionClaim.acquire(dir, stage: .finish)
         defer { SessionClaim.release(dir) }
-        guard var calendar = SessionState.read(dir)?["calendar"] as? [String: Any],
-              let id = calendar["event_id"] as? String, !id.isEmpty else { throw CocoaError(.fileReadUnknown) }
-        calendar["association"] = "confirmed"
-        try SessionState.amend(dir, with: ["calendar": calendar])
+        // Only the meeting snapshot changes; names and transcript versions are independent files.
+        let snapshot = meeting.flatMap { MeetingContext(meeting: $0, app: nil, confirmed: true).metaFields["calendar"] }
+        try SessionState.amend(dir, with: ["calendar": snapshot])
     }
+
 }

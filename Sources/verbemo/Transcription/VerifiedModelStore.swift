@@ -29,6 +29,7 @@ import Foundation
 /// waiting, and the download itself stops only when nobody is waiting for it
 /// any more.
 struct VerifiedModelStore: Sendable {
+    private static let downloads = SharedDownloads<Progress>()
     struct Manifest: Equatable, Sendable {
         let id: String
         let fileName: String
@@ -105,10 +106,9 @@ struct VerifiedModelStore: Sendable {
     /// The verified model, downloading it first if it is not here yet.
     func download(progress: @escaping ProgressHandler = { _ in }) async throws -> URL {
         if try installedModel() != nil { return modelURL }
-        let shared = SharedDownloads.shared.download(for: modelURL.path) { [self] fanOut in
+        return try await Self.downloads.wait(for: modelURL.path, progress: progress) { [self] fanOut in
             try await downloadUnderLock(progress: fanOut)
         }
-        return try await shared.wait(progress: progress)
     }
 
     func delete() throws {
@@ -202,27 +202,38 @@ struct VerifiedModelStore: Sendable {
 // MARK: - one download, several callers
 
 /// The downloads in flight in this process, by model path.
-final class SharedDownloads: @unchecked Sendable {
-    static let shared = SharedDownloads()
+final class SharedDownloads<Update: Sendable>: @unchecked Sendable {
 
     private let lock = NSLock()
-    private var running: [String: SharedDownload] = [:]
+    private var running: [String: SharedDownload<Update>] = [:]
 
-    func download(
+    func wait(
         for key: String,
-        start: @escaping @Sendable (@escaping VerifiedModelStore.ProgressHandler) async throws -> URL
-    ) -> SharedDownload {
+        progress: @escaping @Sendable (Update) -> Void,
+        start: @escaping @Sendable (@escaping @Sendable (Update) -> Void) async throws -> URL
+    ) async throws -> URL {
+        try Task.checkCancellation()
+        let id = UUID()
+        let download = reserve(for: key, waiter: id, start: start)
+        return try await download.wait(id: id, progress: progress)
+    }
+
+    private func reserve(
+        for key: String, waiter: UUID,
+        start: @escaping @Sendable (@escaping @Sendable (Update) -> Void) async throws -> URL
+    ) -> SharedDownload<Update> {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = running[key], !existing.isAbandoned { return existing }
-        let download = SharedDownload(work: start) { [weak self] finished in
+        if let existing = running[key], existing.reserve(waiter) { return existing }
+        let download = SharedDownload<Update>(work: start) { [weak self] finished in
             self?.forget(key, finished)
         }
+        _ = download.reserve(waiter)
         running[key] = download
         return download
     }
 
-    private func forget(_ key: String, _ download: SharedDownload) {
+    private func forget(_ key: String, _ download: SharedDownload<Update>) {
         lock.lock()
         defer { lock.unlock() }
         if running[key] === download { running[key] = nil }
@@ -230,21 +241,23 @@ final class SharedDownloads: @unchecked Sendable {
 }
 
 /// One download and everybody waiting for it.
-final class SharedDownload: @unchecked Sendable {
+final class SharedDownload<Update: Sendable>: @unchecked Sendable {
     private struct Waiter {
         let continuation: CheckedContinuation<URL, Error>
-        let progress: VerifiedModelStore.ProgressHandler
+        let progress: @Sendable (Update) -> Void
     }
 
     private let lock = NSLock()
     private var waiters: [UUID: Waiter] = [:]
+    private var consumers: Set<UUID> = []
     private var result: Result<URL, Error>?
     private var abandoned = false
+    private var latestProgress: Update?
     private var task: Task<Void, Never>?
 
     init(
-        work: @escaping @Sendable (@escaping VerifiedModelStore.ProgressHandler) async throws -> URL,
-        finished: @escaping @Sendable (SharedDownload) -> Void
+        work: @escaping @Sendable (@escaping @Sendable (Update) -> Void) async throws -> URL,
+        finished: @escaping @Sendable (SharedDownload<Update>) -> Void
     ) {
         task = Task.detached(priority: .utility) { [self] in
             let outcome: Result<URL, Error>
@@ -258,10 +271,16 @@ final class SharedDownload: @unchecked Sendable {
         }
     }
 
-    var isAbandoned: Bool { lock.withLock { abandoned } }
+    // Reserve while holding the registry lock, before a task can suspend or cancel.
+    func reserve(_ id: UUID) -> Bool {
+        lock.withLock {
+            guard !abandoned else { return false }
+            if result == nil { consumers.insert(id) }
+            return true
+        }
+    }
 
-    func wait(progress: @escaping VerifiedModelStore.ProgressHandler) async throws -> URL {
-        let id = UUID()
+    func wait(id: UUID, progress: @escaping @Sendable (Update) -> Void) async throws -> URL {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 lock.lock()
@@ -273,7 +292,9 @@ final class SharedDownload: @unchecked Sendable {
                     continuation.resume(throwing: CancellationError())
                 } else {
                     waiters[id] = Waiter(continuation: continuation, progress: progress)
+                    let latest = latestProgress
                     lock.unlock()
+                    if let latest { progress(latest) }
                 }
             }
         } onCancel: {
@@ -285,7 +306,8 @@ final class SharedDownload: @unchecked Sendable {
     private func leave(_ id: UUID) {
         lock.lock()
         let waiter = waiters.removeValue(forKey: id)
-        let nobodyLeft = waiters.isEmpty && result == nil
+        consumers.remove(id)
+        let nobodyLeft = consumers.isEmpty && result == nil
         if nobodyLeft { abandoned = true }
         let task = nobodyLeft ? self.task : nil
         lock.unlock()
@@ -293,8 +315,11 @@ final class SharedDownload: @unchecked Sendable {
         task?.cancel()
     }
 
-    private func report(_ update: VerifiedModelStore.Progress) {
-        let handlers = lock.withLock { waiters.values.map(\.progress) }
+    private func report(_ update: Update) {
+        let handlers = lock.withLock {
+            latestProgress = update
+            return waiters.values.map(\.progress)
+        }
         for handler in handlers { handler(update) }
     }
 
@@ -303,6 +328,7 @@ final class SharedDownload: @unchecked Sendable {
         result = outcome
         let waiting = waiters.values
         waiters = [:]
+        consumers = []
         lock.unlock()
         for waiter in waiting { waiter.continuation.resume(with: outcome) }
     }

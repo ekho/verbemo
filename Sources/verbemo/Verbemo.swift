@@ -227,17 +227,8 @@ final class AppController {
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
     private let window = ApplicationWindow()
-    /// Built on first use. It is thirty-odd controls, and verbemo spends nearly
-    /// all of its life recording rather than being configured.
-    private lazy var settings: SettingsWindow = {
-        let window = self.window.settings
-        window.isRecording = { [weak self] in self?.isRecording == true }
-        return window
-    }()
-    /// Built on first use, like the others, and for a stronger reason: most
-    /// copies of verbemo will never be asked who wrote them.
-    private lazy var setupWindow: SetupWindow = {
-        let setup = SetupWindow(hostWindow: window.panel)
+    private lazy var setupPage: SetupPage = {
+        let setup = SetupPage()
         setup.isRecording = { [weak self] in self?.isRecording == true }
         setup.onFinished = { [weak self] in
             self?.startAutomaticFeatures(requestCalendarAccess: false)
@@ -276,7 +267,7 @@ final class AppController {
     private var sweeps: SweepScheduler!
     private var mediaImport: MediaImportCoordinator
     private let liveTranscription = LiveTranscriptionCoordinator()
-    private let calendar: CalendarWatcher?
+    private let calendar = CalendarWatcher()
     private let autoRecord: AutoRecordController
     private var session: RecordingSession?
     /// Whether a meeting is being recorded. The session itself stays private —
@@ -293,49 +284,55 @@ final class AppController {
     private var liveRecordingStatus = LiveTranscriptionCoordinator.Status.idle
     private var ticker: Timer?
     private var recordingsBuilt = false
-    private lazy var recordings: RecordingsWindow = makeRecordingsWindow()
+    private lazy var recordings: MeetingLibraryController = makeLibrary()
 
-    private func makeRecordingsWindow() -> RecordingsWindow {
+    private func makeLibrary() -> MeetingLibraryController {
         recordingsBuilt = true
-        let window = RecordingsWindow(root: root, hostWindow: self.window.panel)
+        let library = MeetingLibraryController(root: root, hostWindow: self.window.panel)
         self.window.isProcessing = { [weak self] in self?.isBusyForUpdate == true }
-        window.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
-        window.onOpenActiveRecording = { [weak self] in self?.window.showActiveRecording() }
-        window.onRenameActiveRecording = { [weak self] title in
+        library.calendarSearch = { [weak self] query in
+            guard let self else { throw CancellationError() }
+            return try await self.calendar.search(query)
+        }
+        library.calendarResolve = { [weak self] meeting in
+            guard let self else { throw CancellationError() }
+            return try await self.calendar.resolve(meeting)
+        }
+        library.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
+        library.onOpenActiveRecording = { [weak self] in self?.window.showActiveRecording() }
+        library.onRenameActiveRecording = { [weak self] title in
             guard let self, let session = self.session else { throw CocoaError(.fileNoSuchFile) }
             try session.rename(to: title)
             self.window.recordingTitle = title
             self.updateActiveRecording()
         }
-        window.onRetranscribe = { [weak self] _ in self?.catchUp() }
-        window.onImportFiles = { [weak self] files in self?.importFiles(files) }
-        window.onCancelImport = { [weak self] in self?.cancelImport() }
-        window.onChooseImport = { [weak self] in self?.chooseMediaToImport() }
+        library.onRetranscribe = { [weak self] _ in self?.catchUp() }
+        library.onImportFiles = { [weak self] files in self?.importFiles(files) }
+        library.onCancelImport = { [weak self] in self?.cancelImport() }
         let coordinator = transcription
-        window.onResumeDiarization = { [weak self] dir, request in
+        library.onResumeDiarization = { [weak self] dir, request in
             self?.processingStarted()
             defer { self?.processingFinished() }
             try await coordinator.resumeDiarization(dir, request: request)
         }
-        window.onRetryDiarization = { [weak self] dir in
+        library.onRetryDiarization = { [weak self] dir in
             self?.processingStarted()
             defer { self?.processingFinished() }
             try await coordinator.diarizeNow(dir)
         }
-        window.onSkipDiarization = { [weak self] dir in
+        library.onSkipDiarization = { [weak self] dir in
             self?.processingStarted()
             defer { self?.processingFinished() }
             try await coordinator.skipDiarization(dir)
         }
-        return window
+        return library
     }
     private var network: NetworkMonitor?
     private var setupRequestObserver: NSObjectProtocol?
     /// How the app menu is told whether to offer **Setup…**; the status
     /// item's own menu is reached directly.
     var onSetupAvailable: ((Bool) -> Void)?
-    /// Takes up every setting that can change while verbemo runs, whichever
-    /// window wrote it — see `SettingsApplier`.
+    /// Takes up settings changed in the UI or configuration file.
     private var settingsApplier: SettingsApplier?
     /// Hears edits made to the config file from outside — above all the one
     /// that fixes a file verbemo could not read.
@@ -372,7 +369,6 @@ final class AppController {
         // The calendar is worth reading for names even when it isn't a
         // trigger: "Integration sync (zoom.us)" beats "20:39" in a folder list
         // whether or not the event is what started the recording.
-        calendar = (Config.useCalendar() || settings.calendar) ? CalendarWatcher() : nil
         self.autoRecord = watcher ?? AutoRecordController(
             settings: settings, calendar: calendar,
             canStartRecording: { SetupPermissions.microphone() == .granted })
@@ -389,9 +385,8 @@ final class AppController {
         menuBar.onTogglePause = { [weak self] in self?.togglePause() }
         menuBar.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
-        menuBar.onShowRecordings = { [weak self] in self?.showRecordings() }
+        menuBar.onShowMeetings = { [weak self] in self?.showMeetings() }
         menuBar.onImport = { [weak self] in self?.chooseMediaToImport() }
-        menuBar.onShowWindow = { [weak self] in self?.showWindow() }
         menuBar.onShowSettings = { [weak self] in self?.showSettings() }
         menuBar.onShowSetup = { [weak self] in self?.showSetup() }
         menuBar.onCheckForUpdates = { [weak self] in self?.updates.checkForUpdates() }
@@ -406,11 +401,29 @@ final class AppController {
             try session.rename(to: name)
         }
         window.onToggle = { [weak self] in self?.toggle() }
+        window.recordingCalendar = { [weak self] date in
+            guard let self, Config.useCalendar() else { return nil }
+            await self.calendar.requestAccess()
+            guard self.calendar.authorized, Config.useCalendar() else { return nil }
+            return (self.calendar.bestMatch(for: Date()), self.calendar.meetings(on: date))
+        }
+        window.calendarSearch = { [weak self] query in
+            guard let self else { throw CancellationError() }
+            return try await self.calendar.search(query)
+        }
+        window.calendarResolve = { [weak self] meeting in
+            guard let self else { throw CancellationError() }
+            return try await self.calendar.resolve(meeting)
+        }
+        window.onStartRecording = { [weak self] title, meeting in
+            guard let self, self.session == nil else { return }
+            self.autoRecord.noteManualStart()
+            let context = self.recordingContext(meeting: Config.useCalendar() ? meeting : nil, confirmed: true)
+            self.startSession(trigger: .manual, context: context, title: title)
+        }
         window.onTogglePause = { [weak self] in self?.togglePause() }
         window.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
         window.onToggleLive = { [weak self] enabled in self?.toggleLive(enabled) }
-        window.onOpenFolder = { [weak self] in self?.openFolder() }
-        window.onShowRecordings = { [weak self] in self?.showRecordings() }
         window.onImportFiles = { [weak self] files in self?.importFiles(files) }
         window.onCancelImport = { [weak self] in self?.cancelImport() }
         window.onChooseImport = { [weak self] in self?.chooseMediaToImport() }
@@ -556,8 +569,8 @@ final class AppController {
 
         // A calendar prompt can stay unanswered. It must never hold up the
         // already-running microphone watcher.
-        if requestCalendarAccess {
-            Task { [weak self] in await self?.calendar?.requestAccess() }
+        if requestCalendarAccess && (Config.useCalendar() || Config.autoRecord().calendar) {
+            Task { [weak self] in await self?.calendar.requestAccess() }
         }
         autoRecord.reloadSettings()
         showAutoRecord()
@@ -576,7 +589,7 @@ final class AppController {
         importFiles(files)
     }
 
-    /// Also used by drag-and-drop entry points in the windows. The importer
+    /// Also used by drag-and-drop entry points in the meeting and live pages. The importer
     /// publishes complete filesystem sessions; only then are they handed to
     /// the ordinary transcription queue, exactly like a recording just ended.
     func importFiles(_ files: [URL]) {
@@ -711,7 +724,7 @@ final class AppController {
         tick()
     }
 
-    /// The menu's and the status window's switch. It writes
+    /// The menu's and the main window's switch. It writes
     /// `auto_record.enabled` like every other surface does, so the answer
     /// survives a relaunch and Settings shows the same thing.
     private func toggleAutoRecord() {
@@ -725,7 +738,7 @@ final class AppController {
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
     }
 
-    /// The status window's live-transcript switch. It only writes, as the
+    /// The main window's live-transcript switch. It only writes, as the
     /// setup form's switch does; the recording is rewired by `take`, which
     /// hears both.
     private func toggleLive(_ enabled: Bool) {
@@ -754,7 +767,7 @@ final class AppController {
     /// Choosing a folder in Setup used to change nothing until the next
     /// launch, and said nothing about it: the next meeting went on landing
     /// in the old folder while the window showed the new one. Now the next
-    /// recording or import goes to the new folder, and the recordings window
+    /// recording or import goes to the new folder, and the meeting library
     /// shows what is in it. A recording or an import under way finishes where
     /// it started — a session is one folder — and the move waits for it.
     private func adoptPendingRoot() {
@@ -791,24 +804,29 @@ final class AppController {
     /// What we can tell about a meeting being started by hand: whichever call
     /// app is already holding the microphone, plus the calendar's view of now.
     private func currentContext() -> MeetingContext {
+        recordingContext(meeting: Config.useCalendar() ? calendar.bestMatch(for: Date()) : nil)
+    }
+
+    private func recordingContext(meeting: CalendarWatcher.Meeting?, confirmed: Bool = false) -> MeetingContext {
         let settings = Config.autoRecord()
         let mic = MicActivityMonitor.check(
             callApps: settings.callApps, ignoring: settings.ignoreApps
         )
         return MeetingContext(
-            meeting: calendar?.bestMatch(for: Date()),
+            meeting: meeting,
             app: mic.names.first,
-            appFamilies: mic.families
+            appFamilies: mic.families,
+            confirmed: confirmed
         )
     }
 
     /// Whether a recording is running once this returns. The auto-record
     /// loop decides from the answer when to try again.
     @discardableResult
-    private func startSession(trigger: RecordingSession.Trigger, context: MeetingContext) -> Bool {
+    private func startSession(trigger: RecordingSession.Trigger, context: MeetingContext, title: String? = nil) -> Bool {
         guard session == nil else { return true }
         do {
-            let newSession = try RecordingSession(root: root, context: context, trigger: trigger)
+            let newSession = try RecordingSession(root: root, context: context, trigger: trigger, title: title)
             try newSession.start()
             session = newSession
             updates.activityDidChange()
@@ -989,15 +1007,14 @@ final class AppController {
     private func showTranscription(_ status: TranscriptionCoordinator.Status) {
         let text = Self.transcriptionLine(for: status)
         menuBar.updateTranscription(text)
-        window.updateTranscription(text)
         // Each change of status follows the end of a session's work — its
         // transcript, names and summary — or the start of the next, so the
-        // recordings window reads again rather than going on offering
+        // meeting library reads again rather than going on offering
         // Finish processing for work that has been done.
         sessionsChanged()
     }
 
-    /// The recordings folder changed behind the recordings window's back.
+    /// The recordings folder changed behind the meeting library's back.
     private func sessionsChanged() {
         if recordingsBuilt { recordings.sessionsChanged() }
     }
@@ -1016,25 +1033,20 @@ final class AppController {
         }
     }
 
-    /// Bring the status window up — from the menu, a notification, or a
+    /// Bring the main window up — from the menu, a notification, or a
     /// second launch of an already-running verbemo. All three are someone
     /// asking for the window this second, so it comes forward rather than
     /// waiting behind whatever they were looking at.
     func showWindow() { window.bringToFront() }
 
-    /// Settings, from either menu. Activating first because a click on the
-    /// status item doesn't bring the app forward, and a settings window you
-    /// have to click again before you can type in it is a small insult.
+    /// Settings use the same window as meetings, including menu-bar activation.
     func showSettings() {
         NSApp.activate(ignoringOtherApps: true)
         window.navigate(.general)
         window.bringToFront()
     }
 
-    /// About, from either menu. Activating for the same reason Settings
-    /// does: a click on the status item does not bring the app forward, and a
-    /// window that opens behind the one you were reading is a window you have
-    /// to go looking for.
+    /// About is a page in the same window.
     func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         window.navigate(.about)
@@ -1051,17 +1063,10 @@ final class AppController {
     func showSetup() {
         NSApp.activate(ignoringOtherApps: true)
         offerSetup()
-        window.presentSetup(setupWindow)
+        window.presentSetup(setupPage)
     }
 
-    /// Offer the wizard in both menus, or in neither.
-    ///
-    /// It is offered while there is a first run to finish. After that the
-    /// item is a door to a window whose job is over: the form inside it lives
-    /// in Settings for good, and what the wizard adds — the order the grants
-    /// have to happen in, and the line saying what is still outstanding — has
-    /// been answered by then. `verbemo setup` is the way back, and README says
-    /// so where the menu used to.
+    /// Offer permissions while first-run setup is pending. The CLI can reopen it.
     private func offerSetup() {
         let available = SetupState.isPending
         menuBar.setupAvailable(available)
@@ -1114,7 +1119,7 @@ final class AppController {
         NSWorkspace.shared.open(root)
     }
 
-    private func showRecordings() {
+    private func showMeetings() {
         // A session put back in the queue should start transcribing now, not
         // at the next launch — the person asking for it is watching.
         recordings.onRetranscribe = { [weak self] _ in
@@ -1125,7 +1130,7 @@ final class AppController {
         window.bringToFront()
     }
 
-    /// The elapsed time as the status window shows it. Not private and not
+    /// The elapsed time as the recording controls show it. Not private and not
     /// isolated because `verbemo doctor` prints the same number from a command
     /// that never touches AppKit, and one shape for it is the point.
     nonisolated static func format(_ interval: TimeInterval) -> String {

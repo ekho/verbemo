@@ -14,7 +14,8 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
     }
     init(content: NSView) {
         super.init(frame: .zero)
-        name.font = .systemFont(ofSize: 24, weight: .semibold)
+        name.font = JournalStyle.titleFont()
+        name.textColor = JournalStyle.ink
         name.isBordered = false
         name.drawsBackground = false
         name.identifier = .init("recording-title")
@@ -31,18 +32,27 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
             "«Вы» и «Они» — источники звука, а не подтверждённые имена участников."))
         sourceNote.font = .systemFont(ofSize: 11)
         sourceNote.textColor = .secondaryLabelColor
-        let stack = NSStackView(views: [name, heading, note, content, sourceNote])
+        let sources = NSStackView(views: [
+            JournalUnavailableView(.audioLevels, title: localised("Microphone · input level", "Микрофон · уровень звука")),
+            JournalUnavailableView(.audioLevels, title: localised("Computer audio · input level", "Звук компьютера · уровень звука")),
+        ])
+        sources.distribution = .fillEqually
+        sources.spacing = 24
+        let stack = NSStackView(views: [name, note, sources, heading, content, sourceNote])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 24),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -24),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 40),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -40),
             name.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            sources.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            note.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            sourceNote.widthAnchor.constraint(equalTo: stack.widthAnchor),
             content.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         content.setContentHuggingPriority(.defaultLow, for: .vertical)

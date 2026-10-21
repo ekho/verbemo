@@ -1,104 +1,127 @@
 import AppKit
 
 @MainActor
-final class SidebarView: NSVisualEffectView {
+final class SidebarView: JournalSurface {
     var onNavigate: ((ApplicationNavigationState.Destination) -> Void)?
-    private var buttons: [NSButton] = []
-    private let automatic = NSButton()
+    var onStart: (() -> Void)?
+    var onImport: (() -> Void)?
+    var onToggleAutomatic: (() -> Void)?
+    private let libraryHost = NSView()
+    private let start = NSButton()
+    private let settings = NSButton()
+    private let automatic = NSSwitch()
 
     init() {
-        super.init(frame: .zero)
-        material = .sidebar
-        blendingMode = .behindWindow
-        let brand = NSTextField(labelWithString: "Verbemo")
-        brand.font = .systemFont(ofSize: 23, weight: .semibold)
+        super.init(JournalStyle.sidebar)
+        identifier = .init("journal.sidebar")
+        let brand = NSTextField(labelWithString: "verbemo")
+        brand.font = .systemFont(ofSize: 24, weight: .semibold)
+        brand.textColor = JournalStyle.ink
         let logo = NSImageView(image: NSApplication.shared.applicationIconImage)
-        logo.widthAnchor.constraint(equalToConstant: 32).isActive = true
-        logo.heightAnchor.constraint(equalToConstant: 32).isActive = true
-        let identity = NSStackView(views: [logo, brand])
-        identity.spacing = 10
-        let meetings = group(localised("MEETINGS", "ВСТРЕЧИ"), destinations: [.allMeetings, .processing, .attention])
-        let settings = group(localised("SETTINGS", "НАСТРОЙКИ"), destinations: [.general, .recording, .transcription, .summary, .storage, .about])
-        automatic.title = localised("Auto-recording is on", "Автозапись включена")
-        automatic.image = NSImage(systemSymbolName: "arrow.clockwise.circle", accessibilityDescription: nil)
-        automatic.imagePosition = .imageLeading
-        automatic.isBordered = false
-        automatic.alignment = .left
-        automatic.font = .systemFont(ofSize: 11)
+        logo.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        logo.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        let identity = NSStackView(views: [logo, brand, NSView()])
+        identity.spacing = 9
+        start.title = localised("●  New recording", "●  Новая запись")
+        start.font = .systemFont(ofSize: 13, weight: .medium)
+        start.bezelStyle = .regularSquare
+        start.bezelColor = NSColor(srgbRed: 0.16, green: 0.34, blue: 0.27, alpha: 1)
+        start.contentTintColor = .white
+        start.wantsLayer = true
+        start.layer?.cornerRadius = 7
+        start.layer?.masksToBounds = true
+        start.identifier = .init("journal.new-recording")
+        start.keyEquivalent = "n"
+        start.keyEquivalentModifierMask = .command
+        start.target = self
+        start.action = #selector(startClicked)
+        start.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        let importButton = NSButton(title: localised("Import", "Импортировать"), target: self, action: #selector(importClicked))
+        importButton.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: nil)
+        importButton.imagePosition = .imageLeading
+        importButton.imageHugsTitle = true
+        importButton.bezelStyle = .regularSquare
+        importButton.isBordered = true
+        importButton.font = .systemFont(ofSize: 13, weight: .medium)
+        importButton.wantsLayer = true
+        importButton.layer?.cornerRadius = 7
+        importButton.layer?.masksToBounds = true
+        importButton.identifier = .init("journal.import")
+        importButton.heightAnchor.constraint(equalToConstant: 40).isActive = true
+        settings.title = localised("Settings", "Настройки")
+        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        settings.imagePosition = .imageLeading
+        settings.isBordered = false
+        settings.alignment = .left
+        settings.identifier = .init("journal.settings")
+        settings.keyEquivalent = ","
+        settings.keyEquivalentModifierMask = .command
+        settings.target = self
+        settings.action = #selector(settingsClicked)
+        settings.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        automatic.controlSize = .small
         automatic.target = self
-        automatic.action = #selector(openRecording)
+        automatic.action = #selector(automaticClicked)
         automatic.identifier = .init("navigation.auto-record")
-        automatic.setAccessibilityLabel(localised("Open automatic recording settings", "Открыть настройки автоматической записи"))
-        let spring = NSView()
-        spring.setContentHuggingPriority(.defaultLow, for: .vertical)
-        let stack = FlippedStackView(views: [identity, meetings, spring, settings, automatic])
+        let automaticLabel = JournalStyle.caption(localised("Auto-record calls", "Автозапись звонков"))
+        automatic.setAccessibilityLabel(automaticLabel.stringValue)
+        let autoRow = NSStackView(views: [automaticLabel, NSView(), automatic])
+        let divider = NSBox(); divider.boxType = .separator
+        let stack = NSStackView(views: [identity, start, importButton, libraryHost, divider, settings, autoRow])
         stack.orientation = .vertical
+        stack.distribution = .fill
         stack.alignment = .leading
-        stack.spacing = 22
+        stack.spacing = 12
+        stack.setCustomSpacing(22, after: identity)
+        stack.setCustomSpacing(20, after: importButton)
         stack.translatesAutoresizingMaskIntoConstraints = false
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.drawsBackground = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.documentView = stack
-        addSubview(scroll)
+        addSubview(stack)
         NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            scroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            scroll.topAnchor.constraint(equalTo: topAnchor, constant: 22),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
-            stack.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor),
-            stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
-            meetings.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            settings.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            automatic.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
         ])
+        for view in stack.arrangedSubviews { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        libraryHost.setContentHuggingPriority(.init(1), for: .vertical)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    private func group(_ title: String, destinations: [ApplicationNavigationState.Destination]) -> NSStackView {
-        let caption = NSTextField(labelWithString: title)
-        caption.font = .systemFont(ofSize: 10, weight: .medium)
-        caption.textColor = .secondaryLabelColor
-        let views = destinations.map { destination -> NSButton in
-            let button = NSButton(title: destination.title, target: self, action: #selector(clicked(_:)))
-            button.identifier = .init(destination.rawValue)
-            button.image = NSImage(systemSymbolName: destination.symbol, accessibilityDescription: nil)
-            button.imagePosition = .imageLeading
-            button.imageHugsTitle = true
-            button.isBordered = false
-            button.alignment = .left
-            button.font = .systemFont(ofSize: 12)
-            button.heightAnchor.constraint(equalToConstant: 35).isActive = true
-            button.setAccessibilityLabel(destination.title)
-            buttons.append(button)
-            return button
-        }
-        let group = NSStackView(views: [caption] + views)
-        group.orientation = .vertical
-        group.alignment = .leading
-        group.spacing = 4
-        for button in views { button.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true }
-        return group
+    func mountLibrary(_ view: NSView) {
+        guard view.superview !== libraryHost else { return }
+        libraryHost.subviews.forEach { $0.removeFromSuperview() }
+        view.translatesAutoresizingMaskIntoConstraints = false
+        libraryHost.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: libraryHost.leadingAnchor), view.trailingAnchor.constraint(equalTo: libraryHost.trailingAnchor),
+            view.topAnchor.constraint(equalTo: libraryHost.topAnchor), view.bottomAnchor.constraint(equalTo: libraryHost.bottomAnchor),
+        ])
     }
     func select(_ destination: ApplicationNavigationState.Destination) {
-        for button in buttons {
-            let selected = button.identifier?.rawValue == destination.rawValue
-            button.contentTintColor = selected ? .controlAccentColor : .secondaryLabelColor
-            button.font = .systemFont(ofSize: 12, weight: selected ? .semibold : .regular)
-            button.setAccessibilityValue(selected ? 1 : 0)
-        }
+        settings.contentTintColor = destination.isMeetings ? JournalStyle.ink : JournalStyle.accent
+        settings.setAccessibilityValue(destination.isMeetings ? 0 : 1)
     }
+    func updateRecording(_ recording: Bool) { start.isEnabled = !recording }
     func updateAutomatic(_ enabled: Bool, reason: String?) {
-        automatic.title = enabled ? localised("Auto-recording is on", "Автозапись включена") : localised("Auto-recording is off", "Автозапись выключена")
+        automatic.state = enabled ? .on : .off
         automatic.toolTip = reason
     }
-    @objc private func clicked(_ sender: NSButton) {
-        guard let id = sender.identifier?.rawValue, let destination = ApplicationNavigationState.Destination(rawValue: id) else { return }
-        onNavigate?(destination)
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.characters == "f", let search = libraryHost.journalSearchField {
+            window?.makeFirstResponder(search)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
-    @objc private func openRecording() { onNavigate?(.recording) }
+    @objc private func startClicked() { onStart?() }
+    @objc private func importClicked() { onImport?() }
+    @objc private func settingsClicked() { onNavigate?(.general) }
+    @objc private func automaticClicked() { onToggleAutomatic?() }
+}
+
+private extension NSView {
+    var journalSearchField: NSSearchField? {
+        if let search = self as? NSSearchField { return search }
+        return subviews.lazy.compactMap(\.journalSearchField).first
+    }
 }

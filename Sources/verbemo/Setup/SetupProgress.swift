@@ -180,6 +180,7 @@ struct SetupProgress: Equatable {
         switch engine {
         case "whisper": return "Whisper"
         case "gigaam": return "GigaAM"
+        case "nemotron": return "Nemotron 3.5 ASR"
         default: return "parakeet"
         }
     }

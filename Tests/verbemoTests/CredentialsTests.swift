@@ -206,6 +206,144 @@ struct CredentialsTests {
 
     // MARK: - the form, end to end
 
+    @Test("Each cloud provider keeps its key editor inside its own card")
+    @MainActor
+    func cloudProviderCardsOwnTheirKeyFields() throws {
+        try withFreshHome(config: ["transcription": ["engine": "assemblyai"]]) { _ in
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.transcription)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let root = try #require(application.panel.contentView)
+            let cards = root.allDescendants.compactMap { $0 as? ChoiceCard }
+            for service in CloudService.allCases {
+                let id = service.rawValue
+                let card = try #require(cards.first { $0.id == id })
+                let field = try #require(card.allDescendants.first {
+                    $0.identifier?.rawValue == "transcription.key.\(id)"
+                } as? NSSecureTextField)
+                #expect(!field.isHiddenOrHasHiddenAncestor)
+                let title = try #require(card.accessibilityLabel())
+                #expect(field.accessibilityLabel()?.contains(title) == true)
+                field.stringValue = "draft-\(id)"
+                #expect(card.accessibilityPerformPress())
+            }
+            form.refresh()
+            for service in CloudService.allCases {
+                let field = try Self.field("transcription.key.\(service.rawValue)", in: form)
+                #expect(field.stringValue == "draft-\(service.rawValue)")
+                #expect(service.key() == nil, "selecting a card must not save another provider's draft")
+            }
+        }
+    }
+
+    @Test("Cloud provider selection restores its endpoint and saved key")
+    @MainActor
+    func cloudProvidersKeepIndependentKeys() async throws {
+        try await withFreshHome(config: ["transcription": ["engine": "assemblyai"]]) { home in
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.transcription)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let page = try #require(form.settingsPages[.transcription])
+            let cards = page.allDescendants.compactMap { $0 as? ChoiceCard }
+            var asked: [Credentials.Check] = []
+            form.checkKey = { asked.append($0); return .works }
+            let providers: [(CloudService, Credentials.Check.Service, String)] = [
+                (.assemblyAI, .assemblyAI, "api.assemblyai.com"),
+                (.openAI, .openAI(baseURL: "https://api.openai.com/v1"), "api.openai.com"),
+                (.elevenLabs, .elevenLabs, "api.elevenlabs.io"),
+            ]
+            for (service, check, _) in providers {
+                let id = service.rawValue
+                #expect(try #require(cards.first { $0.id == id }).accessibilityPerformPress())
+                let field = try Self.field("transcription.key.\(id)", in: form)
+                field.stringValue = "saved-\(id)-key"
+                await form.saveCloudKey(for: id)
+                #expect(asked.last == Credentials.Check(service: check, key: "saved-\(id)-key"))
+                #expect(field.stringValue.isEmpty, "saved secrets must not be redisplayed")
+                #expect(Config.transcriptionCloudProvider() == id)
+            }
+            for (service, _, host) in providers.reversed() {
+                let id = service.rawValue
+                #expect(try #require(cards.first { $0.id == id }).accessibilityPerformPress())
+                let selected = CloudService(provider: EngineResolver.cloudProvider(configured: Config.transcriptionEngine()))
+                #expect(selected == service)
+                #expect(selected.probeURL.host == host)
+                #expect(selected.key() == "saved-\(id)-key")
+                #expect(!home.configText!.contains("saved-\(id)-key"))
+                let path = Credentials.transcriptionSlot(for: id, in: Config.raw()).path
+                #expect(Config.secret(at: path) == "saved-\(id)-key")
+                let permissions = try FileManager.default.attributesOfItem(atPath: path.path)[.posixPermissions] as? NSNumber
+                #expect(permissions?.intValue == 0o600)
+            }
+            #expect(asked.count == 3, "switching a configured provider must not require the key again")
+        }
+    }
+
+    @Test("A late key check saves only its own provider without undoing a later selection", arguments: [false, true])
+    @MainActor
+    func cloudKeyCheckPreservesLaterChoice(turnCloudOff: Bool) async throws {
+        try await withFreshHome(config: ["transcription": ["engine": "assemblyai"]]) { _ in
+            try Credentials.writeSecret("assembly-key", to: Config.assemblyAIKeyPath)
+            try Credentials.writeSecret("openai-key", to: Config.openAIKeyPath)
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.transcription)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let page = try #require(form.settingsPages[.transcription])
+            let cards = page.allDescendants.compactMap { $0 as? ChoiceCard }
+            #expect(try #require(cards.first { $0.id == "elevenlabs" }).accessibilityPerformPress())
+            let started = Gate(), release = Gate()
+            form.checkKey = { _ in started.open(); await release.pass(); return .works }
+            try Self.field("transcription.key.elevenlabs", in: form).stringValue = "elevenlabs-key"
+            let check = Task { await form.saveCloudKey(for: "elevenlabs") }
+            await started.pass()
+            #expect(try #require(cards.first { $0.id == "openai" }).accessibilityPerformPress())
+            if turnCloudOff {
+                let toggle = try #require(page.allDescendants.first {
+                    $0.identifier?.rawValue == "transcription.cloud"
+                } as? NSSwitch)
+                toggle.state = .off
+                _ = NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)
+            }
+            release.open()
+            await check.value
+            #expect(Config.elevenLabsKey() == "elevenlabs-key")
+            #expect(Config.assemblyAIKey() == "assembly-key")
+            #expect(Config.openAIKey() == "openai-key")
+            #expect(Config.transcriptionCloudProvider() == "openai")
+            #expect(Config.transcriptionEnabled() == !turnCloudOff)
+        }
+    }
+
+    @Test("An older key check cannot replace a newer key or a new draft", arguments: [false, true])
+    @MainActor
+    func cloudKeyChecksKeepLatestEdit(saveLatest: Bool) async throws {
+        try await withFreshHome(config: ["transcription": ["engine": "assemblyai"]]) { _ in
+            try Credentials.writeSecret("saved-key", to: Config.assemblyAIKeyPath)
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.transcription)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let field = try Self.field("transcription.key.assemblyai", in: form)
+            let started = Gate(), release = Gate()
+            form.checkKey = { check in
+                if check.key == "older-key" { started.open(); await release.pass() }
+                return .works
+            }
+            field.stringValue = "older-key"
+            let oldCheck = Task { await form.saveCloudKey(for: "assemblyai") }
+            await started.pass()
+            field.stringValue = "newer-key"
+            if saveLatest { await form.saveCloudKey(for: "assemblyai") }
+            release.open()
+            await oldCheck.value
+            #expect(Config.assemblyAIKey() == (saveLatest ? "newer-key" : "saved-key"))
+            #expect(field.stringValue == (saveLatest ? "" : "newer-key"))
+        }
+    }
+
     @Test("Switching between OpenAI and a compatible service keeps endpoints and keys separate")
     @MainActor
     func summaryProviderSwitchKeepsEndpointsAndKeys() async throws {
@@ -215,9 +353,11 @@ struct CredentialsTests {
         try await withFreshHome(config: config) { _ in
             try Credentials.writeSecret("openai-key", to: Config.openAIKeyPath)
             try Credentials.writeSecret("router-key", to: Credentials.openAICompatibleKeyPath)
-            let form = SetupForm()
-            defer { form.stop() }
-            let selector = try #require(form.view.allDescendants.compactMap { $0 as? NSSegmentedControl }
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.summary)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let selector = try #require(application.panel.contentView?.allDescendants.compactMap { $0 as? NSSegmentedControl }
                 .first { $0.label(forSegment: 0) == "OpenAI" })
             try #require(selector.segmentCount == 3)
             #expect(selector.selectedSegment == 2, "a legacy custom endpoint must select compatible")
@@ -253,9 +393,11 @@ struct CredentialsTests {
     func compatibleProviderNeedsItsOwnEndpoint() throws {
         try withFreshHome(config: ["summary": ["backend": "openai-api"]]) { _ in
             try Credentials.writeSecret("openai-key", to: Config.openAIKeyPath)
-            let form = SetupForm()
-            defer { form.stop() }
-            let selector = try #require(form.view.allDescendants.compactMap { $0 as? NSSegmentedControl }
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.summary)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            let selector = try #require(application.panel.contentView?.allDescendants.compactMap { $0 as? NSSegmentedControl }
                 .first { $0.label(forSegment: 0) == "OpenAI" })
             try #require(selector.segmentCount == 3)
             selector.selectedSegment = 2
@@ -280,8 +422,10 @@ struct CredentialsTests {
         ]
         try await withFreshHome(config: config) { _ in
             try Credentials.writeSecret("openai-key", to: Config.openAIKeyPath)
-            let form = SetupForm()
-            defer { form.stop() }
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.summary)
+            defer { form.stop(); withExtendedLifetime(application) {} }
             var asked: [Credentials.Check] = []
             form.checkKey = { asked.append($0); return .works }
 
@@ -304,8 +448,10 @@ struct CredentialsTests {
             "summary": ["backend": "anthropic-api", "api_key_path": "~/.config/anthropic/token"],
         ]
         try await withFreshHome(config: config) { home in
-            let form = SetupForm()
-            defer { form.stop() }
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.summary)
+            defer { form.stop(); withExtendedLifetime(application) {} }
             var asked = 0
             form.checkKey = { _ in asked += 1; return .works }
 
@@ -321,28 +467,52 @@ struct CredentialsTests {
         }
     }
 
-    @Test("Offline, a pasted cloud key is neither saved nor called refused")
+    @Test("An unsuccessful cloud key check preserves the saved key", arguments: [
+        Credentials.Verdict.unreachable, .refused, .unexpected(status: 503),
+    ])
     @MainActor
-    func cloudKeyOffline() async throws {
+    func cloudKeyFailure(verdict: Credentials.Verdict) async throws {
         try await withFreshHome { _ in
             try Credentials.writeSecret("good-key", to: Config.assemblyAIKeyPath)
-            let form = SetupForm()
-            defer { form.stop() }
-            form.checkKey = { _ in .unreachable }
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.transcription)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            form.checkKey = { _ in verdict }
 
-            try Self.field("transcription.key", in: form).stringValue = "new-key"
-            await form.saveCloudKey()
+            try Self.field("transcription.key.assemblyai", in: form).stringValue = "new-key"
+            await form.saveCloudKey(for: "assemblyai")
 
             #expect(Config.secret(at: Config.assemblyAIKeyPath) == "good-key")
-            let status = try Self.field("transcription.key.status", in: form).stringValue
-            #expect(status == Credentials.Verdict.unreachable.sentence(keepingSaved: true))
-            #expect(!status.contains("refused"))
+            let status = try Self.field("transcription.key.assemblyai.status", in: form).stringValue
+            #expect(status == verdict.sentence(keepingSaved: true))
+        }
+    }
+
+    @Test("Changing the key file during verification does not write to the previous slot")
+    @MainActor
+    func cloudKeySlotChangeDuringCheck() async throws {
+        try await withFreshHome { _ in
+            try Credentials.writeSecret("saved-key", to: Config.assemblyAIKeyPath)
+            let application = ApplicationWindow()
+            let form = application.settings.setup
+            application.navigate(.transcription)
+            defer { form.stop(); withExtendedLifetime(application) {} }
+            form.checkKey = { _ in
+                Config.update(path: ["transcription", "assemblyai", "api_key_path"], value: "~/external/key")
+                return .works
+            }
+            try Self.field("transcription.key.assemblyai", in: form).stringValue = "new-key"
+            await form.saveCloudKey(for: "assemblyai")
+            #expect(Config.secret(at: Config.assemblyAIKeyPath) == "saved-key")
+            #expect(try Self.field("transcription.key.assemblyai.status", in: form).stringValue
+                == "Key settings changed — enter the key again.")
         }
     }
 
     @MainActor
     private static func field(_ id: String, in form: SetupForm) throws -> NSTextField {
-        var pending: [NSView] = [form.view]
+        var pending = Array(form.settingsPages.values) as [NSView]
         while let view = pending.popLast() {
             if let field = view as? NSTextField, field.identifier?.rawValue == id { return field }
             pending.append(contentsOf: view.subviews)

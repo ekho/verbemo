@@ -2,28 +2,8 @@ import AppKit
 import FluidAudio
 import Foundation
 
-/// Everything a new installation is asked: the permissions macOS will
-/// otherwise demand at the worst possible moment, and the choices verbemo can't
-/// sensibly make for you — what writes the transcript, what writes the
-/// summary, where the files go, and whether it all runs by itself.
-///
-/// It is a form rather than a window because it is shown in two places. The
-/// setup window wraps it in a wizard — a footer that names what is left and a
-/// button that does the next thing — and the settings window shows the same
-/// form as its first tab. One form, so the two can never drift into
-/// disagreeing about what verbemo offers; and there is nothing in setup a
-/// person should have to reopen setup to change.
-///
-/// It is AppKit rather than a terminal wizard for a reason that isn't
-/// cosmetic. macOS grants microphone and system-audio capture to the process
-/// that asks; a wizard run from a shell teaches the system that Terminal may
-/// record, and the daemon then captures a full-length silent file with nothing
-/// to show for it (.issues/rca-002). The asking has to happen here, inside the
-/// program that will do the recording.
-///
-/// Everything it shows is read from the machine rather than assumed: whether a
-/// grant exists, whether a model is downloaded, whether `claude` and `codex`
-/// are installed *and answer when run*. Nothing here says "should work".
+/// Permission onboarding and Journal settings share their actions and model state.
+/// macOS grants must be requested by the process that will record the meeting.
 @MainActor
 final class SetupForm: NSObject, NSTextFieldDelegate {
     /// Whether a recording is in progress. Registering at login and testing
@@ -32,8 +12,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     var isRecording: (() -> Bool)?
     /// Called whenever anything a host displays *about* the form may have
     /// changed — what is still outstanding, what the next action is. The
-    /// setup window's footer is written from it, and the settings window
-    /// redraws its other tab.
+    /// setup page's footer and the settings model inventory follow it.
     var onStateChange: (() -> Void)?
 
     /// What the config says about transcription, and how to change it.
@@ -83,17 +62,21 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     var playTestTone: @MainActor () async -> SetupPermissions.SystemAudioResult = {
         await SetupPermissions.testSystemAudio()
     }
+    var loginItemStatus: () -> LoginItem.State = { LoginItem.status() }
+    var setLoginItemEnabled: (Bool) throws -> LoginItem.State = {
+        try $0 ? LoginItem.register() : LoginItem.unregister()
+    }
+    var openLoginItemSettings: () -> Void = { LoginItem.openSettings() }
+    private var loginItemError: String?
 
     /// The form itself, for a host to put in a scroll view.
     let view = FlippedStackView()
 
-    /// Redraws this copy when anything writes the config file — the other
-    /// window showing the same form, the Advanced tab beside it, or the
-    /// status window's live-transcript switch.
-    var hasModelDownloads: Bool { parakeetDownload != nil || whisperDownloadTask != nil || gigaAMDownloadTask != nil || liveDownloading || diarizationDownloadTask != nil }
+    /// Active downloads also protect the model inventory from deletion.
+    var hasModelDownloads: Bool { parakeetDownload != nil || whisperDownloadTask != nil || gigaAMDownloadTask != nil || liveDownloading || !diarizationDownloads.isEmpty }
     private var formWindow: NSWindow? { view.window ?? settingsPages.values.compactMap(\.window).first }
     private var storageControls: [String: (view: NSView, button: NSButton, note: NSTextField, model: ModelStorage.Model)] = [:]
-    private lazy var liveDownloadProgress = ModelDownloadProgress(model: "Nemotron Live", identifier: "live.cancel", target: self, action: #selector(cancelLiveDownload))
+    private lazy var liveDownloadProgress = ModelDownloadProgress(model: "Nemotron 3.5 ASR", identifier: "live.cancel", target: self, action: #selector(cancelLiveDownload))
     private var configWatch: ConfigWatch.Token?
     /// Redraws this copy when verbemo comes back to the front. Every grant the
     /// Access rows ask for is given somewhere else — System Settings, a
@@ -102,13 +85,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// happened to redraw it. Coming back is the moment to look again.
     private var activation: ConfigWatch.Token?
 
-    private let launchRow = AccessRow(
-        title: localised("Start at login", "Запуск при входе"),
-        detail: localised(
-            "So a meeting is never missed because nobody opened verbemo.",
-            "Чтобы встреча не пропала из-за того, что verbemo никто не открыл."),
-        action: localised("Install", "Включить"),
-        grantedNote: localised("installed", "включено"))
+    private let launchSwitch = NSSwitch()
+    private let launchDetail = SetupLayout.detail("", lines: 3, width: 520)
     private let micRow = AccessRow(
         title: localised("Microphone", "Микрофон"),
         detail: localised("Your side of the call.", "Ваша сторона разговора."),
@@ -131,15 +109,12 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let cloudSwitch = NSSwitch()
     private let cloudStatus = NSTextField(labelWithString: "")
     private let providerCards = ChoiceGroup()
-    private let cloudKey = NSSecureTextField()
-    private let cloudKeyStatus = NSTextField(labelWithString: "")
-    /// Shown only when there is a key to paste: an empty field under a
-    /// working provider is an invitation to overwrite something that works.
-    private let keyLine = NSStackView()
-    /// The provider whose key field is open. Set when a card or the switch is
-    /// clicked for a service with no key yet — and while it is set, the
-    /// provider actually in force is unchanged, so a curious click cannot cost
-    /// the next meeting its transcript.
+    private var cloudKeys: [String: NSSecureTextField] = [:]
+    private var cloudKeyStatuses: [String: NSTextField] = [:]
+    private var cloudKeyChecks: [String: UUID] = [:]
+    /// The provider waiting for a key. Set when a card or the switch is
+    /// clicked for a service with no key yet. Cloud processing waits for a
+    /// validated key; switching from local mode first disables that mode.
     private var pendingProvider: String?
     /// The provider in force, read back from the config on every refresh.
     private var provider = "assemblyai"
@@ -160,15 +135,17 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let diarizationCards = ChoiceGroup()
     private var diarizationDownloadButtons: [DiarizationModel: NSButton] = [:]
     private var diarizationDownloadProgress: [DiarizationModel: ModelDownloadProgress] = [:]
-    private var diarizationDownloadTask: Task<Void, Never>?
-    private var downloadingDiarizationModel: DiarizationModel?
-    private var diarizationOperation: UUID?
+    private var diarizationDownloads: [DiarizationModel: Task<Void, Never>] = [:]
+    private var diarizationOperations: [DiarizationModel: UUID] = [:]
     private var diarizationErrors: [DiarizationModel: String] = [:]
+    var diarizationIsHere: @MainActor (DiarizationModel) -> Bool = { model in
+        DiarizationModelStore.isReady(at: DiarizationModelStore.shared(for: model).directory, model: model)
+    }
     var fetchDiarization: @MainActor (DiarizationModel, @escaping @Sendable (Double) -> Void) async throws -> Void = {
         model, progress in
         try await DiarizationModelStore.shared(for: model).download(progress: progress)
     }
-    private let liveModelStore = LiveTranscriptionModelStore()
+    var liveModelStore = NemotronModelStore()
     /// What the models on this Mac weigh, for the two rows that say so. The
     /// figure in each row's prose is what a download will cost; this is what
     /// it did cost, and only this one can be trusted once the files exist.
@@ -177,8 +154,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let gigaAMModelStore = GigaAMModelStore()
     private var whisperDownloadTask: Task<Void, Never>?
     private var gigaAMDownloadTask: Task<Void, Never>?
-    private var liveDownloadTask: Task<Void, Never>?
-    private var liveDownloading = false
+    private var nemotronDownloads: [String: Task<Void, Never>] = [:]
+    private var nemotronOperations: [String: UUID] = [:]
+    private var nemotronObserver: ConfigWatch.Token?
+    private var liveDownloading: Bool { !nemotronDownloads.isEmpty || liveModelStore.isDownloading }
+    private lazy var nemotronFilesProgress = ModelDownloadProgress(model: "Nemotron 3.5 ASR", identifier: "nemotron.files.cancel", target: self, action: #selector(cancelNemotronFiles))
     /// What parakeet weighs on disk once it is there — measured, not quoted:
     /// 461 MB for v3, and v2 is the same 0.6B model. The bar is the cache
     /// directory growing towards this number, so a figure taken from
@@ -222,10 +202,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let noIconsNote: NSTextField = {
         let label = SetupLayout.status()
         label.lineBreakMode = .byWordWrapping
-        // Three, though two is enough in both languages at the width the
-        // setup window opens at: the settings window is narrower, and a
-        // sentence that is the only way back into the program is the last one
-        // that should end in an ellipsis.
+        // Keep the way back into the app readable on narrow settings pages.
         label.maximumNumberOfLines = 3
         label.preferredMaxLayoutWidth = 520
         return label
@@ -245,40 +222,33 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         return label
     }()
 
-    /// False where the host says the same thing itself — the settings window,
-    /// whose footer sits under this form and under the Advanced tab alike.
-    var showsConfigProblems = true {
-        didSet { refresh() }
-    }
-
     /// What the last look for `claude`, `codex` and ollama found, by card.
     /// Empty until that look finishes, and a missing answer is not "absent":
     /// the window says nothing about a tool it has not been to see yet.
     private var summaryToolRuns: [String: Bool] = [:]
 
 
-    private let forSettings: Bool
-    private let permissionsOnly: Bool
+    enum Mode { case settings, permissions }
+    private let mode: Mode
     private let parakeetVersion = NSPopUpButton()
     private var cloudOptions: NSView?
     private var localOptionsView: NSView?
+    private var diarizationOptions: NSView?
     private var summaryOptions: NSView?
     private var summaryKeyFields: NSView?
     private var summaryOllamaFields: NSView?
     private(set) var settingsPages: [ApplicationNavigationState.Destination: FlippedStackView] = [:]
     static var settingsCoveredPaths: Set<String> {
         var paths: Set<String> = ["auto_record.enabled", "recordings_dir", "keep_audio", "menu_bar_icon", "dock_icon",
-            "transcription.enabled", "transcription.engine", "transcription.cloud", "summary.enabled", "summary.backend",
+            "transcription.enabled", "transcription.engine", "transcription.cloud", "transcription.language", "summary.enabled", "summary.backend",
             "summary.openai_base_url", "summary.openai_model", "summary.openai_compatible", "summary.ollama_base_url", "summary.ollama_model"]
         if Platform.supportsLocalModels {
             paths.formUnion(["transcription.local_engine", "transcription.model", "transcription.local_diarization", "transcription.diarization_model", "live_transcription.enabled"])
         }
         return paths
     }
-    override convenience init() { self.init(forSettings: false) }
-    init(forSettings: Bool, permissionsOnly: Bool = false) {
-        self.forSettings = forSettings
-        self.permissionsOnly = permissionsOnly
+    init(mode: Mode) {
+        self.mode = mode
         super.init()
 
         let form = view
@@ -288,19 +258,21 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         form.edgeInsets = NSEdgeInsets(
             top: 22, left: SetupLayout.gutter, bottom: 22, right: SetupLayout.gutter)
 
-        launchRow.identifier = NSUserInterfaceItemIdentifier("access.login")
         micRow.identifier = NSUserInterfaceItemIdentifier("access.microphone")
         audioRow.identifier = NSUserInterfaceItemIdentifier("access.system-audio")
         calendarRow.identifier = NSUserInterfaceItemIdentifier("access.calendar")
-        if permissionsOnly {
+        if mode == .permissions {
+            let title = NSTextField(wrappingLabelWithString: localised("Hear the conversation.\nKeep what matters.", "Слышать разговор.\nНе упускать главное."))
+            title.font = JournalStyle.titleFont(32)
+            title.textColor = JournalStyle.ink
             let intro = SetupLayout.detail(localised(
                 "Allow the microphone and test call audio before your first recording. Models and optional Calendar access are available in Settings.",
                 "Перед первой записью разрешите микрофон и проверьте звук звонка. Модели и необязательный доступ к календарю доступны в настройках."), lines: 4)
-            for child in [intro, SetupLayout.box([micRow, audioRow])] {
+            for child in [title, intro, configProblems, SetupLayout.box([micRow, audioRow])] {
                 form.addArrangedSubview(child)
                 child.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             }
-        } else if forSettings {
+        } else {
             func page(_ destination: ApplicationNavigationState.Destination, _ content: [NSView]) {
                 let page = FlippedStackView(views: content)
                 page.orientation = .vertical
@@ -310,69 +282,25 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 for child in content { child.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -48).isActive = true }
                 settingsPages[destination] = page
             }
-            page(.general, [SetupLayout.box([launchRow, menuBarIconRow(), dockIconRow()]), noIconsNote])
-            page(.recording, [SetupLayout.box([micRow, audioRow, calendarRow]), SetupLayout.box([autoRecordRow()])])
-            var transcription = [transcriptionRows()]
+            page(.general, [SetupLayout.box([startAtLoginRow(), menuBarIconRow(), dockIconRow()]), noIconsNote])
+            page(.recording, [SetupLayout.box([micRow, audioRow]), SetupLayout.box([autoRecordRow()])])
+            page(.calendar, [SetupLayout.box([calendarRow])])
+            var transcription = [SetupLayout.section(localised("Transcription models", "Модели расшифровки"), content: transcriptionRows())]
             if Platform.supportsLocalModels {
-                transcription.append(SetupLayout.section(localised("Speaker separation", "Разделение говорящих"), content: diarizationRow()))
-                transcription.append(SetupLayout.box([liveTranscriptionRow()]))
+                transcription.append(SetupLayout.section(localised("Diarization", "Диаризация"), content: SetupLayout.box([diarizationRow()])))
+                transcription.append(SetupLayout.section(localised("During the meeting", "Во время встречи"), content: SetupLayout.box([liveTranscriptionRow()])))
             }
+            transcription.append(SetupLayout.box([languageRow()]))
             page(.transcription, transcription)
             page(.summary, [SetupLayout.section(localised("Summary", "Сводка"), leading: summariesOn, content: summaryChoices())])
             page(.storage, [SetupLayout.box([folderRow(), keepAudioRow()])])
-        } else {
-        form.addArrangedSubview(configProblems)
-        form.addArrangedSubview(SetupLayout.section(
-            localised("Access", "Доступ"),
-            content: SetupLayout.box([launchRow, micRow, audioRow, calendarRow])))
-
-        var transcription: [NSView] = [
-            transcriptionRows(),
-            SetupLayout.section(localised("Diarization", "Диаризация"),
-                                content: SetupLayout.box([diarizationRow()])),
-            languageRow(),
-        ]
-        // The live transcript is a local streaming model, so on an Intel Mac
-        // there is nothing behind the switch. Left out rather than shown
-        // switched off: an offer that can never be accepted.
-        if Platform.supportsLocalModels {
-            transcription.append(SetupLayout.box([liveTranscriptionRow()]))
-        }
-        form.addArrangedSubview(SetupLayout.section(
-            localised("Transcription", "Расшифровка"),
-            content: SetupLayout.group(transcription)))
-
-        form.addArrangedSubview(SetupLayout.section(
-            localised("Files", "Файлы"),
-            content: SetupLayout.box([folderRow(), keepAudioRow()])))
-
-        form.addArrangedSubview(SetupLayout.section(
-            localised("Summaries", "Сводка"),
-            leading: summariesOn,
-            content: summaryChoices()))
-
-        form.addArrangedSubview(SetupLayout.section(
-            localised("Where verbemo shows up", "Где видно verbemo"),
-            content: SetupLayout.group(
-                [SetupLayout.box([menuBarIconRow(), dockIconRow()]), noIconsNote],
-                spacing: SetupLayout.headerGap)))
-
-        // No heading of its own: one switch is not a section, and it belongs
-        // at the end because it is the thing that makes all of the above run
-        // without anyone opening this form again.
-        form.addArrangedSubview(SetupLayout.box([autoRecordRow()]))
-
-        for view in form.arrangedSubviews {
-            view.widthAnchor.constraint(
-                equalTo: form.widthAnchor, constant: -2 * SetupLayout.gutter).isActive = true
-        }
-
         }
 
         // Names for the switches that do not depend on the words beside
         // them, so a test can find a switch without walking up from its
         // label through however many stacks the layout has this week.
         for (toggle, name) in [
+            (launchSwitch, "access.login.toggle"),
             (cloudSwitch, "transcription.cloud"), (localSwitch, "transcription.local"),
             (liveTranscription, "transcription.live"),
             (diarizationSwitch, "transcription.local-diarization"),
@@ -384,6 +312,12 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
         wireActions()
         refresh()
+        let home = Home.current
+        nemotronObserver = ConfigWatch.Token(NotificationCenter.default.addObserver(
+            forName: NemotronModelStore.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { Home.$scoped.withValue(home) { self?.refresh() } }
+        })
         configWatch = ConfigWatch.observe { [weak self] in self?.refresh() }
         // A token of the same kind as the config watch's: it ends the
         // observation when the form goes.
@@ -411,16 +345,14 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             watchParakeetSize()
         }
         refresh()
-        if permissionsOnly { return }
+        if mode == .permissions { return }
         // Detection runs off the main thread: finding `claude` can mean
         // starting the login shell, and a form that freezes while it asks
         // would be a worse first impression than one that fills in.
         Task { await detectTools() }
     }
 
-    /// Put down what outlives a keystroke. The setup window calls it on the
-    /// way out: a timer polling a download directory has no reason to keep
-    /// running behind a closed window.
+    /// Pause polling when the host puts the form away.
     ///
     /// The Parakeet download itself is left running; `reload` restores its
     /// progress poll. The other local downloads pause when setup closes.
@@ -433,7 +365,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         localDownloadProgress["gigaam"]?.cancelling()
     }
     private func choiceCards(_ cards: [NSView]) -> NSView {
-        forSettings ? SetupLayout.group(cards, spacing: SetupLayout.cardGap) : SetupLayout.cards(cards)
+        SetupLayout.group(cards, spacing: SetupLayout.cardGap)
     }
 
     // MARK: - building
@@ -444,9 +376,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// when it doesn't" is what having both on *means*, not a third option to
     /// pick.
     ///
-    /// The provider cards sit under the cloud switch and stay on screen while
-    /// it is off, because they are what the switch costs: the price per hour
-    /// belongs where the decision is made, not in a document.
+    /// Each switch and its options share one block; settings collapse inactive options.
     private func transcriptionRows() -> NSView {
         cloudSwitch.target = self
         cloudSwitch.action = #selector(cloudToggled)
@@ -459,8 +389,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised("In the cloud", "В облаке")),
             detail: SetupLayout.detail(
                 localised(
-                    "Audio is sent to the selected provider for transcription and speaker separation.",
-                    "Звук отправляется выбранному провайдеру для расшифровки и разделения говорящих."),
+                    "Audio is sent to the selected provider for transcription and diarization.",
+                    "Звук отправляется выбранному провайдеру для расшифровки и диаризации."),
                 lines: 2, width: 440),
             trailing: [cloudStatus])
 
@@ -474,6 +404,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             ("gigaam", "GigaAM v3", localised(
                 "Alternative for Russian · about \(ModelStorage.describe(bytes: modelStorage.gigaAMModel().advertisedBytes))",
                 "Альтернатива для русского · около \(ModelStorage.describe(bytes: modelStorage.gigaAMModel().advertisedBytes))")),
+            ("nemotron", NemotronModelStore.title, localised(
+                "Shares the downloaded model with live transcription",
+                "Общая модель с живой расшифровкой")),
         ]
         let localCards = localChoices.map { id, title, detail in
             let download = SetupLayout.actionButton(
@@ -487,7 +420,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 target: self, action: #selector(cancelLocalClicked(_:)))
             localDownloadProgress[id] = progress
             var accessories: [NSView] = [download, progress]
-            if forSettings && id == "parakeet" {
+            if id == "parakeet" {
                 parakeetVersion.addItems(withTitles: ["v3", "v2"])
                 parakeetVersion.identifier = .init("transcription.model")
                 parakeetVersion.setAccessibilityLabel(localised("Parakeet version", "Версия Parakeet"))
@@ -505,8 +438,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised("On this Mac", "На этом маке")),
             detail: SetupLayout.detail(
                 localised(
-                    "Audio is processed on this Mac. Speaker separation can be enabled below.",
-                    "Звук обрабатывается на этом Mac. Разделение говорящих можно включить ниже."),
+                    "Audio is processed on this Mac. Diarization can be enabled below.",
+                    "Звук обрабатывается на этом Mac. Диаризацию можно включить ниже."),
                 lines: 2, width: 440),
             trailing: [])
 
@@ -529,13 +462,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             row.widthAnchor.constraint(equalTo: localBlock.widthAnchor).isActive = true
         }
 
-        // One row, not two, on an Intel Mac: there is no local model to offer,
-        // and the row explains itself rather than vanishing.
-        return SetupLayout.box([cloudRow, providerRow(), localBlock])
+        let cloudBlock = SetupLayout.group([cloudRow, providerRow()], spacing: 0)
+        return SetupLayout.box([cloudBlock, localBlock])
     }
 
-    /// The provider cards and the one key field they share, indented under
-    /// the switch they belong to.
+    /// Each provider owns its editor, so drafts and checks cannot follow a selection.
     private func providerRow() -> NSView {
         let assembly = ChoiceCard(
             id: "assemblyai",
@@ -543,54 +474,35 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             detail: localised(
                 "$0.23 an hour. No limit on meeting length.",
                 "$0,23 за час. Без ограничения на длину встречи."),
-            accessories: [link(
-                localised("Get a key", "Получить ключ"),
-                "https://www.assemblyai.com/dashboard/signup")])
+            accessories: providerKeyControls(
+                "assemblyai", title: "AssemblyAI", keyURL: "https://www.assemblyai.com/dashboard/signup"))
         let openai = ChoiceCard(
             id: "openai",
             title: "OpenAI",
             detail: localised(
                 "$0.36 an hour. Same key as summaries.",
                 "$0,36 за час. Тот же ключ, что и для сводки."),
-            accessories: [link(
-                localised("Get a key", "Получить ключ"),
-                "https://platform.openai.com/api-keys")])
+            accessories: providerKeyControls(
+                "openai", title: "OpenAI", keyURL: "https://platform.openai.com/api-keys"))
         let elevenlabs = ChoiceCard(
             id: "elevenlabs",
             title: "ElevenLabs",
             detail: localised(
                 "Scribe v2. $0.44 an hour for a two-channel call.",
                 "Scribe v2. $0,44 за час разговора с двумя каналами."),
-            accessories: [link(
-                localised("Get a key", "Получить ключ"),
-                "https://elevenlabs.io/app/developers/api-keys")])
+            accessories: providerKeyControls(
+                "elevenlabs", title: "ElevenLabs", keyURL: "https://elevenlabs.io/app/developers/api-keys"))
         providerCards.adopt([assembly, openai, elevenlabs])
         providerCards.onChange = { [weak self] id in self?.providerPicked(id) }
 
-        cloudKey.placeholderString = localised("paste key", "вставьте ключ")
-        cloudKey.identifier = NSUserInterfaceItemIdentifier("transcription.key")
-        cloudKeyStatus.identifier = NSUserInterfaceItemIdentifier("transcription.key.status")
-        cloudKey.font = SetupLayout.detailFont
-        cloudKey.delegate = self
-        cloudKey.widthAnchor.constraint(equalToConstant: 220).isActive = true
-        cloudKeyStatus.font = SetupLayout.statusFont
-        cloudKeyStatus.textColor = .secondaryLabelColor
-        cloudKeyStatus.lineBreakMode = .byWordWrapping
-        cloudKeyStatus.maximumNumberOfLines = 2
-
-        keyLine.orientation = .horizontal
-        keyLine.alignment = .centerY
-        keyLine.spacing = 10
-        keyLine.setViews([cloudKey, cloudKeyStatus, NSView()], in: .leading)
-
-        let stack = NSStackView(views: [choiceCards(providerCards.cards), keyLine])
+        let stack = NSStackView(views: [choiceCards(providerCards.cards)])
         cloudOptions = stack
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
         // Indented to the width of a switch plus its gap, so the cards read as
         // the cloud row's detail rather than as a third choice beside it.
-        stack.edgeInsets = NSEdgeInsets(top: 12, left: 58, bottom: 13, right: 14)
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 58, bottom: 13, right: 14)
         for view in stack.arrangedSubviews {
             view.widthAnchor.constraint(
                 equalTo: stack.widthAnchor, constant: -72).isActive = true
@@ -598,15 +510,30 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         return stack
     }
 
+    private func providerKeyControls(_ id: String, title: String, keyURL: String) -> [NSView] {
+        let field = NSSecureTextField()
+        field.identifier = .init("transcription.key.\(id)")
+        field.setAccessibilityLabel(localised("\(title) API key", "API-ключ \(title)"))
+        field.font = SetupLayout.detailFont
+        field.delegate = self
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        cloudKeys[id] = field
+
+        let status = SetupLayout.status()
+        status.identifier = .init("transcription.key.\(id).status")
+        status.lineBreakMode = .byWordWrapping
+        status.maximumNumberOfLines = 0
+        status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        cloudKeyStatuses[id] = status
+        return [field, status, link(localised("Get a key", "Получить ключ"), keyURL)]
+    }
+
     /// A menu rather than the two-letter code this used to ask for. The code
     /// was never a question anybody could answer from the window: nothing said
     /// whether it wanted `ru`, `rus` or `ru-RU`, and a typo went to stderr,
     /// where nobody was reading. What is stored is still the code.
     private func languageRow() -> NSView {
-        let label = NSTextField(labelWithString: localised(
-            "Meetings are mostly in", "Чаще всего встречи на языке"))
-        label.font = .systemFont(ofSize: 13)
-        label.textColor = .secondaryLabelColor
+        let label = SetupLayout.title(localised("Meeting language", "Язык встреч"))
 
         language.target = self
         language.action = #selector(languageChanged)
@@ -614,22 +541,18 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         language.setAccessibilityLabel(label.stringValue)
         buildLanguageMenu()
 
-        let picker = NSStackView(views: [label, language, NSView()])
-        picker.orientation = .horizontal
-        picker.alignment = .centerY
-        picker.spacing = 10
-
         languageNote.font = SetupLayout.statusFont
         languageNote.textColor = .secondaryLabelColor
         languageNote.lineBreakMode = .byWordWrapping
-        languageNote.maximumNumberOfLines = 2
+        languageNote.maximumNumberOfLines = 0
         languageNote.preferredMaxLayoutWidth = 520
+        languageNote.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let stack = NSStackView(views: [picker, languageNote])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 4
-        return stack
+        let picker = NSStackView(views: [label, language])
+        picker.orientation = .vertical
+        picker.alignment = .leading
+        picker.spacing = 6
+        return SetupLayout.row(title: picker, detail: languageNote)
     }
 
     /// Detect first, then the five languages verbemo is actually used in, then
@@ -661,7 +584,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         liveStatus.font = SetupLayout.statusFont
         liveStatus.textColor = .secondaryLabelColor
         liveStatus.lineBreakMode = .byTruncatingTail
-        let size = ModelStorage.describe(bytes: modelStorage.liveModel().advertisedBytes)
 
         return SetupLayout.row(
             leading: liveTranscription,
@@ -670,10 +592,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 "Показывать расшифровку прямо во время встречи")),
             detail: SetupLayout.detail(
                 localised(
-                    "A \(size) NVIDIA model downloads once. Live recognition stays on this Mac. After the meeting, the selected transcription service produces the final transcript.",
-                    "Один раз скачается модель NVIDIA, \(size). Текущий текст распознаётся на этом Mac. После встречи окончательную расшифровку подготовит выбранный сервис."),
+                    "Nemotron 3.5 ASR. Live and final transcription use the same downloaded files. The final-transcription model is selected independently.",
+                    "Nemotron 3.5 ASR. Живая и итоговая расшифровка используют одни скачанные файлы. Модель для итоговой обработки выбирается отдельно."),
                 lines: 2, width: 520),
-            trailing: [liveStatus])
+            trailing: [liveStatus, liveDownloadProgress])
     }
 
     private func diarizationRow() -> NSView {
@@ -703,14 +625,15 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let row = SetupLayout.row(
             leading: diarizationSwitch,
             title: SetupLayout.title(localised(
-                "Separate speakers", "Разделять говорящих")),
+                "Enable diarization", "Включить диаризацию")),
             detail: diarizationDetail)
         let options = NSStackView(views: [choiceCards(diarizationCards.cards)])
+        diarizationOptions = options
         options.orientation = .vertical
         options.alignment = .leading
-        options.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 10, right: 10)
+        options.edgeInsets = NSEdgeInsets(top: 0, left: 58, bottom: 13, right: 14)
         options.arrangedSubviews[0].widthAnchor.constraint(
-            equalTo: options.widthAnchor, constant: -20).isActive = true
+            equalTo: options.widthAnchor, constant: -72).isActive = true
         let block = NSStackView(views: [row, options])
         block.orientation = .vertical
         block.alignment = .leading
@@ -734,25 +657,31 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
               diarizationCards.card(id)?.isEnabled == true else { refreshDiarization(); return }
         write(["transcription", "diarization_model"], model.rawValue)
         refresh()
+        downloadDiarizationIfNeeded(model)
     }
 
     @objc private func downloadDiarizationClicked(_ sender: NSButton) {
         let prefix = "transcription.diarization.download."
         guard let raw = sender.identifier?.rawValue, raw.hasPrefix(prefix),
               let model = DiarizationModel(rawValue: String(raw.dropFirst(prefix.count))),
-              sender.isEnabled, diarizationDownloadTask == nil else { return }
+              sender.isEnabled else { return }
+        downloadDiarizationIfNeeded(model)
+    }
+
+    private func downloadDiarizationIfNeeded(_ model: DiarizationModel) {
+        guard Platform.supportsLocalModels, !Config.settingsUnknown,
+              diarizationDownloads[model] == nil, !diarizationIsHere(model) else { return }
         let operation = UUID()
         diarizationErrors[model] = nil
-        downloadingDiarizationModel = model
-        diarizationOperation = operation
+        diarizationOperations[model] = operation
         diarizationDownloadProgress[model]?.begin()
-        diarizationDownloadTask = Task { [weak self, model, operation] in
+        diarizationDownloads[model] = Task { [weak self, model, operation] in
             guard let self else { return }
             do {
                 try await fetchDiarization(model) { [weak self] fraction in
                     Task { @MainActor [weak self] in
-                        guard let self, self.diarizationOperation == operation,
-                              self.diarizationDownloadTask?.isCancelled == false else { return }
+                        guard let self, self.diarizationOperations[model] == operation,
+                              self.diarizationDownloads[model]?.isCancelled == false else { return }
                         self.diarizationDownloadProgress[model]?.update(fraction)
                     }
                 }
@@ -763,10 +692,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                         ?? error.localizedDescription
                 }
             }
-            guard diarizationOperation == operation else { return }
-            diarizationDownloadTask = nil
-            downloadingDiarizationModel = nil
-            diarizationOperation = nil
+            guard diarizationOperations[model] == operation else { return }
+            diarizationDownloads[model] = nil
+            diarizationOperations[model] = nil
             diarizationDownloadProgress[model]?.end()
             refreshDiarization()
             refreshStorageControls()
@@ -780,7 +708,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let prefix = "transcription.diarization.cancel."
         guard let raw = sender.identifier?.rawValue, raw.hasPrefix(prefix),
               let model = DiarizationModel(rawValue: String(raw.dropFirst(prefix.count))),
-              downloadingDiarizationModel == model, let task = diarizationDownloadTask
+              let task = diarizationDownloads[model]
         else { return }
         task.cancel()
         diarizationDownloadProgress[model]?.cancelling()
@@ -794,25 +722,25 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         diarizationDetail.stringValue = !Platform.supportsLocalModels
             ? localised("Needs Apple Silicon.", "Нужен Apple Silicon.")
             : transcriptionChoice.local
-            ? localised("After local transcription. Audio stays on this Mac.",
-                        "После локальной расшифровки. Звук остаётся на этом маке.")
+            ? localised("Separates speech by speaker after local transcription. Audio stays on this Mac.",
+                        "Разделяет речь по говорящим после локальной расшифровки. Звук остаётся на этом маке.")
             : localised("Available with On this Mac enabled.",
                         "Доступно при включённом «На этом Mac».")
         diarizationSwitch.setAccessibilityHelp(diarizationDetail.stringValue)
         diarizationCards.select("diarization.\(Config.diarizationModel().rawValue)")
         let enabled = localAvailable && diarizationSwitch.state == .on
+        diarizationOptions?.isHidden = !enabled && diarizationDownloads.isEmpty
         for model in DiarizationModel.allCases {
             let card = diarizationCards.card("diarization.\(model.rawValue)")
             let button = diarizationDownloadButtons[model]
-            let ready = DiarizationModelStore.isReady(
-                at: DiarizationModelStore.shared(for: model).directory, model: model)
+            let ready = diarizationIsHere(model)
             card?.isEnabled = enabled
-            button?.isEnabled = enabled && diarizationDownloadTask == nil && !ready
-            button?.isHidden = ready || downloadingDiarizationModel == model
+            button?.isEnabled = enabled && diarizationDownloads[model] == nil && !ready
+            button?.isHidden = ready || diarizationDownloads[model] != nil
             button?.title = diarizationErrors[model] == nil
                 ? localised("Download…", "Скачать…")
                 : localised("Retry…", "Повторить…")
-            if downloadingDiarizationModel == model {
+            if diarizationDownloads[model] != nil {
                 diarizationDownloadProgress[model]?.isHidden = false
                 card?.report("")
             } else if ready {
@@ -985,12 +913,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         let automatic = ChoiceCard(id: "auto", title: localised("Automatic", "Автоматически"),
             detail: localised("Use the available summary services in the configured fallback order.", "Использовать доступные сервисы по порядку резервирования."))
-        let none = ChoiceCard(id: "none", title: localised("Do not create a summary", "Не создавать сводку"),
-            detail: localised("The summary service is off. Transcription is configured separately.", "Сервис сводки отключён. Расшифровка настраивается отдельно."))
-        summaryCards.adopt(forSettings ? [automatic, claude, codex, key, ollama, none] : [claude, codex, key, ollama])
+        summaryCards.adopt([automatic, claude, codex, key, ollama])
         summaryCards.onChange = { [weak self] id in
             guard let self else { return }
-            let backend = self.forSettings && id == "claude-cli" ? "claude-cli"
+            let backend = id == "claude-cli" ? "claude-cli"
                 : id == "auto" ? nil : SetupSelection.summaryBackend(choice: id, keyBackend: self.selectedKeyBackend)
             Config.update(path: ["summary", "backend"], value: backend)
             self.refresh()
@@ -1002,10 +928,21 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             lines: 2,
             width: 520)
         let options = SetupLayout.group(
-            [choiceCards(forSettings ? [automatic, claude, codex, key] : [claude, codex, key]), ollama] + (forSettings ? [none] : []) + [disclosure],
+            [choiceCards([automatic, claude, codex, key]), ollama, disclosure],
             spacing: SetupLayout.cardGap)
         summaryOptions = options
         return options
+    }
+
+    private func startAtLoginRow() -> NSView {
+        launchSwitch.target = self
+        launchSwitch.action = #selector(startAtLogin)
+        let row = SetupLayout.row(
+            leading: launchSwitch,
+            title: SetupLayout.title(localised("Start at login", "Запуск при входе")),
+            detail: launchDetail)
+        row.identifier = NSUserInterfaceItemIdentifier("access.login")
+        return row
     }
 
     /// The two places a person can find a running verbemo, each of which can be
@@ -1099,7 +1036,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     // MARK: - actions
 
     private func wireActions() {
-        launchRow.onAct = { [weak self] in self?.startAtLogin() }
         micRow.onAct = { [weak self] in Task { await self?.askMicrophone() } }
         audioRow.onAct = { [weak self] in Task { await self?.testSystemAudio() } }
         calendarRow.onAct = { [weak self] in Task { await self?.askCalendar() } }
@@ -1128,15 +1064,12 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         Config.update(path: ["keep_audio"], value: keepAudio.state == .on ? true : nil)
     }
 
-    /// The cloud switch. Turning it on for a service with no key does not
-    /// turn it on: it opens the key field instead and leaves the switch where
-    /// it was, because a switch that says "on" while every transcript fails
-    /// with HTTP 401 is a lie the person only finds out about after a meeting.
+    /// A missing key opens configuration without enabling cloud processing.
     @objc private func cloudToggled() {
+        if cloudSwitch.state == .on { localSwitch.state = .off }
         if cloudSwitch.state == .on, !Credentials.hasTranscriptionKey(for: provider) {
             pendingProvider = provider
-            cloudSwitch.state = .off
-            refresh()
+            commitTranscription()
             focusKeyField()
             return
         }
@@ -1148,9 +1081,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// key also switches the cloud on. A card without one only opens the key
     /// field: what is in force stays in force until the new key is accepted.
     private func providerPicked(_ id: String) {
+        cloudSwitch.state = .on
+        localSwitch.state = .off
         guard Credentials.hasTranscriptionKey(for: id) else {
             pendingProvider = id
-            refresh()
+            commitTranscription()
             focusKeyField()
             return
         }
@@ -1178,6 +1113,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// asks whether the local model is wanted and missing, and a choice that
     /// was never written is not wanted.
     @objc private func localToggled() {
+        if localSwitch.state == .on {
+            cloudSwitch.state = .off
+            pendingProvider = nil
+        }
         commitTranscription()
         if localSwitch.state == .on { downloadLocalIfNeeded() }
     }
@@ -1197,94 +1136,81 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         guard Config.localEngines.contains(id) else { return }
         localEngineCards.select(id)
         localSwitch.state = .on
-        commitTranscription()
-        downloadLocalIfNeeded(id)
+        localToggled()
     }
 
     private func commitTranscription() {
         let selectedLocal = localEngineCards.selected
             ?? transcriptionChoice.localEngine
         let choice = TranscriptionChoice(
-            cloud: cloudSwitch.state == .on,
+            cloud: pendingProvider == nil ? cloudSwitch.state == .on : transcriptionChoice.cloud,
             local: localSwitch.state == .on && Platform.supportsLocalModels,
             provider: provider,
             localEngine: selectedLocal)
+        if !choice.local || choice.localEngine != "nemotron" { nemotronDownloads["final"]?.cancel() }
         for update in choice.updates {
             write(update.path, update.value)
         }
         refresh()
     }
 
-    /// Whichever window is showing the form — the setup wizard or the
-    /// settings tab. The form does not own a window and must not assume one.
+    /// The main window hosting the mounted settings or permissions page.
     private func focusKeyField() {
-        formWindow?.makeFirstResponder(cloudKey)
+        formWindow?.makeFirstResponder(cloudKeys[pendingProvider ?? provider])
     }
 
     @objc private func liveTranscriptionToggled() {
         let enabled = liveTranscription.state == .on
         Config.update(path: ["live_transcription", "enabled"], value: enabled ? true : nil)
-        if enabled {
-            downloadLiveModel()
-        } else {
-            liveDownloadTask?.cancel()
-            liveDownloadTask = nil
-            liveDownloading = false
-            refresh()
-        }
+        if enabled { downloadLiveModel() }
+        else { nemotronDownloads["live"]?.cancel() }
+        refresh()
     }
 
-    private func downloadLiveModel() {
-        guard !liveDownloading else { return }
+    private func downloadLiveModel() { downloadNemotron(for: "live") }
+
+    private func downloadNemotron(for consumer: String) {
+        guard nemotronDownloads[consumer] == nil else { return }
         let prompt = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
-        if liveModelStore.isReady(language: prompt) {
-            liveStatus.stringValue = localised("downloaded", "скачана")
-            refresh()
-            return
-        }
-        Analytics.track(.modelDownloadStarted, [.asset: .text("nemotron-live")])
-        liveDownloading = true
-        liveDownloadProgress.begin()
-        liveStatus.stringValue = localised("preparing download…", "готовлюсь скачивать…")
-        refresh()
-        liveDownloadTask = Task { [weak self] in
+        guard !liveModelStore.isReady(language: prompt) else { refresh(); return }
+        let operation = UUID()
+        nemotronOperations[consumer] = operation
+        nemotronDownloads[consumer] = Task { [weak self] in
             guard let self else { return }
-            do {
-                _ = try await liveModelStore.download(language: prompt) { [weak self] fraction in
-                    Task { @MainActor in
-                        self?.liveDownloadProgress.update(fraction)
-                        self?.liveStatus.stringValue = localised(
-                            "downloading — \(Int(fraction * 100))%",
-                            "скачивание — \(Int(fraction * 100))%")
-                    }
-                }
-                if liveModelStore.isReady(language: prompt) {
-                    Analytics.track(.modelDownloadFinished, [.asset: .text("nemotron-live")])
-                    liveStatus.stringValue = localised("downloaded", "скачана")
-                } else {
-                    Analytics.track(.modelDownloadFailed, [
-                        .asset: .text("nemotron-live"),
-                        .reason: .text(Analytics.Reason.noModel.rawValue),
-                    ])
-                    liveStatus.stringValue = localised(
-                        "download incomplete — turn off and on to retry",
-                        "скачалось не всё — выключите и включите, чтобы повторить")
-                }
-            } catch is CancellationError {
-                liveStatus.stringValue = localised("download paused", "скачивание остановлено")
-            } catch {
-                Analytics.track(.modelDownloadFailed, [
-                    .asset: .text("nemotron-live"),
-                    .reason: .text(Analytics.reason(for: error).rawValue),
-                ])
-                liveStatus.stringValue =
-                    localised("download failed: ", "не удалось скачать: ")
-                        + error.localizedDescription
-            }
-            liveDownloading = false
-            liveDownloadTask = nil
-            liveDownloadProgress.end()
+            do { _ = try await liveModelStore.download(language: prompt) }
+            catch { /* The shared store publishes the common failure/cancellation state. */ }
+            guard nemotronOperations[consumer] == operation else { return }
+            nemotronOperations[consumer] = nil
+            nemotronDownloads[consumer] = nil
             refresh()
+        }
+        refresh()
+    }
+
+    private func refreshNemotron() {
+        let prompt = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
+        let state = liveModelStore.state(language: prompt)
+        localDownloadErrors["nemotron"] = nil
+        liveStatus.textColor = .secondaryLabelColor
+        switch state {
+        case .ready:
+            liveStatus.stringValue = Self.downloaded(modelStorage.nemotronModel())
+            liveStatus.textColor = .systemGreen
+        case .downloading(let fraction):
+            liveStatus.stringValue = localised("Downloading · ", "Загрузка · ") + "\(Int(fraction * 100))%"
+        case .failed(let error):
+            liveStatus.stringValue = error
+            localDownloadErrors["nemotron"] = error
+        case .idle:
+            liveStatus.stringValue = localised("Not downloaded", "Не скачана")
+        }
+        for (consumer, progress) in [("live", liveDownloadProgress), ("final", localDownloadProgress["nemotron"]), ("files", nemotronFilesProgress)] {
+            guard let progress else { continue }
+            if case .downloading(let fraction) = state {
+                if progress.isHidden { progress.begin() }
+                progress.update(fraction)
+                progress.setCancellable(nemotronDownloads[consumer] != nil)
+            } else { progress.end() }
         }
     }
 
@@ -1365,26 +1291,32 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         return row
     }
 
-    /// Register with Login Items, the way every other application does.
-    private func startAtLogin() {
-        if [.enabled, .needsApproval].contains(LoginItem.status()) {
-            LoginItem.openSettings()
+    /// Change registration here; only macOS approval needs System Settings.
+    @objc private func startAtLogin() {
+        loginItemError = nil
+        let state = loginItemStatus()
+        if state == .needsApproval {
+            openLoginItemSettings()
+            refresh()
             return
         }
         if isRecording?() == true {
-            report(launchRow, localised(
+            loginItemError = localised(
                 "not while a recording is running — stop it and try again",
-                "не сейчас: идёт запись — остановите её и попробуйте снова"))
+                "не сейчас: идёт запись — остановите её и попробуйте снова")
+            refresh()
             return
         }
+        let enabling = state != .enabled
         do {
-            let state = try LoginItem.register()
+            let state = try setLoginItemEnabled(enabling)
             // Registered but held: macOS wants a person to say yes, and the
             // only place they can is System Settings.
-            if state == .needsApproval { LoginItem.openSettings() }
+            if state == .needsApproval { openLoginItemSettings() }
         } catch {
-            report(launchRow, localised("couldn't register at login: ", "не удалось включить: ")
-                + error.localizedDescription)
+            loginItemError = (enabling
+                ? localised("couldn't enable start at login: ", "не удалось включить запуск при входе: ")
+                : localised("couldn't disable start at login: ", "не удалось отключить запуск при входе: ")) + error.localizedDescription
         }
         refresh()
     }
@@ -1414,7 +1346,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// and only the login item kept: the test opens a second tap beside the
     /// one recording the meeting and plays 440 Hz out of the speakers, into
     /// the call — the far end hears it, and it lands in the recording too.
-    /// The wizard's button reaches this as well as the row's, so the refusal
+    /// The setup page's button reaches this as well as the row's, so the refusal
     /// is here rather than on either button.
     private func testSystemAudio() async {
         if isRecording?() == true {
@@ -1453,6 +1385,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             downloadWhisperIfNeeded()
         } else if engine == "gigaam" {
             downloadGigaAMIfNeeded()
+        } else if engine == "nemotron" {
+            downloadNemotron(for: "final")
         } else {
             downloadParakeetIfNeeded()
         }
@@ -1581,6 +1515,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         case "parakeet": task = parakeetDownload
         case "whisper": task = whisperDownloadTask
         case "gigaam": task = gigaAMDownloadTask
+        case "nemotron": task = nemotronDownloads["final"]
         default: return
         }
         guard let task else { return }
@@ -1624,7 +1559,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else { return }
-        if field === cloudKey { Task { await saveCloudKey() } }
+        if let target = cloudKeys.first(where: { $0.value === field })?.key {
+            Task { await saveCloudKey(for: target) }
+        }
         if field === summaryKey { Task { await saveSummaryKey() } }
         let summaryPaths: [(NSTextField, String)] = [
             (summaryOpenAIBaseURL, "openai_base_url"),
@@ -1650,7 +1587,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     ///
     /// Ending editing here is the same path a click elsewhere takes — it fires
     /// `controlTextDidEndEditing`, which saves — and returning true keeps the
-    /// keystroke from travelling any further. Only these two fields swallow
+    /// keystroke from travelling any further. Only these fields swallow
     /// Return: everywhere else in the window it should still mean Done.
     func control(
         _ control: NSControl,
@@ -1658,7 +1595,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         doCommandBy selector: Selector
     ) -> Bool {
         guard selector == #selector(NSResponder.insertNewline(_:)),
-              control === cloudKey || control === summaryKey
+              cloudKeys.values.contains(where: { $0 === control }) || control === summaryKey
                 || control === summaryOpenAIBaseURL || control === summaryOpenAIModel
                 || control === summaryOllamaBaseURL || control === summaryOllamaModel
         else { return false }
@@ -1667,7 +1604,16 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     }
 
     @objc private func languageChanged() {
+        let previous = liveModelStore.variantDirectory(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
         Config.update(path: ["transcription", "language"], value: selectedLanguage)
+        let next = liveModelStore.variantDirectory(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
+        if previous != next {
+            for task in nemotronDownloads.values { task.cancel() }
+            nemotronDownloads = [:]
+            nemotronOperations = [:]
+            if Config.liveTranscriptionEnabled() { downloadLiveModel() }
+            if transcriptionChoice.local && transcriptionChoice.localEngine == "nemotron" { downloadNemotron(for: "final") }
+        }
         refresh()
     }
 
@@ -1688,14 +1634,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             "Встречи на английском тоже распознаются — переключать ничего не надо.")
     }
 
-    /// What a key field says while the provider is being asked.
-    ///
-    /// Named rather than written out at each of the three places that need
-    /// it, because one of them needs it by *comparison* — the redraw clears a
-    /// stale "checking…" and leaves anything else alone. Two literals agree
-    /// in one language and stop agreeing in the other, which would leave a
-    /// Russian window saying it was still checking a key it had finished
-    /// with.
+    /// Shared wording while a transcription or summary key is being checked.
     private static var checkingKey: String { localised("checking…", "проверяю…") }
 
     /// Check first, write second.
@@ -1704,16 +1643,22 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// into the field by accident used to replace a good key on disk, and the
     /// only sign was every later meeting failing to transcribe with HTTP 401.
     /// A key that isn't accepted never reaches the file.
-    func saveCloudKey() async {
-        let target = pendingProvider ?? provider
-        let key = cloudKey.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
+    func saveCloudKey(for target: String) async {
+        guard let field = cloudKeys[target], let status = cloudKeyStatuses[target] else { return }
+        let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !Config.settingsUnknown else { return }
         let slot = Credentials.transcriptionSlot(for: target, in: Config.raw())
+        status.isHidden = false
         guard slot.isVerbemos else {
-            cloudKeyStatus.stringValue = Credentials.notOursToWrite(slot)
+            status.stringValue = Credentials.notOursToWrite(slot)
             return
         }
-        cloudKeyStatus.stringValue = Self.checkingKey
+        let operation = UUID()
+        cloudKeyChecks[target] = operation
+        defer {
+            if cloudKeyChecks[target] == operation { cloudKeyChecks[target] = nil }
+        }
+        status.stringValue = Self.checkingKey
 
         let service: Credentials.Check.Service
         switch target {
@@ -1724,26 +1669,41 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         default: service = .assemblyAI
         }
         let verdict = await checkKey(Credentials.Check(service: service, key: key))
+        guard cloudKeyChecks[target] == operation else { return }
+        guard field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) == key else {
+            status.stringValue = ""
+            status.isHidden = true
+            return
+        }
         guard verdict == .works else {
-            cloudKeyStatus.stringValue = verdict.sentence(
+            status.stringValue = verdict.sentence(
                 keepingSaved: Credentials.hasTranscriptionKey(for: target))
+            return
+        }
+        guard !Config.settingsUnknown,
+              Credentials.transcriptionSlot(for: target, in: Config.raw()) == slot else {
+            status.stringValue = localised(
+                "Key settings changed — enter the key again.",
+                "Настройки ключа изменились — введите ключ ещё раз.")
             return
         }
         do {
             try Credentials.writeSecret(key, to: slot.path)
         } catch {
-            cloudKeyStatus.stringValue =
+            status.stringValue =
                 localised("couldn't save the key: ", "не удалось сохранить ключ: ") + "\(error)"
             return
         }
-        cloudKey.stringValue = ""
-        cloudKeyStatus.stringValue = verdict.sentence(keepingSaved: true)
-        // A key that works is the answer to the question the switch asked, so
-        // it turns the cloud on rather than making the person click twice.
-        provider = target
-        pendingProvider = nil
-        cloudSwitch.state = .on
-        commitTranscription()
+        field.stringValue = ""
+        status.stringValue = ""
+        // A completed check must not undo a later provider selection or cloud-off click.
+        if cloudSwitch.state == .on, providerCards.selected == target {
+            provider = target
+            pendingProvider = nil
+            commitTranscription()
+        } else {
+            refresh()
+        }
     }
 
     /// The same order as the cloud key, into the slot the summary actually
@@ -1855,18 +1815,22 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         switch transcriptionChoice.localEngine {
         case "whisper": return whisperModelStore.bytesOnDisk > 0
         case "gigaam": return gigaAMModelStore.bytesOnDisk > 0
+        case "nemotron": return liveModelStore.isReady(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage()))
         default: return parakeetIsHere()
         }
     }
 
-    /// The two switches as the config file has them.
     private var transcriptionChoice: TranscriptionChoice {
-        storedTranscription()
+        var choice = storedTranscription()
+        // Show the primary route of legacy auto settings; a new selection writes one explicit engine.
+        if choice.cloud && choice.local {
+            choice.cloud = Credentials.hasTranscriptionKey(for: choice.provider)
+            choice.local = !choice.cloud
+        }
+        return choice
     }
 
-    /// Asked for, and not here. **On this Mac** is the whole question: both
-    /// switches on is still asking for the local model, because that is the
-    /// setting that transcribes when the network doesn't.
+    /// Whether the selected local model still needs downloading.
     private var localModelIsWantedAndMissing: Bool {
         transcriptionChoice.needsLocalModel(downloaded: localModelIsDownloaded)
     }
@@ -1893,31 +1857,28 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
     /// Redraw everything from the machine and the config file. Cheap: no
     /// subprocesses, no network — those write into fields this only reads.
-    /// Public because the settings window's other tab writes the same keys,
-    /// and a change made there has to reach these controls rather than wait
-    /// for the window to be reopened.
+    /// Other settings pages write the same keys, so visible controls follow them.
     func refresh() {
-        switch LoginItem.status() {
-        case .enabled:
-            launchRow.update(.granted, note: localised("on", "включено"),
-                             action: forSettings ? localised("Manage in macOS…", "Управлять в macOS…") : nil)
+        let loginState = loginItemStatus()
+        launchSwitch.state = loginState == .enabled ? .on : .off
+        launchSwitch.isEnabled = loginState != .unavailable
+        switch loginState {
+        case .enabled, .notRegistered:
+            launchDetail.stringValue = localised(
+                "Open verbemo automatically when you log in to your Mac.",
+                "Открывать verbemo автоматически при входе в систему.")
         case .needsApproval:
-            launchRow.update(
-                .denied,
-                detail: localised(
-                    "macOS wants this allowed in Login Items.",
-                    "macOS хочет, чтобы это разрешили в объектах входа."),
-                action: localised("Open Settings", "Открыть настройки"))
-        case .notRegistered:
-            launchRow.update(.notAsked, detail: localised(
-                "So a meeting is never missed.", "Чтобы ни одна встреча не пропала."))
+            launchDetail.stringValue = localised(
+                "macOS wants this allowed in Login Items.",
+                "macOS хочет, чтобы это разрешили в объектах входа.")
         case .unavailable:
-            launchRow.update(
-                .notAsked,
-                detail: localised(
-                    "Only Verbemo.app can register itself; this is a bare build.",
-                    "Зарегистрировать себя может только Verbemo.app, а это голая сборка."))
+            launchDetail.stringValue = localised(
+                "Only Verbemo.app can register itself; this is a bare build.",
+                "Зарегистрировать себя может только Verbemo.app, а это голая сборка.")
         }
+        if let loginItemError { launchDetail.stringValue = loginItemError }
+        launchDetail.textColor = loginItemError == nil ? .secondaryLabelColor : .systemRed
+        launchSwitch.setAccessibilityHelp(launchDetail.stringValue)
         micRow.update(SetupPermissions.microphone())
         calendarRow.update(calendarGrant ?? SetupPermissions.calendar())
 
@@ -1945,6 +1906,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
 
         let config = Config.raw()
+        refreshNemotron()
         refreshTranscription()
         // A code the menu doesn't offer — hand-edited, or a leftover "ru-RU"
         // — selects Detect automatically, which is what the engines will
@@ -1959,17 +1921,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         liveTranscription.state = Config.liveTranscriptionEnabled() ? .on : .off
         refreshDiarization()
-        let livePrompt = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
-        if liveModelStore.isReady(language: livePrompt) {
-            liveStatus.stringValue = Self.downloaded(modelStorage.liveModel())
-            liveStatus.textColor = .systemGreen
-        } else if !liveDownloading, Config.liveTranscriptionEnabled(), liveStatus.stringValue.isEmpty {
-            liveStatus.stringValue = localised(
-                "about \(ModelStorage.describe(bytes: modelStorage.liveModel().advertisedBytes)) — downloads when switched on",
-                "около \(ModelStorage.describe(bytes: modelStorage.liveModel().advertisedBytes)) — скачается при включении")
-        } else if !Config.liveTranscriptionEnabled() {
-            liveStatus.stringValue = localised("optional", "по желанию")
-        }
 
         recordingsPath.stringValue = Home.current.abbreviating(
             Config.resolveRoot(cliOverride: nil).path)
@@ -1978,7 +1929,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let summariesEnabled = summary.enabled && summary.backend != "none"
         summariesOn.state = summariesEnabled ? .on : .off
         let backendIsKey = summary.backend == "anthropic-api" || summary.backend == "openai-api"
-        summaryCards.select(forSettings && summary.backend == "auto" ? "auto" : SetupSelection.summaryChoice(backend: summary.backend))
+        summaryCards.select(summary.backend == "auto" ? "auto" : SetupSelection.summaryChoice(backend: summary.backend))
         if backendIsKey {
             keyProvider.selectedSegment = summary.backend == "anthropic-api" ? 1
                 : (summary.openAICompatible ? 2 : 0)
@@ -1989,11 +1940,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         if summaryOllamaModel.currentEditor() == nil { summaryOllamaModel.stringValue = summary.ollamaModel }
         showKeyProvider()
         for card in summaryCards.cards { card.isEnabled = summariesEnabled }
-        if forSettings {
-            summaryOptions?.isHidden = !summariesEnabled
-            summaryKeyFields?.isHidden = !backendIsKey && summary.backend != "auto"
-            summaryOllamaFields?.isHidden = summary.backend != "ollama" && summary.backend != "auto"
-        }
+        summaryOptions?.isHidden = !summariesEnabled
+        summaryKeyFields?.isHidden = !backendIsKey && summary.backend != "auto"
+        summaryOllamaFields?.isHidden = summary.backend != "ollama" && summary.backend != "auto"
 
         menuBarIcon.state = Config.menuBarIcon() ? .on : .off
         dockIcon.state = Config.dockIcon() ? .on : .off
@@ -2004,7 +1953,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let autoRecordOn = Config.flag(.autoRecordEnabled, in: config)
         autoRecord.state = autoRecordOn ? .on : .off
 
-        let problems = showsConfigProblems ? Config.problems() : []
+        let problems = Config.problems()
         configProblems.stringValue = problems.map(\.explanation).joined(separator: "\n")
         configProblems.isHidden = problems.isEmpty
 
@@ -2022,46 +1971,38 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             Credentials.hasTranscriptionKey(for: $0)
         }
 
-        cloudSwitch.state = choice.cloud ? .on : .off
-        if forSettings {
-            cloudOptions?.isHidden = !choice.cloud && pendingProvider == nil
-            localOptionsView?.isHidden = !choice.local
-        }
+        cloudSwitch.state = choice.cloud || pendingProvider != nil ? .on : .off
+        cloudOptions?.isHidden = !choice.cloud && pendingProvider == nil
+        localOptionsView?.isHidden = !choice.local
         let version = Config.transcriptionModel() == "v2" ? "v2" : "v3"
         parakeetVersion.selectItem(withTitle: version)
         parakeetVersion.isEnabled = parakeetDownload == nil && !Config.settingsUnknown
         let languages = version == "v2" ? localised("English", "Английский язык") : localised("25 European languages", "25 европейских языков")
         let size = ModelStorage.describe(bytes: modelStorage.parakeet(version: ParakeetEngine.configuredVersion()).advertisedBytes)
         localEngineCards.card("parakeet")?.describe(title: "Parakeet \(version)", detail: languages + localised(" · about ", " · около ") + size)
-        // The card under the key field is the one being answered, so a
-        // provider waiting for a key is the one shown chosen.
+        // A provider waiting for a key is the one shown chosen.
         providerCards.select(pendingProvider ?? provider)
 
         for card in providerCards.cards {
             let known = Credentials.hasTranscriptionKey(for: card.id)
             card.report(
                 known
-                    ? localised("key works", "ключ работает")
+                    ? localised("key saved", "ключ сохранён")
                     : localised("no key yet", "ключа ещё нет"),
                 good: known)
             card.showLink(!known)
-        }
-        cloudKey.placeholderString = (pendingProvider ?? provider) == "openai"
-            ? "sk-…" : localised("paste key", "вставьте ключ")
-        // Written on every pass rather than only into an empty label: a line
-        // left over from the last question describes the wrong one.
-        if let prompt = TranscriptionChoice.keyPrompt(
-            pending: pendingProvider, inForce: provider, cloudOn: choice.cloud) {
-            cloudKeyStatus.stringValue = prompt
-        } else if cloudKeyStatus.stringValue == Self.checkingKey {
-            cloudKeyStatus.stringValue = ""
+            cloudKeys[card.id]?.placeholderString = known
+                ? localised("Enter a new API key to replace", "Введите новый API-ключ для замены")
+                : localised("Enter API key", "Введите API-ключ")
+            if let status = cloudKeyStatuses[card.id] {
+                status.isHidden = status.stringValue.isEmpty
+            }
         }
         // The cards below carry the price and the key state, so the row speaks
         // only when a missing key is what holds the switch down.
         cloudStatus.stringValue = TranscriptionChoice.rowNeedsKey(
             pending: pendingProvider, cloudOn: choice.cloud)
             ? localised("needs a key", "нужен ключ") : ""
-        keyLine.isHidden = pendingProvider == nil && Credentials.hasTranscriptionKey(for: provider)
 
         localSwitch.isEnabled = Platform.supportsLocalModels
         localSwitch.state = choice.local ? .on : .off
@@ -2114,15 +2055,18 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         switch id {
         case "whisper": return modelStorage.whisperModel()
         case "gigaam": return modelStorage.gigaAMModel()
+        case "nemotron": return modelStorage.nemotronModel()
         default: return modelStorage.parakeet(version: ParakeetEngine.configuredVersion())
         }
     }
 
     /// File operations reuse the same download task; they never select a working model.
-    func modelFilesControl(for model: ModelStorage.Model) -> NSView {
-        if let cached = storageControls[model.directory.path] { return cached.view }
+    func modelFilesControl(for model: ModelStorage.Model) -> (button: NSButton, status: NSView) {
+        if let cached = storageControls[model.directory.path] { return (cached.button, cached.view) }
         let button = NSButton(title: localised("Download", "Скачать"), target: self, action: #selector(storageDownloadClicked(_:)))
         button.identifier = .init(model.directory.path)
+        button.bezelStyle = .rounded
+        button.controlSize = .small
         let note = SetupLayout.status()
         let progress: NSView?
         switch model.kind {
@@ -2130,16 +2074,16 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         case .whisper: progress = localDownloadProgress["whisper"]?.mirroredView()
         case .gigaAM: progress = localDownloadProgress["gigaam"]?.mirroredView()
         case .diarization: progress = model.diarizationModel.flatMap { diarizationDownloadProgress[$0]?.mirroredView() }
-        case .live: progress = liveDownloadProgress.mirroredView()
+        case .nemotron: progress = nemotronFilesProgress.mirroredView()
         }
-        let group = NSStackView(views: [button, note] + (progress.map { [$0] } ?? []))
+        let group = NSStackView(views: [note] + (progress.map { [$0] } ?? []))
         group.orientation = .vertical
         group.alignment = .leading
         group.spacing = 6
         if let progress { progress.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true }
         storageControls[model.directory.path] = (group, button, note, model)
         refreshStorageControls()
-        return group
+        return (button, group)
     }
     private func refreshStorageControls() {
         for (_, entry) in storageControls {
@@ -2150,12 +2094,16 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             case .parakeet: downloading = localModelIsDownloading("parakeet"); error = localDownloadErrors["parakeet"]
             case .whisper: downloading = localModelIsDownloading("whisper"); error = localDownloadErrors["whisper"]
             case .gigaAM: downloading = localModelIsDownloading("gigaam"); error = localDownloadErrors["gigaam"]
-            case .diarization: downloading = downloadingDiarizationModel == model.diarizationModel; error = model.diarizationModel.flatMap { diarizationErrors[$0] }
-            case .live: downloading = liveDownloading; error = liveStatus.stringValue
+            case .diarization: downloading = model.diarizationModel.flatMap { diarizationDownloads[$0] } != nil; error = model.diarizationModel.flatMap { diarizationErrors[$0] }
+            case .nemotron:
+                downloading = liveDownloading
+                if case .failed(let message) = liveModelStore.state(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())) {
+                    error = message
+                } else { error = nil }
             }
             let ready = modelStorage.isReady(model)
             entry.button.isHidden = ready || downloading
-            entry.button.isEnabled = !Config.settingsUnknown && !(model.kind == .diarization && diarizationDownloadTask != nil)
+            entry.button.isEnabled = !Config.settingsUnknown && !downloading
             entry.note.stringValue = error ?? ""
             entry.note.isHidden = entry.note.stringValue.isEmpty
         }
@@ -2166,37 +2114,35 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         case .parakeet: downloadLocalIfNeeded("parakeet")
         case .whisper: downloadLocalIfNeeded("whisper")
         case .gigaAM: downloadLocalIfNeeded("gigaam")
-        case .live: downloadLiveModel()
+        case .nemotron: downloadNemotron(for: "files")
         case .diarization:
             guard let model = entry.model.diarizationModel else { return }
-            let request = NSButton()
-            request.identifier = .init("transcription.diarization.download.\(model.rawValue)")
-            downloadDiarizationClicked(request)
+            downloadDiarizationIfNeeded(model)
         }
         refreshStorageControls()
     }
     @objc private func cancelLiveDownload() {
-        liveDownloadTask?.cancel()
+        nemotronDownloads["live"]?.cancel()
         liveDownloadProgress.cancelling()
     }
 
+    @objc private func cancelNemotronFiles() { nemotronDownloads["files"]?.cancel() }
+
     private func isLocalModelDownloaded(_ id: String, model: ModelStorage.Model) -> Bool {
-        id == "parakeet" ? parakeetIsHere() : model.isDownloaded
+        if id == "nemotron" { return liveModelStore.isReady(language: LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())) }
+        return id == "parakeet" ? parakeetIsHere() : model.isDownloaded
     }
 
     private func localModelIsDownloading(_ id: String) -> Bool {
         switch id {
         case "whisper": return whisperDownloadTask != nil
         case "gigaam": return gigaAMDownloadTask != nil
+        case "nemotron": return liveDownloading
         default: return parakeetDownload != nil
         }
     }
 
-    /// A model that is here, and what it is costing to keep. The size is the
-    /// half of this line a person can act on: the row above it says what the
-    /// download would weigh, and only the Advanced tab can give the space
-    /// back, so the number has to appear where somebody would go looking for
-    /// it rather than only where it can be deleted.
+    /// Show installed size beside model selection as well as in Storage.
     private static func downloaded(_ model: ModelStorage.Model) -> String {
         localised("downloaded · ", "скачана · ") + ModelStorage.describe(bytes: model.bytes)
     }
@@ -2205,11 +2151,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// one. The order below is the same one `nextAction` walks, because the
     /// highlight is meant to point at the button, not compete with it.
     private func highlightNextGrant() {
-        let rows = [launchRow, micRow, audioRow, calendarRow]
+        let rows = [micRow, audioRow, calendarRow]
         let pending: AccessRow?
-        if !permissionsOnly && SetupPermissions.needsStartAtLogin {
-            pending = launchRow
-        } else if SetupPermissions.microphone() != .granted {
+        if SetupPermissions.microphone() != .granted {
             pending = micRow
         } else if SetupPermissions.needsSystemAudioTest(systemAudio) || systemAudio == .silent {
             pending = audioRow
@@ -2219,28 +2163,28 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         for row in rows { row.setAttention(row === pending) }
     }
 
-    /// The machine as it stands, for the three answers the wizard around the
-    /// form needs — see `SetupProgress`. Read on every ask: the permission
+    /// The machine as it stands for onboarding and download state.
+    /// Read on every ask: the permission
     /// reads cost a round trip each, and `ThisTurn` is what keeps a redraw
     /// from paying for them more than once.
     var progress: SetupProgress {
         let prompt = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
         let live = Config.liveTranscriptionEnabled()
         return SetupProgress(SetupProgress.Machine(
-            loginItem: permissionsOnly ? .enabled : LoginItem.status(),
+            loginItem: mode == .permissions ? .enabled : loginItemStatus(),
             microphone: SetupPermissions.microphone(),
             systemAudio: systemAudio,
-            missingLocalModel: !permissionsOnly && localModelIsWantedAndMissing
+            missingLocalModel: mode == .settings && localModelIsWantedAndMissing
                 ? transcriptionChoice.localEngine : nil,
             localModelDownloading: parakeetDownload != nil || whisperDownloadTask != nil
-                || gigaAMDownloadTask != nil,
-            liveModelWanted: !permissionsOnly && live,
+                || gigaAMDownloadTask != nil || liveDownloading,
+            liveModelWanted: mode == .settings && live,
             liveModelReady: live && liveModelStore.isReady(language: prompt),
             liveModelDownloading: liveDownloading,
-            summaryToolMissing: !permissionsOnly && chosenSummaryIsMissing))
+            summaryToolMissing: mode == .settings && chosenSummaryIsMissing))
     }
 
-    /// What the setup window's primary button will do, or nil when there is
+    /// What the setup page's primary button will do, or nil when there is
     /// nothing left to offer.
     var nextAction: (() -> Void)? {
         switch progress.next {
@@ -2258,7 +2202,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// What the machine still owes, in the order it has to be dealt with.
     var outstanding: [Missing] { progress.outstanding }
 
-    /// The same list in a sentence, for the footer of either window.
+    /// The same list in a sentence for the setup page.
     var outstandingSentence: String { progress.sentence }
 
     nonisolated static func sentence(for outstanding: [Missing]) -> String {
@@ -2269,7 +2213,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// offer to start a second time.
     var isDownloading: Bool { progress.isDownloading }
 
-    /// What the setup window's primary button says, given where things stand.
+    /// What the setup page's primary button says, given where things stand.
     var nextActionTitle: String { progress.nextTitle }
 
     private func report(_ row: AccessRow, _ message: String) {

@@ -5,40 +5,45 @@ import Testing
 @testable import verbemo
 
 struct MediaImportUITests {
-    @Test("Both ordinary windows offer the same visible Import command")
+    @Test("The sidebar and status menu use the same Import command", .freshHome)
     @MainActor
-    func windowEntryPoints() throws {
-        _ = NSApplication.shared
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("verbemo-import-ui-\(UUID().uuidString)")
-        let status = StatusWindow()
-        let recordings = RecordingsWindow(root: root)
-
-        for view in [status.view, recordings.view] {
-            let button = try #require((view?.allDescendants ?? []).compactMap { $0 as? NSButton }
-                .first { $0.identifier?.rawValue == "choose-media-import" })
-            #expect(button.title == "Import…")
-            #expect(button.target != nil)
-            #expect(button.action != nil)
-        }
-        withExtendedLifetime((status, recordings)) {}
+    func importEntryPoints() throws {
+        let app = ApplicationWindow()
+        let menu = MenuBarController(visible: false)
+        var requests = 0
+        app.onChooseImport = { requests += 1 }
+        menu.onImport = app.onChooseImport
+        let button = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "journal.import" })
+        #expect(button.isBordered)
+        button.performClick(nil)
+        #expect(menu.performOfferedItem(titled: "Import…"))
+        #expect(requests == 2)
     }
 
-    @Test("The first import update reveals progress when the status window was hidden")
+    @Test("Live import progress finishes in the main window and hides cancellation", .freshHome)
     @MainActor
-    func progressRevealsStatusWindow() {
-        _ = NSApplication.shared
-        let status = StatusWindow()
-        status.hide()
-        #expect(!status.isVisible)
-
-        status.updateImport(.init(
-            source: URL(fileURLWithPath: "/tmp/interview.mov"),
+    func importProgressCompletesInPlace() throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        app.update(state: .recording, elapsed: "00:10")
+        app.showActiveRecording()
+        let panel = app.panel
+        app.updateImport(.init(source: URL(fileURLWithPath: "/tmp/interview.mov"),
             index: 1, total: 1, stage: .checking, fraction: nil))
-
-        #expect(status.isVisible)
-        status.hide()
-        withExtendedLifetime(status) {}
+        let progress = try #require(panel.contentView?.allDescendants.first { $0 is MediaImportStatusView })
+        let cancel = try #require(progress.allDescendants.compactMap { $0 as? NSButton }.first)
+        #expect(!progress.isHidden)
+        #expect(!cancel.isHidden)
+        var requests = 0
+        app.onCancelImport = { requests += 1 }
+        cancel.performClick(nil)
+        #expect(requests == 1)
+        app.finishImport(.init())
+        #expect(cancel.isHidden)
+        #expect(progress.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Imported 0" })
+        #expect(progress.window === panel)
+        #expect(!panel.isVisible, "Progress must not reopen the window")
     }
 
     @Test("Import progress names the file and its place in a multi-file queue")

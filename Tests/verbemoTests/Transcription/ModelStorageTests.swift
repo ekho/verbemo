@@ -34,7 +34,7 @@ struct ModelStorageTests {
     /// — or delete — a model the machine running the tests actually has.
     private static func storage(in root: URL) -> ModelStorage {
         ModelStorage(
-            live: LiveTranscriptionModelStore(root: root.appendingPathComponent("live")),
+            live: NemotronModelStore(root: root.appendingPathComponent("live")),
             whisper: WhisperModelStore(directory: root.appendingPathComponent("whisper")),
             gigaAM: GigaAMModelStore(directory: root.appendingPathComponent("gigaam")),
             diarizationDirectory: root.appendingPathComponent("diarization"),
@@ -63,7 +63,7 @@ struct ModelStorageTests {
         // because its row is where a person reads that it isn't here.
         let empty = storage.all(configured: .v3)
         #expect(empty.map(\.name) == [
-            "parakeet v3", "Whisper large-v3-turbo", "GigaAM v3", "NVIDIA nemotron",
+            "parakeet v3", "Whisper large-v3-turbo", "GigaAM v3", NemotronModelStore.title,
             "Nemotron 3", "LS-EEND AMI", "Community-1",
         ])
         #expect(empty.allSatisfy { !$0.isDownloaded })
@@ -85,7 +85,7 @@ struct ModelStorageTests {
         let both = storage.all(configured: .v3)
         #expect(both.map(\.name) == [
             "parakeet v3", "parakeet v2", "Whisper large-v3-turbo", "GigaAM v3",
-            "NVIDIA nemotron", "Nemotron 3", "LS-EEND AMI", "Community-1",
+            NemotronModelStore.title, "Nemotron 3", "LS-EEND AMI", "Community-1",
         ])
         #expect(storage.total(both) == 6 * 1024)
     }
@@ -125,10 +125,10 @@ struct ModelStorageTests {
     }
 
     @Test("The live model is measured and deleted whole, variants and all")
-    func liveModelIsOneThing() throws {
+    func liveModelIsOneThing() async throws {
         let root = try Self.temporary()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LiveTranscriptionModelStore(root: root.appendingPathComponent("live"))
+        let store = NemotronModelStore(root: root.appendingPathComponent("live"))
         let storage = ModelStorage(
             live: store,
             whisper: WhisperModelStore(directory: root.appendingPathComponent("whisper")),
@@ -140,16 +140,16 @@ struct ModelStorageTests {
         try FileManager.default.createDirectory(at: variant, withIntermediateDirectories: true)
         try Data(repeating: 0, count: 2048).write(to: variant.appendingPathComponent("encoder"))
 
-        let model = storage.liveModel()
+        let model = storage.nemotronModel()
         #expect(model.bytes == 2048)
         #expect(model.directory == store.modelDirectory)
 
-        try storage.delete(model)
+        try await store.delete()
         #expect(!FileManager.default.fileExists(atPath: store.modelDirectory.path))
         #expect(!store.isReady(language: "multilingual"))
         // Deleting what is already gone is what a second click on a stale
         // window is, and it is not an error.
-        try storage.delete(model)
+        try await store.delete()
     }
 
     @Test("Deleting parakeet brings the switch that wanted it down too")
@@ -185,7 +185,7 @@ struct ModelStorageTests {
     func liveSwitchesOff() {
         let choice = TranscriptionChoice(cloud: true, local: true, provider: "assemblyai")
         let written = ModelStorage.updatesAfterDeleting(
-            .live, choice: choice, liveEnabled: true)
+            .nemotron, choice: choice, liveEnabled: true)
         #expect(written.count == 1)
         #expect(written[0].path == ["live_transcription", "enabled"])
         // Cleared rather than written false: a setting back at its default
@@ -193,13 +193,24 @@ struct ModelStorageTests {
         #expect(written[0].value == nil)
 
         #expect(ModelStorage.updatesAfterDeleting(
-            .live, choice: choice, liveEnabled: false).isEmpty)
+            .nemotron, choice: choice, liveEnabled: false).isEmpty)
         // Deleting parakeet is not a reason to turn the live transcript off.
         #expect(ModelStorage.updatesAfterDeleting(
             .parakeet,
             choice: TranscriptionChoice(cloud: true, local: false, provider: "assemblyai"),
             liveEnabled: true
         ).isEmpty)
+    }
+
+    @Test("Deleting the shared Nemotron resource disables only its consumers")
+    func sharedNemotronDeletion() {
+        let both = TranscriptionChoice(cloud: false, local: true, provider: "openai", localEngine: "nemotron")
+        let changes = ModelStorage.updatesAfterDeleting(.nemotron, choice: both, liveEnabled: true)
+        #expect(changes.contains { $0.path == ["live_transcription", "enabled"] && $0.value == nil })
+        #expect(changes.contains { $0.path == ["transcription", "enabled"] && $0.value as? Bool == false })
+        let finalOnly = ModelStorage.updatesAfterDeleting(.nemotron, choice: both, liveEnabled: false)
+        #expect(!finalOnly.contains { $0.path == ["live_transcription", "enabled"] })
+        #expect(finalOnly.contains { $0.path == ["transcription", "enabled"] && $0.value as? Bool == false })
     }
 
     /// A test process is in English and nothing here changes that: the

@@ -12,7 +12,7 @@ enum MeetingActionsMenu {
             localised("Open in external editor", "Открыть во внешнем редакторе"),
             localised("Delete", "Удалить"),
         ]
-        for (kind, title) in zip(MeetingActionState.Action.allCases, titles) {
+        for (kind, title) in zip(MeetingActionState.Action.allCases, titles) where ![.copyTranscript, .copySummary, .regenerateSummary].contains(kind) {
             if kind == .delete { menu.addItem(.separator()) }
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = target

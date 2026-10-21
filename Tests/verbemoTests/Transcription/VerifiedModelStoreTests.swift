@@ -80,6 +80,26 @@ struct VerifiedModelStoreTests {
         #expect(try await patient.value == store.modelURL)
     }
 
+    @Test("Cancellation keeps a consumer that joined before it could begin waiting")
+    func cancellationBetweenJoiningAndWaiting() async throws {
+        let release = Gate()
+        let first = UUID(), second = UUID()
+        let url = URL(fileURLWithPath: "/synthetic-model")
+        let download = SharedDownload<Double>(work: { _ in
+            await release.pass()
+            try Task.checkCancellation()
+            return url
+        }, finished: { _ in })
+        #expect(download.reserve(first))
+        #expect(download.reserve(second))
+        let impatient = Task { try await download.wait(id: first, progress: { _ in }) }
+        impatient.cancel()
+        await #expect(throws: CancellationError.self) { try await impatient.value }
+        let patient = Task { try await download.wait(id: second, progress: { _ in }) }
+        release.open()
+        #expect(try await patient.value == url)
+    }
+
     /// Another verbemo — `verbemo process` in a terminal — holding the model's
     /// lock is downloading it; this one waits and uses what it made.
     @Test("A download another process is making is waited for, not repeated")

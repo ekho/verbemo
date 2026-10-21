@@ -62,6 +62,9 @@ enum AnalyticsCatalogue {
         case "whisper":
             return provenance == WhisperModelStore.defaultManifest.id
                 ? "whisper-large-v3-turbo" : "custom"
+        case "nemotron":
+            let known = ["latin", "multilingual"].map { "nemotron-3.5-asr-streaming-multilingual-0.6b/\($0)/1120ms" }
+            return known.contains(provenance) ? "nemotron-3.5-asr-0.6b" : "custom"
         case "gigaam":
             return provenance == GigaAMModelStore.defaultManifest.id ? "gigaam-v3" : "custom"
         default:

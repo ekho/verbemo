@@ -3,12 +3,11 @@ import EventKit
 
 @MainActor
 final class MeetingCalendarView: NSStackView {
-    var onConfirm: (() throws -> Void)?
     var onOpen: (() -> Void)?
-    var onParticipants: (() -> Void)?
-    private var agenda: NSView?
+    private var metadata: MeetingCalendarMetadata?
     private var eventKey: String?
-    private var expanded = false
+    private var agendaExpanded = false
+    private var inviteesExpanded = false
     init() {
         super.init(frame: .zero)
         orientation = .vertical
@@ -18,56 +17,91 @@ final class MeetingCalendarView: NSStackView {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func update(_ metadata: MeetingCalendarMetadata?) {
+        self.metadata = metadata
         for view in arrangedSubviews { removeArrangedSubview(view); view.removeFromSuperview() }
-        guard let metadata, metadata.isConfirmed || metadata.association == "candidate" else { isHidden = true; return }
+        guard let metadata, metadata.isConfirmed || metadata.association == "candidate" else {
+            isHidden = true; eventKey = nil; return
+        }
         isHidden = false
-        let title = NSTextField(wrappingLabelWithString: metadata.title)
-        title.font = .systemFont(ofSize: 14, weight: .semibold)
-        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let heading = NSStackView(views: [title, NSView()])
-        heading.spacing = 8
-        addArrangedSubview(heading)
         let key = (metadata.eventID ?? "") + (metadata.start ?? "")
-        if eventKey != key { expanded = false; eventKey = key }
+        if eventKey != key { agendaExpanded = false; inviteesExpanded = false; eventKey = key }
+        if metadata.isConfirmed {
+            let title = NSButton(title: metadata.title, target: self, action: #selector(openEvent))
+            title.identifier = .init("calendar.open")
+            title.font = .systemFont(ofSize: 14, weight: .semibold)
+            title.isBordered = false
+            title.alignment = .left
+            title.contentTintColor = JournalStyle.accent
+            title.cell?.wraps = true
+            title.cell?.lineBreakMode = .byWordWrapping
+            title.toolTip = localised("Open calendar event", "Открыть событие календаря")
+            addArrangedSubview(title)
+        } else {
+            let title = NSTextField(wrappingLabelWithString: metadata.title)
+            title.font = .systemFont(ofSize: 14, weight: .semibold)
+            addArrangedSubview(title)
+        }
         let date = Self.dateLine(metadata)
-        let detail = NSTextField(wrappingLabelWithString: [metadata.calendarTitle, date.isEmpty ? nil : date].compactMap { $0 }.joined(separator: " · "))
-        detail.textColor = .secondaryLabelColor
-        detail.font = .systemFont(ofSize: 12)
+        let detail = body([metadata.calendarTitle, date.isEmpty ? nil : date].compactMap { $0 }.joined(separator: " · "))
+        detail.textColor = JournalStyle.muted
         addArrangedSubview(detail)
         if metadata.isConfirmed {
-            let open = NSButton(title: localised("Open in Calendar ↗", "Открыть в календаре ↗"), target: self, action: #selector(openEvent))
-            open.identifier = .init("calendar.open")
-            heading.addArrangedSubview(open)
-            if metadata.agenda != nil || !metadata.participants.isEmpty {
-                let disclosure = NSButton(checkboxWithTitle: localised("Agenda and invitees", "Повестка и приглашённые"), target: self, action: #selector(toggleAgenda(_:)))
-                disclosure.setButtonType(.onOff)
-                disclosure.bezelStyle = .disclosure
-                disclosure.state = expanded ? .on : .off
-                addArrangedSubview(disclosure)
-                let details = NSStackView()
-                details.orientation = .vertical
-                details.alignment = .leading
-                details.spacing = 6
-                if let notes = metadata.agenda {
-                    let body = NSTextField(wrappingLabelWithString: notes)
-                    body.isSelectable = true
-                    body.font = .systemFont(ofSize: 12)
-                    details.addArrangedSubview(body)
-                    body.widthAnchor.constraint(equalTo: details.widthAnchor).isActive = true
+            if let notes = metadata.agenda {
+                addArrangedSubview(JournalStyle.caption(localised("AGENDA", "ПОВЕСТКА")))
+                let preview = Self.agendaPreview(notes)
+                let text = body(agendaExpanded ? notes : preview)
+                text.identifier = .init("calendar.agenda")
+                addArrangedSubview(text)
+                if preview != notes {
+                    addArrangedSubview(expansionButton(
+                        agendaExpanded ? localised("Show less", "Свернуть") : localised("Show in full", "Показать полностью"),
+                        id: "calendar.expand-agenda", action: #selector(toggleAgenda)))
                 }
-                let invited = NSButton(title: localised("Invited: \(metadata.participants.count)", "Приглашены: \(metadata.participants.count)"), target: self, action: #selector(openParticipants))
-                invited.toolTip = localised("Invitees may not have attended the meeting.", "Список приглашённых не подтверждает присутствие на встрече.")
-                details.addArrangedSubview(invited)
-                details.isHidden = !expanded
-                agenda = details
-                addArrangedSubview(details)
             }
-        } else {
-            let confirm = NSButton(title: localised("Link to this event", "Связать с этим событием"), target: self, action: #selector(confirmEvent))
-            confirm.identifier = .init("calendar.confirm")
-            addArrangedSubview(confirm)
+            if !metadata.participants.isEmpty {
+                addArrangedSubview(JournalStyle.caption(localised("INVITEES", "ПРИГЛАШЁННЫЕ")))
+                let visible = inviteesExpanded ? metadata.participants : Array(metadata.participants.prefix(4))
+                let people = body(visible.map(\.name).joined(separator: "\n"))
+                people.identifier = .init("calendar.invitees")
+                addArrangedSubview(people)
+                if metadata.participants.count > 4 {
+                    addArrangedSubview(expansionButton(
+                        inviteesExpanded ? localised("Show less", "Свернуть") : localised("Show all", "Показать всех"),
+                        id: "calendar.expand-invitees", action: #selector(toggleInvitees)))
+                }
+                let notice = body(localised("Invitees may not have attended.", "Приглашение не подтверждает присутствие."))
+                notice.textColor = JournalStyle.muted
+                notice.font = .systemFont(ofSize: 10)
+                addArrangedSubview(notice)
+            }
         }
-        for view in arrangedSubviews { view.widthAnchor.constraint(equalTo: widthAnchor, constant: -16).isActive = true }
+        for view in arrangedSubviews {
+            view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            view.widthAnchor.constraint(equalTo: widthAnchor, constant: -16).isActive = true
+        }
+    }
+    static func agendaPreview(_ text: String) -> String {
+        guard text.count > 100 else { return text }
+        let boundary = text.index(text.startIndex, offsetBy: 100)
+        let prefix = text[..<boundary]
+        if text[boundary].isWhitespace { return String(prefix).trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard let end = prefix.lastIndex(where: { $0.isWhitespace }) else { return "" }
+        return String(prefix[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private func body(_ text: String) -> NSTextField {
+        let field = NSTextField(wrappingLabelWithString: text)
+        field.font = .systemFont(ofSize: 12)
+        field.isSelectable = true
+        return field
+    }
+    private func expansionButton(_ title: String, id: String, action: Selector) -> NSButton {
+        let button = NSButton(title: title, target: self, action: action)
+        button.identifier = .init(id)
+        button.isBordered = false
+        button.alignment = .left
+        button.font = .systemFont(ofSize: 11)
+        button.contentTintColor = JournalStyle.accent
+        return button
     }
     static func dateLine(_ metadata: MeetingCalendarMetadata, timeZone: TimeZone = .current) -> String {
         func parse(_ value: String?) -> Date? {
@@ -93,12 +127,9 @@ final class MeetingCalendarView: NSStackView {
         }
         return line
     }
-    @objc private func toggleAgenda(_ sender: NSButton) { expanded = sender.state == .on; agenda?.isHidden = !expanded }
-    @objc private func confirmEvent() {
-        do { try onConfirm?() } catch { if let window { NSAlert(error: error).beginSheetModal(for: window) } }
-    }
+    @objc private func toggleAgenda() { agendaExpanded.toggle(); update(metadata) }
+    @objc private func toggleInvitees() { inviteesExpanded.toggle(); update(metadata) }
     @objc private func openEvent() { onOpen?() }
-    @objc private func openParticipants() { onParticipants?() }
 }
 
 @MainActor

@@ -307,6 +307,7 @@ enum RecordingsEngineName {
         case "local", "parakeet": return "Parakeet"
         case "whisper": return "Whisper"
         case "gigaam": return "GigaAM"
+        case "nemotron": return "Nemotron 3.5 ASR"
         case "assemblyai": return "AssemblyAI"
         case "openai": return "OpenAI"
         case "elevenlabs": return "ElevenLabs"

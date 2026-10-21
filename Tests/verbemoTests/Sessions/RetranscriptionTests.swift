@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Foundation
 import Testing
 
@@ -447,7 +448,7 @@ struct RetranscriptionTests {
 
         let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
         #expect(item.isOutstanding, "the button is only offered for a recording that owes work")
-        #expect(RecordingsWindow.decision(
+        #expect(MeetingLibraryController.decision(
             for: item, policy: Self.noPostProcessing, transcriptionEnabled: true)
             == .transcribe(clearingFirst: false))
     }
@@ -466,7 +467,7 @@ struct RetranscriptionTests {
 
         let item = try #require(SessionInventory.item(for: dir, policy: Self.bothSteps))
         #expect(item.isOutstanding)
-        guard case .refuse(let why) = RecordingsWindow.decision(
+        guard case .refuse(let why) = MeetingLibraryController.decision(
             for: item, policy: Self.bothSteps, transcriptionEnabled: true
         ) else {
             Issue.record("Expected the window to refuse a retired recording.")
@@ -479,24 +480,42 @@ struct RetranscriptionTests {
         #expect(!why.contains("--again"))
     }
 
-    @Test("A failed transcript with retained audio offers Re-transcribe in its row")
+    @Test("A failed transcript with retained audio offers retranscription in the Journal menu and document")
     @MainActor
-    func aFailedRowOffersRetranscriptionBesideTheFailure() throws {
-        let dir = try Self.settledSession()
-        defer { try? FileManager.default.removeItem(at: dir) }
+    func aFailedMeetingOffersRetranscription() async throws {
+        let root = Home.current.url.appendingPathComponent("recordings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixture = try Self.settledSession()
+        let dir = root.appendingPathComponent("meeting")
+        try FileManager.default.moveItem(at: fixture, to: dir)
+        defer { try? FileManager.default.removeItem(at: root) }
         SessionState.update(dir, with: [
             SessionState.Key.transcriptionFailed: "assemblyai returned no speech",
         ])
-
-        let retryable = try #require(
-            SessionInventory.item(for: dir, policy: Self.noPostProcessing))
-        #expect(RecordingsWindow.inlineRetranscribeTitle(for: retryable)
-            == localised("Re-transcribe", "Расшифровать заново"))
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
+        let table = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSTableView }.first)
+        let menu = try #require(table.menu)
+        let results = try #require(library.contentView.allDescendants.compactMap { $0 as? NSSegmentedControl }.first { $0.identifier?.rawValue == "meeting.result-tabs" })
+        results.selectedSegment = 1
+        NSApplication.shared.sendAction(try #require(results.action), to: results.target, from: results)
+        let repeatButton = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.retranscribe" })
+        library.menuWillOpen(menu)
+        #expect(menu.items.first { $0.representedObject as? String == MeetingActionState.Action.retranscribe.rawValue }?.isEnabled == true)
+        #expect(repeatButton.isEnabled)
 
         TrackCompressor.discard(sessionDir: dir)
-        let missingAudio = try #require(
-            SessionInventory.item(for: dir, policy: Self.noPostProcessing))
-        #expect(RecordingsWindow.inlineRetranscribeTitle(for: missingAudio) == nil)
+        library.refresh()
+        await library.settled()
+        library.menuWillOpen(menu)
+        let retry = try #require(menu.items.first { $0.representedObject as? String == MeetingActionState.Action.retranscribe.rawValue })
+        #expect(!retry.isEnabled)
+        #expect(retry.toolTip != nil)
+        #expect(!repeatButton.isEnabled)
+        #expect(repeatButton.toolTip != nil)
     }
 
     @MainActor
@@ -505,9 +524,9 @@ struct RetranscriptionTests {
         let dir = try Self.settledSession()
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        #expect(RecordingsWindow.retranscriptionEngines.map(\.id)
-            == ["parakeet", "whisper", "gigaam", "assemblyai", "openai", "elevenlabs"])
-        RecordingsWindow.markForRetranscription(dir, engine: "whisper")
+        #expect(MeetingLibraryController.retranscriptionEngines.map(\.id)
+            == ["parakeet", "whisper", "gigaam", "nemotron", "assemblyai", "openai", "elevenlabs"])
+        MeetingLibraryController.markForRetranscription(dir, engine: "whisper")
         #expect(SessionState.value(dir, SessionState.Key.transcriptionEngine) as? String
             == "whisper")
         #expect(EngineResolver.configuredEngine(for: dir) == "whisper")
@@ -527,7 +546,7 @@ struct RetranscriptionTests {
         ).write(to: dir)
         let claim = try Self.claim(dir, pid: ProcessInfo.processInfo.processIdentifier)
 
-        let refusal = RecordingsWindow.markForRetranscription(dir, engine: "whisper")
+        let refusal = MeetingLibraryController.markForRetranscription(dir, engine: "whisper")
 
         #expect(refusal == SessionClaim.Busy(
             session: dir.lastPathComponent, holder: SessionClaim.holder(dir)).described)
@@ -537,7 +556,7 @@ struct RetranscriptionTests {
             atPath: dir.appendingPathComponent("transcript.json").path))
 
         try FileManager.default.removeItem(at: claim)
-        #expect(RecordingsWindow.markForRetranscription(dir, engine: "whisper") == nil)
+        #expect(MeetingLibraryController.markForRetranscription(dir, engine: "whisper") == nil)
         #expect(SessionState.value(dir, SessionState.Key.transcriptionEngine) as? String
             == "whisper")
     }
@@ -549,22 +568,22 @@ struct RetranscriptionTests {
     func emptyFinishIsExplained() throws {
         let dir = try Self.settledSession()
         defer { try? FileManager.default.removeItem(at: dir) }
-        #expect(RecordingsWindow.nothingDoneLine(for: dir) == RecordingsWindow.nothingOwedLine)
+        #expect(MeetingLibraryController.nothingDoneLine(for: dir) == MeetingLibraryController.nothingOwedLine)
 
         let claim = try Self.claim(dir, pid: ProcessInfo.processInfo.processIdentifier, stage: "finish")
-        let busy = RecordingsWindow.nothingDoneLine(for: dir)
-        #expect(busy != RecordingsWindow.nothingOwedLine)
+        let busy = MeetingLibraryController.nothingDoneLine(for: dir)
+        #expect(busy != MeetingLibraryController.nothingOwedLine)
         #expect(busy.contains("naming and summarizing"))
         let russian = InterfaceLanguage.$scoped.withValue(.russian) {
-            RecordingsWindow.nothingDoneLine(for: dir)
+            MeetingLibraryController.nothingDoneLine(for: dir)
         }
         #expect(russian != busy && russian.contains("сводку"))
         try FileManager.default.removeItem(at: claim)
 
         try Home.current.writeConfig(text: #"{ "keep_audio": "#)
-        let config = RecordingsWindow.nothingDoneLine(for: dir)
+        let config = MeetingLibraryController.nothingDoneLine(for: dir)
         #expect(config.contains("config.json"))
-        #expect(RecordingsWindow.retranscriptionRefusal(for: dir) == config)
+        #expect(MeetingLibraryController.retranscriptionRefusal(for: dir) == config)
         try Home.current.writeConfig(["offline_echo_cancellation": false])
     }
 
@@ -576,7 +595,7 @@ struct RetranscriptionTests {
         TrackCompressor.discard(sessionDir: dir)
 
         let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
-        guard case .refuse(let why) = RecordingsWindow.decision(
+        guard case .refuse(let why) = MeetingLibraryController.decision(
             for: item, policy: Self.noPostProcessing, transcriptionEnabled: true
         ) else {
             Issue.record("Expected the window to refuse a recording with no audio left.")
@@ -599,7 +618,7 @@ struct RetranscriptionTests {
         ).write(to: dir)
 
         let item = try #require(SessionInventory.item(for: dir, policy: Self.noPostProcessing))
-        #expect(RecordingsWindow.decision(
+        #expect(MeetingLibraryController.decision(
             for: item, policy: Self.noPostProcessing, transcriptionEnabled: true)
             == .nothingOwed)
     }

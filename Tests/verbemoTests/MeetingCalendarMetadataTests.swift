@@ -93,11 +93,74 @@ struct SpeakerParticipantMappingTests {
 
 @Suite(.serialized) @MainActor
 struct MeetingCalendarViewTests {
-    @Test func candidateNeedsConfirmationAndNeverOpensTheCallAsACalendar() throws {
+    @Test func agendaPreviewKeepsWholeWordsAtTheBoundary() {
+        let word = String(repeating: "я", count: 98)
+        #expect(MeetingCalendarView.agendaPreview(word + " и далее") == word + " и")
+        #expect(MeetingCalendarView.agendaPreview(word + " слово") == word)
+        #expect(MeetingCalendarView.agendaPreview(String(repeating: "я", count: 101)).isEmpty)
+    }
+
+    @Test(.speaking(.russian), arguments: [5, 10]) func agendaAndInviteesStartVisibleAndExpandIndependently(participantCount: Int) throws {
+        let view = MeetingCalendarView()
+        let agenda = String(repeating: "План встречи ", count: 10).trimmingCharacters(in: .whitespaces)
+        let metadata = try #require(MeetingCalendarMetadata([
+            "event_id": "event", "association": "confirmed", "title": "Планирование", "agenda": agenda,
+            "participants": (1...participantCount).map { ["id": "p\($0)", "name": "Участник \($0)"] },
+        ]))
+        var opens = 0
+        view.onOpen = { opens += 1 }
+        view.update(metadata)
+        func button(_ id: String) throws -> NSButton {
+            try #require(view.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == id })
+        }
+        func field(_ id: String) throws -> NSTextField {
+            try #require(view.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == id })
+        }
+        let title = try button("calendar.open")
+        #expect(title.title == "Планирование")
+        _ = NSApplication.shared.sendAction(try #require(title.action), to: title.target, from: title)
+        #expect(opens == 1)
+        let preview = try field("calendar.agenda")
+        #expect(!preview.isHiddenOrHasHiddenAncestor)
+        #expect(preview.stringValue == String(agenda.prefix(100)).split(separator: " ").dropLast().joined(separator: " "))
+        let invitees = try field("calendar.invitees")
+        #expect(invitees.stringValue.components(separatedBy: "\n").count == 4)
+        let expandAgenda = try button("calendar.expand-agenda")
+        _ = NSApplication.shared.sendAction(try #require(expandAgenda.action), to: expandAgenda.target, from: expandAgenda)
+        #expect(try field("calendar.agenda").stringValue == agenda)
+        #expect(try field("calendar.invitees").stringValue.components(separatedBy: "\n").count == 4)
+        let expandPeople = try button("calendar.expand-invitees")
+        #expect(expandPeople.title == "Показать всех")
+        _ = NSApplication.shared.sendAction(try #require(expandPeople.action), to: expandPeople.target, from: expandPeople)
+        #expect(try field("calendar.invitees").stringValue.components(separatedBy: "\n").count == participantCount)
+        view.update(metadata)
+        #expect(try field("calendar.agenda").stringValue == agenda)
+        view.update(MeetingCalendarMetadata(["event_id": "another", "association": "confirmed", "agenda": agenda, "title": "Other"]))
+        #expect(try field("calendar.agenda").stringValue.count <= 100)
+    }
+
+    @Test func shortAgendaAndFourPeopleNeedNoExpansion() throws {
+        let view = MeetingCalendarView()
+        for length in [0, 99, 100] {
+            let agenda = String(repeating: "я", count: length)
+            view.update(MeetingCalendarMetadata([
+                "event_id": "event", "association": "confirmed", "title": "Planning", "agenda": agenda,
+                "participants": (1...4).map { ["id": "p\($0)", "name": "Person \($0)"] },
+            ]))
+            #expect(!view.allDescendants.contains { $0.identifier?.rawValue == "calendar.expand-agenda" })
+            #expect(!view.allDescendants.contains { $0.identifier?.rawValue == "calendar.expand-invitees" })
+            if length > 0 {
+                let text = try #require(view.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "calendar.agenda" })
+                #expect(text.stringValue == agenda)
+            }
+        }
+    }
+
+    @Test func candidateUsesTheSharedPickerAndNeverOpensTheCallAsACalendar() throws {
         let view = MeetingCalendarView()
         view.update(MeetingCalendarMetadata(["event_id": "event", "association": "candidate", "title": "Planning", "link": "https://call.example"]))
         let buttons = view.allDescendants.compactMap { $0 as? NSButton }
-        #expect(buttons.contains { $0.identifier?.rawValue == "calendar.confirm" })
+        #expect(!buttons.contains { $0.identifier?.rawValue == "calendar.confirm" })
         #expect(!buttons.contains { $0.identifier?.rawValue == "calendar.open" })
         view.update(nil)
         #expect(view.isHidden)

@@ -16,7 +16,7 @@ struct EngineVocabularyTests {
                     to: home.keysDirectory.appendingPathComponent(service))
             }
             return [
-                ParakeetEngine(), WhisperEngine(), GigaAMEngine(),
+                ParakeetEngine(), WhisperEngine(), GigaAMEngine(), NemotronEngine(),
                 try AssemblyAIEngine(), try OpenAITranscriptionEngine(), try ElevenLabsEngine(),
             ]
         }

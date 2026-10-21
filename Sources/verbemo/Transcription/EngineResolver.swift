@@ -226,6 +226,7 @@ actor EngineResolver {
     static func localEngine(named name: String, wordTimings: Bool = false) -> TranscriptionEngine {
         if name == "whisper" { return WhisperEngine(wordTimings: wordTimings) }
         if name == "gigaam" { return GigaAMEngine() }
+        if name == "nemotron" { return NemotronEngine() }
         return ParakeetEngine()
     }
 

@@ -17,17 +17,23 @@ struct MacUXFollowupTests {
     @Test(.freshHome, .speaking(.english), .enabled(if: Platform.supportsLocalModels))
     func incompleteModelFilesAreNotShownAsInstalled() throws {
         let storage = ModelStorage()
-        for model in [storage.parakeet(version: .v3), storage.liveModel()] {
+        for model in [storage.parakeet(version: .v3), storage.nemotronModel()] {
             try FileManager.default.createDirectory(at: model.directory, withIntermediateDirectories: true)
             try Data("{}".utf8).write(to: model.directory.appendingPathComponent("metadata.json"))
         }
-        let settings = SettingsWindow(hostWindow: NSWindow())
-        let labels = settings.content(for: .storage).allDescendants.compactMap { ($0 as? NSTextField)?.stringValue }
-        #expect(labels.contains("No installed models."))
-        #expect(labels.filter { $0.hasPrefix("incomplete · ") }.count == 2)
+        let application = ApplicationWindow()
+        defer { application.settings.setup.stop(); withExtendedLifetime(application) {} }
+        let content = application.settings.content(for: .storage)
+        let buttons = content.allDescendants.compactMap { $0 as? NSButton }
+        for model in [storage.parakeet(version: .v3), storage.nemotronModel()] {
+            let download = try #require(buttons.first { $0.identifier?.rawValue == model.directory.path })
+            #expect(download.title == "Download")
+            #expect(!download.isHidden && download.isEnabled)
+        }
+        #expect(!buttons.contains { $0.title == "Delete" })
     }
 
-    @Test(.freshHome) func participantMappingCanBeChangedFromEitherTab() async throws {
+    @Test(.freshHome) func participantMappingCanBeChangedFromInspectorAndTranscript() async throws {
         let fixture = try SessionFixture.make(meta: ["title": "Planning", "calendar": [
             "schema_version": 2, "event_id": "test-event", "association": "confirmed", "title": "Planning",
             "participants": [["id": "anna", "name": "Anna", "email": "anna@example.test"]],
@@ -39,22 +45,22 @@ struct MacUXFollowupTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let app = ApplicationWindow()
         defer { app.hide() }
-        let library = RecordingsWindow(root: root, hostWindow: app.panel)
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.panel.setContentSize(NSSize(width: 1600, height: 1000))
         app.show()
         await library.settled()
         let tabs = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTabView }.first)
-        tabs.selectTabViewItem(withIdentifier: "speakers")
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let participantsScroll = try #require(tabs.selectedTabViewItem?.view?.allDescendants.compactMap { $0 as? NSScrollView }.first)
+        let inspector = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        let participantsScroll = try #require(inspector.allDescendants.compactMap { $0 as? NSScrollView }.first)
         let document = try #require(participantsScroll.documentView as? NSStackView)
         let firstLabel = try #require(document.arrangedSubviews.first)
         let clip = participantsScroll.contentView
         let firstFrame = firstLabel.convert(firstLabel.bounds, to: clip)
         let topGap = clip.isFlipped ? firstFrame.minY - clip.bounds.minY : clip.bounds.maxY - firstFrame.maxY
-        #expect(topGap >= -1 && topGap < 24, "participants must start at top, gap: \(topGap)")
-        let picker = try #require(tabs.selectedTabViewItem?.view?.allDescendants.compactMap { $0 as? NSPopUpButton }.first { $0.identifier?.rawValue.hasPrefix("participant\n") == true })
+        #expect(topGap >= -1 && topGap < 40, "participants must start at top, gap: \(topGap)")
+        let picker = try #require(inspector.allDescendants.compactMap { $0 as? NSPopUpButton }.first { $0.identifier?.rawValue.hasPrefix("participant\n") == true })
         let speaker = try #require(picker.identifier?.rawValue.components(separatedBy: "\n").last)
         let anna = try #require(picker.itemArray.first { $0.representedObject as? String == "anna" })
         picker.select(anna)
@@ -90,11 +96,11 @@ struct MacUXFollowupTests {
 
     @Test(.freshHome) func emptyFiltersExplainTheirState() throws {
         let app = ApplicationWindow()
-        let library = RecordingsWindow(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), hostWindow: app.panel)
+        let library = MeetingLibraryController(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), hostWindow: app.panel)
         app.libraryProvider = { library }
         for filter in [ApplicationNavigationState.Destination.processing, .attention] {
             app.navigate(filter)
-            let label = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "meeting-list.empty" })
+            let label = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "meeting-list.empty" })
             #expect(!label.isHiddenOrHasHiddenAncestor)
             #expect(!label.stringValue.isEmpty)
         }
@@ -110,7 +116,7 @@ struct MacUXFollowupTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let app = ApplicationWindow()
         defer { app.hide() }
-        let library = RecordingsWindow(root: root, hostWindow: app.panel)
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.show()
         await library.settled()
@@ -127,7 +133,7 @@ struct MacUXFollowupTests {
     @Test(.freshHome) func firstRunIsACompactPageInTheExistingWindow() throws {
         let app = ApplicationWindow()
         defer { app.hide() }
-        let setup = SetupWindow(hostWindow: app.panel)
+        let setup = SetupPage()
         setup.onFinished = { app.navigate(.allMeetings) }
         app.presentSetup(setup)
         let page = setup.contentView
@@ -148,7 +154,7 @@ struct MacUXFollowupTests {
 
     @Test(.freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet","model":"v2"}}"#))
     func parakeetVersionLivesInTheCardAndUpdatesItsIdentity() throws {
-        let settings = SettingsWindow(hostWindow: NSWindow())
+        let settings = ApplicationWindow().settings
         let page = settings.content(for: .transcription)
         let card = try #require(page.allDescendants.compactMap { $0 as? ChoiceCard }.first { $0.id == "parakeet" })
         #expect(card.accessibilityLabel() == "Parakeet v2")
@@ -162,9 +168,9 @@ struct MacUXFollowupTests {
 
     @Test(.freshHome(config: #"{"transcription":{"enabled":false},"summary":{"enabled":false}}"#))
     func disabledServicesHideTheirFieldsWithoutLosingValues() throws {
-        let settings = SettingsWindow(hostWindow: NSWindow())
+        let settings = ApplicationWindow().settings
         let transcription = settings.content(for: .transcription)
-        let key = try #require(transcription.allDescendants.first { $0.identifier?.rawValue == "transcription.key" })
+        let key = try #require(transcription.allDescendants.first { $0.identifier?.rawValue == "transcription.key.assemblyai" })
         #expect(key.isHiddenOrHasHiddenAncestor)
         let summary = settings.content(for: .summary)
         let ollama = try #require(summary.allDescendants.first { $0.identifier?.rawValue == "summary.ollama_model" })
@@ -191,11 +197,11 @@ struct MacUXFollowupTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let app = ApplicationWindow()
         defer { app.hide() }
-        let library = RecordingsWindow(root: root, hostWindow: app.panel)
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.panel.setContentSize(NSSize(width: 790, height: 680))
         app.show()
-        let list = try #require(library.contentView.allDescendants.compactMap { $0 as? MeetingTableView }.first)
+        let list = try #require(library.listContentView.allDescendants.compactMap { $0 as? MeetingTableView }.first)
         list.selectRowIndexes([0], byExtendingSelection: false)
         _ = NSApplication.shared.sendAction(try #require(list.action), to: list.target, from: list)
         let tabs = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTabView }.first)
@@ -225,12 +231,12 @@ struct MacUXFollowupTests {
     @Test(.freshHome) func wideLibraryGivesReadingPaneMostOfTheWidth() throws {
         let app = ApplicationWindow()
         defer { app.hide() }
-        let library = RecordingsWindow(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), hostWindow: app.panel)
+        let library = MeetingLibraryController(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), hostWindow: app.panel)
         app.libraryProvider = { library }
         app.panel.setContentSize(NSSize(width: 1600, height: 900))
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let split = try #require(library.contentView.allDescendants.compactMap { $0 as? NSSplitView }.first)
-        #expect(split.arrangedSubviews[0].frame.width <= 340, "list \(split.arrangedSubviews[0].frame)")
-        #expect(split.arrangedSubviews[1].frame.width >= 600, "detail \(split.arrangedSubviews[1].frame)")
+        let split = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.columns" } as? NSStackView)
+        #expect(split.arrangedSubviews[0].frame.width >= 600, "document \(split.arrangedSubviews[0].frame)")
+        #expect(split.arrangedSubviews[2].frame.width <= 290, "inspector \(split.arrangedSubviews[2].frame)")
     }
 }

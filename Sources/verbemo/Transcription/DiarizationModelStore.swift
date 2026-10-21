@@ -204,7 +204,7 @@ actor DiarizationModelStore {
         }
     }
 
-    /// This is called only by the explicit Download control. A failed or
+    /// Called by model selection or Download. A failed or
     /// cancelled transfer leaves the old verified set intact.
     func download(progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         guard !inUse && !downloading else { throw StoreError.busy }

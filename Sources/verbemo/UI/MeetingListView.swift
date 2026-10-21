@@ -3,39 +3,37 @@ import QuartzCore
 
 @MainActor
 final class MeetingListView: NSTableCellView {
-    private var hover = false
-    private var tracking: NSTrackingArea?
     init(item: SessionInventory.Item, active: MeetingPresentation.ActiveRecording? = nil) {
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 8
         let title = NSTextField(labelWithString: item.title ?? item.name)
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.lineBreakMode = .byTruncatingTail
         let duration = item.duration.map { " · \(max(1, Int($0 / 60))) " + localised("min", "мин") } ?? ""
-        let invited = MeetingCalendarMetadata.read(from: item.dir)
-        let people = invited?.isConfirmed == true ? localised(" · Invited: \(invited!.participants.count)", " · Приглашены: \(invited!.participants.count)") : item.namedSpeakers.map { localised(" · Speakers: \($0.total)", " · Участников: \($0.total)") } ?? ""
-        let meta = NSTextField(labelWithString: MeetingPresentation.date(item.started) + duration + people)
+        let date = item.started.map { MeetingPresentation.date($0) } ?? localised("Undated", "Без даты")
+        let meta = NSTextField(labelWithString: date + duration)
+        meta.identifier = .init("meeting.list-date")
+        meta.toolTip = meta.stringValue
         meta.font = .systemFont(ofSize: 11)
-        meta.textColor = .secondaryLabelColor
+        meta.textColor = JournalStyle.muted
         meta.lineBreakMode = .byTruncatingTail
-        let stages = NSStackView(views: MeetingPresentation.stages(item, active: active).map { Self.icon($0) })
-        stages.spacing = 9
-        let stack = NSStackView(views: [title, meta, stages])
+        let stages = MeetingPresentation.stages(item, active: active)
+        let status = stages.first { $0.state == .failed } ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending }
+        let metaRow = NSStackView(views: [meta, NSView()] + (status.map { [Self.icon($0)] } ?? []))
+        metaRow.spacing = 8
+        let stack = NSStackView(views: [title, metaRow])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 7
+        stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            title.widthAnchor.constraint(equalTo: stack.widthAnchor), meta.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            title.widthAnchor.constraint(equalTo: stack.widthAnchor), metaRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
-        paint()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    private static func icon(_ stage: MeetingPresentation.Stage) -> NSView {
+    static func icon(_ stage: MeetingPresentation.Stage) -> NSView {
         let host = NSView()
         host.widthAnchor.constraint(equalToConstant: 22).isActive = true
         host.heightAnchor.constraint(equalToConstant: 22).isActive = true
@@ -75,21 +73,7 @@ final class MeetingListView: NSTableCellView {
         }
         return host
     }
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
-        addTrackingArea(area)
-        tracking = area
-    }
-    override func mouseEntered(with event: NSEvent) { hover = true; paint() }
-    override func mouseExited(with event: NSEvent) { hover = false; paint() }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); paint() }
-    private func paint() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = (hover ? NSColor.controlColor : NSColor.controlBackgroundColor).cgColor
-        }
-    }
+
 }
 
 @MainActor
@@ -105,15 +89,5 @@ final class MeetingTableView: NSTableView {
             onContext?(selectedRow)
             menu?.popUp(positioning: nil, at: rect(ofRow: selectedRow).origin, in: self)
         } else { super.keyDown(with: event) }
-    }
-}
-
-@MainActor
-final class MeetingLibrarySplitView: NSSplitView {
-    var onResize: (() -> Void)?
-    private var lastWidth: CGFloat = -1
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        if lastWidth != bounds.width { lastWidth = bounds.width; onResize?() }
     }
 }

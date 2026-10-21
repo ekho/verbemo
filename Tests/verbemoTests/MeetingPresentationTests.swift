@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import AppKit
 import Testing
 @testable import verbemo
 
@@ -40,7 +39,7 @@ struct MeetingPresentationTests {
 @Suite(.serialized)
 @MainActor
 struct MeetingMenuTests {
-    @Test(.freshHome) func embeddedDetailsExposeManualFinishForFailedNaming() async throws {
+    @Test(.freshHome) func journalDetailsExposeManualFinishForFailedNaming() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -48,35 +47,37 @@ struct MeetingMenuTests {
         let dir = root.appendingPathComponent("meeting")
         try FileManager.default.moveItem(at: fixture, to: dir)
         try SessionState.amend(dir, with: [SessionState.Key.speakersStatus: "failed"])
-        let library = RecordingsWindow(root: root, hostWindow: NSWindow())
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
         await library.settled()
         let button = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
             .first { $0.title == "Finish processing" })
         #expect(!button.isHidden)
         #expect(button.isEnabled)
         let item = try #require(SessionInventory.item(for: dir))
-        #expect(RecordingsWindow.decision(for: item, policy: .init(names: true, summary: false)) == .finish)
+        #expect(MeetingLibraryController.decision(for: item, policy: .init(names: true, summary: false)) == .finish)
         withExtendedLifetime(library) {}
     }
-    @Test(.speaking(.russian)) func oneMenuOrdersCopyAndRegenerationAndDisablesUntilReady() {
+    @Test(.speaking(.russian)) func meetingMenuOmitsActionsWithDedicatedControls() {
         let state = MeetingActionState(transcriptReady: false, summaryReady: false,
             hasAudio: true, isRecording: false, isBusy: false,
             configReadable: true, transcriptionEnabled: true, summaryEnabled: true)
         let menu = MeetingActionsMenu.make(state: state, target: NSObject(), action: NSSelectorFromString("run:"))
-        #expect(menu.items.map(\.title) == ["Переименовать", "Копировать транскрипцию", "Расшифровать повторно", "Копировать сводку", "Перегенерировать сводку", "Открыть папку в Finder", "Открыть во внешнем редакторе", "", "Удалить"])
-        #expect(!menu.items[1].isEnabled)
-        #expect(menu.items[2].isEnabled)
+        #expect(menu.items.map(\.title) == ["Переименовать", "Расшифровать повторно", "Открыть папку в Finder", "Открыть во внешнем редакторе", "", "Удалить"])
+        #expect(menu.items[1].isEnabled)
         #expect(!menu.items[3].isEnabled)
-        #expect(!menu.items[4].isEnabled)
-        #expect(menu.items[4].toolTip != nil)
+        #expect(menu.items[3].toolTip != nil)
     }
     @Test func textAndMarkdownCopyHaveDifferentContents() {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         let markdown = "## Heading\n\n- First\n  - Nested"
-        #expect(RecordingsWindow.copyContent(markdown, plainText: true, to: pasteboard))
+        #expect(MeetingLibraryController.copyContent(markdown, plainText: true, to: pasteboard))
         #expect(pasteboard.string(forType: .string)?.contains("##") == false)
-        #expect(RecordingsWindow.copyContent(markdown, plainText: false, to: pasteboard))
+        #expect(MeetingLibraryController.copyContent(markdown, plainText: false, to: pasteboard))
         #expect(pasteboard.string(forType: .string) == markdown)
     }
 }
@@ -94,8 +95,11 @@ struct ActiveMeetingPresentationTests {
         let paused = MeetingPresentation.stages(active.item, active: active)
         #expect(paused.first { $0.symbol == "mic" }?.state == .paused)
         #expect(paused.first { $0.symbol == "doc.text" }?.state == .paused)
-        let host = NSWindow()
-        let library = RecordingsWindow(root: root, hostWindow: host)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        defer { withExtendedLifetime(app) {} }
         library.setActiveRecording(active)
         #expect(library.currentActions.isRecording)
         #expect(library.currentActions.reason(for: .delete) != nil)

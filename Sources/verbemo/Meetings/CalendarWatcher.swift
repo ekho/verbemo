@@ -40,6 +40,8 @@ final class CalendarWatcher {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess:
             authorized = true
+        case .notDetermined where authorized:
+            break
         case .notDetermined:
             authorized = (try? await store.requestFullAccessToEvents()) ?? false
             if !authorized {
@@ -86,20 +88,45 @@ final class CalendarWatcher {
         }
     }
 
+    func meetings(on date: Date) -> [Meeting] {
+        guard let day = Calendar.current.dateInterval(of: .day, for: date) else { return [] }
+        return meetings(from: day.start, to: day.end)
+    }
+
+    func search(_ query: CalendarEventQuery) async throws -> [Meeting] {
+        guard Config.useCalendar() else { throw CalendarSelectionError.integrationDisabled }
+        await requestAccess()
+        guard authorized else { throw CalendarSelectionError.accessDenied }
+        return meetings(from: query.range.start, to: query.range.end, includeAllDay: true).filter(query.matches)
+    }
+
+    func resolve(_ selected: Meeting) async throws -> Meeting {
+        let events = try await search(CalendarEventQuery(date: selected.start))
+        guard selected.hasPersistentID,
+              let current = events.first(where: { $0.id == selected.id && $0.start == selected.start }) else {
+            throw CalendarSelectionError.missingEvent
+        }
+        return current
+    }
+
     // MARK: -
 
     private func meetings(around date: Date, slack: TimeInterval) -> [Meeting] {
+        meetings(from: date.addingTimeInterval(-slack), to: date.addingTimeInterval(slack))
+    }
+
+    private func meetings(from start: Date, to end: Date, includeAllDay: Bool = false) -> [Meeting] {
         guard authorized else { return [] }
         let calendars = store.calendars(for: .event)
         guard !calendars.isEmpty else { return [] }
 
         let predicate = store.predicateForEvents(
-            withStart: date.addingTimeInterval(-slack),
-            end: date.addingTimeInterval(slack),
+            withStart: start,
+            end: end,
             calendars: calendars
         )
         return store.events(matching: predicate)
-            .filter { !$0.isAllDay && $0.status != .canceled }
+            .filter { (includeAllDay || !$0.isAllDay) && $0.status != .canceled }
             .map(Self.convert)
             .sorted { $0.start < $1.start }
     }
