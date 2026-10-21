@@ -10,7 +10,7 @@ Contract checked on **2026-10-22** for `gpt-4o-transcribe-diarize`:
   to send `auto` and request `diarized_json` for timed speaker segments.
 - Neither those pages nor [the model page](https://developers.openai.com/api/docs/models/gpt-4o-transcribe-diarize)
   specifies a 1400-second maximum. That number is an **observed rejection**
-  reported in [Amanu PR #18](https://github.com/gsamat/amanu/pull/18), not a
+  reported in [Amanu PR #18](../history/openai-duration-cap-upstream.md), not a
   documented or independently verified current service guarantee.
 - **1390 seconds** is therefore a defensive cut length, leaving ten seconds
   below that observed rejection for AAC padding. The shorter of this duration
@@ -61,6 +61,8 @@ on `f08bf3458731ffb570b2de52b28df67e388c9e87`:
 | `swift test --no-parallel --filter 'OpenAIEngineTests\|FormEngineHTTPTests\|TranscriptionScratchTests'` | 22 tests in 3 suites passed, 24.840 s |
 | `swift test --no-parallel` | Final report: 1031 tests in 145 suites passed, 132.521 s; 23 opt-in/asset-dependent tests skipped |
 | `swift build` | Debug build passed |
+| `python3 -m unittest discover -s Tests/scripts -p 'test_*.py'` | 114 tests passed, 81.794 s |
+| `python3 Tests/scripts/test_independent_product.py --all` | Passed; upstream references live in history/provenance |
 | `git diff --check` | Passed |
 
 Skipped cases cover native model/corpus downloads and inference, LocalVQE
@@ -72,7 +74,7 @@ tests passed in that same run. Independent read-only review found no issues.
 ## Upstream credit
 
 The tighter-ceiling approach and 1390-second guard are adapted from Dmitry
-Tsoy's [Amanu PR #18](https://github.com/gsamat/amanu/pull/18), source commit
+Tsoy's [Amanu PR #18](../history/openai-duration-cap-upstream.md), source commit
 `31b8ec434224ad6ead27c37dec8db51694a1b757`, reviewed at PR head
 `101b41816fe7cd359a453d3d4653a19df028e20b`. Cache-boundary identity, validation
 and regression coverage are adapted for current Verbemo. The unrelated

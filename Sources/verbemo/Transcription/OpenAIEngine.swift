@@ -168,7 +168,7 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
         return slices
     }
 
-    /// Adapted from https://github.com/gsamat/amanu/pull/18: the tighter ceiling wins.
+    /// Adapted from Dmitry Tsoy's Amanu PR #18: the tighter ceiling wins (see docs/history/openai-duration-cap-upstream.md).
     static func pieceLength(
         bytes: Int64, duration: TimeInterval,
         requestLimit: Int64 = defaultRequestLimit,
