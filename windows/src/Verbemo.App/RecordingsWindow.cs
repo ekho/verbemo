@@ -291,6 +291,8 @@ internal sealed class RecordingsWindow : Window
     {
         if (Selected is null) return;
         var menu = MeetingActionsMenu.Create(ActionState(), action => _ = PerformAsync(action));
+        menu.FontSize = SystemFonts.MessageFontSize;
+        menu.FontWeight = FontWeights.Normal;
         foreach (var item in menu.Items.OfType<MenuItem>().Where(item => item.Tag is MeetingAction.CopyTranscript or MeetingAction.CopySummary or MeetingAction.RegenerateSummary or MeetingAction.Retranscribe).ToArray()) menu.Items.Remove(item);
         menu.PlacementTarget = anchor;
         menu.IsOpen = true;
