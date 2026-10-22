@@ -123,12 +123,12 @@ enum Credentials {
             // transcription.
             if Home.current.variable("OPENAI_API_KEY")?
                 .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-                return Config.openAIKey()
+                return Config.openAIKey(in: config)
             }
             if let named = pathSetting(.summaryOpenAIKeyPath, in: config) {
                 return Config.secret(at: named)
             }
-            return Config.openAIKey()
+            return Config.openAIKey(in: config)
         }
         if let named = pathSetting(.summaryOpenAICompatibleKeyPath, in: config) {
             return Config.secret(at: named)
@@ -136,7 +136,7 @@ enum Credentials {
         if let pasted = Config.secret(at: openAICompatibleKeyPath) { return pasted }
         let host = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines))?
             .host?.lowercased() ?? ""
-        return OpenAICompatible.isLoopback(host) ? Config.openAIKey() : nil
+        return OpenAICompatible.isLoopback(host) ? Config.openAIKey(in: config) : nil
     }
 
     private static func pathSetting(_ key: Config.Key, in config: [String: Any]?) -> URL? {

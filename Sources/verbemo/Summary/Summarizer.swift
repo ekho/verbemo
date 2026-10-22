@@ -21,7 +21,8 @@ enum Summarizer {
     static func summarize(
         transcript: Transcript,
         context: [String],
-        into dir: URL
+        into dir: URL,
+        request: SummaryRequest? = nil
     ) async -> String? {
         func log(_ message: String) { appendSessionLog(message, to: dir) }
 
@@ -29,12 +30,12 @@ enum Summarizer {
         // minutes, and the route below is read from the file as it is now.
         // Nothing is recorded, so the summary is still owed once the file
         // reads again.
-        if let reason = Config.unreadableReason {
+        if request == nil, let reason = Config.unreadableReason {
             log("summary waits — config.json can't be read (\(reason))")
             return nil
         }
-        let settings = Config.summary()
-        guard MeetingEgress.route(for: .summary) != nil else { return nil }
+        let settings = request?.settings ?? Config.summary()
+        guard request != nil || MeetingEgress.route(for: .summary) != nil else { return nil }
 
         let body = plainText(transcript)
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -42,7 +43,7 @@ enum Summarizer {
             return nil
         }
 
-        let backends = MeetingEgress.backends(for: .summary)
+        let backends = request?.backends ?? MeetingEgress.backends(for: .summary)
         guard !backends.isEmpty else {
             log("summary skipped — no backend available")
             Analytics.track(.summaryFailed, [
@@ -68,6 +69,8 @@ enum Summarizer {
         for backend in backends {
             guard !Task.isCancelled else { return nil }
             do {
+                if request != nil { try await backend.checkAccess() }
+                try Task.checkCancellation()
                 log("summarizing with \(backend.name)")
                 let markdown = try await produce(
                     body: body, header: header, settings: settings, backend: backend
@@ -92,6 +95,7 @@ enum Summarizer {
                 ])
                 return backend.name
             } catch {
+                if error is CancellationError || Task.isCancelled { return nil }
                 // Falling through is the expected path when a subscription is
                 // spent, so say which kind of failure this was — otherwise a
                 // healthy hand-off reads like something broke.
@@ -118,7 +122,7 @@ enum Summarizer {
             statusKey: SessionState.Key.summaryStatus,
             fingerprintKey: SessionState.Key.summaryFailedFor,
             countKey: SessionState.Key.summaryDeferrals,
-            fingerprint: MeetingEgress.fingerprint(for: .summary)))
+            fingerprint: request?.fingerprint ?? MeetingEgress.fingerprint(for: .summary)))
         let deferred: Bool
         switch verdict {
         case .deferred:

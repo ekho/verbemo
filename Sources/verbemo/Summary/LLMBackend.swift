@@ -32,6 +32,7 @@ struct LLMBackend: Sendable {
     /// option — and the whole transcript went back to every backend in the
     /// chain at every launch and every change of network, for ever.
     var isUnchosenFallback = false
+    var checkAccess: @Sendable () async throws -> Void = {}
     /// (system prompt, user prompt) → completion text.
     let call: @Sendable (String, String) async throws -> String
 
@@ -59,27 +60,29 @@ struct LLMBackend: Sendable {
     static func available(
         preference: String = "auto",
         anthropicModel: String? = nil,
-        openAIModel overriddenOpenAIModel: String? = nil
+        openAIModel overriddenOpenAIModel: String? = nil,
+        config: [String: Any]? = Config.raw(),
+        freezeConfiguration: Bool = false
     ) -> [LLMBackend] {
         // Whatever the home says instead — nothing at all, in a test that has
         // not brought a fake of its own.
         if let supplied = Home.current.languageModels { return supplied(preference) }
-        let settings = Config.summary()
+        let settings = Config.summary(in: config)
         let openAIModelID = overriddenOpenAIModel ?? settings.openAIModel
 
         var candidates: [LLMBackend] = []
         if let claude = cliPath("claude") {
             candidates.append(claudeCLI(path: claude, model: anthropicModel))
         }
-        if let key = Config.anthropicKey() {
+        if let key = Config.anthropicKey(in: config) {
             candidates.append(anthropic(key: key, model: anthropicModel ?? settings.model))
         }
         if let codex = cliPath("codex") {
-            candidates.append(codexCLI(path: codex))
+            candidates.append(codexCLI(path: codex, freezeConfiguration: freezeConfiguration))
         }
         // Not simply the OpenAI key: an OpenAI-compatible endpoint has a key
         // of its own — see `Credentials.summaryOpenAIKey`.
-        if let key = Credentials.summaryOpenAIKey() {
+        if let key = Credentials.summaryOpenAIKey(in: config) {
             candidates.append(openAI(key: key, model: openAIModelID, baseURL: settings.openAIBaseURL))
         }
         var local = ollama(model: settings.ollamaModel, baseURL: settings.ollamaBaseURL)
@@ -109,10 +112,21 @@ struct LLMBackend: Sendable {
         }
     }
 
+    private static func checkKey(_ check: Credentials.Check) async throws {
+        switch await check.ask() {
+        case .works: return
+        case .refused: throw LLMError.http(401, "Authentication refused")
+        case .unreachable: throw URLError(.cannotConnectToHost)
+        case .unexpected(let status): throw LLMError.http(status, "Access check failed")
+        }
+    }
+
     // MARK: - Anthropic
 
     private static func claudeCLI(path: String, model: String?) -> LLMBackend {
-        LLMBackend(name: "claude-cli", model: model) { system, prompt in
+        LLMBackend(name: "claude-cli", model: model, checkAccess: {
+            _ = try await run(executable: path, arguments: ["auth", "status"], input: "", timeout: 20)
+        }) { system, prompt in
             try await run(
                 executable: path,
                 arguments: claudeArguments(system: system, model: model),
@@ -163,7 +177,9 @@ struct LLMBackend: Sendable {
     }
 
     private static func anthropic(key: String, model: String) -> LLMBackend {
-        LLMBackend(name: "anthropic-api", model: model) { system, prompt in
+        LLMBackend(name: "anthropic-api", model: model, checkAccess: {
+            try await checkKey(.init(service: .anthropic, key: key))
+        }) { system, prompt in
             var request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
             request.httpMethod = "POST"
             request.timeoutInterval = 600
@@ -197,17 +213,31 @@ struct LLMBackend: Sendable {
     /// `codex exec` prints a running trace to stdout, so the answer is read
     /// from the file it writes with `--output-last-message` rather than
     /// scraped out of the log.
-    private static func codexCLI(path: String) -> LLMBackend {
+    static func codexCLI(path: String, freezeConfiguration: Bool = false) -> LLMBackend {
+        let configURL = codexConfigURL
+        let config = try? Data(contentsOf: configURL)
+        let servers = config.flatMap { String(data: $0, encoding: .utf8) }.map(mcpServerNames(inTOML:)) ?? []
+        let checkConfig: @Sendable () throws -> Void = {
+            guard !freezeConfiguration || (try? Data(contentsOf: configURL)) == config else {
+                throw PostProcessor.SummaryRegenerationError.unavailable(localised(
+                    "Codex configuration changed. Choose the provider again before sending the transcript.",
+                    "Настройки Codex изменились. Выберите способ заново перед отправкой текста."))
+            }
+        }
         // The CLI resolves its model from its own config or default. We do
         // not know that model here and must not report the API's model as it.
-        LLMBackend(name: "codex-cli", model: nil) { system, prompt in
+        return LLMBackend(name: "codex-cli", model: nil, checkAccess: {
+            try checkConfig()
+            _ = try await run(executable: path, arguments: ["login", "status"], input: "", timeout: 20)
+        }) { system, prompt in
+            try checkConfig()
             let output = FileManager.default.temporaryDirectory
                 .appendingPathComponent("verbemo-codex-\(UUID().uuidString).txt")
             defer { try? FileManager.default.removeItem(at: output) }
 
             _ = try await run(
                 executable: path,
-                arguments: codexArguments(output: output),
+                arguments: codexArguments(output: output, mcpServers: freezeConfiguration ? servers : codexMCPServers()),
                 input: "\(system)\n\n\(prompt)",
                 timeout: 1800
             )
@@ -265,11 +295,15 @@ struct LLMBackend: Sendable {
 
     /// The MCP servers the person's codex config defines, read from
     /// `$CODEX_HOME/config.toml` or `~/.codex/config.toml`.
-    static func codexMCPServers() -> [String]? {
+    private static var codexConfigURL: URL {
         let home = Home.current.variable("CODEX_HOME").map { Home.current.expanding($0) }
             ?? Home.current.url.appendingPathComponent(".codex", isDirectory: true)
+        return home.appendingPathComponent("config.toml")
+    }
+
+    static func codexMCPServers() -> [String]? {
         guard let text = try? String(
-            contentsOf: home.appendingPathComponent("config.toml"), encoding: .utf8)
+            contentsOf: codexConfigURL, encoding: .utf8)
         else { return [] }
         return mcpServerNames(inTOML: text)
     }
@@ -328,7 +362,10 @@ struct LLMBackend: Sendable {
     }
 
     private static func openAI(key: String, model: String, baseURL: String) -> LLMBackend {
-        LLMBackend(name: "openai-api", model: model) { system, prompt in
+        LLMBackend(name: "openai-api", model: model, checkAccess: {
+            _ = try OpenAICompatible.url(baseURL: baseURL, path: "models")
+            try await checkKey(.init(service: .openAI(baseURL: baseURL), key: key))
+        }) { system, prompt in
             let url = try OpenAICompatible.url(baseURL: baseURL, path: "chat/completions")
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -363,7 +400,13 @@ struct LLMBackend: Sendable {
     // MARK: - local
 
     private static func ollama(model: String, baseURL: String) -> LLMBackend {
-        LLMBackend(name: "ollama", model: model, promptLimit: OllamaClient.promptLimit) {
+        LLMBackend(name: "ollama", model: model, promptLimit: OllamaClient.promptLimit, checkAccess: {
+            let models = try await OllamaClient.listModels(baseURL: baseURL)
+            guard SetupSelection.ollamaModel(named: model, in: models) != nil else {
+                throw PostProcessor.SummaryRegenerationError.unavailable(localised(
+                    "The selected Ollama model is unavailable.", "Выбранная модель Ollama недоступна."))
+            }
+        }) {
             system, prompt in
             try await OllamaClient.chat(
                 baseURL: baseURL, model: model, system: system, prompt: prompt)

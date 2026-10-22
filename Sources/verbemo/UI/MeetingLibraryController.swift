@@ -115,6 +115,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private var undoDeletionID: UUID?
     var isProcessing: Bool { working || deletion.hasWork }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
+    private var summarySheet: SummaryRegenerationSheet?
     private var working = false { didSet { onActivityChange?() } }
 
     init(root: URL, pasteboard: NSPasteboard = .general, hostWindow: NSWindow) {
@@ -433,40 +434,18 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     @objc private func regenerateClicked() { regenerateSummary() }
     private func regenerateSummary() {
         guard currentActions.reason(for: .regenerateSummary) == nil, let dir = artifactDirectory, panel.attachedSheet == nil else { updateButtons(); return }
-        let alert = NSAlert()
-        alert.messageText = localised("Create a new summary", "Создать новую сводку")
-        alert.informativeText = localised(
-            "Uses the selected transcript version and your configured provider. The previous summary is kept if this attempt fails.",
-            "Используется выбранная версия расшифровки и способ из настроек. Если попытка не удастся, предыдущая сводка сохранится.")
-        let method = NSTextField(wrappingLabelWithString: localised("Configured provider: ", "Способ из настроек: ") + Self.summaryMethodName(Config.summary().backend))
-        let placeholder = JournalUnavailableView(.summaryProvider, title: localised("Choose a provider for this run", "Выбрать способ только для этой сводки"))
-        let accessory = NSStackView(views: [method, placeholder])
-        accessory.orientation = .vertical
-        accessory.alignment = .leading
-        accessory.spacing = 16
-        accessory.frame = NSRect(x: 0, y: 0, width: 380, height: 126)
-        for view in accessory.arrangedSubviews { view.widthAnchor.constraint(equalTo: accessory.widthAnchor).isActive = true }
-        alert.accessoryView = accessory
-        alert.addButton(withTitle: localised("Create summary", "Создать сводку"))
-        alert.addButton(withTitle: localised("Cancel", "Отмена"))
-        alert.addButton(withTitle: localised("Summary settings", "Настройки сводки"))
-        alert.beginSheetModal(for: panel) { [weak self] response in
+        working = true
+        updateButtons()
+        let sheet = SummaryRegenerationSheet(onSettings: { [weak self] in self?.onNavigateSettings?(.summary) }, run: { request in
+            try await PostProcessor.regenerateSummary(dir, request: request)
+        }, completion: { [weak self] in
             guard let self else { return }
-            if response == .alertThirdButtonReturn { self.onNavigateSettings?(.summary); return }
-            guard response == .alertFirstButtonReturn,
-                  self.artifactDirectory == dir, self.currentActions.reason(for: .regenerateSummary) == nil else { return }
-            self.working = true
-            self.updateButtons()
-            self.updateInspector()
-            self.table.reloadData()
-            Task { [weak self] in
-                guard let self else { return }
-                do { try await PostProcessor.regenerateSummary(dir) }
-                catch { await NSAlert(error: error).beginSheetModal(for: panel) }
-                working = false
-                reload()
-            }
-        }
+            summarySheet = nil
+            working = false
+            reload()
+        })
+        summarySheet = sheet
+        panel.beginSheet(sheet.window)
     }
     func beginRenamingMeeting() {
         guard let item = selected else { return }

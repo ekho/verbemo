@@ -480,7 +480,7 @@ enum Config {
     /// Post-transcript summarization. `backend: auto` walks the chain in
     /// LLMBackend: the local `claude` CLI, the Anthropic API, the `codex` CLI,
     /// the OpenAI API, then ollama — subscriptions before metered keys.
-    struct SummarySettings {
+    struct SummarySettings: Sendable {
         var enabled = Config.defaultFlag(.summaryEnabled)
         var backend = Config.defaultString(.summaryBackend)
         /// Summarizing is where a cheap model quietly costs you something:
@@ -547,12 +547,12 @@ enum Config {
     /// named by `transcription.openai.api_key_path` (or, in a config written
     /// before that setting, `summary.openai_api_key_path` — see
     /// `openAIKeyFile`), verbemo's own key file, then the shared one.
-    static func openAIKey() -> String? {
+    static func openAIKey(in config: [String: Any]? = Config.raw()) -> String? {
         if let env = Home.current.variable("OPENAI_API_KEY"),
            !env.trimmed.isEmpty {
             return env.trimmed
         }
-        if let configured = openAIKeyFile(in: load()) { return secret(at: configured) }
+        if let configured = openAIKeyFile(in: config) { return secret(at: configured) }
         return secret(at: openAIKeyPath) ?? secret(atAnyOf: openAISharedKeyPaths)
     }
 
@@ -579,12 +579,12 @@ enum Config {
 
     /// Anthropic key, in order: ANTHROPIC_API_KEY, a token file named by
     /// `summary.api_key_path`, verbemo's own key file, then the shared one.
-    static func anthropicKey() -> String? {
+    static func anthropicKey(in config: [String: Any]? = Config.raw()) -> String? {
         if let env = Home.current.variable("ANTHROPIC_API_KEY"),
            !env.trimmed.isEmpty {
             return env.trimmed
         }
-        if let configured = summary().apiKeyPath { return secret(at: configured) }
+        if let configured = summary(in: config).apiKeyPath { return secret(at: configured) }
         return secret(at: anthropicKeyPath) ?? secret(atAnyOf: anthropicSharedKeyPaths)
     }
 
