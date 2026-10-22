@@ -55,8 +55,8 @@ public sealed class RecordingActionsTests
             .Invoke(window, null)!).GetAwaiter().GetResult();
     }
 
-    internal static T Field<T>(RecordingsWindow window, string name) =>
-        (T)typeof(RecordingsWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+    internal static T Field<T>(object window, string name) =>
+        (T)window.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
 
     internal static void WithWindow(Action<RecordingsWindow, string> test)
     {

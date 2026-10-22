@@ -65,6 +65,7 @@ internal sealed class StatusWindow : Window
 
     public Action? RevealAction { get; set; }
     public Window? HostWindow { get; set; }
+    public Func<Task>? StartRecordingAction { get; set; }
 
     public StatusWindow(VerbemoRuntime runtime, bool embedded = false)
     {
@@ -229,8 +230,9 @@ internal sealed class StatusWindow : Window
         base.OnClosing(e);
     }
 
-    public async Task ToggleRecordingAsync()
+    public async Task ToggleRecordingAsync(bool prompt = true)
     {
+        if (prompt && !runtime.State.IsRecording && StartRecordingAction is { } start) { await start(); return; }
         if (operationPending) return;
         operationPending = true;
         Refresh();

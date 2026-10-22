@@ -15,7 +15,6 @@ public partial class App : System.Windows.Application
     private static StatusWindow? status;
     private static TrayIconService? tray;
     private static ApplicationWindow? workspace;
-    private static SetupWindow? setup;
     private static UpdateStartupAdmission? startupAdmission;
     private EventWaitHandle? doorbell;
 
@@ -171,17 +170,8 @@ public partial class App : System.Windows.Application
 
     public static void ShowSetup()
     {
-        if (runtime is null) return;
-        if (setup is null)
-        {
-            setup = new SetupWindow(runtime);
-            setup.Closed += (_, _) =>
-            {
-                setup = null;
-                status?.Reveal();
-            };
-        }
-        Bring(setup);
+        workspace?.ShowDestination(ApplicationDestination.General);
+        workspace?.Reveal();
     }
 
     public static void ShowAbout() { workspace?.ShowDestination(ApplicationDestination.About); workspace?.Reveal(); }

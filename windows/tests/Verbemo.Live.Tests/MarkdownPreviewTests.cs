@@ -11,6 +11,19 @@ namespace Verbemo.Live.Tests;
 public sealed class MarkdownPreviewTests
 {
     [Fact]
+    public void Transcript_timestamp_seeks_without_changing_selectable_text() => OnSta(() =>
+    {
+        var preview = new MarkdownPreview();
+        double? position = null;
+        preview.ShowTranscript("**[1:02:03] Анна:** Обсудим проект.", seconds => position = seconds);
+        var span = Assert.IsType<Span>(Assert.IsType<Paragraph>(preview.Document.Blocks.FirstBlock).Inlines.FirstInline);
+        var link = Assert.IsType<Hyperlink>(span.Inlines.FirstInline);
+        link.RaiseEvent(new RoutedEventArgs(Hyperlink.ClickEvent));
+        Assert.Equal(3723, position);
+        Assert.Contains("[1:02:03] Анна: Обсудим проект.", new TextRange(preview.Document.ContentStart, preview.Document.ContentEnd).Text);
+    });
+
+    [Fact]
     public void Existing_transcript_files_render_heading_and_speaker_labels_as_selectable_text() => OnSta(() =>
     {
         var markdown = TranscriptWriter.RenderMarkdown("Встреча", new TranscriptDocument("assemblyai", "universal",

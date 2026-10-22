@@ -29,14 +29,21 @@ internal sealed class RecordingsWindow : Window
     private readonly DockPanel listPanel = new();
     private readonly StackPanel deletionNotices = new();
     private readonly Dictionary<string, System.Windows.Controls.Button> undoButtons = new(StringComparer.OrdinalIgnoreCase);
-    private readonly TextBox search = new();
+    private readonly TextBox search;
     private readonly System.Windows.Controls.Button regenerate;
     private readonly System.Windows.Controls.Button textCopy;
     private readonly System.Windows.Controls.Button markdownCopy;
-    private readonly TextBlock reprocessHint = Ui.Status();
     private MeetingFilter filter;
     private List<Row> allRows = [];
     private bool detailOpen;
+    private bool sidebarExtracted;
+    private bool inspectorOpen;
+    private readonly Border inspector = new();
+    private readonly TextBlock metadata = Ui.Detail("");
+    private readonly TextBlock processingSettings = Ui.Detail("");
+    private readonly MeetingPlayer player = new();
+    public event EventHandler? MeetingRequested;
+    public event EventHandler? SettingsRequested;
     private ApplicationNavigationState? navigation;
     public event EventHandler? ActiveMeetingRequested;
     public ApplicationNavigationState? Navigation { set => navigation = value; }
@@ -72,6 +79,10 @@ internal sealed class RecordingsWindow : Window
         MinHeight = 520;
         Ui.FitToWorkArea(this, 1040, 760);
         Icon = App.WindowIcon;
+        var searchField = Ui.Field(T("Find a meeting", "Найти встречу"));
+        search = searchField.Box;
+        grid.Background = System.Windows.Media.Brushes.Transparent;
+        ScrollViewer.SetHorizontalScrollBarVisibility(grid, ScrollBarVisibility.Disabled);
 
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetBinding(ContentPresenter.ContentProperty, new System.Windows.Data.Binding(nameof(Row.View)));
@@ -93,6 +104,7 @@ internal sealed class RecordingsWindow : Window
         {
             if (Selected?.Item.Transcript == ProcessingStep.Recording) { ActiveMeetingRequested?.Invoke(this, EventArgs.Empty); return; }
             detailOpen = Selected is not null;
+            MeetingRequested?.Invoke(this, EventArgs.Empty);
             UpdateLayoutMode();
         }
         grid.PreviewKeyDown += (_, e) =>
@@ -116,7 +128,7 @@ internal sealed class RecordingsWindow : Window
         transcriptContent.Content = transcript;
         tabs.Items.Add(new TabItem { Header = T("Summary", "Сводка"), Content = summary });
         tabs.Items.Add(new TabItem { Header = T("Transcript", "Расшифровка"), Content = transcriptContent });
-        tabs.Items.Add(new TabItem { Header = T("Speakers", "Участники"), Content = Ui.Scroll(speakers) });
+
         engineTabs.SelectionChanged += async (_, args) =>
         {
             if (!updatingChoices && args.Source == engineTabs) await ShowTranscriptAsync();
@@ -128,56 +140,81 @@ internal sealed class RecordingsWindow : Window
         Grid.SetRow(tabs, 1);
         transcriptPanel.Children.Add(tabs);
 
-        var actions = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
-        foreach (var button in new[] { retranscribe, regenerate, textCopy, markdownCopy, listen })
+        var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 12) };
+        foreach (var button in new[] { textCopy, markdownCopy })
         {
             ToolTipService.SetShowOnDisabled(button, true);
             button.Margin = new Thickness(0, 0, 8, 0);
             actions.Children.Add(button);
         }
-
-        detail.Margin = new Thickness(16, 8, 16, 14);
-        detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        detail.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        title.FontSize = 18;
-        title.FontWeight = FontWeights.SemiBold;
+        detail.Margin = new Thickness(28, 18, 28, 20);
+        for (var index = 0; index < 5; index++) detail.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        detail.RowDefinitions.Add(new RowDefinition());
+        detail.Children.Add(metadata);
+        title.FontSize = 30;
+        title.FontWeight = FontWeights.Bold;
+        title.Margin = new Thickness(0, 10, 0, 16);
         var titleRow = new DockPanel();
-        var more = Ui.Button("⋯", () => OpenMeetingMenu(title));
-        more.MinWidth = 36;
-        System.Windows.Automation.AutomationProperties.SetName(more, T("Meeting actions", "Действия со встречей"));
+        var more = JournalStyle.IconButton("\uE712", T("Meeting actions", "Действия со встречей"), () => OpenMeetingMenu(title));
         DockPanel.SetDock(more, Dock.Right);
         titleRow.Children.Add(more);
-        titleRow.Children.Add(title);
+        var rename = Ui.Button("", () => _ = PerformAsync(MeetingAction.Rename));
+        rename.Content = title;
+        rename.Background = System.Windows.Media.Brushes.Transparent;
+        rename.BorderThickness = new Thickness(0);
+        rename.Padding = new Thickness(0);
+        rename.HorizontalContentAlignment = HorizontalAlignment.Left;
+        System.Windows.Automation.AutomationProperties.SetName(rename, T("Rename meeting", "Переименовать встречу"));
+        titleRow.Children.Add(rename);
+        Grid.SetRow(titleRow, 1);
         detail.Children.Add(titleRow);
-        Grid.SetRow(problem, 1);
-        problem.Margin = new Thickness(0, 4, 0, 0);
-        var statusPanel = new StackPanel();
-        statusPanel.Children.Add(processingStatus);
-        statusPanel.Children.Add(problem);
-        statusPanel.Children.Add(finish);
-        calendarPanel.Margin = new Thickness(0,12,0,12);
-        statusPanel.Children.Add(calendarPanel);
-        Grid.SetRow(statusPanel, 1);
-        detail.Children.Add(statusPanel);
-        Grid.SetRow(transcriptPanel, 3);
+        Grid.SetRow(player, 2);
+        detail.Children.Add(player);
+        Grid.SetRow(problem, 3);
+        detail.Children.Add(problem);
+        Grid.SetRow(actions, 4);
+        detail.Children.Add(actions);
+        Grid.SetRow(transcriptPanel, 5);
         detail.Children.Add(transcriptPanel);
-        Grid.SetRow(actions, 3);
-        var operations = new StackPanel();
-        operations.Children.Add(actions);
-        reprocessHint.Margin = new Thickness(0, 8, 0, 0);
-        operations.Children.Add(reprocessHint);
-        Grid.SetRow(operations, 2);
-        detail.Children.Add(operations);
+
+        var information = new StackPanel { Margin = new Thickness(18, 24, 18, 18) };
+        information.Children.Add(Ui.Heading(T("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")));
+        information.Children.Add(Ui.Heading(T("PARTICIPANTS", "УЧАСТНИКИ")));
+        speakers.Margin = new Thickness(0, 8, 0, 16);
+        information.Children.Add(speakers);
+        information.Children.Add(calendarPanel);
+        information.Children.Add(Ui.Heading(T("PROCESSING", "ОБРАБОТКА")));
+        information.Children.Add(processingStatus);
+        information.Children.Add(finish);
+        foreach (var (button, text) in new[] { (retranscribe, T("Transcript", "Расшифровка")), (regenerate, T("Summary", "Сводка")) })
+        {
+            var label = button.Content?.ToString() ?? text;
+            var symbol = Ui.Symbol("\uE72C"); symbol.Width = 20;
+            button.Content = symbol;
+            button.MinWidth = 32;
+            button.Padding = new Thickness(5);
+            System.Windows.Automation.AutomationProperties.SetName(button, label);
+            ToolTipService.SetShowOnDisabled(button, true);
+            information.Children.Add(Ui.Row(null, Ui.Title(text), null, button));
+        }
+        information.Children.Add(Ui.Heading(T("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")));
+        information.Children.Add(processingSettings);
+        var settingsLink = Ui.Button(T("Settings →", "Настройки →"), () => SettingsRequested?.Invoke(this, EventArgs.Empty));
+        settingsLink.Margin = new Thickness(0, 12, 0, 0);
+        information.Children.Add(settingsLink);
+        inspector.Child = Ui.Scroll(information);
+        inspector.BorderThickness = new Thickness(1, 0, 0, 0);
+        inspector.SetResourceReference(Border.BackgroundProperty, "JournalInset");
+        inspector.SetResourceReference(Border.BorderBrushProperty, "JournalLine");
 
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(290) });
         layout.ColumnDefinitions.Add(new ColumnDefinition());
-        search.Margin = new Thickness(12,8,12,10);
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(280) });
+        searchField.View.Margin = new Thickness(12,8,12,10);
         System.Windows.Automation.AutomationProperties.SetName(search, T("Find a meeting", "Найти встречу"));
         search.TextChanged += (_, _) => { if (navigation is not null) navigation.Query = search.Text; ApplyFilter(); };
-        DockPanel.SetDock(search, Dock.Top);
-        listPanel.Children.Add(search);
+        DockPanel.SetDock(searchField.View, Dock.Top);
+        listPanel.Children.Add(searchField.View);
         var listContent = new Grid();
         listContent.Children.Add(grid);
         listContent.Children.Add(empty);
@@ -185,6 +222,8 @@ internal sealed class RecordingsWindow : Window
         layout.Children.Add(listPanel);
         Grid.SetColumn(detail, 1);
         layout.Children.Add(detail);
+        Grid.SetColumn(inspector, 2);
+        layout.Children.Add(inspector);
         var content = new DockPanel();
         DockPanel.SetDock(deletionNotices, Dock.Bottom);
         content.Children.Add(deletionNotices);
@@ -200,14 +239,14 @@ internal sealed class RecordingsWindow : Window
         layout.SizeChanged += (_, _) => UpdateLayoutMode();
         EventHandler changed = (_, _) => Dispatcher.InvokeAsync(ReloadAsync);
         runtime.SessionsChanged += changed;
-        Closed += (_, _) => runtime.SessionsChanged -= changed;
+        Closed += (_, _) => { runtime.SessionsChanged -= changed; player.Dispose(); };
         System.ComponentModel.PropertyChangedEventHandler motionChanged = (_, e) =>
         {
             if(e.PropertyName == nameof(SystemParameters.ClientAreaAnimation)) Dispatcher.InvokeAsync(ReloadAsync);
         };
         SystemParameters.StaticPropertyChanged += motionChanged;
         Closed += (_, _) => SystemParameters.StaticPropertyChanged -= motionChanged;
-        layout.Loaded += async (_, _) => await ReloadAsync();
+        listPanel.Loaded += async (_, _) => await ReloadAsync();
         runtime.TrackArtifact("recordings_window");
     }
 
@@ -234,19 +273,23 @@ internal sealed class RecordingsWindow : Window
         if (regenerate is null) return;
         var state = ActionState();
         var summaryTab = tabs.SelectedIndex == 0;
-        regenerate.Visibility = summaryTab ? Visibility.Visible : Visibility.Collapsed;
-        retranscribe.Visibility = tabs.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+        regenerate.Visibility = retranscribe.Visibility = Visibility.Visible;
         regenerate.IsEnabled = state.Reason(MeetingAction.RegenerateSummary) is null;
         regenerate.ToolTip = state.Reason(MeetingAction.RegenerateSummary);
-        textCopy.Visibility = markdownCopy.Visibility = tabs.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
+        textCopy.Visibility = markdownCopy.Visibility = Selected is null ? Visibility.Collapsed : Visibility.Visible;
         textCopy.IsEnabled = markdownCopy.IsEnabled = state.Reason(summaryTab ? MeetingAction.CopySummary : MeetingAction.CopyTranscript) is null;
-        reprocessHint.Text = summaryTab ? runtime.Settings.Summary.Backend : EngineResolver.DisplayName(runtime.Settings.Transcription.Engine);
+        var settings = runtime.Settings;
+        processingSettings.Text = T("Transcription: ", "Расшифровка: ") + (settings.Transcription.Enabled ? EngineResolver.DisplayName(settings.Transcription.Engine) : T("Disabled", "Выключена"))
+            + "\n" + T("Diarization: ", "Диаризация: ") + (settings.Transcription.Enabled && TranscriptionSettings.CloudEngines.Contains(settings.Transcription.Engine)
+                ? T("Cloud provider", "Облачный провайдер") : T("Not available locally", "Локально недоступна"))
+            + "\n" + T("Summary: ", "Сводка: ") + (settings.Summary.Enabled ? settings.Summary.Backend : T("Disabled", "Выключена"));
     }
 
     private void OpenMeetingMenu(FrameworkElement anchor)
     {
         if (Selected is null) return;
         var menu = MeetingActionsMenu.Create(ActionState(), action => _ = PerformAsync(action));
+        foreach (var item in menu.Items.OfType<MenuItem>().Where(item => item.Tag is MeetingAction.CopyTranscript or MeetingAction.CopySummary or MeetingAction.RegenerateSummary or MeetingAction.Retranscribe).ToArray()) menu.Items.Remove(item);
         menu.PlacementTarget = anchor;
         menu.IsOpen = true;
     }
@@ -312,15 +355,27 @@ internal sealed class RecordingsWindow : Window
 
     public void SetFilter(MeetingFilter value) { filter = value; ApplyFilter(); }
     public void ShowList() { search.Text = ""; detailOpen = false; UpdateLayoutMode(); }
+    public FrameworkElement ExtractSidebar()
+    {
+        sidebarExtracted = true;
+        layout.Children.Remove(listPanel);
+        layout.ColumnDefinitions[0].Width = new GridLength(0);
+        return listPanel;
+    }
+    public void FocusSearch() { search.Focus(); search.SelectAll(); }
+    public void ToggleInspector() { inspectorOpen = !inspectorOpen; UpdateLayoutMode(); }
     private void UpdateLayoutMode()
     {
         if (Selected is null) detailOpen = false;
-        var compact = layout.ActualWidth < 730;
-        listPanel.Visibility = compact && detailOpen ? Visibility.Collapsed : Visibility.Visible;
-        detail.Visibility = Selected is null || compact && !detailOpen ? Visibility.Collapsed : Visibility.Visible;
-        layout.ColumnDefinitions[0].Width = compact ? new GridLength(1, GridUnitType.Star) : new GridLength(290);
-        layout.ColumnDefinitions[1].Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        Grid.SetColumn(detail, compact ? 0 : 1);
+        var available = layout.ActualWidth - (sidebarExtracted ? 0 : 268);
+        var compact = available < 760;
+        listPanel.Visibility = Visibility.Visible;
+        detail.Visibility = Selected is null || compact && inspectorOpen ? Visibility.Collapsed : Visibility.Visible;
+        inspector.Visibility = Selected is not null && (!compact || inspectorOpen) ? Visibility.Visible : Visibility.Collapsed;
+        layout.ColumnDefinitions[0].Width = new GridLength(sidebarExtracted ? 0 : 268);
+        layout.ColumnDefinitions[1].Width = compact && inspectorOpen ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        layout.ColumnDefinitions[2].Width = inspector.Visibility == Visibility.Collapsed ? new GridLength(0)
+            : compact ? new GridLength(1, GridUnitType.Star) : new GridLength(280);
     }
     private void ApplyFilter()
     {
@@ -373,6 +428,9 @@ internal sealed class RecordingsWindow : Window
         {
             foreach (var button in new[] { finish, retranscribe, listen, folder, delete }) button.IsEnabled = false;
             title.Text = "";
+            player.Load(null);
+            UpdateContentActions();
+            UpdateLayoutMode();
             summary.ShowText("");
             transcript.ShowText("");
             return;
@@ -402,6 +460,9 @@ internal sealed class RecordingsWindow : Window
             : T("Try again whatever gave up or is waiting, keeping the transcript and every name typed by hand.",
                 "Ещё раз попробовать то, что не получилось или ждёт, — расшифровка и имена, введённые вручную, остаются.");
         title.Text = item.Title;
+        metadata.Text = MeetingPresentation.Date(item) + " · " + Math.Max(1, item.DurationSeconds / 60) + T(" min", " мин");
+        player.Load(recording ? null : item.Directory);
+        UpdateLayoutMode();
         problem.Text = item.Problem ?? "";
         problem.Visibility = item.Problem is null ? Visibility.Collapsed : Visibility.Visible;
         processingStatus.Text = row.Status is { IsBusy: true } status ? status.Message : row.TranscriptText;
@@ -460,7 +521,7 @@ internal sealed class RecordingsWindow : Window
         if (File.Exists(Path.Combine(directory, "summary.stale")))
             summaryText = T("This summary refers to the previous transcript.\n\n", "Это сводка предыдущей расшифровки.\n\n") + summaryText;
         if (version != transcriptShown) return;
-        transcript.ShowMarkdown(text);
+        transcript.ShowTranscript(text, seconds => player.Seek(seconds));
         summary.ShowMarkdown(summaryText);
         if(item?.Calendar is { IsConfirmed: true, Participants.Count: > 0 } calendar)
             await ShowTranscriptParticipantsAsync(directory,calendar,version);
@@ -499,18 +560,18 @@ internal sealed class RecordingsWindow : Window
         {
             var label = group.Key;
             var row = new Grid { Margin = new Thickness(0, 0, 0, 12) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.RowDefinitions.Add(new RowDefinition());
+            row.RowDefinitions.Add(new RowDefinition());
             row.RowDefinitions.Add(new RowDefinition());
             row.RowDefinitions.Add(new RowDefinition());
             var name = Ui.Title(SpeakerLabels.Display(label));
             name.FontWeight = FontWeights.SemiBold;
             name.VerticalAlignment = VerticalAlignment.Center;
             row.Children.Add(name);
-            var (view, box) = Ui.Field(T("name", "имя"), 230);
+            var (view, box) = Ui.Field(T("name", "имя"), 210);
             box.Text = file.Names.GetValueOrDefault(label) ?? "";
-            Grid.SetColumn(view, 1);
+            Grid.SetRow(view, 1);
             row.Children.Add(view);
             var source = file.Sources.GetValueOrDefault(label) switch
             {
@@ -520,13 +581,13 @@ internal sealed class RecordingsWindow : Window
                 _ => "",
             };
             var count = Ui.Status(source + T($"lines: {group.Count()}", $"реплик: {group.Count()}"));
-            count.Margin = new Thickness(12, 0, 0, 0);
-            Grid.SetColumn(count, 2);
+            count.Margin = new Thickness(0, 4, 0, 4);
+            Grid.SetRow(count, 2);
             row.Children.Add(count);
             var first = Ui.Detail(T("first: ", "первая: ") + group.First().Text.Trim());
             first.TextTrimming = TextTrimming.CharacterEllipsis;
             first.TextWrapping = TextWrapping.NoWrap;
-            Grid.SetRow(first, 1);
+            Grid.SetRow(first, 3);
             Grid.SetColumnSpan(first, 3);
             row.Children.Add(first);
             speakers.Children.Add(row);
@@ -562,7 +623,11 @@ internal sealed class RecordingsWindow : Window
         foreach(var segment in document.Segments)
         {
             var row = new StackPanel { Margin = new Thickness(0,18,0,8) };
-            row.Children.Add(Ui.Detail(TimeSpan.FromMilliseconds(segment.StartMs).ToString(@"hh\:mm\:ss")));
+            var timestamp = TimeSpan.FromMilliseconds(Math.Max(0, segment.StartMs));
+            var seek = Ui.Button(timestamp.ToString(@"hh\:mm\:ss"), () => player.Seek(timestamp.TotalSeconds));
+            seek.HorizontalAlignment = HorizontalAlignment.Left;
+            System.Windows.Automation.AutomationProperties.SetName(seek, T("Play from ", "Воспроизвести с ") + timestamp);
+            row.Children.Add(seek);
             if(segment.Speaker is { } speaker)
             {
                 var combo = new System.Windows.Controls.ComboBox { MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
