@@ -57,6 +57,29 @@ final class AutoRecordController {
     /// is otherwise a question you can only answer with a debugger.
     private(set) var lastDecision = localised("ready", "готов")
 
+    enum Notice: Equatable {
+        case microphoneAccess
+        case manualStop
+        case safetyLimit(String)
+        case retry(Int)
+
+        var title: String {
+            switch self {
+            case .microphoneAccess:
+                localised("Microphone access needed…", "Нужен доступ к микрофону…")
+            case .manualStop:
+                localised("Auto-record is waiting for this call to end", "Автозапись ждёт окончания текущего звонка")
+            case .safetyLimit(let reason):
+                reason == "silence"
+                    ? localised("Stopped after silence. Waiting for the call to end", "Остановлено после тишины. Ожидание конца звонка")
+                    : localised("Recording limit reached. Waiting for the call to end", "Достигнут лимит записи. Ожидание конца звонка")
+            case .retry(let seconds):
+                localised("Could not start recording. Retry in \(seconds)s", "Не удалось начать запись. Повтор через \(seconds) с")
+            }
+        }
+    }
+    private(set) var notice: Notice?
+
     /// `auto_record.enabled`, as last read. The config file is the only place
     /// this is decided: the menu, the status window and Settings all write it
     /// there and read it back, so none of them can show a switch that the
@@ -212,6 +235,7 @@ final class AutoRecordController {
         micActiveSince = nil
         startFailures = 0
         if !newValue {
+            notice = nil
             if phase != .recording { phase = .watching }
             lastDecision = localised("auto-record off", "автозапись выключена")
         }
@@ -237,6 +261,7 @@ final class AutoRecordController {
     /// ends, and consider the current calendar event dealt with.
     func noteManualStop() {
         phase = .standingDown(.manualStop)
+        notice = .manualStop
         micActiveSince = nil
         if let event = currentEvent {
             markHandled(event)
@@ -256,6 +281,7 @@ final class AutoRecordController {
     // MARK: -
 
     func tick() {
+        notice = nil
         let settings = loadSettings()
         apply(enabled: settings.enabled)
         let now = now()
@@ -327,10 +353,12 @@ final class AutoRecordController {
             guard callOver else {
                 switch why {
                 case .manualStop:
+                    notice = .manualStop
                     lastDecision = localised(
                         "paused after a manual stop until the call ends",
                         "пауза после ручной остановки до конца звонка")
-                case .backstop:
+                case .backstop(let reason):
+                    notice = .safetyLimit(reason)
                     lastDecision = localised(
                         "stopped by a safety limit — waiting for the call app to let go of the mic",
                         "остановлено ограничителем — жду, пока приложение освободит микрофон")
@@ -340,6 +368,7 @@ final class AutoRecordController {
             phase = .watching
         case .backingOff(let until):
             guard now >= until else {
+                notice = .retry(Int(until.timeIntervalSince(now).rounded(.up)))
                 lastDecision = localised(
                     "couldn't start recording — trying again in \(Int(until.timeIntervalSince(now).rounded(.up)))s",
                     "не удалось начать запись — повторю через \(Int(until.timeIntervalSince(now).rounded(.up))) с")
@@ -354,6 +383,7 @@ final class AutoRecordController {
         // retrying a denied grant. Once access is granted, the next tick can
         // record the call that is already in progress.
         guard canStartRecording() else {
+            notice = .microphoneAccess
             lastDecision = localised("waiting for microphone access", "жду разрешения на микрофон")
             return
         }
@@ -422,6 +452,7 @@ final class AutoRecordController {
         startFailures += 1
         let wait = Self.retryDelay(afterFailures: startFailures)
         phase = .backingOff(until: now.addingTimeInterval(wait))
+        notice = .retry(Int(wait))
         lastDecision = localised(
             "couldn't start recording — trying again in \(Int(wait))s",
             "не удалось начать запись — повторю через \(Int(wait)) с")
@@ -524,6 +555,7 @@ final class AutoRecordController {
     /// the loop stands down until the mic is let go; after the others the call
     /// is over and the next one may start as soon as it begins.
     private func stop(_ reason: String) {
+        notice = Self.backstopReasons.contains(reason) ? .safetyLimit(reason) : nil
         stopRecording?(reason)
         observedSession = nil
         currentEvent = nil

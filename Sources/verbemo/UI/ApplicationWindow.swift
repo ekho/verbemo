@@ -34,6 +34,9 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         return settings
     }()
     private lazy var about = AboutPage()
+    var onCheckForUpdates: (() -> Void)? { didSet { about.onCheckForUpdates = onCheckForUpdates } }
+    var updatesAvailable = false { didSet { about.updatesAvailable = updatesAvailable } }
+    var onOpenFolder: (() -> Void)? { didSet { settings.setup.onOpenFolder = onOpenFolder } }
     private(set) var navigation = ApplicationNavigationState()
     var libraryProvider: (() -> MeetingLibraryController?)? {
         didSet { connectLibrary(); if navigation.destination.isMeetings { navigate(navigation.destination) } }

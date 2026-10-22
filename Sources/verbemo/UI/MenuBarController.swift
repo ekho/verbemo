@@ -17,7 +17,7 @@ final class MenuBarController {
         case paused
     }
 
-    private let menu: NSMenu
+    let menu: NSMenu
     /// Nil while the icon is switched off.
     private var statusItem: NSStatusItem?
     /// What the icon would be showing if it were here, so that one put back
@@ -29,23 +29,21 @@ final class MenuBarController {
     /// Says the config file cannot be used, and opens the settings page —
     /// the one surface that names the file and offers to reveal it.
     private let configProblemItem: NSMenuItem
+    private let startItem: NSMenuItem
     private let toggleItem: NSMenuItem
     private let pauseItem: NSMenuItem
     private let autoRecordItem: NSMenuItem
     private let autoRecordStatus: NSMenuItem
-    private let updatesItem: NSMenuItem
     private let setupItem: NSMenuItem
 
     var onToggle: (() -> Void)?
     var onTogglePause: (() -> Void)?
     var onToggleAutoRecord: (() -> Void)?
-    var onOpenFolder: (() -> Void)?
     var onShowMeetings: (() -> Void)?
     var onImport: (() -> Void)?
     var onShowSettings: (() -> Void)?
     var onShowSetup: (() -> Void)?
-    var onCheckForUpdates: (() -> Void)?
-    var onShowAbout: (() -> Void)?
+    var onShowTranscription: (() -> Void)?
     var onQuit: (() -> Void)?
 
     init(visible: Bool = true) {
@@ -58,132 +56,57 @@ final class MenuBarController {
         // gives a disabled one, and the state line is disabled.
         menu.font = NSFont.menuFont(ofSize: 0).tabularFigures
 
-        stateLabel = NSMenuItem(
-            title: localised("ready", "готов"), action: nil, keyEquivalent: "")
-        stateLabel.isEnabled = false
+        stateLabel = .sectionHeader(title: "")
         menu.addItem(stateLabel)
 
-        transcriptionLabel = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        transcriptionLabel.isEnabled = false
+        startItem = NSMenuItem(title: localised("Start recording", "Начать запись"),
+            action: #selector(toggleClicked), keyEquivalent: "r")
+        startItem.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil)
+        menu.addItem(startItem)
+
+        pauseItem = NSMenuItem(title: localised("Pause", "Пауза"),
+            action: #selector(pauseClicked), keyEquivalent: "p")
+        toggleItem = NSMenuItem(title: localised("Finish recording", "Завершить запись"),
+            action: #selector(toggleClicked), keyEquivalent: "r")
+        menu.addItem(pauseItem)
+        menu.addItem(toggleItem)
+
+        transcriptionLabel = NSMenuItem(title: "", action: #selector(transcriptionClicked), keyEquivalent: "")
         transcriptionLabel.isHidden = true
         menu.addItem(transcriptionLabel)
 
-        configProblemItem = NSMenuItem(
-            title: "", action: #selector(showSettingsClicked), keyEquivalent: "")
-        configProblemItem.isHidden = true
-        menu.addItem(configProblemItem)
-
-        menu.addItem(.separator())
-
-        toggleItem = NSMenuItem(
-            title: localised("Start recording", "Начать запись"),
-            action: #selector(toggleClicked),
-            keyEquivalent: "r"
-        )
-        menu.addItem(toggleItem)
-
-        pauseItem = NSMenuItem(
-            title: localised("Pause", "Пауза"),
-            action: #selector(pauseClicked),
-            keyEquivalent: "p"
-        )
-        pauseItem.isEnabled = false
-        menu.addItem(pauseItem)
-
-        menu.addItem(.separator())
-
-        autoRecordItem = NSMenuItem(
-            title: localised("Record meetings automatically", "Записывать встречи автоматически"),
-            action: #selector(autoRecordClicked),
-            keyEquivalent: ""
-        )
+        let importItem = NSMenuItem(title: localised("Import recording…", "Импортировать запись…"),
+            action: #selector(importClicked), keyEquivalent: "i")
+        menu.addItem(importItem)
+        autoRecordItem = NSMenuItem(title: localised("Automatic meeting recording", "Автозапись встреч"),
+            action: #selector(autoRecordClicked), keyEquivalent: "")
         menu.addItem(autoRecordItem)
-
-        // What the auto-record loop is currently thinking. Without this the
-        // only way to answer "why didn't it record that call" is a debugger.
         autoRecordStatus = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        autoRecordStatus.isEnabled = false
         autoRecordStatus.isHidden = true
         menu.addItem(autoRecordStatus)
-
         menu.addItem(.separator())
 
-        let meetings = NSMenuItem(
-            title: localised("Meetings", "Встречи"),
-            action: #selector(showMeetingsClicked),
-            keyEquivalent: "l"
-        )
-        menu.addItem(meetings)
-
-        let importItem = NSMenuItem(
-            title: localised("Import…", "Импортировать…"),
-            action: #selector(importClicked),
-            keyEquivalent: "i"
-        )
-        menu.addItem(importItem)
-
-        let openFolder = NSMenuItem(
-            title: localised("Open recordings folder", "Открыть папку записей"),
-            action: #selector(openFolderClicked),
-            keyEquivalent: "o"
-        )
-        menu.addItem(openFolder)
-        menu.addItem(.separator())
-
-        let settings = NSMenuItem(
-            title: localised("Settings…", "Настройки…"),
-            action: #selector(showSettingsClicked),
-            keyEquivalent: ","
-        )
+        let settings = NSMenuItem(title: localised("Settings…", "Настройки…"),
+            action: #selector(showSettingsClicked), keyEquivalent: ",")
         menu.addItem(settings)
-
-        // Hidden once the first run is over — see `setupAvailable`.
-        setupItem = NSMenuItem(
-            title: localised("Setup…", "Первая настройка…"),
-            action: #selector(showSetupClicked),
-            keyEquivalent: ""
-        )
+        configProblemItem = NSMenuItem(title: "", action: #selector(showSettingsClicked), keyEquivalent: "")
+        configProblemItem.isHidden = true
+        menu.addItem(configProblemItem)
+        setupItem = NSMenuItem(title: localised("Finish setup…", "Завершить настройку…"),
+            action: #selector(showSetupClicked), keyEquivalent: "")
         menu.addItem(setupItem)
-
-        // Hidden until someone says there is an updater behind it. A bare
-        // build has nothing to update, and an item that can only report
-        // failure is worse than no item.
-        updatesItem = NSMenuItem(
-            title: localised("Check for updates…", "Проверить обновления…"),
-            action: #selector(checkForUpdatesClicked),
-            keyEquivalent: ""
-        )
-        updatesItem.isHidden = true
-        menu.addItem(updatesItem)
-
-        // Where every Mac keeps it, near the bottom rather than at the top:
-        // the application menu is the one place About is expected to be
-        // first, and an `.accessory` app's application menu is only on
-        // screen while one of its windows is in front.
-        let about = NSMenuItem(
-            title: localised("About Verbemo", "О приложении"),
-            action: #selector(showAboutClicked),
-            keyEquivalent: ""
-        )
-        menu.addItem(about)
-
+        let meetings = NSMenuItem(title: localised("Open Verbemo", "Открыть Verbemo"),
+            action: #selector(showMeetingsClicked), keyEquivalent: "l")
+        menu.addItem(meetings)
         menu.addItem(.separator())
-
-        let quit = NSMenuItem(
-            title: localised("Quit Verbemo", "Завершить verbemo"),
-            action: #selector(quitClicked),
-            keyEquivalent: "q"
-        )
+        let quit = NSMenuItem(title: localised("Quit Verbemo", "Выйти из Verbemo"),
+            action: #selector(quitClicked), keyEquivalent: "q")
         menu.addItem(quit)
 
-        for item in [
-            toggleItem, pauseItem, autoRecordItem, meetings, openFolder,
-            importItem, settings, setupItem, updatesItem, about, quit,
-            configProblemItem,
-        ] {
+        for item in [startItem, toggleItem, pauseItem, transcriptionLabel, autoRecordItem,
+                     autoRecordStatus, importItem, settings, configProblemItem, setupItem, meetings, quit] {
             item.target = self
         }
-
         update(state: .idle, elapsed: nil)
         setVisible(visible)
     }
@@ -221,30 +144,25 @@ final class MenuBarController {
     /// Whether the icon is currently in the menu bar.
     var isVisible: Bool { statusItem != nil }
 
-    /// Show or hide **Check for updates…**. Only a real application bundle
-    /// can be replaced by Sparkle, so only a real application bundle offers it.
-    func updatesAvailable(_ available: Bool) {
-        updatesItem.isHidden = !available
-    }
-
     /// First-run permissions remain available until setup is completed.
     /// `verbemo setup` resets the marker and makes the entry available again.
     func setupAvailable(_ available: Bool) {
         setupItem.isHidden = !available
     }
 
-    /// The items a person would actually see. Two of them come and go, and
-    /// this is how anything outside asks which are on offer.
+    /// Visible commands in their display order.
     var offeredItemTitles: [String] {
-        menu.items.filter { !$0.isHidden }.map(\.title)
+        offeredItems.map(\.title)
     }
 
-    /// Drive one of the visible commands. Besides making the status menu
-    /// inspectable without exposing its whole mutable NSMenu, this mirrors
-    /// exactly what AppKit does when a person clicks the item.
+    private var offeredItems: [NSMenuItem] {
+        menu.items.filter { !$0.isHidden }
+    }
+
+    /// Drive a visible, enabled command through its normal AppKit action.
     @discardableResult
     func performOfferedItem(titled title: String) -> Bool {
-        guard let item = menu.items.first(where: { !$0.isHidden && $0.title == title }) else {
+        guard let item = offeredItems.first(where: { $0.isEnabled && $0.title == title }) else {
             return false
         }
         guard let action = item.action else { return false }
@@ -272,17 +190,24 @@ final class MenuBarController {
         // the icon comes back.
         self.state = state
         self.elapsed = elapsed
+        startItem.keyEquivalent = state == .idle ? "r" : ""
+        toggleItem.keyEquivalent = state == .idle ? "" : "r"
+        pauseItem.keyEquivalent = state == .idle ? "" : "p"
+        stateLabel.isHidden = state == .idle
+        startItem.isHidden = state != .idle
+        startItem.isEnabled = state == .idle
+        pauseItem.isHidden = state == .idle
+        toggleItem.isHidden = state == .idle
+        toggleItem.isEnabled = state != .idle
         switch state {
         case .idle:
             stateLabel.title = localised("ready", "готов")
-            toggleItem.title = localised("Start recording", "Начать запись")
             pauseItem.title = localised("Pause", "Пауза")
             pauseItem.isEnabled = false
             statusItem?.button?.image = Self.icon(color: nil)
             statusItem?.button?.title = ""
         case .recording:
-            stateLabel.title = localised("● recording · ", "● запись · ") + (elapsed ?? "0:00")
-            toggleItem.title = localised("Stop recording", "Остановить запись")
+            stateLabel.title = localised("● Recording · ", "● Идёт запись · ") + (elapsed ?? "0:00")
             pauseItem.title = localised("Pause", "Пауза")
             pauseItem.isEnabled = true
             statusItem?.button?.image = Self.icon(color: .systemRed)
@@ -290,8 +215,7 @@ final class MenuBarController {
             // "something is recording" and "I know it's recording" at a glance.
             statusItem?.button?.title = " \(elapsed ?? "0:00")"
         case .paused:
-            stateLabel.title = localised("❙❙ paused · ", "❙❙ пауза · ") + (elapsed ?? "0:00")
-            toggleItem.title = localised("Stop recording", "Остановить запись")
+            stateLabel.title = localised("Ⅱ Recording paused · ", "Ⅱ Запись на паузе · ") + (elapsed ?? "0:00")
             pauseItem.title = localised("Resume", "Продолжить")
             pauseItem.isEnabled = true
             statusItem?.button?.image = Self.icon(color: .systemOrange)
@@ -308,18 +232,20 @@ final class MenuBarController {
         transcriptionLabel.isHidden = text == nil
     }
 
-    /// Reflect the auto-record switch and the reason behind its current
-    /// decision.
     /// The config file's problem in one line, or nil when it has none.
     func updateConfigProblem(_ headline: String?) {
         configProblemItem.title = headline.map { "⚠︎ " + $0 } ?? ""
         configProblemItem.isHidden = headline == nil
     }
 
-    func updateAutoRecord(enabled: Bool, decision: String?) {
+    /// Keep routine detection status quiet; show only exceptions.
+    func updateAutoRecord(enabled: Bool, notice: AutoRecordController.Notice?) {
         autoRecordItem.state = enabled ? .on : .off
-        autoRecordStatus.title = decision.map { "   \($0)" } ?? ""
-        autoRecordStatus.isHidden = !enabled || decision == nil
+        autoRecordStatus.title = notice?.title ?? ""
+        autoRecordStatus.isHidden = !enabled || notice == nil
+        autoRecordStatus.action = notice == .microphoneAccess ? #selector(showSetupClicked) : nil
+        autoRecordStatus.isEnabled = notice == .microphoneAccess
+        autoRecordStatus.indentationLevel = 1
     }
 
     /// Menu-bar status icons are nominally 18pt tall; 16 leaves a little air.
@@ -332,10 +258,8 @@ final class MenuBarController {
     @objc private func autoRecordClicked() { onToggleAutoRecord?() }
     @objc private func showSettingsClicked() { onShowSettings?() }
     @objc private func showSetupClicked() { onShowSetup?() }
-    @objc private func openFolderClicked() { onOpenFolder?() }
     @objc private func showMeetingsClicked() { onShowMeetings?() }
     @objc private func importClicked() { onImport?() }
-    @objc private func checkForUpdatesClicked() { onCheckForUpdates?() }
-    @objc private func showAboutClicked() { onShowAbout?() }
+    @objc private func transcriptionClicked() { onShowTranscription?() }
     @objc private func quitClicked() { onQuit?() }
 }

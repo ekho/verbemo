@@ -14,6 +14,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// changed — what is still outstanding, what the next action is. The
     /// setup page's footer and the settings model inventory follow it.
     var onStateChange: (() -> Void)?
+    var onOpenFolder: (() -> Void)?
 
     /// What the config says about transcription, and how to change it.
     ///
@@ -763,6 +764,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// Where the recordings live, and the one thing worth saying about the
     /// default: it is outside Documents, Desktop and Downloads, so macOS never
     /// has to ask a background recorder for permission to write there.
+    @objc private func openRecordingsFolder() { onOpenFolder?() }
+
     private func folderRow() -> NSView {
         recordingsPath.font = SetupLayout.monoFont
         recordingsPath.lineBreakMode = .byTruncatingMiddle
@@ -772,7 +775,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             symbol: "folder",
             title: recordingsPath,
             detail: folderDetail,
-            trailing: [SetupLayout.actionButton(
+            trailing: (mode == .settings ? [SetupLayout.actionButton(
+                localised("Open folder", "Открыть папку"),
+                target: self, action: #selector(openRecordingsFolder))] : []) + [SetupLayout.actionButton(
                 localised("Choose…", "Выбрать…"),
                 target: self, action: #selector(chooseFolder))])
     }

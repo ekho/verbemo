@@ -4,6 +4,9 @@ import AppKit
 @MainActor
 final class AboutPage: NSObject {
     private(set) var contentView = NSView()
+    var onCheckForUpdates: (() -> Void)?
+    private let updates = NSButton()
+    var updatesAvailable = false { didSet { updates.isHidden = !updatesAvailable } }
     private var linkButtons: [NSButton] = []
 
     override init() {
@@ -43,7 +46,13 @@ final class AboutPage: NSObject {
             link(localised("Support", "Поддержка"), Self.supportPage),
             link(localised("Origin and licenses", "Происхождение и лицензии"), Self.originPage),
         ]
-        let links = NSStackView(views: linkButtons)
+        updates.title = localised("Check for updates…", "Проверить обновления…")
+        updates.bezelStyle = .rounded
+        updates.target = self
+        updates.action = #selector(checkForUpdatesClicked)
+        updates.identifier = .init("about.checkUpdates")
+        updates.isHidden = true
+        let links = NSStackView(views: [updates] + linkButtons)
         links.orientation = .vertical
         links.alignment = .leading
         links.spacing = 18
@@ -96,6 +105,8 @@ final class AboutPage: NSObject {
         let number = build.map { "\(short) (\($0))" } ?? short
         return localised("Version \(number)", "Версия \(number)")
     }
+
+    @objc private func checkForUpdatesClicked() { onCheckForUpdates?() }
 
     private func link(_ title: String, _ url: String) -> NSButton {
         SetupLayout.link(title, url, target: self, action: #selector(linkClicked(_:)))

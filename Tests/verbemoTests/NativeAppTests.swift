@@ -201,15 +201,15 @@ struct SetupOfferTests {
         defer { withExtendedLifetime(menuBar) {} }
 
         menuBar.setupAvailable(true)
-        #expect(menuBar.offeredItemTitles.contains("Setup…"))
+        #expect(menuBar.offeredItemTitles.contains("Finish setup…"))
 
         menuBar.setupAvailable(false)
-        #expect(!menuBar.offeredItemTitles.contains("Setup…"))
+        #expect(!menuBar.offeredItemTitles.contains("Finish setup…"))
 
         // `verbemo setup` resets the marker, and the way back has to be a way
         // back: an item that only ever disappears is a one-way door.
         menuBar.setupAvailable(true)
-        #expect(menuBar.offeredItemTitles.contains("Setup…"))
+        #expect(menuBar.offeredItemTitles.contains("Finish setup…"))
     }
 
     /// The icon can be given up, and the menu behind it is what makes that
@@ -244,18 +244,18 @@ struct SetupOfferTests {
 
         menuBar.setVisible(true)
         #expect(menuBar.statusItemTitle == " 1:23")
-        #expect(menuBar.offeredItemTitles.contains("Stop recording"))
+        #expect(menuBar.offeredItemTitles.contains("Finish recording"))
     }
 
     /// About is where a Mac user looks for a name, and there are two menus
     /// it could be missing from. In the application menu it is also first,
     /// which is where every Mac puts it.
-    @Test("About Verbemo is offered in both menus")
+    @Test("About remains in the application menu without a duplicate tray entry")
     @MainActor
     func aboutIsInBothMenus() throws {
         let menuBar = MenuBarController()
         defer { withExtendedLifetime(menuBar) {} }
-        #expect(menuBar.offeredItemTitles.contains("About Verbemo"))
+        #expect(!menuBar.offeredItemTitles.contains("About Verbemo"))
 
         let menu = Run.mainMenu(settingsTarget: AppDelegate())
         let appMenu = try #require(menu.items.first?.submenu)

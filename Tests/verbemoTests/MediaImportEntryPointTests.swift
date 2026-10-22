@@ -30,8 +30,8 @@ struct MediaImportEntryPointTests {
         var calls = 0
         menuBar.onImport = { calls += 1 }
 
-        #expect(menuBar.offeredItemTitles.contains("Import…"))
-        #expect(menuBar.performOfferedItem(titled: "Import…"))
+        #expect(menuBar.offeredItemTitles.contains("Import recording…"))
+        #expect(menuBar.performOfferedItem(titled: "Import recording…"))
         #expect(calls == 1)
         withExtendedLifetime(menuBar) {}
     }

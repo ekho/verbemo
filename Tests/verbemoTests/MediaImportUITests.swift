@@ -17,7 +17,7 @@ struct MediaImportUITests {
             .first { $0.identifier?.rawValue == "journal.import" })
         #expect(button.isBordered)
         button.performClick(nil)
-        #expect(menu.performOfferedItem(titled: "Import…"))
+        #expect(menu.performOfferedItem(titled: "Import recording…"))
         #expect(requests == 2)
     }
 
