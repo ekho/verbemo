@@ -4,6 +4,116 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct SettingsNavigationTests {
+    @Test(.freshHome, .enabled(if: Platform.supportsLocalModels))
+    func switchingTabsDoesNotRepeatMachineChecksOrRebuildHiddenModels() throws {
+        let app = ApplicationWindow()
+        defer { app.settings.setup.stop(); app.hide() }
+        app.navigate(.storage)
+        app.show()
+        let storage = app.settings.content(for: .storage)
+        let model = try #require(storage.allDescendants.compactMap { $0 as? NSTextField }
+            .first { $0.stringValue == "Whisper large-v3-turbo" })
+        var machineChecks = 0
+        app.settings.setup.loginItemStatus = { machineChecks += 1; return .notRegistered }
+        for destination in [ApplicationNavigationState.Destination.general, .recording,
+                            .transcription, .summary, .calendar] {
+            app.navigate(destination)
+            app.panel.contentView?.layoutSubtreeIfNeeded()
+        }
+        #expect(machineChecks == 0)
+        #expect(storage.allDescendants.contains { $0 === model })
+    }
+
+    @Test(.freshHome)
+    func returningToSettingsAndReopeningTheWindowRefreshMachineState() {
+        let app = ApplicationWindow()
+        defer { app.settings.setup.stop(); app.hide() }
+        app.navigate(.general)
+        app.show()
+        var machineChecks = 0
+        app.settings.setup.loginItemStatus = { machineChecks += 1; return .enabled }
+        app.navigate(.allMeetings)
+        Config.update(path: ["summary", "ollama_model"], value: "fixture-model")
+        machineChecks = 0
+        app.navigate(.summary)
+        #expect(machineChecks == 1)
+        app.hide()
+        machineChecks = 0
+        app.navigate(.summary)
+        #expect(machineChecks == 0)
+        app.show()
+        #expect(machineChecks == 1)
+        machineChecks = 0
+        app.show()
+        #expect(machineChecks == 0)
+        app.hide()
+        app.show()
+        #expect(machineChecks == 1)
+    }
+
+    @Test(.freshHome, .enabled(if: Platform.supportsLocalModels))
+    func openingStorageOffersDownloadAfterExternalModelRemoval() throws {
+        let store = NemotronModelStore()
+        let variant = store.variantDirectory(language: "auto")
+        try NemotronFixtures.install(at: variant)
+        let app = ApplicationWindow()
+        defer { app.settings.setup.stop(); app.hide() }
+        app.navigate(.storage)
+        app.show()
+        let model = try #require(ModelStorage().all().first { $0.kind == .nemotron })
+        let controls = app.settings.setup.modelFilesControl(for: model)
+        #expect(controls.button.isHidden)
+        app.navigate(.general)
+        try FileManager.default.removeItem(at: variant)
+        app.navigate(.storage)
+        #expect(!controls.button.isHidden)
+        #expect(controls.button.isEnabled)
+        #expect(controls.button.window === app.panel)
+    }
+
+    @Test(.freshHome, arguments: ["ollama_model", "ollama_base_url"])
+    func returningToSummaryRechecksChangedOllamaSettingsOnce(key: String) {
+        let app = ApplicationWindow()
+        defer { app.settings.setup.stop(); app.hide() }
+        app.navigate(.summary)
+        app.show()
+        Config.update(path: ["summary", key], value: key == "ollama_model"
+            ? "fixture-model" : "http://127.0.0.1:11435")
+        app.navigate(.general)
+        var machineChecks = 0
+        app.settings.setup.loginItemStatus = { machineChecks += 1; return .enabled }
+        app.navigate(.summary)
+        #expect(machineChecks == 1)
+        app.navigate(.general)
+        machineChecks = 0
+        app.navigate(.summary)
+        #expect(machineChecks == 0)
+        app.hide()
+        Config.update(path: ["summary", key], value: nil)
+        machineChecks = 0
+        app.navigate(.summary)
+        #expect(machineChecks == 0)
+        app.show()
+        #expect(machineChecks == 1)
+    }
+
+    @Test(.freshHome, .enabled(if: Platform.supportsLocalModels))
+    func openingStorageDiscoversFilesAddedWhileOnAnotherTab() throws {
+        let app = ApplicationWindow()
+        defer { app.settings.setup.stop(); app.hide() }
+        app.navigate(.storage)
+        app.navigate(.general)
+        let store = WhisperModelStore()
+        try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: store.modelURL)
+        app.navigate(.storage)
+        let storage = app.settings.content(for: .storage)
+        let name = try #require(storage.allDescendants.compactMap { $0 as? NSTextField }
+            .first { $0.stringValue == "Whisper large-v3-turbo" })
+        let action = try #require(name.superview?.subviews.compactMap { $0 as? NSButton }.first)
+        #expect(action.title == localised("Delete", "Удалить"))
+    }
+
     @Test(.freshHome, .speaking(.russian))
     func settingsSelectorNavigatesAtBothWindowWidths() throws {
         let app = ApplicationWindow()

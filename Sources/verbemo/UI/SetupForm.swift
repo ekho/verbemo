@@ -2069,7 +2069,11 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
     /// File operations reuse the same download task; they never select a working model.
     func modelFilesControl(for model: ModelStorage.Model) -> (button: NSButton, status: NSView) {
-        if let cached = storageControls[model.directory.path] { return (cached.button, cached.view) }
+        if let cached = storageControls[model.directory.path] {
+            storageControls[model.directory.path]?.model = model
+            refreshStorageControls()
+            return (cached.button, cached.view)
+        }
         let button = NSButton(title: localised("Download", "Скачать"), target: self, action: #selector(storageDownloadClicked(_:)))
         button.identifier = .init(model.directory.path)
         button.bezelStyle = .rounded
