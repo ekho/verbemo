@@ -419,7 +419,7 @@ final class AppController {
         window.onStartRecording = { [weak self] title, meeting in
             guard let self, self.session == nil else { return }
             self.autoRecord.noteManualStart()
-            let context = self.recordingContext(meeting: Config.useCalendar() ? meeting : nil, confirmed: true)
+            let context = self.recordingContext(meeting: Config.useCalendar() ? meeting : nil)
             self.startSession(trigger: .manual, context: context, title: title)
         }
         window.onTogglePause = { [weak self] in self?.togglePause() }
@@ -808,7 +808,7 @@ final class AppController {
         recordingContext(meeting: Config.useCalendar() ? calendar.bestMatch(for: Date()) : nil)
     }
 
-    private func recordingContext(meeting: CalendarWatcher.Meeting?, confirmed: Bool = false) -> MeetingContext {
+    private func recordingContext(meeting: CalendarWatcher.Meeting?) -> MeetingContext {
         let settings = Config.autoRecord()
         let mic = MicActivityMonitor.check(
             callApps: settings.callApps, ignoring: settings.ignoreApps
@@ -816,8 +816,7 @@ final class AppController {
         return MeetingContext(
             meeting: meeting,
             app: mic.names.first,
-            appFamilies: mic.families,
-            confirmed: confirmed
+            appFamilies: mic.families
         )
     }
 

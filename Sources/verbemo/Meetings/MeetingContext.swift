@@ -56,7 +56,7 @@ struct MeetingContext {
         self.scheduledEnd = scheduledEnd
     }
 
-    init(meeting: CalendarWatcher.Meeting?, app: String?, appFamilies: [String] = [], confirmed: Bool = false) {
+    init(meeting: CalendarWatcher.Meeting?, app: String?, appFamilies: [String] = []) {
         self.init(
             title: meeting?.title,
             // An unnameable process is better left out than turned into
@@ -70,7 +70,7 @@ struct MeetingContext {
         )
         if let meeting {
             calendarEventID = meeting.hasPersistentID ? meeting.id : ""
-            calendarAssociation = confirmed && meeting.hasPersistentID ? "confirmed" : "candidate"
+            calendarAssociation = meeting.hasPersistentID && !meeting.id.isEmpty ? "confirmed" : nil
             calendarTitle = meeting.calendarTitle
             calendarTimeZoneIdentifier = meeting.timeZoneIdentifier
             agenda = meeting.agenda

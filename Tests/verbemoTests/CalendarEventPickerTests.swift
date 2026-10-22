@@ -103,7 +103,7 @@ struct CalendarEventPickerTests {
 
     @Test(.freshHome, arguments: ["Планирование old", "Название вручную", nil] as [String?])
     func changingEventUpdatesOnlyAnInheritedMeetingTitle(title: String?) async throws {
-        var meta = MeetingContext(meeting: event("old"), app: nil, confirmed: true).metaFields
+        var meta = MeetingContext(meeting: event("old"), app: nil).metaFields
         meta["title"] = title
         let fixture = try SessionFixture.make(meta: meta)
         let root = fixture.appendingPathExtension("library")

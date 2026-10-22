@@ -19,14 +19,23 @@ struct MeetingCalendarMetadataTests {
         #expect(meta.participants.map(\.id) == ["a", "b"])
         #expect(meta.eventURL == nil)
     }
-    @Test @MainActor func recordingTriggerDecidesWhetherTheEventIsConfirmed() {
+    @Test @MainActor func matchedEventIsLinkedWithoutExplicitConfirmation() {
         var event = CalendarWatcher.Meeting(id: "event", title: "Planning", start: Date(), end: Date().addingTimeInterval(600), attendees: ["Anna"], link: "https://call.example", looksLikeCall: true)
         event.timeZoneIdentifier = "America/New_York"
-        let candidate = MeetingContext(meeting: event, app: nil)
-        let linked = MeetingContext(meeting: event, app: nil, confirmed: true)
-        #expect(MeetingCalendarMetadata(candidate.metaFields["calendar"] as? [String: Any] ?? [:])?.isConfirmed == false)
+        let linked = MeetingContext(meeting: event, app: nil)
         #expect(MeetingCalendarMetadata(linked.metaFields["calendar"] as? [String: Any] ?? [:])?.isConfirmed == true)
         #expect(MeetingCalendarMetadata(linked.metaFields["calendar"] as? [String: Any] ?? [:])?.timeZoneIdentifier == "America/New_York")
+    }
+    @Test @MainActor func missingOrUnidentifiedEventsDoNotCreateALink() {
+        #expect(MeetingContext(meeting: nil, app: nil).metaFields["calendar"] == nil)
+        for (id, persistent) in [("temporary", false), ("", true)] {
+            var event = CalendarWatcher.Meeting(id: id, title: "Planning", start: Date(), end: Date().addingTimeInterval(600), attendees: [], link: nil, looksLikeCall: true)
+            event.hasPersistentID = persistent
+            let context = MeetingContext(meeting: event, app: nil)
+            let snapshot = MeetingCalendarMetadata(context.metaFields["calendar"] as? [String: Any] ?? [:])
+            #expect(snapshot?.isConfirmed == false)
+            #expect(snapshot?.association == nil)
+        }
     }
 }
 
