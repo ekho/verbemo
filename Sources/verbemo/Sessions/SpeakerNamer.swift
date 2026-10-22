@@ -102,7 +102,7 @@ enum SpeakerNamer {
         var lastModel: String?
         var lastReason = Analytics.Reason.unknown
 
-        for backend in backends {
+        for (index, backend) in backends.enumerated() {
             do {
                 log("naming speakers with \(backend.name)")
                 let answer = try await backend.call(
@@ -144,8 +144,9 @@ enum SpeakerNamer {
                 lastBackend = backend.name
                 lastModel = backend.model
                 lastReason = Analytics.reason(for: error)
-                log(LLMError.signInAdvice(error, backend: backend.name) ?? (LLMError.isUsageLimit(error)
-                    ? "\(backend.name) is out of allowance — trying the next backend"
+                let hasNext = index + 1 < backends.count
+                log(LLMError.signInAdvice(error, backend: backend.name, hasNextBackend: hasNext) ?? (LLMError.isUsageLimit(error)
+                    ? "\(backend.name) is out of allowance" + (hasNext ? " — trying the next backend" : "")
                     : "naming via \(backend.name) failed: \(error)"))
             }
         }

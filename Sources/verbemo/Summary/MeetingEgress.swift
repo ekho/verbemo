@@ -91,13 +91,15 @@ enum MeetingEgress {
     /// of all of it is ever written down.
     static func fingerprint(for purpose: Purpose) -> String? {
         guard let route = route(for: purpose) else { return nil }
-        let summary = Config.summary()
+        return fingerprint(for: purpose, route: route, summary: Config.summary(), backends: backends(for: purpose))
+    }
+
+    static func fingerprint(for purpose: Purpose, route: Route, summary: Config.SummarySettings,
+                            backends: [LLMBackend], config: [String: Any]? = Config.raw()) -> String {
         var parts = [purpose.rawValue, route.preference, route.anthropicModel ?? "-"]
-        parts += LLMBackend.available(
-            preference: route.preference, anthropicModel: route.anthropicModel
-        ).map { "\($0.name)=\($0.model ?? "-")" }
+        parts += backends.map { "\($0.name)=\($0.model ?? "-")" }
         parts += [summary.openAIBaseURL, summary.ollamaBaseURL]
-        parts += [Config.anthropicKey(), Credentials.summaryOpenAIKey()].map { key in
+        parts += [Config.anthropicKey(in: config), Credentials.summaryOpenAIKey(in: config)].map { key in
             key.map { digest($0) } ?? "-"
         }
         if purpose == .summary {

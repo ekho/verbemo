@@ -25,7 +25,7 @@ struct MeetingActionStateTests {
         #expect(state.reason(for: .copySummary) == nil)
         state.isBusy = false
         state.summaryEnabled = false
-        #expect(state.reason(for: .regenerateSummary) != nil)
+        #expect(state.reason(for: .regenerateSummary) == nil)
         state.summaryEnabled = true
         state.configReadable = false
         #expect(state.reason(for: .regenerateSummary) != nil)

@@ -186,6 +186,7 @@ enum TranscriptVersions {
                 let reset: [String: Any?] = [
                     SessionState.Key.summaryStale: archive != nil && fm.fileExists(atPath: dir.appendingPathComponent("summary.md").path) ? true : nil,
                     SessionState.Key.speakersStatus: nil, SessionState.Key.summaryStatus: nil,
+                    SessionState.Key.summaryManual: nil,
                     SessionState.Key.speakersFailedFor: nil, SessionState.Key.summaryFailedFor: nil,
                     SessionState.Key.speakersDeferrals: nil, SessionState.Key.summaryDeferrals: nil,
                     SessionState.Key.transcriptionFailed: nil, SessionState.Key.transcriptionAttempts: nil,

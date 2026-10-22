@@ -74,6 +74,7 @@ enum PostProcessor {
             && (retryFailed || !gaveUp(SessionState.Key.speakersStatus, SessionState.Key.speakersFailedFor,
                        .speakerNames))
         work.summary = policy.summary
+            && meta[SessionState.Key.summaryManual] as? Bool != true
             && !hasCurrentSummary(dir, meta: meta)
             && (retryFailed || !gaveUp(SessionState.Key.summaryStatus, SessionState.Key.summaryFailedFor,
                        .summary))
@@ -98,13 +99,13 @@ enum PostProcessor {
     }
 
     /// Regenerate just this version's summary; keep the previous bytes on failure.
-    static func regenerateSummary(_ dir: URL, policy: Policy = .configured) async throws {
+    static func regenerateSummary(_ dir: URL, policy: Policy = .configured, request: SummaryRequest? = nil) async throws {
         let root = try validatedSessionRoot(for: dir)
         func validate() throws -> Transcript {
-            if let reason = Config.unreadableReason {
+            if request == nil, let reason = Config.unreadableReason {
                 throw Refusal.configUnreadable(reason)
             }
-            guard policy.summary else {
+            guard request != nil || policy.summary else {
                 throw SummaryRegenerationError.unavailable(localised("Summary generation is off.", "Создание сводки выключено."))
             }
             guard !FileManager.default.fileExists(atPath: root.appendingPathComponent(".recording.json").path),
@@ -118,6 +119,13 @@ enum PostProcessor {
         try SessionClaim.acquire(root, stage: .finish)
         defer { SessionClaim.release(root) }
         let transcript = try validate()
+        try Task.checkCancellation()
+        if request != nil {
+            // A one-run destination must never become a configured background retry.
+            try SessionState.amend(dir, with: [SessionState.Key.summaryManual: true])
+        }
+        try await request?.checkAccess()
+        try Task.checkCancellation()
         let meta = SessionState.read(root) ?? [:]
         let calendar = meta["calendar"] as? [String: Any]
         let title = (meta["title"] as? String) ?? (calendar?["title"] as? String) ?? root.lastPathComponent
@@ -127,7 +135,7 @@ enum PostProcessor {
             context.append("Participants: " + attendees.joined(separator: ", "))
         }
         let names = SpeakerNames.read(from: dir)
-        guard await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir) != nil else {
+        guard await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir, request: request) != nil else {
             throw SummaryRegenerationError.unavailable(localised(
                 "The summary could not be regenerated. The previous summary is preserved; see the session log.",
                 "Не удалось перегенерировать сводку. Предыдущая сводка сохранена; подробности в журнале встречи."))
@@ -187,10 +195,20 @@ enum PostProcessor {
         }
     }
 
+    static func manualSummaryRefusal(_ dir: URL) -> Completion? {
+        let meta = SessionState.read(dir) ?? [:]
+        guard meta[SessionState.Key.summaryManual] as? Bool == true,
+              !hasCurrentSummary(dir, meta: meta) else { return nil }
+        let english = "This summary needs an explicit provider choice. Use Create a new summary to retry."
+        return .refused(english, localised(english,
+            "Для этой сводки нужно выбрать способ создания. Нажмите «Создать новую сводку», чтобы повторить попытку."))
+    }
+
     /// The button and command share the explicit retry and its outcome; the sweep uses finish.
     static func finishManually(_ dir: URL, policy: Policy = .configured) async -> Completion {
         do {
             let work = try await finishWork(dir, policy: policy, retryFailed: true)
+            if let refusal = manualSummaryRefusal(dir) { return refusal }
             guard !work.isEmpty else { return .nothingToDo }
             let meta = SessionState.read(dir) ?? [:]
             let missingNames = work.names && !FileManager.default.fileExists(atPath: dir.appendingPathComponent(SpeakerNames.file).path)

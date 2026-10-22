@@ -31,7 +31,6 @@ struct MeetingActionState {
             if !configReadable { return localised("Fix config.json before processing.", "Сначала исправьте config.json.") }
             if action == .regenerateSummary {
                 if !transcriptReady || hasPendingTranscript { return localised("A finished transcript is required.", "Сначала нужна готовая расшифровка.") }
-                if !summaryEnabled { return localised("Enable summary generation in settings.", "Включите создание сводки в настройках.") }
             } else {
                 if !hasAudio { return localised("The source audio was not kept.", "Исходное аудио не сохранено.") }
                 if !transcriptionEnabled { return localised("Enable transcription in settings.", "Включите расшифровку в настройках.") }
