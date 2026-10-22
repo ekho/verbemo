@@ -852,6 +852,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         let state = item.flatMap { DiarizationState.read($0.dir) }
         let actionable = !working && item?.unreadableDiarization != true
             && state?.retainsAudio == true && state?.status != .running
+            && item.map { !TranscriptVersions.isRequested($0.dir) } == true
         retryDiarizationButton.isEnabled = actionable && onRetryDiarization != nil
         skipDiarizationButton.isEnabled = actionable && onSkipDiarization != nil
         busyLabel.isHidden = !working
@@ -888,6 +889,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         diarizationLabel.stringValue = Self.diarizationLine(state)
         diarizationLabel.toolTip = diarizationLabel.stringValue
         let actions = state.retainsAudio && state.status != .running
+            && !TranscriptVersions.isRequested(item.dir)
         retryDiarizationButton.isHidden = !actions
         let needsModel = !DiarizationModelStore.isReady(at: DiarizationModelStore.shared(for: state.request.model).directory, model: state.request.model)
         retryDiarizationButton.title = needsModel ? localised("Download and continue", "Скачать и продолжить") : localised("Retry diarization", "Повторить диаризацию")
@@ -1110,29 +1112,21 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             Из звука будет сделана новая расшифровка. Нынешняя расшифровка, имена \
             участников и сводка сохранятся отдельным вариантом.
             """)
-        let enginePicker = NSPopUpButton()
-        enginePicker.addItem(withTitle: localised("Use transcription settings", "По настройкам расшифровки"))
-        for choice in Self.retranscriptionEngines {
-            let locality = Config.localEngines.contains(choice.id) ? localised(" · on Mac", " · на Mac") : localised(" · sends audio to cloud", " · аудио отправляется в облако")
-            enginePicker.addItem(withTitle: choice.title + locality)
-            enginePicker.lastItem?.representedObject = choice.id
-        }
-        if let engine, let index = enginePicker.itemArray.firstIndex(where: { $0.representedObject as? String == engine }) { enginePicker.selectItem(at: index) }
-        enginePicker.setAccessibilityLabel(localised("Transcription engine", "Способ распознавания"))
-        let missing = JournalUnavailableView(.diarizationChoice, title: localised("Diarization model for this run", "Модель диаризации для этого запуска"))
-        let accessory = NSStackView(views: [enginePicker, missing])
-        accessory.orientation = .vertical
-        accessory.alignment = .leading
-        accessory.spacing = 16
-        accessory.frame = NSRect(x: 0, y: 0, width: 390, height: 132)
-        for view in accessory.arrangedSubviews { view.widthAnchor.constraint(equalTo: accessory.widthAnchor).isActive = true }
-        alert.accessoryView = accessory
+        let options = RetranscriptionOptionsView(session: item.dir, engine: engine)
+        alert.accessoryView = options
         alert.addButton(withTitle: localised("Transcribe again", "Расшифровать заново"))
         alert.addButton(withTitle: localised("Cancel", "Отмена"))
+        options.onValidation = { [weak alert] valid in alert?.buttons.first?.isEnabled = valid }
+        options.changed()
         Task { @MainActor in
             guard panel.attachedSheet == nil else { return }
-            guard await alert.beginSheetModal(for: panel) == .alertFirstButtonReturn else { return }
-            if let why = Self.markForRetranscription(item.dir, engine: enginePicker.selectedItem?.representedObject as? String) {
+            guard await alert.beginSheetModal(for: panel) == .alertFirstButtonReturn,
+                  let request = options.request else { return }
+            if let why = await RetranscriptionOptionsView.refusal(for: request) {
+                say(why, about: item)
+                return
+            }
+            if let why = Self.markForRetranscription(item.dir, engine: request.engine, request: request) {
                 say(why, about: item)
                 return
             }
@@ -1145,18 +1139,11 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// or say why not. The engine is written only once the clearing is sure
     /// to happen.
     @discardableResult
-    static func markForRetranscription(_ dir: URL, engine: String?) -> String? {
+    static func markForRetranscription(_ dir: URL, engine: String?,
+                                      request: TranscriptVersions.Request? = nil) -> String? {
         if let why = retranscriptionRefusal(for: dir) { return why }
-        let previous = SessionState.value(dir, SessionState.Key.transcriptionEngine)
-        if let engine {
-            SessionState.update(dir, with: [SessionState.Key.transcriptionEngine: engine])
-        }
-        guard PostProcessor.markForRetranscription(dir) else {
-            // Taken between the question and the clearing: put the choice
-            // back as it was, and say so.
-            if engine != nil {
-                SessionState.update(dir, with: [SessionState.Key.transcriptionEngine: previous])
-            }
+        let choice = request ?? .capture(engine: engine ?? EngineResolver.configuredEngine(for: dir))
+        guard PostProcessor.markForRetranscription(dir, request: choice) else {
             return retranscriptionRefusal(for: dir) ?? nothingOwedLine
         }
         return nil

@@ -13,6 +13,13 @@ struct MeetingPresentationTests {
         let item = try #require(SessionInventory.item(for: dir))
         #expect(MeetingPresentation.stages(item).first { $0.symbol == "doc.text" }?.diarized == true)
     }
+    @Test(.freshHome) func singleSourceWithoutSpeakerSeparationHasNoDiarizationBadge() throws {
+        let dir = try SessionFixture.make(segments: [
+            .init(speaker: "speaker", start_ms: 0, end_ms: 1000, text: "Imported speech.")])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(SessionInventory.item(for: dir))
+        #expect(MeetingPresentation.stages(item).first { $0.symbol == "doc.text" }?.diarized == false)
+    }
     @Test(.freshHome) func audioOnlyOffersExistingFilesInsideMeeting() throws {
         let dir = try SessionFixture.make()
         defer { try? FileManager.default.removeItem(at: dir) }

@@ -35,7 +35,7 @@ struct DiarizationState: Codable, Equatable {
         case notApplicable = "not_applicable"
     }
 
-    struct Request: Codable, Equatable {
+    struct Request: Codable, Equatable, Sendable {
         let engine: String
         let threshold: Double
         let explicit: Bool

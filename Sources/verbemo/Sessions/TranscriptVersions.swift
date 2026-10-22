@@ -5,6 +5,40 @@ import CryptoKit
 /// Previous results have their own transcript, names, summary and processing state.
 enum TranscriptVersions {
     static let requestFile = "transcribe.requested"
+    static let requestKey = "transcription_request"
+
+    struct Request: Codable, Equatable, Sendable {
+        let engine: String
+        // nil is an explicit opt-out, independent of subsequent settings changes.
+        let diarization: DiarizationState.Request?
+
+        static func capture(engine: String) -> Self {
+            Self(engine: engine, diarization: Config.localDiarizationEnabled() && !Config.cloudEngines.contains(engine)
+                ? .init(engine: engine, threshold: Config.diarizationThreshold(),
+                        explicit: true, model: Config.diarizationModel()) : nil)
+        }
+
+        func write(to dir: URL) throws {
+            try JSONEncoder().encode(self).write(
+                to: dir.appendingPathComponent(requestFile), options: .atomic)
+        }
+    }
+
+    static func readRequest(_ dir: URL) throws -> Request? {
+        guard isRequested(dir) else { return nil }
+        let data = try Data(contentsOf: dir.appendingPathComponent(requestFile))
+        if let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           EngineResolver.knownEngines.contains(text) {
+            return .capture(engine: text)
+        }
+        let request = try JSONDecoder().decode(Request.self, from: data)
+        guard EngineResolver.knownEngines.contains(request.engine),
+              request.diarization.map({ $0.engine == request.engine && $0.threshold.isFinite
+                  && (0.3...1.2).contains($0.threshold) }) ?? true else {
+            throw CocoaError(.coderReadCorrupt)
+        }
+        return request
+    }
     static let journalDirectory = ".transcript-commit"
     private static let transactionFiles: Set<String> = [
         "transcript.json", "transcript.md", SpeakerNames.file, "meta.json",
@@ -26,6 +60,8 @@ enum TranscriptVersions {
         let state: SessionInventory.Step
         let isCurrent: Bool
         let isRequest: Bool
+        var diarization: DiarizationState.Request? = nil
+        var hasSavedRequest = false
 
         var title: String {
             let name = RecordingsEngineName.name(engine)
@@ -34,7 +70,9 @@ enum TranscriptVersions {
             formatter.dateStyle = .medium
             formatter.timeStyle = .medium
             let stamp = formatter.string(from: createdAt)
-            return isRequest ? "\(name) · \(state.described)" : "\(name) · \(stamp)"
+            let speakers = hasSavedRequest ? " · " + (diarization?.model.title
+                ?? localised("Diarization off", "Без диаризации")) : ""
+            return (isRequest ? "\(name) · \(state.described)" : "\(name) · \(stamp)") + speakers
         }
     }
 
@@ -60,11 +98,11 @@ enum TranscriptVersions {
         }.sorted { ($0.createdAt, $0.dir.path) < ($1.createdAt, $1.dir.path) }
         if let current = version(in: dir, current: true) { versions.append(current) }
         if isRequested(dir) {
-            let engine = (try? String(contentsOf: dir.appendingPathComponent(requestFile), encoding: .utf8))?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let engine = (try? readRequest(dir))?.engine
             let created = (try? dir.appendingPathComponent(requestFile).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
             versions.append(Version(dir: dir, engine: engine ?? Config.transcriptionEngine(), model: "",
-                createdAt: created, state: requestState(dir), isCurrent: false, isRequest: true))
+                createdAt: created, state: requestState(dir), isCurrent: false, isRequest: true,
+                diarization: (try? readRequest(dir))?.diarization, hasSavedRequest: true))
         }
         return versions
     }
@@ -81,7 +119,9 @@ enum TranscriptVersions {
         guard let transcript = PostProcessor.readTranscript(dir) else { return nil }
         return Version(dir: dir, engine: transcript.engine, model: transcript.model,
             createdAt: creationDate(transcript.created_at),
-            state: .done, isCurrent: current, isRequest: false)
+            state: .done, isCurrent: current, isRequest: false,
+            diarization: DiarizationState.read(dir)?.request,
+            hasSavedRequest: SessionState.value(dir, requestKey) != nil)
     }
 
     private static func creationDate(_ value: String) -> Date {
@@ -181,6 +221,10 @@ enum TranscriptVersions {
                 ?? dir.lastPathComponent
             guard var nextMeta = SessionState.read(dir) else {
                 throw SessionState.StateError.unreadable(dir.appendingPathComponent("meta.json"))
+            }
+            if let request = try readRequest(dir) {
+                nextMeta[requestKey] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request))
+                nextMeta[SessionState.Key.transcriptionEngine] = request.engine
             }
             if isRequested(dir) || oldJSON != nil {
                 let reset: [String: Any?] = [
