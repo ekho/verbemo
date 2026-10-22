@@ -23,23 +23,27 @@ public sealed class JournalLayoutTests
             Assert.Single(runtime.LoadSessionsAsync().GetAwaiter().GetResult());
             var status = new StatusWindow(runtime, embedded: true);
             var window = new ApplicationWindow(runtime, status);
+            var library = RecordingActionsTests.Field<RecordingsWindow>(window, "recordings");
             try
             {
                 window.ShowDestination(ApplicationDestination.General);
                 window.Show();
-                var frame = new System.Windows.Threading.DispatcherFrame();
-                var tick = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-                tick.Tick += (_, _) => { tick.Stop(); frame.Continue = false; };
-                tick.Start();
-                System.Windows.Threading.Dispatcher.PushFrame(frame);
-                var library = RecordingActionsTests.Field<RecordingsWindow>(window, "recordings");
+                ApplicationWindowTests.Until(() => !RecordingActionsTests.Field<bool>(library, "loading")
+                    && RecordingActionsTests.Field<ListBox>(library, "grid").Items.Count == 1);
                 Assert.Single(RecordingActionsTests.Field<ListBox>(library, "grid").Items.Cast<object>());
                 var player = RecordingActionsTests.Field<MeetingPlayer>(library, "player");
                 var clock = RecordingActionsTests.Field<System.Windows.Media.Animation.ClockGroup>(player, "clock");
                 typeof(RecordingsWindow).GetMethod("ApplyFilter", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(library, null);
                 Assert.Same(clock, RecordingActionsTests.Field<System.Windows.Media.Animation.ClockGroup>(player, "clock"));
             }
-            finally { window.AllowClose(); window.Close(); status.AllowClose(); status.Close(); }
+            finally
+            {
+                window.AllowClose(); window.Close(); status.AllowClose(); status.Close();
+                ApplicationWindowTests.Until(() => !RecordingActionsTests.Field<bool>(library, "loading"));
+                typeof(RecordingsWindow).GetMethod("ReloadAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(library, null);
+                Assert.Null(RecordingActionsTests.Field<System.Windows.Media.Animation.ClockGroup?>(
+                    RecordingActionsTests.Field<MeetingPlayer>(library, "player"), "clock"));
+            }
         }));
 
     [Fact]
@@ -87,4 +91,5 @@ public sealed class JournalLayoutTests
         foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
             foreach (var descendant in Descendants(child)) yield return descendant;
     }
+
 }

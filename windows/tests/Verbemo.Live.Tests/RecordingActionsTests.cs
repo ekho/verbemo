@@ -72,7 +72,11 @@ public sealed class RecordingActionsTests
         {
             var window = new RecordingsWindow(runtime);
             try { test(window, root); }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+                ApplicationWindowTests.Until(() => !Field<bool>(window, "loading"));
+            }
         }
         finally
         {

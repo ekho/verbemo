@@ -65,6 +65,7 @@ internal sealed class RecordingsWindow : Window
     private readonly Grid detail = new();
     private readonly TabControl tabs = new() { Margin = new Thickness(0, 8, 0, 0) };
     private bool loading;
+    private bool closed;
     private bool replacingRows;
     private bool reloadRequested;
     private bool updatingChoices;
@@ -241,7 +242,7 @@ internal sealed class RecordingsWindow : Window
         layout.SizeChanged += (_, _) => UpdateLayoutMode();
         EventHandler changed = (_, _) => Dispatcher.InvokeAsync(ReloadAsync);
         runtime.SessionsChanged += changed;
-        Closed += (_, _) => { runtime.SessionsChanged -= changed; player.Dispose(); };
+        Closed += (_, _) => { closed = true; runtime.SessionsChanged -= changed; player.Dispose(); };
         System.ComponentModel.PropertyChangedEventHandler motionChanged = (_, e) =>
         {
             if(e.PropertyName == nameof(SystemParameters.ClientAreaAnimation)) Dispatcher.InvokeAsync(ReloadAsync);
@@ -400,6 +401,7 @@ internal sealed class RecordingsWindow : Window
 
     private async Task ReloadAsync()
     {
+        if (closed) return;
         if (loading) { reloadRequested = true; return; }
         loading = true;
         try
@@ -407,6 +409,7 @@ internal sealed class RecordingsWindow : Window
             var selected = Selected?.Item.Directory;
             var selectedTab = tabs.SelectedIndex;
             var items = await runtime.LoadSessionsAsync();
+            if (closed) return;
             var rows = items.Select(item => new Row(item, runtime.ProcessingStatusFor(item.Directory))
             { IsPaused = runtime.State.SessionDirectory == item.Directory && runtime.State.IsPaused }).ToList();
             allRows = rows;
