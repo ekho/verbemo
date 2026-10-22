@@ -114,7 +114,7 @@ struct Run: ParsableCommand {
                 let alert = NSAlert()
                 alert.messageText = StartupAlert.title
                 alert.informativeText = StartupAlert.body(for: checks)
-                alert.runModal()
+                alert.runJournalModal()
                 throw ExitCode(1)
             }
         }

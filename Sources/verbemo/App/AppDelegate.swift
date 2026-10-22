@@ -73,8 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 """)
             alert.addButton(withTitle: localised(
                 "Quit and save the recording", "Выйти и сохранить запись"))
-            alert.addButton(withTitle: localised("Keep recording", "Продолжить запись"))
-            guard alert.runModal() == .alertFirstButtonReturn else {
+            alert.addButton(withTitle: localised("Keep recording", "Продолжить запись")).keyEquivalent = "\u{1b}"
+            guard alert.runJournalModal() == .alertFirstButtonReturn else {
                 return .terminateCancel
             }
         }

@@ -77,7 +77,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let id = sender.selectedItem?.representedObject as? String
         let participant = participants.first { $0.id == id }
         do { try onMap?(segments[sender.tag].speaker, participant) }
-        catch { if let window { NSAlert(error: error).beginSheetModal(for: window) }; table.reloadData() }
+        catch { if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }; table.reloadData() }
     }
     static func speakerTitle(_ speaker: String, in segments: [Transcript.Segment]) -> String {
         if SpeakerNames.isUnknown(speaker) { return SpeakerNames.described(label: speaker) }

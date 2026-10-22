@@ -315,7 +315,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         if let reason = modelDeletionReason(model) {
             let alert = NSAlert()
             alert.messageText = reason
-            alert.beginSheetModal(for: panel)
+            alert.beginJournalSheetModal(for: panel)
             return
         }
         let previewChoice = TranscriptionChoice.read(
@@ -332,15 +332,15 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         alert.messageText = localised("Delete \(model.name)?", "Удалить \(model.name)?")
         alert.informativeText = Self.consequence(of: model, choice: previewChoice, switchesOff: !previewUpdates.isEmpty)
         alert.addButton(withTitle: localised("Delete", "Удалить"))
-        alert.addButton(withTitle: localised("Cancel", "Отмена"))
+        alert.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
         alert.buttons.first?.hasDestructiveAction = true
         Task { @MainActor [self] in
             guard panel.attachedSheet == nil,
-                  await alert.beginSheetModal(for: panel) == .alertFirstButtonReturn else { return }
+                  await alert.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
             if let reason = modelDeletionReason(model) {
                 let failure = NSAlert()
                 failure.messageText = reason
-                failure.beginSheetModal(for: panel, completionHandler: nil)
+                failure.beginJournalSheetModal(for: panel, completionHandler: nil)
                 return
             }
             do {
@@ -365,7 +365,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             } catch {
                 let failed = NSAlert(error: error)
                 failed.messageText = localised("Couldn't delete \(model.name)", "Не удалось удалить \(model.name)")
-                failed.beginSheetModal(for: panel, completionHandler: nil)
+                failed.beginJournalSheetModal(for: panel, completionHandler: nil)
             }
             refreshModels()
             setup.refresh()
