@@ -295,6 +295,7 @@ internal sealed class RecordingsWindow : Window
         menu.FontWeight = FontWeights.Normal;
         foreach (var item in menu.Items.OfType<MenuItem>().Where(item => item.Tag is MeetingAction.CopyTranscript or MeetingAction.CopySummary or MeetingAction.RegenerateSummary or MeetingAction.Retranscribe).ToArray()) menu.Items.Remove(item);
         menu.PlacementTarget = anchor;
+        menu.Placement = anchor == grid ? System.Windows.Controls.Primitives.PlacementMode.MousePoint : System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
     }
 

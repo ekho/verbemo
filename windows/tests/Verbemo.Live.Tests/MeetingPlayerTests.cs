@@ -60,6 +60,7 @@ public sealed class MeetingPlayerTests
         Dispatcher.PushFrame(frame);
         Assert.True(condition(), "Timed out waiting for the native media clock. "
             + RecordingActionsTests.Field<TextBlock>(player, "error").Text
+            + "; audio-devices=" + NAudio.Wave.WaveOut.DeviceCount
             + "; paused=" + RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused
             + "; durations=" + string.Join(",", RecordingActionsTests.Field<List<MediaPlayer>>(player, "players").Select(track => track.NaturalDuration)));
     }
