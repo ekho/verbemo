@@ -101,6 +101,12 @@ enum PostProcessor {
     /// Regenerate just this version's summary; keep the previous bytes on failure.
     static func regenerateSummary(_ dir: URL, policy: Policy = .configured, request: SummaryRequest? = nil) async throws {
         let root = try validatedSessionRoot(for: dir)
+        try await ProcessingOperations.shared.run(session: root, kind: .summary) {
+            try await regenerateSummaryWork(dir, root: root, policy: policy, request: request)
+        }
+    }
+
+    private static func regenerateSummaryWork(_ dir: URL, root: URL, policy: Policy, request: SummaryRequest?) async throws {
         func validate() throws -> Transcript {
             if request == nil, let reason = Config.unreadableReason {
                 throw Refusal.configUnreadable(reason)
@@ -135,7 +141,9 @@ enum PostProcessor {
             context.append("Participants: " + attendees.joined(separator: ", "))
         }
         let names = SpeakerNames.read(from: dir)
-        guard await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir, request: request) != nil else {
+        let generated = await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir, request: request)
+        try Task.checkCancellation()
+        guard generated != nil else {
             throw SummaryRegenerationError.unavailable(localised(
                 "The summary could not be regenerated. The previous summary is preserved; see the session log.",
                 "Не удалось перегенерировать сводку. Предыдущая сводка сохранена; подробности в журнале встречи."))
@@ -161,7 +169,12 @@ enum PostProcessor {
     @discardableResult
     static func finish(_ dir: URL, policy: Policy = .configured, retryFailed: Bool = false) async -> Work {
         do {
-            return try await finishWork(dir, policy: policy, retryFailed: retryFailed)
+            let root = try validatedSessionRoot(for: dir)
+            return try await ProcessingOperations.shared.run(session: root, kind: .postProcessing) {
+                try await finishWork(dir, policy: policy, retryFailed: retryFailed)
+            }
+        } catch is CancellationError {
+            return Work()
         } catch {
             appendSessionLog("post-processing skipped — \(error)", to: dir)
             return Work()
@@ -169,7 +182,7 @@ enum PostProcessor {
     }
 
     enum Completion {
-        case completed, failed, deferred, nothingToDo
+        case completed, failed, deferred, nothingToDo, cancelled
         case refused(String, String)
 
         var succeeded: Bool {
@@ -178,6 +191,7 @@ enum PostProcessor {
         var description: String {
             switch self {
             case .completed: return "Processing completed."
+            case .cancelled: return "Processing cancelled. Completed stages are preserved."
             case .failed: return "Processing failed again. See transcribe.log in the recording folder; fix the cause and try Finish processing again."
             case .deferred: return "Processing deferred. See transcribe.log in the recording folder; it can retry when the backend is available."
             case .nothingToDo: return "Everything that can be done here is already done."
@@ -187,6 +201,7 @@ enum PostProcessor {
         var described: String {
             switch self {
             case .completed: return localised(description, "Обработка завершена.")
+            case .cancelled: return localised(description, "Обработка отменена. Готовые результаты сохранены.")
             case .failed: return localised(description, "Снова не удалось завершить обработку. Причина — в transcribe.log в папке записи. После исправления нажмите «Доделать» ещё раз.")
             case .deferred: return localised(description, "Обработка отложена. Подробности — в transcribe.log в папке записи. Повтор возможен, когда сервис станет доступен.")
             case .nothingToDo: return localised(description, "Всё, что можно было сделать, уже сделано.")
@@ -207,29 +222,12 @@ enum PostProcessor {
     /// The button and command share the explicit retry and its outcome; the sweep uses finish.
     static func finishManually(_ dir: URL, policy: Policy = .configured) async -> Completion {
         do {
-            let work = try await finishWork(dir, policy: policy, retryFailed: true)
-            if let refusal = manualSummaryRefusal(dir) { return refusal }
-            guard !work.isEmpty else { return .nothingToDo }
-            let meta = SessionState.read(dir) ?? [:]
-            let missingNames = work.names && !FileManager.default.fileExists(atPath: dir.appendingPathComponent(SpeakerNames.file).path)
-            let missingSummary = work.summary && !hasCurrentSummary(dir, meta: meta)
-            guard missingNames || missingSummary else { return .completed }
-            if let reason = Config.unreadableReason {
-                let english = "Processing paused — config.json can't be read (\(reason)). Completed stages are preserved."
-                return .refused(english, localised(english,
-                    "Обработка приостановлена: не читается config.json (\(reason)). Готовые результаты сохранены."))
+            let root = try validatedSessionRoot(for: dir)
+            return try await ProcessingOperations.shared.run(session: root, kind: .postProcessing) {
+                try await finishManuallyWork(dir, policy: policy)
             }
-            if (work.names && !Config.speakerNames().enabled)
-                || (work.summary && MeetingEgress.route(for: .summary) == nil) {
-                let english = "Processing settings changed during the attempt. Completed stages are preserved."
-                return .refused(english, localised(english,
-                    "Настройки обработки изменились во время попытки. Готовые результаты сохранены."))
-            }
-            if (missingNames && meta[SessionState.Key.speakersStatus] as? String == SessionState.failed)
-                || (missingSummary && meta[SessionState.Key.summaryStatus] as? String == SessionState.failed) {
-                return .failed
-            }
-            return .deferred
+        } catch is CancellationError {
+            return .cancelled
         } catch {
             appendSessionLog("post-processing skipped — \(error)", to: dir)
             if let busy = error as? SessionClaim.Busy { return .refused(busy.description, busy.described) }
@@ -240,7 +238,34 @@ enum PostProcessor {
         }
     }
 
+    private static func finishManuallyWork(_ dir: URL, policy: Policy) async throws -> Completion {
+        let work = try await finishWork(dir, policy: policy, retryFailed: true)
+        if let refusal = manualSummaryRefusal(dir) { return refusal }
+        guard !work.isEmpty else { return .nothingToDo }
+        let meta = SessionState.read(dir) ?? [:]
+        let missingNames = work.names && !FileManager.default.fileExists(atPath: dir.appendingPathComponent(SpeakerNames.file).path)
+        let missingSummary = work.summary && !hasCurrentSummary(dir, meta: meta)
+        guard missingNames || missingSummary else { return .completed }
+        if let reason = Config.unreadableReason {
+            let english = "Processing paused — config.json can't be read (\(reason)). Completed stages are preserved."
+            return .refused(english, localised(english,
+                "Обработка приостановлена: не читается config.json (\(reason)). Готовые результаты сохранены."))
+        }
+        if (work.names && !Config.speakerNames().enabled)
+            || (work.summary && MeetingEgress.route(for: .summary) == nil) {
+            let english = "Processing settings changed during the attempt. Completed stages are preserved."
+            return .refused(english, localised(english,
+                "Настройки обработки изменились во время попытки. Готовые результаты сохранены."))
+        }
+        if (missingNames && meta[SessionState.Key.speakersStatus] as? String == SessionState.failed)
+            || (missingSummary && meta[SessionState.Key.summaryStatus] as? String == SessionState.failed) {
+            return .failed
+        }
+        return .deferred
+    }
+
     private static func finishWork(_ dir: URL, policy: Policy, retryFailed: Bool) async throws -> Work {
+        try Task.checkCancellation()
         if let reason = Config.unreadableReason { throw Refusal.configUnreadable(reason) }
         let root = try validatedSessionRoot(for: dir)
         try SessionClaim.acquire(root, stage: .finish)
@@ -265,6 +290,7 @@ enum PostProcessor {
         let attendees = MeetingCalendarMetadata.modelAttendees(calendar)
         let app = meta["app"] as? String
 
+        try Task.checkCancellation()
         var names = SpeakerNames.read(from: dir)
         if work.names {
             names = await SpeakerNamer.name(
@@ -276,7 +302,9 @@ enum PostProcessor {
             ) ?? names
         }
 
+        try Task.checkCancellation()
         if work.summary {
+            ProcessingOperations.shared.stage(.summary)
             var context = ["Meeting: \(title ?? dir.lastPathComponent)"]
             if !attendees.isEmpty {
                 context.append("Participants: " + attendees.joined(separator: ", "))
@@ -289,6 +317,7 @@ enum PostProcessor {
             )
         }
 
+        try Task.checkCancellation()
         return work
     }
 
@@ -300,13 +329,24 @@ enum PostProcessor {
     /// backlog is never urgent.
     @discardableResult
     static func sweep(root: URL) async -> Int {
-        guard Config.unreadableReason == nil else { return 0 }
+        (try? await ProcessingOperations.shared.run(kind: .sweep) {
+            await sweepWork(root: root)
+        }) ?? 0
+    }
 
+    private static func sweepWork(root: URL) async -> Int {
+        guard Config.unreadableReason == nil else { return 0 }
         var finished = 0
         for dir in SessionInventory.sessionFolders(in: root) {
-            let work = await finish(dir)
-            if !work.isEmpty { finished += 1 }
-            StopHook.fireIfOwed(dir)
+            guard !Task.isCancelled else { break }
+            let work = try? await ProcessingOperations.shared.run(session: dir, kind: .postProcessing) {
+                let work = await finish(dir)
+                try Task.checkCancellation()
+                await StopHook.fireIfOwed(dir)
+                try Task.checkCancellation()
+                return work
+            }
+            if let work, !work.isEmpty { finished += 1 }
         }
         return finished
     }

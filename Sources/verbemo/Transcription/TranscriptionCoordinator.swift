@@ -25,18 +25,27 @@ actor TranscriptionCoordinator {
         case failed(session: URL)
     }
 
-    private var queue: [URL] = []
+    private struct Queued {
+        let dir: URL
+        let ticket: ProcessingOperations.Ticket
+    }
+    private var queue: [Queued] = []
+    private var activeQueued: Queued?
+    private var cancelledInDrain: Set<String> = []
+    private let operations: ProcessingOperations
     /// Sessions a drain set aside because the machine could not transcribe
     /// them — a model that would not download, no network, no key. They go
     /// back in front of the queue the next time something is queued, rather
     /// than at once: the same drain would only fail them the same way.
     private var heldBack: [URL] = []
     private var recordingArchives = 0
+    private var drainCompletions = 0
     private var draining = false
+    private var releaseDrainSleep: (() -> Void)?
     private var processing = false
-    private var processingWaiters: [CheckedContinuation<Void, Never>] = []
+    private var processingWaiters: [(UUID, CheckedContinuation<Void, Error>)] = []
     /// Whoever is waiting for the queue to run dry — see `waitUntilIdle`.
-    private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+    private var idleWaiters: [(UUID, CheckedContinuation<Void, Never>)] = []
     private var environmentalFailureNoted = false
     private var lastFailure: URL?
     private var statusHandler: (@Sendable (Status) -> Void)?
@@ -57,6 +66,7 @@ actor TranscriptionCoordinator {
     /// machine at the moment there is work. Only tests pass one: everything
     /// real wants the configured answer, and wants it decided late.
     init(engine: TranscriptionEngine? = nil,
+         operations: ProcessingOperations = .shared,
          onStop: @escaping @Sendable () -> String? = { Config.onStop() },
          echoCanceller: @escaping EchoCancellerFactory = { try EchoCanceller() },
          diarizerFactory: @escaping @Sendable (DiarizationSettings) -> any LocalDiarizationRuntime = {
@@ -70,6 +80,7 @@ actor TranscriptionCoordinator {
          },
          keepAwake: @escaping Wakefulness.Hold = Wakefulness.holdAwake) {
         engines = EngineResolver(fixed: engine)
+        self.operations = operations
         self.onStop = onStop
         self.echoCanceller = echoCanceller
         self.diarizerFactory = diarizerFactory
@@ -78,6 +89,7 @@ actor TranscriptionCoordinator {
     }
 
     init(engines: EngineResolver,
+         operations: ProcessingOperations = .shared,
          onStop: @escaping @Sendable () -> String? = { Config.onStop() },
          echoCanceller: @escaping EchoCancellerFactory = { try EchoCanceller() },
          diarizerFactory: @escaping @Sendable (DiarizationSettings) -> any LocalDiarizationRuntime = {
@@ -91,6 +103,7 @@ actor TranscriptionCoordinator {
          },
          keepAwake: @escaping Wakefulness.Hold = Wakefulness.holdAwake) {
         self.engines = engines
+        self.operations = operations
         self.onStop = onStop
         self.echoCanceller = echoCanceller
         self.diarizerFactory = diarizerFactory
@@ -105,18 +118,21 @@ actor TranscriptionCoordinator {
     /// Queue a finished session. With transcription disabled in config, the
     /// on_stop hook still fires — it just gets an untranscribed folder.
     func enqueue(_ sessionDir: URL) {
+        guard operations.isAccepting else { return }
         guard Config.transcriptionEnabled() else {
+            guard let ticket = try? operations.register(session: sessionDir, kind: .archive) else { return }
             recordingArchives += 1
             Task {
                 defer {
                     recordingArchives -= 1
                     resumeIdleWaitersIfIdle()
                 }
-                do { try await archiveRecordingOnly(sessionDir) }
+                do { try await ticket.run { try await self.archiveRecordingOnly(sessionDir) } }
                 catch { log(sessionDir, "recording-only archive deferred: \(error)") }
             }
             return
         }
+        cancelledInDrain.remove(Self.identity(of: sessionDir))
         requeueHeldBack()
         add(sessionDir)
         drainIfIdle()
@@ -126,7 +142,11 @@ actor TranscriptionCoordinator {
         guard !draining else { return }
         let held = heldBack
         heldBack = []
-        queue = held.filter { !isQueued($0) } + queue
+        let pending = held.filter { !isQueued($0) }.compactMap { dir -> Queued? in
+            guard let ticket = try? operations.register(session: dir, kind: .transcription) else { return nil }
+            return Queued(dir: dir, ticket: ticket)
+        }
+        queue = pending + queue
     }
 
     /// Queue a folder unless it is already queued under any spelling of its
@@ -135,12 +155,14 @@ actor TranscriptionCoordinator {
     /// one session was two entries, and was transcribed and paid for twice.
     private func add(_ dir: URL) {
         guard !isQueued(dir) else { return }
-        queue.append(dir)
+        guard let ticket = try? operations.register(session: dir, kind: .transcription) else { return }
+        queue.append(Queued(dir: dir, ticket: ticket))
     }
 
     private func isQueued(_ dir: URL) -> Bool {
         let key = Self.identity(of: dir)
-        return queue.contains { Self.identity(of: $0) == key }
+        let active = Set(operations.snapshot().map(\.id))
+        return queue.contains { Self.identity(of: $0.dir) == key && active.contains($0.ticket.id) }
     }
 
     private static func identity(of dir: URL) -> String {
@@ -157,11 +179,20 @@ actor TranscriptionCoordinator {
     /// With no transcript the audio is the only copy of the meeting. Archive
     /// it regardless of keep_audio, under the same claim as transcription.
     func archiveRecordingOnly(_ dir: URL) async throws {
+        try await operations.run(session: dir, kind: .archive) { try await self.archiveRecordingOnlyOwned(dir) }
+    }
+
+    private func archiveRecordingOnlyOwned(_ dir: URL) async throws {
+        try Task.checkCancellation()
         try SessionClaim.acquire(dir, stage: .transcribe)
-        await Task.detached(priority: .utility) { TrackCompressor.compress(sessionDir: dir) }.value
-        StopHook.owe(dir)
+        do {
+            await Task.detached(priority: .utility) { TrackCompressor.compress(sessionDir: dir) }.value
+            try Task.checkCancellation()
+            StopHook.owe(dir)
+        } catch { SessionClaim.release(dir); throw error }
         SessionClaim.release(dir)
-        StopHook.fireIfOwed(dir, command: onStop())
+        await StopHook.fireIfOwed(dir, command: onStop())
+        try Task.checkCancellation()
     }
 
     /// Scan the recordings root for sessions that finished (meta.json exists)
@@ -170,9 +201,23 @@ actor TranscriptionCoordinator {
     func resumePending(root: URL) {
         // A config that cannot be read holds the queue — see `Config.Unreadable`.
         // The app offers the folder again once the file is fixed.
-        guard Config.unreadableReason == nil, Config.transcriptionEnabled() else { return }
+        guard operations.isAccepting, Config.unreadableReason == nil, Config.transcriptionEnabled() else { return }
         requeueHeldBack()
-        let pending = Self.pendingSessions(in: root)
+        if !draining { cancelledInDrain = [] }
+        if draining {
+            let active = Dictionary(uniqueKeysWithValues: operations.snapshot().map { ($0.id, $0.state) })
+            for queued in queue where active[queued.ticket.id] == nil {
+                cancelledInDrain.insert(Self.identity(of: queued.dir))
+            }
+            if let queued = activeQueued, active[queued.ticket.id] == .cancelling {
+                cancelledInDrain.insert(Self.identity(of: queued.dir))
+            }
+        }
+        let cancelling = Set(operations.snapshot().filter { $0.state == .cancelling }.compactMap { $0.session.map(Self.identity) })
+        let pending = Self.pendingSessions(in: root).filter {
+            let identity = Self.identity(of: $0)
+            return !cancelledInDrain.contains(identity) && !cancelling.contains(identity)
+        }
         for dir in pending { add(dir) }
         if !pending.isEmpty {
             FileHandle.standardError.write(Data(
@@ -216,57 +261,67 @@ actor TranscriptionCoordinator {
 
     private func drainIfIdle() {
         guard !draining, !queue.isEmpty else { return }
+        guard let ticket = try? operations.register(session: nil, kind: .transcription) else {
+            discardQueuedOperations()
+            return
+        }
         draining = true
+        cancelledInDrain = []
+        drainCompletions += 1
         lastFailure = nil
         environmentalFailureNoted = false
         // Acquire before scheduling so a restarted drain overlaps the old hold.
-        let releaseSleep = keepAwake("verbemo is transcribing a meeting")
-        Task { await drain(releasing: releaseSleep) }
-    }
-
-    private func drain(releasing releaseSleep: () -> Void) async {
-        // Cover the processing turn, diarization and asynchronous engine cleanup.
-        defer { releaseSleep() }
-        await takeProcessingTurn()
-        defer { releaseProcessingTurn() }
-        while !queue.isEmpty {
-            let dir = queue.removeFirst()
-            publish(.transcribing(session: dir, queued: queue.count))
-            do {
-                try await transcribeAndAnnounce(dir)
-            } catch let busy as SessionClaim.Busy {
-                // Not a failure of this session — a collision with another
-                // process that has it. Counting it would retire a perfectly
-                // good recording after three unlucky launches, so the folder is
-                // simply left where it is: the filesystem is the queue, and the
-                // next `resumePending` offers it again once the owner is done.
-                log(dir, "\(busy)")
-            } catch is CancellationError {
-                log(dir, "processing cancelled; the session remains resumable")
-            } catch is AlreadyTranscribed {
-                // Somebody finished it while it waited here — nothing to do,
-                // and nothing to announce twice.
-            } catch let held as Config.Unreadable {
-                // Not this session's failure either, and not only this one's:
-                // everything behind it would be held for the same reason. The
-                // folders stay where they are and are offered again when the
-                // file can be read.
-                log(dir, "\(held)")
-                queue.removeAll()
-            } catch let held as UnreadableDiarizationRequest {
-                // The saved request needs repair, not another ASR attempt.
-                log(dir, "\(held)")
-            } catch {
-                log(dir, "transcription failed: \(error)")
-                lastFailure = dir
-                let outcome = TranscriptionFailurePolicy.record(
-                    error, for: dir, engine: current, notify: !environmentalFailureNoted)
-                if outcome == .environmental {
-                    environmentalFailureNoted = true
-                    heldBack.append(dir)
-                }
+        releaseDrainSleep = keepAwake("verbemo is transcribing a meeting")
+        Task {
+            defer {
+                drainCompletions -= 1
+                resumeIdleWaitersIfIdle()
+            }
+            do { try await ticket.run { await self.drain() } }
+            catch {
+                discardQueuedOperations()
+                releaseDrainSleep?()
+                releaseDrainSleep = nil
+                draining = false
+                resumeIdleWaitersIfIdle()
             }
         }
+    }
+
+    private func discardQueuedOperations() {
+        for pending in queue { operations.cancel(pending.ticket.id) }
+        queue.removeAll()
+    }
+
+    private func drain() async {
+        // The drain owns the reusable engine cache and its wakefulness assertion.
+        let releaseSleep = releaseDrainSleep
+        releaseDrainSleep = nil
+        defer { releaseSleep?() }
+        operations.stage(.transcription, state: .waiting)
+        do { try await takeProcessingTurn() }
+        catch {
+            discardQueuedOperations()
+            draining = false
+            resumeIdleWaitersIfIdle()
+            return
+        }
+        defer { releaseProcessingTurn() }
+        operations.stage(.transcription)
+        while !queue.isEmpty, !Task.isCancelled {
+            let item = queue.removeFirst()
+            let dir = item.dir
+            guard operations.snapshot().contains(where: { $0.id == item.ticket.id }) else {
+                cancelledInDrain.insert(Self.identity(of: dir))
+                continue
+            }
+            publish(.transcribing(session: dir, queued: queue.count))
+            activeQueued = item
+            do { try await item.ticket.run { try await self.processQueued(dir) } }
+            catch { cancelledInDrain.insert(Self.identity(of: dir)) }
+            activeQueued = nil
+        }
+        if Task.isCancelled { discardQueuedOperations() }
         await releaseEngine()
         publish(lastFailure.map { .failed(session: $0) } ?? .idle)
         draining = false
@@ -276,11 +331,55 @@ actor TranscriptionCoordinator {
         resumeIdleWaitersIfIdle()
     }
 
+    private func processQueued(_ dir: URL) async throws {
+        do {
+            try await transcribeAndAnnounce(dir)
+        } catch let busy as SessionClaim.Busy {
+            // Not a failure of this session — a collision with another
+            // process that has it. Counting it would retire a perfectly
+            // good recording after three unlucky launches, so the folder is
+            // simply left where it is: the filesystem is the queue, and the
+            // next `resumePending` offers it again once the owner is done.
+            log(dir, "\(busy)")
+        } catch is CancellationError {
+            cancelledInDrain.insert(Self.identity(of: dir))
+            await releaseEngine()
+            throw CancellationError()
+        } catch is AlreadyTranscribed {
+            // Somebody finished it while it waited here — nothing to do,
+            // and nothing to announce twice.
+        } catch let held as Config.Unreadable {
+            // Not this session's failure either, and not only this one's:
+            // everything behind it would be held for the same reason. The
+            // folders stay where they are and are offered again when the
+            // file can be read.
+            log(dir, "\(held)")
+            discardQueuedOperations()
+        } catch let held as UnreadableDiarizationRequest {
+            // The saved request needs repair, not another ASR attempt.
+            log(dir, "\(held)")
+        } catch {
+            if Task.isCancelled {
+                cancelledInDrain.insert(Self.identity(of: dir))
+                await releaseEngine()
+                throw CancellationError()
+            }
+            log(dir, "transcription failed: \(error)")
+            lastFailure = dir
+            let outcome = TranscriptionFailurePolicy.record(
+                error, for: dir, engine: current, notify: !environmentalFailureNoted)
+            if outcome == .environmental {
+                environmentalFailureNoted = true
+                heldBack.append(dir)
+            }
+        }
+    }
+
     private func resumeIdleWaitersIfIdle() {
-        guard !draining, recordingArchives == 0 else { return }
+        guard !draining, drainCompletions == 0, recordingArchives == 0 else { return }
         let waiters = idleWaiters
         idleWaiters = []
-        for waiter in waiters { waiter.resume() }
+        for waiter in waiters { waiter.1.resume() }
     }
 
     /// Return once transcription and recording-only audio archiving are done: at once when the queue is
@@ -293,8 +392,21 @@ actor TranscriptionCoordinator {
     /// the drain, reaching for the session being settled and filling its log
     /// with "another verbemo has this session".
     func waitUntilIdle() async {
-        guard draining || recordingArchives > 0 else { return }
-        await withCheckedContinuation { idleWaiters.append($0) }
+        guard !Task.isCancelled, draining || drainCompletions > 0 || recordingArchives > 0 else { return }
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled { continuation.resume() }
+                else { idleWaiters.append((id, continuation)) }
+            }
+        } onCancel: {
+            Task { await self.cancelIdleWaiter(id) }
+        }
+    }
+
+    private func cancelIdleWaiter(_ id: UUID) {
+        guard let index = idleWaiters.firstIndex(where: { $0.0 == id }) else { return }
+        idleWaiters.remove(at: index).1.resume()
     }
 
     /// Transcribe one session now, and wait for it.
@@ -306,8 +418,15 @@ actor TranscriptionCoordinator {
     /// either way, down to pulling one channel out of `audio.m4a` — a settled
     /// session has nothing else left to transcribe from.
     func transcribeNow(_ dir: URL) async throws {
-        await takeProcessingTurn()
+        try await operations.run(session: dir, kind: .transcription) { try await self.transcribeNowOwned(dir) }
+    }
+
+    private func transcribeNowOwned(_ dir: URL) async throws {
+        operations.stage(.transcription, state: .waiting)
+        try await takeProcessingTurn()
         defer { releaseProcessingTurn() }
+        operations.stage(.transcription)
+        try Task.checkCancellation()
         do {
             try await transcribeAndAnnounce(dir)
         } catch let busy as SessionClaim.Busy {
@@ -331,6 +450,7 @@ actor TranscriptionCoordinator {
             await releaseEngine()
             throw CancellationError()
         } catch {
+            if Task.isCancelled { await releaseEngine(); throw CancellationError() }
             log(dir, "transcription failed: \(error)")
             TranscriptionFailurePolicy.record(error, for: dir, engine: current)
             await releaseEngine()
@@ -339,25 +459,37 @@ actor TranscriptionCoordinator {
         await releaseEngine()
     }
 
-    private func takeProcessingTurn() async {
-        if processing {
-            await withCheckedContinuation { processingWaiters.append($0) }
-        } else {
-            processing = true
+    private func takeProcessingTurn() async throws {
+        try Task.checkCancellation()
+        guard processing else { processing = true; return }
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled { continuation.resume(throwing: CancellationError()) }
+                else { processingWaiters.append((id, continuation)) }
+            }
+        } onCancel: {
+            Task { await self.cancelProcessingWaiter(id) }
         }
+    }
+
+    private func cancelProcessingWaiter(_ id: UUID) {
+        guard let index = processingWaiters.firstIndex(where: { $0.0 == id }) else { return }
+        processingWaiters.remove(at: index).1.resume(throwing: CancellationError())
     }
 
     private func releaseProcessingTurn() {
         if processingWaiters.isEmpty {
             processing = false
         } else {
-            processingWaiters.removeFirst().resume()
+            processingWaiters.removeFirst().1.resume()
         }
     }
 
     /// One session from end to end: the transcript, then the banner and the
     /// hook that say it happened.
     private func transcribeAndAnnounce(_ dir: URL) async throws {
+        try Task.checkCancellation()
         // Before the claim and before the engine: nothing about this session
         // is decided while the answers are in a file that cannot be read.
         try Config.requireReadable()
@@ -374,6 +506,7 @@ actor TranscriptionCoordinator {
             do {
                 if try await runDiarization(dir, explicit: state.request.explicit) {
                     await PostProcessor.finish(dir)
+                    try Task.checkCancellation()
                     notifyUser(
                         title: localised("verbemo — speakers updated", "verbemo — говорящие обновлены"),
                         body: dir.lastPathComponent, opening: dir)
@@ -412,6 +545,7 @@ actor TranscriptionCoordinator {
             engine = try await transcribe(dir, with: try await engines.localFallback(
                 wordTimings: wordTimings))
         }
+        try Task.checkCancellation()
         // After the transcript, never instead of it: transcript.json is the
         // completion marker, so anything that runs before it risks retiring a
         // session that has no transcript. Naming and summarizing both just log
@@ -431,12 +565,14 @@ actor TranscriptionCoordinator {
                 title: localised("verbemo — transcript ready; speakers pending",
                                  "verbemo — расшифровка готова; говорящие определяются"),
                 body: dir.lastPathComponent, opening: dir)
-            StopHook.fireIfOwed(dir, command: onStop())
+            await StopHook.fireIfOwed(dir, command: onStop())
+            try Task.checkCancellation()
             if let state = DiarizationState.read(dir),
                state.status == .pending && state.attempts == 0 {
                 do {
                     if try await runDiarization(dir, explicit: state.request.explicit) {
                         await PostProcessor.finish(dir)
+                        try Task.checkCancellation()
                         notifyUser(
                             title: localised("verbemo — speakers updated", "verbemo — говорящие обновлены"),
                             body: dir.lastPathComponent, opening: dir)
@@ -446,10 +582,12 @@ actor TranscriptionCoordinator {
             }
         } else {
             await PostProcessor.finish(dir)
+            try Task.checkCancellation()
             notifyUser(
                 title: localised("verbemo — transcript ready", "verbemo — расшифровка готова"),
                 body: dir.lastPathComponent, opening: dir)
-            StopHook.fireIfOwed(dir, command: onStop())
+            await StopHook.fireIfOwed(dir, command: onStop())
+            try Task.checkCancellation()
         }
     }
 
@@ -484,8 +622,15 @@ actor TranscriptionCoordinator {
     /// Explicit retry is independent of the global automatic switch. It may
     /// finish a provisional transcript without asking the recognizer again.
     func diarizeNow(_ dir: URL) async throws {
-        await takeProcessingTurn()
+        try await operations.run(session: dir, kind: .diarization) { try await self.diarizeNowOwned(dir) }
+    }
+
+    private func diarizeNowOwned(_ dir: URL) async throws {
+        operations.stage(.diarization, state: .waiting)
+        try await takeProcessingTurn()
         defer { releaseProcessingTurn() }
+        operations.stage(.diarization)
+        try Task.checkCancellation()
         do {
             try await diarizeNowClaimed(dir)
             await releaseEngine()
@@ -497,11 +642,21 @@ actor TranscriptionCoordinator {
 
     /// Resume the saved request after its model download, without adopting newer settings.
     func resumeDiarization(_ dir: URL, request: DiarizationState.Request) async throws {
-        await takeProcessingTurn()
+        try await operations.run(session: dir, kind: .diarization) { try await self.resumeDiarizationOwned(dir, request: request) }
+    }
+
+    private func resumeDiarizationOwned(_ dir: URL, request: DiarizationState.Request) async throws {
+        operations.stage(.diarization, state: .waiting)
+        try await takeProcessingTurn()
         defer { releaseProcessingTurn() }
+        operations.stage(.diarization)
+        try Task.checkCancellation()
         do {
             let updated = try await runDiarization(dir, explicit: true, expectedRequest: request)
-            if updated { await PostProcessor.finish(dir) }
+            if updated {
+                await PostProcessor.finish(dir)
+                try Task.checkCancellation()
+            }
             await releaseEngine()
         } catch {
             await releaseEngine()
@@ -575,6 +730,7 @@ actor TranscriptionCoordinator {
         let updated = try await runDiarization(dir, explicit: true)
         if updated {
             await PostProcessor.finish(dir)
+            try Task.checkCancellation()
             notifyUser(title: localised("verbemo — speakers updated", "verbemo — говорящие обновлены"),
                        body: dir.lastPathComponent, opening: dir)
         }
@@ -674,8 +830,15 @@ actor TranscriptionCoordinator {
     }
 
     func skipDiarization(_ dir: URL) async throws {
-        await takeProcessingTurn()
+        try await operations.run(session: dir, kind: .diarization) { try await self.skipDiarizationOwned(dir) }
+    }
+
+    private func skipDiarizationOwned(_ dir: URL) async throws {
+        operations.stage(.diarization, state: .waiting)
+        try await takeProcessingTurn()
         defer { releaseProcessingTurn() }
+        operations.stage(.diarization)
+        try Task.checkCancellation()
         try SessionClaim.acquire(dir, stage: .transcribe)
         do {
             try TranscriptVersions.recover(dir)
@@ -703,11 +866,15 @@ actor TranscriptionCoordinator {
             throw error
         }
         await PostProcessor.finish(dir)
-        StopHook.fireIfOwed(dir, command: onStop())
+        try Task.checkCancellation()
+        await StopHook.fireIfOwed(dir, command: onStop())
+        try Task.checkCancellation()
     }
 
     @discardableResult
     private func runDiarization(_ dir: URL, explicit: Bool, expectedRequest: DiarizationState.Request? = nil) async throws -> Bool {
+        operations.stage(.diarization)
+        try Task.checkCancellation()
         try SessionClaim.acquire(dir, stage: .transcribe)
         defer { SessionClaim.release(dir) }
         try TranscriptVersions.recover(dir)
@@ -789,6 +956,7 @@ actor TranscriptionCoordinator {
             current = engine
             model = try await modelFingerprint(state.request.model)
         } catch {
+            try Task.checkCancellation()
             state.deferForEnvironment("model unavailable: \(error)")
             try state.write(to: dir)
             throw error
@@ -824,6 +992,7 @@ actor TranscriptionCoordinator {
                 && $0.result.asrOptionsFingerprint == asrOptions
         }?.result.turnASR
         let result: LocalDiarizationPipeline.Result
+        var inferredThisRun = false
         if let cachedTimeline, cachedTimeline.schemaVersion == 1,
            cachedTimeline.transcriptSHA256 == priorHash,
            cachedTimeline.generationFingerprint == fingerprint,
@@ -839,11 +1008,14 @@ actor TranscriptionCoordinator {
             do {
                 try await runtime.prepare()
             } catch {
+                await runtime.release()
+                try Task.checkCancellation()
                 state.deferForEnvironment("model unavailable: \(error)")
                 try state.write(to: dir)
                 throw error
             }
             state.beginInference(fingerprint: fingerprint)
+            inferredThisRun = true
             var runPersisted = false
             do {
                 try state.write(to: dir)
@@ -865,6 +1037,7 @@ actor TranscriptionCoordinator {
                     asrOptionsFingerprint: asrOptions)
                 try Task.checkCancellation()
                 await runtime.release()
+                try Task.checkCancellation()
             } catch is CancellationError {
                 await runtime.release()
                 state.attempts = max(0, state.attempts - 1)
@@ -885,6 +1058,12 @@ actor TranscriptionCoordinator {
                 throw LocalDiarizationRuntimeError.unavailable
             } catch {
                 await runtime.release()
+                if Task.isCancelled {
+                    state.attempts = max(0, state.attempts - 1)
+                    state.status = .pending
+                    try state.write(to: dir)
+                    throw CancellationError()
+                }
                 if runPersisted {
                     state.failInference("inference failed: \(error)")
                     try state.write(to: dir)
@@ -900,65 +1079,76 @@ actor TranscriptionCoordinator {
                 result: result)).write(to: candidateURL, options: .atomic)
         }
 
-        let hadRemoteWords = provisional.segments.contains {
-            $0.speaker != "me" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        if result.segments.isEmpty && hadRemoteWords {
-            state.status = .partial
-            state.reason = "the speaker model found no speech in audio with recognized words"
-            try state.write(to: dir)
-            throw DiarizationUnavailable(reason: state.reason!)
-        }
-        let unchangedLocal = provisional.segments.filter { $0.speaker == "me" }
-        let segments = (unchangedLocal + result.segments).sorted { $0.start_ms < $1.start_ms }
-        let created = ISO8601DateFormatter().string(from: Date())
-        let final = Transcript(engine: provisional.engine, model: provisional.model,
-                               created_at: created, segments: segments)
-        state.status = .completed
-        state.reason = nil
-        state.confirmedSpeakers = Set(segments.map(\.speaker).filter {
-            !SpeakerNames.isUnknown($0)
-        }).count
-        state.hasUnknown = segments.contains { SpeakerNames.isUnknown($0.speaker) }
-        state.rejectedTurnCount = result.rejectedTurnCount
-        let finalTimeline = DiarizationArtifacts.Timeline(
-            transcriptSHA256: try DiarizationArtifacts.transcriptHash(final),
-            generationFingerprint: fingerprint, result: result)
-        let finalHash = try DiarizationArtifacts.transcriptHash(final)
-        let originFingerprint: String
-        if let stored = cachedTrack?.originFingerprint { originFingerprint = stored }
-        else { originFingerprint = try Self.originFingerprint(track, in: dir) }
-        let newRemoteASR = DiarizationArtifacts.ASR.Track(
-            speaker: track.speaker, sourceFingerprint: source.fingerprint,
-            sampleCount: source.sampleCount, clock: source.clock,
-            originFingerprint: originFingerprint,
-            originFile: cachedTrack?.originFile ?? track.file,
-            originChannel: cachedTrack?.originChannel ?? track.channel,
-            sourceKind: cachedTrack?.sourceKind ?? (track.channel == nil ? "raw" : "archive"),
-            segments: result.asr)
-        let finalASR = (asr ?? DiarizationArtifacts.ASR(
-            transcriptSHA256: priorHash, engine: engine.name, model: engine.model,
-            optionsFingerprint: asrOptions, tracks: []))
-            .replacing(newRemoteASR, transcriptSHA256: finalHash)
         do {
-            try TranscriptVersions.commit(
-                final, to: dir,
-                sidecars: [DiarizationArtifacts.timelineFile:
-                    try DiarizationArtifacts.encode(finalTimeline),
-                    DiarizationArtifacts.asrFile: try DiarizationArtifacts.encode(finalASR)],
-                metadata: [DiarizationState.key:
-                    try JSONSerialization.jsonObject(with: DiarizationArtifacts.encode(state))],
-                preserveRemoteNames: false)
+            let hadRemoteWords = provisional.segments.contains {
+                $0.speaker != "me" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            if result.segments.isEmpty && hadRemoteWords {
+                state.status = .partial
+                state.reason = "the speaker model found no speech in audio with recognized words"
+                try state.write(to: dir)
+                throw DiarizationUnavailable(reason: state.reason!)
+            }
+            let unchangedLocal = provisional.segments.filter { $0.speaker == "me" }
+            let segments = (unchangedLocal + result.segments).sorted { $0.start_ms < $1.start_ms }
+            let created = ISO8601DateFormatter().string(from: Date())
+            let final = Transcript(engine: provisional.engine, model: provisional.model,
+                                   created_at: created, segments: segments)
+            state.status = .completed
+            state.reason = nil
+            state.confirmedSpeakers = Set(segments.map(\.speaker).filter {
+                !SpeakerNames.isUnknown($0)
+            }).count
+            state.hasUnknown = segments.contains { SpeakerNames.isUnknown($0.speaker) }
+            state.rejectedTurnCount = result.rejectedTurnCount
+            let finalTimeline = DiarizationArtifacts.Timeline(
+                transcriptSHA256: try DiarizationArtifacts.transcriptHash(final),
+                generationFingerprint: fingerprint, result: result)
+            let finalHash = try DiarizationArtifacts.transcriptHash(final)
+            let originFingerprint: String
+            if let stored = cachedTrack?.originFingerprint { originFingerprint = stored }
+            else { originFingerprint = try Self.originFingerprint(track, in: dir) }
+            let newRemoteASR = DiarizationArtifacts.ASR.Track(
+                speaker: track.speaker, sourceFingerprint: source.fingerprint,
+                sampleCount: source.sampleCount, clock: source.clock,
+                originFingerprint: originFingerprint,
+                originFile: cachedTrack?.originFile ?? track.file,
+                originChannel: cachedTrack?.originChannel ?? track.channel,
+                sourceKind: cachedTrack?.sourceKind ?? (track.channel == nil ? "raw" : "archive"),
+                segments: result.asr)
+            let finalASR = (asr ?? DiarizationArtifacts.ASR(
+                transcriptSHA256: priorHash, engine: engine.name, model: engine.model,
+                optionsFingerprint: asrOptions, tracks: []))
+                .replacing(newRemoteASR, transcriptSHA256: finalHash)
+            try Task.checkCancellation()
+            do {
+                try TranscriptVersions.commit(
+                    final, to: dir,
+                    sidecars: [DiarizationArtifacts.timelineFile:
+                        try DiarizationArtifacts.encode(finalTimeline),
+                        DiarizationArtifacts.asrFile: try DiarizationArtifacts.encode(finalASR)],
+                    metadata: [DiarizationState.key:
+                        try JSONSerialization.jsonObject(with: DiarizationArtifacts.encode(state))],
+                    preserveRemoteNames: false)
+            } catch {
+                state.status = .partial
+                state.reason = "could not publish speaker result: \(error)"
+                try? state.write(to: dir)
+                throw error
+            }
+            TrackCompressor.settle(sessionDir: dir)
+            try? FileManager.default.removeItem(at: candidateURL)
+            TranscriptionScratch.remove(in: dir)
+            return true
         } catch {
-            state.status = .partial
-            state.reason = "could not publish speaker result: \(error)"
-            try? state.write(to: dir)
+            if error is CancellationError || Task.isCancelled {
+                if inferredThisRun { state.attempts = max(0, state.attempts - 1) }
+                state.status = .pending
+                try state.write(to: dir)
+                throw CancellationError()
+            }
             throw error
         }
-        TrackCompressor.settle(sessionDir: dir)
-        try? FileManager.default.removeItem(at: candidateURL)
-        TranscriptionScratch.remove(in: dir)
-        return true
     }
 
     /// Transcribe one session with the engine it asks for, or with `given`,
@@ -1146,6 +1336,7 @@ actor TranscriptionCoordinator {
             merged.sort { $0.start_ms < $1.start_ms }
         }
 
+        try Task.checkCancellation()
         guard merged.contains(where: { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
             throw EmptyTranscript()
         }
@@ -1379,6 +1570,8 @@ actor TranscriptionCoordinator {
             model = try await modelFingerprint(state.request.model)
             try await runtime.prepare()
         } catch {
+            await runtime.release()
+            try Task.checkCancellation()
             state.deferForEnvironment("model unavailable: \(error)")
             if !preservingCurrent { try state.write(to: dir) }
             return (false, state)
@@ -1402,6 +1595,7 @@ actor TranscriptionCoordinator {
                 asrOptionsFingerprint: asrOptions)
             try Task.checkCancellation()
             await runtime.release()
+            try Task.checkCancellation()
         } catch is CancellationError {
             await runtime.release()
             state.attempts = max(0, state.attempts - 1)
@@ -1416,6 +1610,12 @@ actor TranscriptionCoordinator {
             return (false, state)
         } catch {
             await runtime.release()
+            if Task.isCancelled {
+                state.attempts = max(0, state.attempts - 1)
+                state.status = .pending
+                if !preservingCurrent { try state.write(to: dir) }
+                throw CancellationError()
+            }
             if runPersisted {
                 state.failInference("inference failed: \(error)")
                 if !preservingCurrent {
@@ -1429,91 +1629,102 @@ actor TranscriptionCoordinator {
             return (false, state)
         }
 
-        var micTracks: [TranscriptionInputs.PerTrackResult] = []
-        var micSource: DiarizationAudioSource.Prepared?
-        if let mic = meta.track(for: "me") {
-            let micURL = audio.appendingPathComponent(mic.file)
-            if FileManager.default.fileExists(atPath: micURL.path),
-               (mic.channel != nil || !TranscriptionInputs.holdsNoAudio(micURL)) {
-                let micOnly = SessionMeta(tracks: [mic], title: meta.title,
-                                          attendees: meta.attendees, app: meta.app)
-                let preparedMic = try prepareSource(mic, audio: audio, session: dir)
-                micSource = preparedMic
-                micTracks = try await TranscriptionInputs(
-                    session: dir, audio: audio, meta: micOnly, engine: engine)
-                    .perTrackDetailed(prepared: ["me": preparedMic])
+        do {
+            var micTracks: [TranscriptionInputs.PerTrackResult] = []
+            var micSource: DiarizationAudioSource.Prepared?
+            if let mic = meta.track(for: "me") {
+                let micURL = audio.appendingPathComponent(mic.file)
+                if FileManager.default.fileExists(atPath: micURL.path),
+                   (mic.channel != nil || !TranscriptionInputs.holdsNoAudio(micURL)) {
+                    let micOnly = SessionMeta(tracks: [mic], title: meta.title,
+                                              attendees: meta.attendees, app: meta.app)
+                    let preparedMic = try prepareSource(mic, audio: audio, session: dir)
+                    micSource = preparedMic
+                    micTracks = try await TranscriptionInputs(
+                        session: dir, audio: audio, meta: micOnly, engine: engine)
+                        .perTrackDetailed(prepared: ["me": preparedMic])
+                }
             }
-        }
-        let local = micTracks.flatMap(\.transcript)
-        var segments = (local + result.segments).sorted { $0.start_ms < $1.start_ms }
-        let beforeEchoFilter = segments.count
-        if Config.transcriptEchoFilter(), !meta.isSingleSource {
-            segments = cleaned ? EchoFilter.dropResidualEchoes(segments)
-                               : EchoFilter.dropEchoes(segments)
-        }
-        let echoesDropped = beforeEchoFilter - segments.count
-        guard segments.contains(where: { !$0.text.trimmingCharacters(
-            in: .whitespacesAndNewlines).isEmpty }) else { throw EmptyTranscript() }
-        var tracks = [DiarizationArtifacts.ASR.Track(
-            speaker: remote.speaker, sourceFingerprint: source.fingerprint,
-            sampleCount: source.sampleCount, clock: source.clock,
-            originFingerprint: try recordedMeta.track(for: remote.speaker).map {
-                try Self.originFingerprint($0, in: dir)
-            },
-            originFile: recordedMeta.track(for: remote.speaker)?.file,
-            originChannel: recordedMeta.track(for: remote.speaker)?.channel,
-            sourceKind: audio == dir ? (remote.channel == nil ? "raw" : "archive") : "aec",
-            segments: result.asr)]
-        if let micSource {
-            tracks += try micTracks.map {
-                DiarizationArtifacts.ASR.Track(
-                    speaker: "me", sourceFingerprint: micSource.fingerprint,
-                    sampleCount: micSource.sampleCount, clock: micSource.clock,
-                    originFingerprint: try recordedMeta.track(for: "me").map {
-                        try Self.originFingerprint($0, in: dir)
-                    },
-                    originFile: recordedMeta.track(for: "me")?.file,
-                    originChannel: recordedMeta.track(for: "me")?.channel,
-                    sourceKind: audio == dir ? (meta.track(for: "me")?.channel == nil
-                        ? "raw" : "archive") : "aec",
-                    segments: $0.offsetApplied ? $0.segments
-                        : Self.onSessionClock($0.segments, clock: micSource.clock))
+            let local = micTracks.flatMap(\.transcript)
+            var segments = (local + result.segments).sorted { $0.start_ms < $1.start_ms }
+            let beforeEchoFilter = segments.count
+            if Config.transcriptEchoFilter(), !meta.isSingleSource {
+                segments = cleaned ? EchoFilter.dropResidualEchoes(segments)
+                                   : EchoFilter.dropEchoes(segments)
             }
+            let echoesDropped = beforeEchoFilter - segments.count
+            guard segments.contains(where: { !$0.text.trimmingCharacters(
+                in: .whitespacesAndNewlines).isEmpty }) else { throw EmptyTranscript() }
+            var tracks = [DiarizationArtifacts.ASR.Track(
+                speaker: remote.speaker, sourceFingerprint: source.fingerprint,
+                sampleCount: source.sampleCount, clock: source.clock,
+                originFingerprint: try recordedMeta.track(for: remote.speaker).map {
+                    try Self.originFingerprint($0, in: dir)
+                },
+                originFile: recordedMeta.track(for: remote.speaker)?.file,
+                originChannel: recordedMeta.track(for: remote.speaker)?.channel,
+                sourceKind: audio == dir ? (remote.channel == nil ? "raw" : "archive") : "aec",
+                segments: result.asr)]
+            if let micSource {
+                tracks += try micTracks.map {
+                    DiarizationArtifacts.ASR.Track(
+                        speaker: "me", sourceFingerprint: micSource.fingerprint,
+                        sampleCount: micSource.sampleCount, clock: micSource.clock,
+                        originFingerprint: try recordedMeta.track(for: "me").map {
+                            try Self.originFingerprint($0, in: dir)
+                        },
+                        originFile: recordedMeta.track(for: "me")?.file,
+                        originChannel: recordedMeta.track(for: "me")?.channel,
+                        sourceKind: audio == dir ? (meta.track(for: "me")?.channel == nil
+                            ? "raw" : "archive") : "aec",
+                        segments: $0.offsetApplied ? $0.segments
+                            : Self.onSessionClock($0.segments, clock: micSource.clock))
+                }
+            }
+            let created = ISO8601DateFormatter().string(from: Date())
+            let transcript = Transcript(engine: engine.name, model: engine.model,
+                                        created_at: created, segments: segments)
+            state.status = .completed
+            state.reason = nil
+            state.confirmedSpeakers = Set(segments.map(\.speaker).filter {
+                !SpeakerNames.isUnknown($0)
+            }).count
+            state.hasUnknown = segments.contains { SpeakerNames.isUnknown($0.speaker) }
+            state.rejectedTurnCount = result.rejectedTurnCount
+            let asr = DiarizationArtifacts.ASR(
+                transcriptSHA256: try DiarizationArtifacts.transcriptHash(transcript),
+                engine: engine.name, model: engine.model,
+                optionsFingerprint: asrOptions, tracks: tracks)
+            let timeline = DiarizationArtifacts.Timeline(
+                transcriptSHA256: try DiarizationArtifacts.transcriptHash(transcript),
+                generationFingerprint: generationFingerprint, result: result)
+            try Task.checkCancellation()
+            try TranscriptVersions.commit(
+                transcript, to: dir,
+                sidecars: [DiarizationArtifacts.asrFile: try DiarizationArtifacts.encode(asr),
+                           DiarizationArtifacts.timelineFile: try DiarizationArtifacts.encode(timeline)],
+                metadata: [DiarizationState.key:
+                    try JSONSerialization.jsonObject(with: DiarizationArtifacts.encode(state)),
+                           StopHook.key: StopHook.owed,
+                           "transcription_input": engine.input.metadataName,
+                           "echo_filter": [
+                               "ran": Config.transcriptEchoFilter() && !meta.isSingleSource,
+                               "dropped_segments": echoesDropped,
+                               "mode": cleaned ? "residual_exact_phrases" : "raw_audio",
+                           ]],
+                preserveRemoteNames: false)
+            TrackCompressor.settle(sessionDir: dir)
+            TranscriptionScratch.remove(in: dir)
+            return (true, state)
+        } catch {
+            if error is CancellationError || Task.isCancelled {
+                state.attempts = max(0, state.attempts - 1)
+                state.status = .pending
+                if !preservingCurrent { try state.write(to: dir) }
+                throw CancellationError()
+            }
+            throw error
         }
-        let created = ISO8601DateFormatter().string(from: Date())
-        let transcript = Transcript(engine: engine.name, model: engine.model,
-                                    created_at: created, segments: segments)
-        state.status = .completed
-        state.reason = nil
-        state.confirmedSpeakers = Set(segments.map(\.speaker).filter {
-            !SpeakerNames.isUnknown($0)
-        }).count
-        state.hasUnknown = segments.contains { SpeakerNames.isUnknown($0.speaker) }
-        state.rejectedTurnCount = result.rejectedTurnCount
-        let asr = DiarizationArtifacts.ASR(
-            transcriptSHA256: try DiarizationArtifacts.transcriptHash(transcript),
-            engine: engine.name, model: engine.model,
-            optionsFingerprint: asrOptions, tracks: tracks)
-        let timeline = DiarizationArtifacts.Timeline(
-            transcriptSHA256: try DiarizationArtifacts.transcriptHash(transcript),
-            generationFingerprint: generationFingerprint, result: result)
-        try TranscriptVersions.commit(
-            transcript, to: dir,
-            sidecars: [DiarizationArtifacts.asrFile: try DiarizationArtifacts.encode(asr),
-                       DiarizationArtifacts.timelineFile: try DiarizationArtifacts.encode(timeline)],
-            metadata: [DiarizationState.key:
-                try JSONSerialization.jsonObject(with: DiarizationArtifacts.encode(state)),
-                       StopHook.key: StopHook.owed,
-                       "transcription_input": engine.input.metadataName,
-                       "echo_filter": [
-                           "ran": Config.transcriptEchoFilter() && !meta.isSingleSource,
-                           "dropped_segments": echoesDropped,
-                           "mode": cleaned ? "residual_exact_phrases" : "raw_audio",
-                       ]],
-            preserveRemoteNames: false)
-        TrackCompressor.settle(sessionDir: dir)
-        TranscriptionScratch.remove(in: dir)
-        return (true, state)
     }
 
     private func log(_ dir: URL, _ message: String) {

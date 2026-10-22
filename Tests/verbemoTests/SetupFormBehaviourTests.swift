@@ -14,7 +14,8 @@ struct SetupFormBehaviourTests {
     @Test(.freshHome(config: #"{"transcription":{"engine":"parakeet"}}"#), .enabled(if: Platform.supportsLocalModels))
     func nemotronModesShareOneDownloadWithoutEnablingEachOther() async throws {
         let store = NemotronModelStore()
-        let started = Gate(), finish = Gate()
+        let started = Gate(), finish = Gate(), installed = Gate()
+        defer { finish.open() }
         let downloads = OSAllocatedUnfairLock(initialState: 0)
         let form = SetupForm(mode: .settings)
         defer { form.stop() }
@@ -22,6 +23,7 @@ struct SetupFormBehaviourTests {
             downloads.withLock { $0 += 1 }
             started.open(); progress(0.4); await finish.pass(); try Task.checkCancellation()
             let variant = NemotronModelStore(root: root).variantDirectory(language: language)
+            defer { installed.open() }
             try NemotronFixtures.install(at: variant); return variant
         }
         let card = try #require(Self.view("choice.nemotron", in: form) as? ChoiceCard)
@@ -40,6 +42,7 @@ struct SetupFormBehaviourTests {
         live.state = .off
         _ = NSApp.sendAction(try #require(live.action), to: live.target, from: live)
         finish.open()
+        await installed.pass()
         for _ in 0..<100 where form.hasModelDownloads { try await Task.sleep(for: .milliseconds(10)) }
         #expect(store.isReady(language: "auto"))
         #expect(!Config.liveTranscriptionEnabled())

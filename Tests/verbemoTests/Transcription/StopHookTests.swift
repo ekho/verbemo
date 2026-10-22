@@ -84,7 +84,7 @@ struct StopHookTests {
         StopHook.owe(dir)
         try SessionClaim.acquire(dir, stage: .finish)
 
-        #expect(!StopHook.fireIfOwed(dir))
+        #expect(!(await StopHook.fireIfOwed(dir)))
         #expect(SessionState.value(dir, StopHook.key) as? String == StopHook.owed)
 
         SessionClaim.release(dir)

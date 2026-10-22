@@ -42,6 +42,7 @@ enum SpeakerNamer {
         into dir: URL
     ) async -> SpeakerNames? {
         func log(_ message: String) { appendSessionLog(message, to: dir) }
+        guard !Task.isCancelled else { return nil }
 
         // Where the transcript may go is an answer in the config file, and a
         // file broken since the job began is not one. Nothing is recorded,
@@ -103,6 +104,7 @@ enum SpeakerNamer {
         var lastReason = Analytics.Reason.unknown
 
         for (index, backend) in backends.enumerated() {
+            guard !Task.isCancelled else { return nil }
             do {
                 log("naming speakers with \(backend.name)")
                 let answer = try await backend.call(
@@ -116,6 +118,7 @@ enum SpeakerNamer {
                         limit: min(maxChars, backend.promptLimit ?? maxChars)
                     )
                 )
+                try Task.checkCancellation()
                 let proposals = try parse(answer)
                 var fresh = resolved
                 fresh.backend = backend.name
@@ -140,6 +143,7 @@ enum SpeakerNamer {
                 }
                 return finished
             } catch {
+                if error is CancellationError || Task.isCancelled { return nil }
                 attempt.note(error, from: backend)
                 lastBackend = backend.name
                 lastModel = backend.model
@@ -151,6 +155,7 @@ enum SpeakerNamer {
             }
         }
 
+        guard !Task.isCancelled else { return nil }
         let previous = SessionState.value(dir, SessionState.Key.speakersDeferrals) as? Int ?? 0
         let verdict = attempt.verdict(after: previous)
         SessionState.update(dir, with: ChainAttempt.fields(
@@ -201,6 +206,7 @@ enum SpeakerNamer {
     ) -> SpeakerNames? {
         do {
             return try SessionLock.withLock(dir) {
+                try Task.checkCancellation()
                 let current = SpeakerNames.read(from: dir)
                 let merged = current?.merged(with: fresh) ?? fresh
                 try merged.write(to: dir)
@@ -213,6 +219,7 @@ enum SpeakerNamer {
                 return merged
             }
         } catch {
+            if error is CancellationError || Task.isCancelled { return nil }
             // The transcript is intact either way — this only costs the names.
             log("couldn't write speaker names: \(error)")
             SessionState.update(dir, with: [

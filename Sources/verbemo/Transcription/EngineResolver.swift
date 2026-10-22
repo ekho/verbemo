@@ -107,6 +107,7 @@ actor EngineResolver {
             do {
                 return try await cloud(provider)
             } catch {
+                try Task.checkCancellation()
                 return try await self.local(named: local, wordTimings: wordTimings)
             }
         case .unavailable:
@@ -186,6 +187,7 @@ actor EngineResolver {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            try Task.checkCancellation()
             let failed = EnginePreparationFailed(engine: key.name, underlying: error)
             unpreparable[key] = failed
             throw failed

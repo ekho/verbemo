@@ -21,7 +21,9 @@ enum Subprocess {
 
     static func run(executable: String, arguments: [String], input: Data,
                     timeout: TimeInterval,
-                    environment: [String: String]? = nil) async throws -> Output {
+                    environment: [String: String]? = nil,
+                    currentDirectory: URL? = nil) async throws -> Output {
+        try Task.checkCancellation()
         let cancellation = Cancellation()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -29,7 +31,7 @@ enum Subprocess {
                     do {
                         continuation.resume(returning: try runSync(
                             executable: executable, arguments: arguments, input: input,
-                            timeout: timeout, environment: environment,
+                            timeout: timeout, environment: environment, currentDirectory: currentDirectory,
                             isCancelled: { cancellation.isCancelled }))
                     } catch { continuation.resume(throwing: error) }
                 }
@@ -40,7 +42,9 @@ enum Subprocess {
     static func runSync(executable: String, arguments: [String], input: Data = Data(),
                         timeout: TimeInterval,
                         environment: [String: String]? = nil,
+                        currentDirectory: URL? = nil,
                         isCancelled: @Sendable () -> Bool = { false }) throws -> Output {
+        if isCancelled() { throw CancellationError() }
         let scratch = FileManager.default.temporaryDirectory
             .appendingPathComponent("verbemo-process-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
@@ -74,12 +78,13 @@ enum Subprocess {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         if let environment { process.environment = environment }
-        process.currentDirectoryURL = scratch
+        process.currentDirectoryURL = currentDirectory ?? scratch
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = stderr
         let done = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in done.signal() }
+        if isCancelled() { throw CancellationError() }
         try process.run()
         let deadline = ProcessInfo.processInfo.systemUptime + max(0, timeout)
 

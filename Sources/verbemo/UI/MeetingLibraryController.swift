@@ -20,7 +20,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
 
     var onImportFiles: (([URL]) -> Void)?
     var onCancelImport: (() -> Void)?
-    var onResumeDiarization: ((URL, DiarizationState.Request) async throws -> Void)?
+    var onResumeDiarization: (@MainActor (URL, DiarizationState.Request) async throws -> Void)?
     var onRetryDiarization: ((URL) async throws -> Void)?
     var onSkipDiarization: ((URL) async throws -> Void)?
     private var root: URL
