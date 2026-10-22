@@ -93,7 +93,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
             title = proposed
         } catch {
             name.stringValue = savedTitle
-            if let window { NSAlert(error: error).beginSheetModal(for: window) }
+            if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
         }
     }
 }

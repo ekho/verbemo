@@ -518,6 +518,56 @@ struct RetranscriptionTests {
         #expect(repeatButton.toolTip != nil)
     }
 
+    @Test("Retranscription has a readable heading and uses the Journal palette", arguments: ["light", "dark"])
+    @MainActor
+    func retranscriptionDialogAppearance(theme: String) async throws {
+        _ = NSApplication.shared
+        let previousAppearance = NSApp.appearance
+        defer { NSApp.appearance = previousAppearance }
+        Config.update(path: ["interface_theme"], value: theme)
+        let root = Home.current.url.appendingPathComponent("recordings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixture = try Self.settledSession()
+        let dir = root.appendingPathComponent("meeting")
+        try FileManager.default.moveItem(at: fixture, to: dir)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let originalMetadata = try Data(contentsOf: dir.appendingPathComponent("meta.json"))
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        app.show()
+        defer {
+            if let sheet = app.panel.attachedSheet { app.panel.endSheet(sheet) }
+            app.hide()
+            withExtendedLifetime(library) {}
+        }
+        await library.settled()
+        let button = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.retranscribe" })
+        #expect(button.sendAction(button.action, to: button.target))
+        for _ in 0..<200 where app.panel.attachedSheet == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let sheet = try #require(app.panel.attachedSheet)
+        let heading = try #require(sheet.contentView?.allDescendants.compactMap { $0 as? NSTextField }
+            .first { $0.stringValue.contains("meeting") })
+        #expect((heading.font?.pointSize ?? 0) >= 18)
+        #expect(heading.textColor == JournalStyle.ink)
+        let surface = try #require(sheet.contentView as? JournalSurface)
+        surface.updateLayer()
+        sheet.effectiveAppearance.performAsCurrentDrawingAppearance {
+            #expect(surface.layer?.backgroundColor == JournalStyle.paper.cgColor)
+        }
+        #expect(sheet.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == (theme == "dark" ? .darkAqua : .aqua))
+        Config.update(path: ["interface_theme"], value: theme == "dark" ? "light" : "dark")
+        #expect(sheet.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == (theme == "dark" ? .aqua : .darkAqua))
+        let cancel = try #require(sheet.contentView?.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.keyEquivalent == "\u{1b}" })
+        #expect(cancel.sendAction(cancel.action, to: cancel.target))
+        #expect(try Data(contentsOf: dir.appendingPathComponent("meta.json")) == originalMetadata)
+    }
+
     @MainActor
     @Test("A re-transcribe engine choice is stored with that session")
     func retranscriptionEngineOverride() throws {

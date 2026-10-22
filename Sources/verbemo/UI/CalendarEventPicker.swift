@@ -64,6 +64,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         table.rowHeight = 52
         table.intercellSpacing = NSSize(width: 0, height: 4)
         table.style = .fullWidth
+        table.backgroundColor = JournalStyle.paper
         table.dataSource = self; table.delegate = self
         table.target = self; table.action = #selector(chooseRow)
         table.identifier = .init("calendar.results")
@@ -74,21 +75,32 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         scroller.drawsBackground = false
         scroller.heightAnchor.constraint(equalToConstant: 240).isActive = true
         status.font = .systemFont(ofSize: 11)
-        status.textColor = .secondaryLabelColor
+        status.textColor = JournalStyle.muted
         status.identifier = .init("calendar.search-status")
         access.title = localised("Allow access in macOS…", "Разрешить доступ в macOS…")
         access.bezelStyle = .rounded
         access.target = self; access.action = #selector(openPermissions)
         access.isHidden = true
-        let fields = NSStackView(views: [search, dateRow, scroller, status, access])
+        let heading = NSTextField(labelWithString: localised("Choose a calendar event", "Выбрать событие календаря"))
+        heading.font = JournalStyle.titleFont(18)
+        heading.textColor = JournalStyle.ink
+        let fields = NSStackView(views: [heading, search, dateRow, scroller, status, access])
         fields.orientation = .vertical; fields.alignment = .leading; fields.spacing = 10
         fields.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
         fields.widthAnchor.constraint(equalToConstant: 410).isActive = true
-        for view in [search, dateRow, scroller, status] as [NSView] {
+        for view in [heading, search, dateRow, scroller, status] as [NSView] {
             view.widthAnchor.constraint(equalTo: fields.widthAnchor, constant: -28).isActive = true
         }
-        let controller = NSViewController(); controller.view = fields
+        let surface = JournalSurface(JournalStyle.paper)
+        fields.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(fields)
+        NSLayoutConstraint.activate([
+            fields.leadingAnchor.constraint(equalTo: surface.leadingAnchor), fields.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
+            fields.topAnchor.constraint(equalTo: surface.topAnchor), fields.bottomAnchor.constraint(equalTo: surface.bottomAnchor),
+        ])
+        let controller = NSViewController(); controller.view = surface
         popover.contentViewController = controller
+        popover.contentSize = surface.fittingSize
         popover.behavior = .transient
         popover.animates = false
     }
@@ -181,7 +193,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
     }
     private func present(_ error: Error) {
         show(error)
-        if !popover.isShown, let window { NSAlert(error: error).beginSheetModal(for: window) }
+        if !popover.isShown, let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
     }
     func numberOfRows(in tableView: NSTableView) -> Int { meetings.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {

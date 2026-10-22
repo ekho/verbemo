@@ -68,8 +68,8 @@ enum ApplicationRelocation {
             "Verbemo запущена с образа диска. Сначала переместите её, чтобы автозапуск и автообновления работали после извлечения образа.")
         alert.addButton(withTitle: localised(
             "Move to Applications", "Переместить в «Программы»"))
-        alert.addButton(withTitle: localised("Not Now", "Не сейчас"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        alert.addButton(withTitle: localised("Not Now", "Не сейчас")).keyEquivalent = "\u{1b}"
+        guard alert.runJournalModal() == .alertFirstButtonReturn else { return false }
 
         do {
             let installed = try install(from: bundleURL)
@@ -89,7 +89,7 @@ enum ApplicationRelocation {
                 "Verbemo couldn't be moved", "Не удалось переместить Verbemo")
             failure.informativeText = error.localizedDescription
             failure.addButton(withTitle: "OK")
-            failure.runModal()
+            failure.runJournalModal()
             return false
         }
     }
