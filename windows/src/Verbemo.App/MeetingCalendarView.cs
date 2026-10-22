@@ -16,17 +16,17 @@ internal static class MeetingCalendarView
         if(calendar.CalendarTitle is { } name) body.Children.Add(Ui.Detail(name));
         if (calendar.Agenda is { Length: > 0 } agenda)
         {
-            var preview = agenda.Length <= 100 ? agenda : agenda[..100];
-            if (agenda.Length > 100 && preview.LastIndexOf(' ') is > 0 and var boundary) preview = preview[..boundary];
-            var text = Ui.Detail(preview + (agenda.Length > 100 ? "…" : ""));
+            var content = new CalendarAgenda(agenda);
+            var text = Ui.Detail("");
+            content.Show(text, expanded: false);
             body.Children.Add(text);
-            if (agenda.Length > 100)
+            if (content.Preview != content.Text)
             {
                 var expanded = false;
                 Button? more = null;
                 more = Ui.Button(T("Show in full", "Показать полностью"), () =>
                 {
-                    expanded = !expanded; text.Text = expanded ? agenda : preview + "…";
+                    expanded = !expanded; content.Show(text, expanded);
                     more!.Content = expanded ? T("Collapse", "Свернуть") : T("Show in full", "Показать полностью");
                 });
                 body.Children.Add(more);
