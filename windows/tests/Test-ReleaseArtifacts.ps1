@@ -39,7 +39,7 @@ try {
     $release = Join-Path $fixture 'release'
     [void][IO.Directory]::CreateDirectory($release)
     $files = @('Verbemo.exe', 'Verbemo.dll', 'Verbemo.Core.dll', 'local-runtime/transcribe-cli.exe',
-        'local-runtime/ggml.dll', 'live-runtime/transcribe.dll', 'Licenses/Verbemo-LICENSE.txt', 'Licenses/Markdig.txt',
+        'local-runtime/ggml.dll', 'live-runtime/transcribe.dll', 'Licenses/Verbemo-LICENSE.txt', 'Licenses/Markdig.txt', 'Licenses/HtmlAgilityPack.txt',
         'local-runtime/licenses/transcribe.cpp-LICENSE', 'local-runtime/licenses/ggml-LICENSE',
         'live-runtime/licenses/transcribe.cpp-LICENSE', 'live-runtime/licenses/ggml-LICENSE')
     foreach ($name in $files) {
