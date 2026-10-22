@@ -3,9 +3,8 @@ import Foundation
 
 /// Cuts one audio file into consecutive pieces small enough to upload.
 ///
-/// This exists for OpenAI, which refuses anything over 25 MB per request — a
-/// limit an hour-long meeting passes at the mix's own bitrate. Nobody should
-/// have to know that, so the engine slices, transcribes each piece, and shifts
+/// OpenAI's engine chooses the tighter size or duration limit, then
+/// slices, transcribes each piece, and shifts
 /// the timings back onto the session's clock; the transcript comes out looking
 /// like one pass.
 ///
@@ -19,6 +18,8 @@ enum AudioSlicer {
         /// Where this piece starts in the source, in seconds. What gets added
         /// back to every timestamp the engine returns for it.
         let offset: TimeInterval
+        /// Source samples covered, excluding padding added by the AAC encoder.
+        let duration: TimeInterval
     }
 
     enum SliceError: Error, CustomStringConvertible {
@@ -63,7 +64,7 @@ enum AudioSlicer {
         limit: Int64,
         margin: Double = 0.85
     ) -> TimeInterval? {
-        guard bytes > limit, duration > 0, bytes > 0 else { return nil }
+        guard bytes > limit, duration.isFinite, duration > 0, bytes > 0 else { return nil }
         let allowed = Double(limit) * margin
         let seconds = duration * allowed / Double(bytes)
         // Never below a minute: a limit that small means the numbers are wrong,
@@ -86,15 +87,18 @@ enum AudioSlicer {
         }
         let format = file.processingFormat
         let rate = format.sampleRate
-        guard file.length > 0, rate > 0 else { throw SliceError.unreadable(source, nil) }
+        guard file.length > 0, rate.isFinite, rate > 0, seconds.isFinite, seconds > 0 else {
+            throw SliceError.unreadable(source, nil)
+        }
 
         let duration = Double(file.length) / rate
-        guard duration > seconds else { return [Slice(url: source, offset: 0)] }
+        guard duration > seconds else { return [Slice(url: source, offset: 0, duration: duration)] }
 
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
 
         let sliceFrames = AVAudioFramePosition(seconds * rate)
+        guard sliceFrames > 0 else { throw SliceError.unreadable(source, nil) }
         // A second at a time, like the mixer: small enough that a long meeting
         // never holds more than a few hundred kilobytes of audio in memory.
         let blockFrames = AVAudioFrameCount(rate)
@@ -152,7 +156,7 @@ enum AudioSlicer {
                 try? FileManager.default.removeItem(at: url)
                 break
             }
-            slices.append(Slice(url: url, offset: Double(start) / rate))
+            slices.append(Slice(url: url, offset: Double(start) / rate, duration: Double(written) / rate))
             index += 1
         }
         return slices

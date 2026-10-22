@@ -34,7 +34,7 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
     def test_pr_ci_validates_both_platform_artifact_sets_without_publication(self):
         data = workflow('ci.yml')
         job = data['jobs'].get('preview', {})
-        self.assertEqual(set(job.get('needs', [])), {'test', 'windows'})
+        self.assertEqual(set(job.get('needs', [])), {'macos-build', 'windows-build'})
         self.assertNotIn('secrets.', str(job))
         self.assertNotIn('permissions', job)
         command = '\n'.join(step.get('run', '') for step in job['steps'])
@@ -45,9 +45,9 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
 
     def test_both_platforms_are_enabled_and_downloaded_by_exact_id(self):
         ci, release = workflow('ci.yml'), workflow('release.yml')
-        self.assertNotIn('if', ci['jobs']['windows'])
+        self.assertEqual(ci['jobs']['windows']['if'], "needs.changes.outputs.windows_test == 'true'")
         self.assertEqual(release['jobs']['windows']['if'], "needs.resolve.outputs.release != 'false'")
-        for data, sources, consumer in ((ci, ('test', 'windows'), 'preview'),
+        for data, sources, consumer in ((ci, ('macos-build', 'windows-build'), 'preview'),
                                         (release, ('macos', 'windows'), 'aggregate')):
             for source in sources:
                 self.assertEqual(data['jobs'][source]['outputs']['artifact_id'], '${{ steps.artifacts.outputs.artifact-id }}')
@@ -192,6 +192,8 @@ else:
     def test_ci_checks_out_and_asserts_exact_event_head_with_full_history(self):
         for name, job in workflow('ci.yml')['jobs'].items():
             with self.subTest(job=name):
+                if name == 'result':
+                    continue
                 steps = job['steps']
                 checkout = next(s for s in steps if s.get('uses', '').startswith('actions/checkout@'))
                 self.assertEqual(checkout.get('with', {}).get('ref'),
@@ -204,7 +206,7 @@ else:
                 self.assertNotIn('${{', proof['run'])
                 self.assertIn('git rev-parse HEAD', proof['run'])
                 self.assertIn('git rev-parse --is-shallow-repository', proof['run'])
-                if name == 'windows':
+                if name in ('windows', 'windows-build'):
                     self.assertEqual(proof['shell'], 'pwsh')
                     self.assertEqual(proof['run'].count("if ($LASTEXITCODE -ne 0) { throw"), 2)
                     self.assertIn("if ($actual -cne $env:EXPECTED_SOURCE_COMMIT) { throw", proof['run'])
@@ -290,18 +292,23 @@ else:
         mac = '\n'.join(s.get('run', '') for s in data['jobs']['test']['steps'])
         win = '\n'.join(s.get('run', '') for s in data['jobs']['windows']['steps'])
         self.assertIn('swift test --no-parallel', mac)
-        self.assertIn('build-macos-preview.sh', mac)
-        self.assertIn('test_independent_product.py --all', mac)
+        self.assertNotIn('build-macos-preview.sh', mac)
+        changes = str(data['jobs']['changes'])
+        self.assertIn('test_independent_product.py --all', changes)
+        self.assertIn('build-macos-preview.sh', str(data['jobs']['macos-build']))
         self.assertIn('Test-ReleaseInstallerName.ps1', win)
         self.assertIn('Test-ReleaseArtifacts.ps1', win)
-        self.assertIn('-Development', win)
+        self.assertIn('-Development -SkipTests', str(data['jobs']['windows-build']))
+        self.assertNotIn('Build-Release.ps1', win)
+        self.assertIn('Verbemo.Core.Tests', win)
+        self.assertIn('Verbemo.Live.Tests', win)
         builder = (ROOT / 'windows/scripts/Build-Release.ps1').read_text()
         self.assertIn('Verbemo.Core.Tests', builder)
         self.assertIn('Verbemo.Live.Tests', builder)
         self.assertIn('dotnet publish', builder)
 
     def test_windows_development_artifacts_are_checked_and_retained_without_publication(self):
-        job = workflow('ci.yml')['jobs']['windows']
+        job = workflow('ci.yml')['jobs']['windows-build']
         steps = job['steps']
         native = next(s for s in steps if s.get('name') == 'Verify packaged native CPU and Unicode paths')
         self.assertIn('Verbemo-$version-windows-x64-Portable.zip', native['run'])
@@ -319,6 +326,28 @@ else:
         self.assertNotIn('gh release', str(job))
         self.assertNotIn('release.py publish', str(job))
         self.assertNotIn('secrets.', str(job))
+
+    def test_platform_tests_and_builds_are_separate_and_skips_are_reported(self):
+        jobs = workflow('ci.yml')['jobs']
+        self.assertIn('macos-build', jobs)
+        self.assertIn('windows-build', jobs)
+        for name, flag in (('macos-build', 'macos_build'), ('windows-build', 'windows_build')):
+            self.assertEqual(jobs[name]['if'], f"needs.changes.outputs.{flag} == 'true'")
+        self.assertEqual(set(jobs['windows-build']['needs']), {'changes', 'windows'})
+        self.assertEqual(jobs['checks']['runs-on'], 'ubuntu-latest')
+        self.assertIn('always()', jobs['result']['if'])
+        self.assertEqual(set(jobs['result']['needs']),
+                         {'changes', 'checks', 'test', 'windows', 'macos-build', 'windows-build', 'preview'})
+        self.assertIn("needs['macos-build'].result == 'success'", jobs['preview']['if'])
+        self.assertIn("needs['windows-build'].result == 'success'", jobs['preview']['if'])
+        # The result command must reject real failures while allowing intentional skips.
+        step = jobs['result']['steps'][0]
+        for result, success in [('success', True), ('skipped', True), ('failure', False), ('cancelled', False)]:
+            with self.subTest(result=result):
+                env = {**os.environ, 'NEEDS': json.dumps({'check': {'result': result}})}
+                run = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']],
+                                     env=env, capture_output=True, text=True)
+                self.assertEqual(run.returncode == 0, success, run.stdout + run.stderr)
 
     def test_readme_downloads_use_read_only_own_public_manifest_policy(self):
         data = workflow('readme-downloads.yml')
