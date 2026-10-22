@@ -18,6 +18,8 @@ public sealed class JournalLayoutTests
             var meeting = Path.Combine(runtime.Settings.RecordingsDirectory, "meeting");
             Directory.CreateDirectory(meeting);
             File.WriteAllText(Path.Combine(meeting, "meta.json"), "{\"title\":\"Journal fixture\",\"duration_seconds\":12}");
+            using (var wav = new NAudio.Wave.WaveFileWriter(Path.Combine(meeting, "mic.wav"), new NAudio.Wave.WaveFormat(16000, 16, 1)))
+                wav.Write(new byte[32000], 0, 32000);
             Assert.Single(runtime.LoadSessionsAsync().GetAwaiter().GetResult());
             var status = new StatusWindow(runtime, embedded: true);
             var window = new ApplicationWindow(runtime, status);
@@ -32,6 +34,10 @@ public sealed class JournalLayoutTests
                 System.Windows.Threading.Dispatcher.PushFrame(frame);
                 var library = RecordingActionsTests.Field<RecordingsWindow>(window, "recordings");
                 Assert.Single(RecordingActionsTests.Field<ListBox>(library, "grid").Items.Cast<object>());
+                var player = RecordingActionsTests.Field<MeetingPlayer>(library, "player");
+                var clock = RecordingActionsTests.Field<System.Windows.Media.Animation.ClockGroup>(player, "clock");
+                typeof(RecordingsWindow).GetMethod("ApplyFilter", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(library, null);
+                Assert.Same(clock, RecordingActionsTests.Field<System.Windows.Media.Animation.ClockGroup>(player, "clock"));
             }
             finally { window.AllowClose(); window.Close(); status.AllowClose(); status.Close(); }
         }));

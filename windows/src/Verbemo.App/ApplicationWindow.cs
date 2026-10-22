@@ -294,12 +294,16 @@ internal sealed class ApplicationWindow : Window
     });
     private void Refresh()
     {
-#pragma warning disable WPF0001
-        if (System.Windows.Application.Current is { } app) app.ThemeMode = runtime.Settings.InterfaceTheme switch
-        { "light" => ThemeMode.Light, "dark" => ThemeMode.Dark, _ => ThemeMode.System };
-#pragma warning restore WPF0001
         var themeKey = runtime.Settings.InterfaceTheme + ":" + SystemParameters.HighContrast;
-        if (appliedTheme != themeKey) { JournalStyle.Apply(this, runtime.Settings.InterfaceTheme); appliedTheme = themeKey; }
+        if (appliedTheme != themeKey)
+        {
+#pragma warning disable WPF0001
+            if (System.Windows.Application.Current is { } app) app.ThemeMode = runtime.Settings.InterfaceTheme switch
+            { "light" => ThemeMode.Light, "dark" => ThemeMode.Dark, _ => ThemeMode.System };
+#pragma warning restore WPF0001
+            JournalStyle.Apply(this, runtime.Settings.InterfaceTheme);
+            appliedTheme = themeKey;
+        }
         ShowInTaskbar = runtime.Settings.TaskbarIcon;
         var state = runtime.State;
         recordingBar.Visibility = state.IsRecording ? Visibility.Visible : Visibility.Collapsed;

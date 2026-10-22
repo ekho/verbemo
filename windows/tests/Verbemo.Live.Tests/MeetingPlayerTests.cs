@@ -28,19 +28,20 @@ public sealed class MeetingPlayerTests
             try
             {
                 player.Load(Path.Combine(root, "first"));
-                Tick();
+                Until(() => RecordingActionsTests.Field<List<MediaPlayer>>(player, "players").All(track => track.NaturalDuration.HasTimeSpan)
+                    && RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
                 Assert.True(RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
                 var controls = ((DockPanel)((StackPanel)player.Child).Children[0]).Children;
                 controls.OfType<Slider>().Single(slider => System.Windows.Automation.AutomationProperties.GetName(slider)
                     == Verbemo.Core.Localization.Localized.T("Playback volume", "Громкость воспроизведения")).Value = 0;
                 controls.OfType<ComboBox>().Single().SelectedIndex = 4;
                 player.Load(Path.Combine(root, "second"));
-                Tick();
+                player.Seek(.25);
+                player.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.FrameworkElement.UnloadedEvent));
+                Until(() => Math.Abs(RecordingActionsTests.Field<Slider>(player, "position").Value - .25) < .01);
                 Assert.All(RecordingActionsTests.Field<List<MediaPlayer>>(player, "players"), track => Assert.Equal(0, track.Volume));
                 Assert.Equal(2, RecordingActionsTests.Field<ClockGroup>(player, "clock").Controller!.SpeedRatio);
                 Assert.True(RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
-                player.Seek(.25, start: false);
-                Tick();
                 Assert.InRange(RecordingActionsTests.Field<ClockGroup>(player, "clock").CurrentTime!.Value.TotalSeconds, .24, .26);
                 Assert.InRange(RecordingActionsTests.Field<Slider>(player, "position").Value, .24, .26);
             }
@@ -49,13 +50,15 @@ public sealed class MeetingPlayerTests
         finally { Directory.Delete(root, true); }
     });
 
-    private static void Tick()
+    private static void Until(Func<bool> condition)
     {
         var frame = new DispatcherFrame();
-        var tick = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
-        tick.Tick += (_, _) => { tick.Stop(); frame.Continue = false; };
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        var tick = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
+        tick.Tick += (_, _) => { if (condition() || elapsed.Elapsed > TimeSpan.FromSeconds(5)) { tick.Stop(); frame.Continue = false; } };
         tick.Start();
         Dispatcher.PushFrame(frame);
+        Assert.True(condition(), "Timed out waiting for the native media clock.");
     }
 
     [Fact]

@@ -25,6 +25,7 @@ internal sealed class MeetingPlayer : Border, IDisposable
     private bool dragging;
     private double playbackSpeed = 1;
     private double playbackVolume = .5;
+    private (double Seconds, bool Start)? pendingSeek;
 
     public MeetingPlayer()
     {
@@ -118,6 +119,11 @@ internal sealed class MeetingPlayer : Border, IDisposable
                 {
                     if (!players.Contains(player)) return;
                     if (player.NaturalDuration.HasTimeSpan) position.Maximum = Math.Max(position.Maximum, offset + player.NaturalDuration.TimeSpan.TotalSeconds);
+                    if (players.All(track => track.NaturalDuration.HasTimeSpan) && pendingSeek is { } request)
+                    {
+                        pendingSeek = null;
+                        Seek(request.Seconds, request.Start);
+                    }
                 };
                 player.MediaFailed += (_, args) => { if (!players.Contains(player)) return; Pause(); error.Text = T("Cannot play audio: ", "Не удалось воспроизвести звук: ") + args.ErrorException.Message; };
                 players.Add(player);
@@ -144,6 +150,7 @@ internal sealed class MeetingPlayer : Border, IDisposable
     {
         if (clock?.Controller is not { } controller || players.Count == 0) return;
         seconds = Math.Max(0, double.IsFinite(seconds) ? seconds : 0);
+        if (players.Any(player => !player.NaturalDuration.HasTimeSpan)) { pendingSeek = (seconds, start); return; }
         if (clock.CurrentState == ClockState.Stopped) controller.Begin();
         controller.Seek(TimeSpan.FromSeconds(seconds), TimeSeekOrigin.BeginTime);
         if (start) { controller.Resume(); playing = true; timer.Start(); }
@@ -151,7 +158,11 @@ internal sealed class MeetingPlayer : Border, IDisposable
         Refresh();
     }
 
-    private void Pause() { clock?.Controller?.Pause(); playing = false; timer.Stop(); Refresh(); }
+    private void Pause()
+    {
+        if (pendingSeek is { } request) pendingSeek = (request.Seconds, false);
+        clock?.Controller?.Pause(); playing = false; timer.Stop(); Refresh();
+    }
     private void Refresh()
     {
         var elapsed = clock?.CurrentTime?.TotalSeconds ?? 0;
@@ -165,7 +176,7 @@ internal sealed class MeetingPlayer : Border, IDisposable
     private static string Format(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"hh\:mm\:ss" : @"mm\:ss");
     private void DisposeMedia()
     {
-        timer.Stop(); playing = false;
+        timer.Stop(); playing = false; pendingSeek = null;
         clock?.Controller?.Stop(); clock = null;
         foreach (var player in players) { player.Clock = null; player.Close(); }
         players.Clear();

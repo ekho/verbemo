@@ -65,6 +65,7 @@ internal sealed class RecordingsWindow : Window
     private readonly Grid detail = new();
     private readonly TabControl tabs = new() { Margin = new Thickness(0, 8, 0, 0) };
     private bool loading;
+    private bool replacingRows;
     private bool reloadRequested;
     private bool updatingChoices;
     private string? selectedTranscriptKey;
@@ -90,6 +91,7 @@ internal sealed class RecordingsWindow : Window
         grid.SetResourceReference(ItemsControl.ItemContainerStyleProperty, "MeetingCard");
         grid.SelectionChanged += async (_, _) =>
         {
+            if (replacingRows) return;
             if (navigation is not null) navigation.SessionDirectory = Selected?.Item.Directory;
             await ShowSelectedAsync();
         };
@@ -381,8 +383,11 @@ internal sealed class RecordingsWindow : Window
     {
         var selected = Selected?.Item.Directory;
         var rows = allRows.Where(row => MeetingPresentation.Matches(row.Item, filter, search.Text, row.Status?.IsBusy == true)).ToList();
-        grid.ItemsSource = rows;
+        replacingRows = true;
+        try { grid.ItemsSource = rows; }
+        finally { replacingRows = false; }
         grid.SelectedItem = rows.FirstOrDefault(row => row.Item.Directory == selected) ?? rows.FirstOrDefault();
+        if (rows.Count == 0) _ = ShowSelectedAsync();
         empty.Text = search.Text.Length > 0 ? T("No matching meetings.", "Встречи не найдены.") : T("No meetings in this section.", "В этом разделе пока нет встреч.");
         empty.Margin = new Thickness(20);
         empty.IsHitTestVisible = false;
