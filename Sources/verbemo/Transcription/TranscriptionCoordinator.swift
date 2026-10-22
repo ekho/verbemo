@@ -63,7 +63,10 @@ actor TranscriptionCoordinator {
              DiarizationEngine(settings: $0)
          },
          modelFingerprint: @escaping @Sendable (DiarizationModel) async throws -> String = { model in
-             try DiarizationModelStore.shared(for: model).fingerprint()
+             if model == .nemotron3, NemotronDiarizationRunner.bundledExecutable == nil {
+                 throw LocalDiarizationRuntimeError.unavailable
+             }
+             return try DiarizationModelStore.shared(for: model).fingerprint()
          },
          keepAwake: @escaping Wakefulness.Hold = Wakefulness.holdAwake) {
         engines = EngineResolver(fixed: engine)
@@ -81,7 +84,10 @@ actor TranscriptionCoordinator {
              DiarizationEngine(settings: $0)
          },
          modelFingerprint: @escaping @Sendable (DiarizationModel) async throws -> String = { model in
-             try DiarizationModelStore.shared(for: model).fingerprint()
+             if model == .nemotron3, NemotronDiarizationRunner.bundledExecutable == nil {
+                 throw LocalDiarizationRuntimeError.unavailable
+             }
+             return try DiarizationModelStore.shared(for: model).fingerprint()
          },
          keepAwake: @escaping Wakefulness.Hold = Wakefulness.holdAwake) {
         self.engines = engines
@@ -193,8 +199,9 @@ actor TranscriptionCoordinator {
                     || TranscriptVersions.isRequested($0)
                     || fm.fileExists(atPath: $0.appendingPathComponent(
                         TranscriptVersions.journalDirectory).path)
-                    || (Config.localDiarizationEnabled()
-                        && DiarizationState.read($0)?.isOutstanding == true))
+                    || (DiarizationState.read($0).map {
+                        $0.isOutstanding && (Config.localDiarizationEnabled() || $0.request.explicit)
+                    } ?? false))
                     && !TranscriptionFailurePolicy.hasGivenUp(on: $0)
                     // A session another process is already transcribing is not
                     // pending, it is in progress somewhere else. Queueing it
@@ -504,6 +511,10 @@ actor TranscriptionCoordinator {
 
     private func diarizeNowClaimed(_ dir: URL) async throws {
         try Config.requireReadable()
+        if TranscriptVersions.isRequested(dir) {
+            try await transcribeAndAnnounce(dir)
+            return
+        }
         guard !DiarizationState.persisted(in: dir).isUnreadable else {
             throw UnreadableDiarizationRequest()
         }
@@ -541,10 +552,12 @@ actor TranscriptionCoordinator {
                 // status, names and timeline even if the retry later fails.
                 _ = try TranscriptVersions.archiveCurrent(dir)
             }
+            let pinned = SessionState.value(dir, TranscriptVersions.requestKey) != nil
+            let request = pinned ? old?.request : nil
             var pending = DiarizationState(
-                request: .init(engine: transcript.engine,
-                               threshold: Config.diarizationThreshold(), explicit: true,
-                               model: Config.diarizationModel()),
+                request: request ?? .init(engine: transcript.engine,
+                                         threshold: Config.diarizationThreshold(), explicit: true,
+                                         model: Config.diarizationModel()),
                 status: .pending)
             if let old, old.status != .completed, old.status != .failed,
                old.request.threshold == pending.request.threshold,
@@ -572,13 +585,16 @@ actor TranscriptionCoordinator {
     private func completedGenerationMatches(
         _ dir: URL, transcript: Transcript, state: DiarizationState
     ) async throws -> Bool {
+        let pinned = SessionState.value(dir, TranscriptVersions.requestKey) != nil
+        let selectedModel = pinned ? state.request.model : Config.diarizationModel()
+        let selectedThreshold = pinned ? state.request.threshold : Config.diarizationThreshold()
         let currentMeta = try SessionMeta.read(from: dir)
         guard let remote = currentMeta.tracks.first(where: {
             $0.speaker == "them" || $0.speaker == "speaker"
         }) else {
-            return state.request.model == Config.diarizationModel()
+            return state.request.model == selectedModel
                 && (state.request.model != .community1
-                    || state.request.threshold == Config.diarizationThreshold())
+                    || state.request.threshold == selectedThreshold)
         }
         guard let asr = DiarizationArtifacts.readASR(dir),
               let track = asr.tracks.first(where: { $0.speaker == remote.speaker }),
@@ -618,10 +634,9 @@ actor TranscriptionCoordinator {
             }
             sourceFingerprint = track.sourceFingerprint
         }
-        let selectedModel = Config.diarizationModel()
         let model = try await modelFingerprint(selectedModel)
         let diarizationOptions = Self.diarizationOptions(
-            model: selectedModel, threshold: Config.diarizationThreshold())
+            model: selectedModel, threshold: selectedThreshold)
         return DiarizationArtifacts.hash(sourceFingerprint, model,
             diarizationOptions, options) == generation
     }
@@ -664,6 +679,9 @@ actor TranscriptionCoordinator {
         try SessionClaim.acquire(dir, stage: .transcribe)
         do {
             try TranscriptVersions.recover(dir)
+            guard !TranscriptVersions.isRequested(dir) else {
+                throw DiarizationUnavailable(reason: "a replacement transcript is already queued")
+            }
             guard !DiarizationState.persisted(in: dir).isUnreadable else {
                 throw UnreadableDiarizationRequest()
             }
@@ -693,6 +711,9 @@ actor TranscriptionCoordinator {
         try SessionClaim.acquire(dir, stage: .transcribe)
         defer { SessionClaim.release(dir) }
         try TranscriptVersions.recover(dir)
+        guard !TranscriptVersions.isRequested(dir) else {
+            throw DiarizationUnavailable(reason: "a replacement transcript is already queued")
+        }
         TranscriptionScratch.remove(in: dir)
         guard var state = DiarizationState.read(dir),
               let provisional = PostProcessor.readTranscript(dir) else { return false }
@@ -971,19 +992,46 @@ actor TranscriptionCoordinator {
         var meta = try SessionMeta.read(from: dir)
         let recordedMeta = meta
         let replacingTranscript = TranscriptVersions.isRequested(dir)
-        var diarization = replacingTranscript ? nil : DiarizationState.read(dir)
+        let request = try TranscriptVersions.readRequest(dir)
+        // Upgrade legacy text markers before an await can observe changed settings.
+        try request?.write(to: dir)
+        if let selected = request?.diarization {
+            guard Platform.supportsLocalModels,
+                  (Config.localEngines.contains(selected.engine) || selected.engine == "auto") else {
+                throw DiarizationUnavailable(reason: localised(
+                    "Choose a local transcription engine for local diarization.",
+                    "Для локальной диаризации выберите локальный способ распознавания."))
+            }
+            if selected.engine != "auto" {
+                do { _ = try await modelFingerprint(selected.model) }
+                catch is CancellationError { throw CancellationError() }
+                catch { throw EnginePreparationFailed(engine: selected.model.title, underlying: error) }
+            }
+        }
+        var diarization = replacingTranscript
+            ? request?.diarization.map { DiarizationState(request: $0, status: .pending) }
+            : DiarizationState.read(dir)
         let engine: TranscriptionEngine
         if let given { engine = given }
-        else if let diarization, diarization.request.explicit {
+        else if let diarization, diarization.request.explicit, !replacingTranscript {
             engine = try await engines.local(named: diarization.request.engine,
                                              wordTimings: true)
         } else {
-            let wordTimings = Config.localDiarizationEnabled()
-                || (!replacingTranscript && diarization != nil)
+            let wordTimings = replacingTranscript ? diarization != nil
+                : Config.localDiarizationEnabled() || diarization != nil
             engine = try await engines.engine(for: dir,
                 wordTimings: wordTimings)
         }
         current = engine
+        if request?.engine == "auto", let selected = request?.diarization,
+           Config.localEngines.contains(engine.name) {
+            do { _ = try await modelFingerprint(selected.model) }
+            catch is CancellationError { throw CancellationError() }
+            catch { throw EnginePreparationFailed(engine: selected.model.title, underlying: error) }
+        }
+        if request?.diarization != nil, request?.engine != "auto", engine.name != request?.engine {
+            throw DiarizationUnavailable(reason: "the requested transcription engine is unavailable")
+        }
         if var requested = diarization {
             if !Config.localEngines.contains(engine.name) || !Platform.supportsLocalModels {
                 requested.status = .notApplicable
@@ -994,9 +1042,9 @@ actor TranscriptionCoordinator {
                     model: requested.request.model), status: .pending)
             }
             diarization = requested
-            try requested.write(to: dir)
+            if !replacingTranscript { try requested.write(to: dir) }
         }
-        if diarization == nil && Config.localDiarizationEnabled() {
+        if !replacingTranscript && diarization == nil && Config.localDiarizationEnabled() {
             let applicable = Config.localEngines.contains(engine.name) && Platform.supportsLocalModels
             diarization = DiarizationState(
                 request: .init(engine: engine.name, threshold: Config.diarizationThreshold(),
@@ -1167,9 +1215,14 @@ actor TranscriptionCoordinator {
         } else if replacingTranscript {
             metadata.updateValue(nil, forKey: DiarizationState.key)
         }
+        if let request {
+            metadata[TranscriptVersions.requestKey] = try JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(request))
+        }
+        try Task.checkCancellation()
         try TranscriptVersions.commit(transcript, to: dir, sidecars: sidecars,
                                       metadata: metadata,
-                                      preserveRemoteNames: diarization == nil)
+                                      preserveRemoteNames: !replacingTranscript && diarization == nil)
         log(dir, "done — \(merged.count) segments")
 
         // The audio was recorded uncompressed so it would survive a crash, and

@@ -158,4 +158,15 @@ struct TranscriptVersionsTests {
         #expect(text("summary") == "Second summary.")
         withExtendedLifetime(window) {}
     }
+    @Test("Queued retranscription snapshots diarization before settings change")
+    @MainActor func queuedDiarizationIsFrozen() throws {
+        let recordings = try TestRecordings(); defer { recordings.remove() }
+        let dir = try recordings.session("frozen")
+        try Home.current.writeConfig(["transcription": ["local_diarization": true, "diarization_model": "community-1"]])
+        #expect(MeetingLibraryController.markForRetranscription(dir, engine: "parakeet") == nil)
+        let data = try Data(contentsOf: dir.appendingPathComponent(TranscriptVersions.requestFile))
+        let saved = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect((saved["diarization"] as? [String: Any])?["model"] as? String == "community-1")
+    }
+
 }

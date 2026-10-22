@@ -527,8 +527,7 @@ struct RetranscriptionTests {
         #expect(MeetingLibraryController.retranscriptionEngines.map(\.id)
             == ["parakeet", "whisper", "gigaam", "nemotron", "assemblyai", "openai", "elevenlabs"])
         MeetingLibraryController.markForRetranscription(dir, engine: "whisper")
-        #expect(SessionState.value(dir, SessionState.Key.transcriptionEngine) as? String
-            == "whisper")
+        #expect(try TranscriptVersions.readRequest(dir)?.engine == "whisper")
         #expect(EngineResolver.configuredEngine(for: dir) == "whisper")
     }
 
@@ -557,8 +556,7 @@ struct RetranscriptionTests {
 
         try FileManager.default.removeItem(at: claim)
         #expect(MeetingLibraryController.markForRetranscription(dir, engine: "whisper") == nil)
-        #expect(SessionState.value(dir, SessionState.Key.transcriptionEngine) as? String
-            == "whisper")
+        #expect(try TranscriptVersions.readRequest(dir)?.engine == "whisper")
     }
 
     /// Finish processing came back empty and said everything was done — also

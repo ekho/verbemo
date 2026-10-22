@@ -71,7 +71,8 @@ actor EngineResolver {
     /// The engine this session asks for, prepared.
     func engine(for session: URL, wordTimings: Bool = false) async throws -> TranscriptionEngine {
         if let fixedEngine { return try await hold(Key(fixedEngine), fixedEngine) }
-        let configured = Self.configuredEngine(for: session)
+        let configured = try TranscriptVersions.readRequest(session)?.engine
+            ?? Self.configuredEngine(for: session)
         if !Self.knownEngines.contains(configured) {
             FileHandle.standardError.write(Data(
                 "warning: unknown transcription engine \"\(configured)\" — choosing automatically\n".utf8
@@ -200,6 +201,7 @@ actor EngineResolver {
         .union(Config.localEngines)
 
     static func configuredEngine(for session: URL) -> String {
+        if let request = try? TranscriptVersions.readRequest(session) { return request.engine }
         let requested = SessionState.value(
             session, SessionState.Key.transcriptionEngine) as? String
         return requested.flatMap { knownEngines.contains($0) ? $0 : nil }

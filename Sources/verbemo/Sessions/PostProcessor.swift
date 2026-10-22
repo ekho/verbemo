@@ -490,7 +490,7 @@ enum PostProcessor {
     /// Request a fresh result without removing the completed one. Only successful
     /// recognition archives and replaces it; failure leaves every artifact readable.
     @discardableResult
-    static func markForRetranscription(_ dir: URL) -> Bool {
+    static func markForRetranscription(_ dir: URL, request: TranscriptVersions.Request? = nil) -> Bool {
         do {
             try SessionClaim.acquire(dir, stage: .transcribe)
             defer { SessionClaim.release(dir) }
@@ -498,16 +498,16 @@ enum PostProcessor {
                 appendSessionLog("can't replace unreadable saved diarization request", to: dir)
                 return false
             }
-            let engine = EngineResolver.configuredEngine(for: dir)
-            try Data(engine.utf8).write(to: dir.appendingPathComponent(TranscriptVersions.requestFile), options: .atomic)
+            let choice = request ?? .capture(engine: EngineResolver.configuredEngine(for: dir))
+            try choice.write(to: dir)
             try SessionState.amend(dir, with: [
                 SessionState.Key.transcriptionFailed: nil,
                 SessionState.Key.transcriptionAttempts: nil,
                 SessionState.Key.transcriptionDeferred: nil,
             ])
             // The old speaker result still belongs to the current transcript
-            // until a new transcript is committed. The coordinator snapshots
-            // the current speaker switch and model for this new request.
+            // until a new transcript is committed. The queued request owns
+            // its speaker choice even after settings change or a restart.
             TranscriptionScratch.remove(in: dir, includingDerivedAudio: true)
             appendSessionLog("queued a new transcript version", to: dir)
             return true
