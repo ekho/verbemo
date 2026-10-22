@@ -384,16 +384,15 @@ final class AppController {
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onTogglePause = { [weak self] in self?.togglePause() }
         menuBar.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
-        menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
+        window.onOpenFolder = { [weak self] in self?.openFolder() }
         menuBar.onShowMeetings = { [weak self] in self?.showMeetings() }
         menuBar.onImport = { [weak self] in self?.chooseMediaToImport() }
         menuBar.onShowSettings = { [weak self] in self?.showSettings() }
         menuBar.onShowSetup = { [weak self] in self?.showSetup() }
-        menuBar.onCheckForUpdates = { [weak self] in self?.updates.checkForUpdates() }
-        menuBar.onShowAbout = { [weak self] in self?.showAbout() }
+        window.onCheckForUpdates = { [weak self] in self?.updates.checkForUpdates() }
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.update(state: .idle, elapsed: nil)
-        menuBar.updatesAvailable(updates.isAvailable)
+        window.updatesAvailable = updates.isAvailable
         window.readAudioLevels = { [weak self] in self?.session?.audioLevels ?? (.off, .off) }
 
         window.libraryProvider = { [weak self] in self?.recordings }
@@ -443,15 +442,17 @@ final class AppController {
         // rescued session is transcribed in the same pass as the clean ones.
         RecordingSession.recoverInterrupted(root: root)
 
-        menuBar.updateAutoRecord(enabled: autoRecord.enabled, decision: nil)
+        menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: nil)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: nil)
 
         // Runs for the life of the daemon, not just while recording: the menu
         // also shows what the auto-record loop is thinking, and a status line
         // that only updates during a recording is worse than none.
-        ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        ticker = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+
+        if let ticker { RunLoop.main.add(ticker, forMode: .common) }
 
         Notifications.install { [weak self] folder in
             if let folder {
@@ -728,7 +729,7 @@ final class AppController {
 
     private func showAutoRecord() {
         let decision = autoRecord.enabled ? autoRecord.lastDecision : nil
-        menuBar.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
+        menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
     }
 
@@ -957,14 +958,16 @@ final class AppController {
         switch status {
         case .idle:
             return nil
-        case .transcribing(let name, let queued):
+        case .transcribing(let dir, let queued):
+            let name = dir.lastPathComponent
             return queued > 0
-                ? localised("transcribing \(name) · \(queued) queued",
-                            "расшифровываю \(name) · в очереди \(queued)")
-                : localised("transcribing \(name)", "расшифровываю \(name)")
-        case .failed(let name):
-            return localised("transcription failed · \(name)",
-                             "не удалось расшифровать · \(name)")
+                ? localised("Transcribing: \(name) · \(queued) queued…",
+                            "Расшифровка: \(name) · в очереди \(queued)…")
+                : localised("Transcribing: \(name)…", "Расшифровка: \(name)…")
+        case .failed(let dir):
+            let name = dir.lastPathComponent
+            return localised("Could not transcribe: \(name)…",
+                             "Не удалось расшифровать: \(name)…")
         }
     }
 
@@ -1000,6 +1003,20 @@ final class AppController {
     private func showTranscription(_ status: TranscriptionCoordinator.Status) {
         let text = Self.transcriptionLine(for: status)
         menuBar.updateTranscription(text)
+        switch status {
+        case .idle:
+            menuBar.onShowTranscription = nil
+        case .transcribing(let dir, _), .failed(let dir):
+            menuBar.onShowTranscription = { [weak self] in
+                guard let self else { return }
+                self.showMeetings()
+                Task { @MainActor in
+                    if !(await self.recordings.reveal(dir)) {
+                        NSWorkspace.shared.open(dir)
+                    }
+                }
+            }
+        }
         // Each change of status follows the end of a session's work — its
         // transcript, names and summary — or the start of the next, so the
         // meeting library reads again rather than going on offering
@@ -1095,7 +1112,7 @@ final class AppController {
 
     private func tick() {
         let decision = autoRecord.enabled ? autoRecord.lastDecision : nil
-        menuBar.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
+        menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
         guard let session else { return }
         present(

@@ -97,10 +97,9 @@ struct ApplicationWindowTests {
         menu.setupAvailable(false)
         menu.onShowMeetings = { app.navigate(.allMeetings); app.bringToFront() }
         menu.onShowSettings = { app.navigate(.general); app.bringToFront() }
-        menu.onShowAbout = { app.navigate(.about); app.bringToFront() }
         let before = Set(NSApp.windows.filter { $0.styleMask.contains(.titled) }.map(ObjectIdentifier.init))
         let commands: [(String, ApplicationNavigationState.Destination)] = [
-            ("Встречи", .allMeetings), ("Настройки…", .general), ("О приложении", .about),
+            ("Открыть Verbemo", .allMeetings), ("Настройки…", .general),
         ]
         for (title, destination) in commands {
             app.hide()
@@ -113,10 +112,10 @@ struct ApplicationWindowTests {
         app.presentSetup(setup)
         #expect(setup.contentView.window === app.panel)
         #expect(Set(NSApp.windows.filter { $0.styleMask.contains(.titled) }.map(ObjectIdentifier.init)) == before)
-        #expect(menu.offeredItemTitles.filter { $0 == "Встречи" }.count == 1)
+        #expect(menu.offeredItemTitles.filter { $0 == "Открыть Verbemo" }.count == 1)
         #expect(!menu.offeredItemTitles.contains("Управление записями…"))
         #expect(!menu.offeredItemTitles.contains("Показать окно verbemo"))
-        for title in ["Начать запись", "Импортировать…", "Открыть папку записей", "Записывать встречи автоматически"] {
+        for title in ["Начать запись", "Импортировать запись…", "Автозапись встреч"] {
             #expect(menu.offeredItemTitles.contains(title))
         }
     }

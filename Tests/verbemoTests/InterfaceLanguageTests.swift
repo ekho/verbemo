@@ -423,17 +423,16 @@ struct InterfaceLanguageTests {
     private static func readableMenuBar() -> [String] {
         _ = NSApplication.shared
         let menuBar = MenuBarController()
-        menuBar.updatesAvailable(true)
         menuBar.setupAvailable(true)
-        menuBar.updateAutoRecord(enabled: true, decision: "verbemo")
+        menuBar.updateAutoRecord(enabled: true, notice: .microphoneAccess)
         menuBar.updateConfigProblem(Config.Problem.unreadable(reason: "1").headline)
 
         var found: [String] = []
         for state in [MenuBarController.State.idle, .recording, .paused] {
             menuBar.update(state: state, elapsed: "1:23")
             for status: TranscriptionCoordinator.Status in [
-                .idle, .transcribing(session: "verbemo", queued: 0),
-                .transcribing(session: "verbemo", queued: 2), .failed(session: "verbemo"),
+                .idle, .transcribing(session: URL(fileURLWithPath: "/verbemo"), queued: 0),
+                .transcribing(session: URL(fileURLWithPath: "/verbemo"), queued: 2), .failed(session: URL(fileURLWithPath: "/verbemo")),
             ] {
                 menuBar.updateTranscription(AppController.transcriptionLine(for: status))
                 found.append(contentsOf: menuBar.offeredItemTitles)

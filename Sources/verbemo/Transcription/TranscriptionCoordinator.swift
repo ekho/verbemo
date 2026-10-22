@@ -21,8 +21,8 @@ import Foundation
 actor TranscriptionCoordinator {
     enum Status: Sendable {
         case idle
-        case transcribing(session: String, queued: Int)
-        case failed(session: String)
+        case transcribing(session: URL, queued: Int)
+        case failed(session: URL)
     }
 
     private var queue: [URL] = []
@@ -38,7 +38,7 @@ actor TranscriptionCoordinator {
     /// Whoever is waiting for the queue to run dry — see `waitUntilIdle`.
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private var environmentalFailureNoted = false
-    private var lastFailure: String?
+    private var lastFailure: URL?
     private var statusHandler: (@Sendable (Status) -> Void)?
 
     private let engines: EngineResolver
@@ -224,7 +224,7 @@ actor TranscriptionCoordinator {
         defer { releaseProcessingTurn() }
         while !queue.isEmpty {
             let dir = queue.removeFirst()
-            publish(.transcribing(session: dir.lastPathComponent, queued: queue.count))
+            publish(.transcribing(session: dir, queued: queue.count))
             do {
                 try await transcribeAndAnnounce(dir)
             } catch let busy as SessionClaim.Busy {
@@ -251,7 +251,7 @@ actor TranscriptionCoordinator {
                 log(dir, "\(held)")
             } catch {
                 log(dir, "transcription failed: \(error)")
-                lastFailure = dir.lastPathComponent
+                lastFailure = dir
                 let outcome = TranscriptionFailurePolicy.record(
                     error, for: dir, engine: current, notify: !environmentalFailureNoted)
                 if outcome == .environmental {

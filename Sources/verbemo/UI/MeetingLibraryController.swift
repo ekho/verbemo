@@ -588,6 +588,18 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
 
     func refresh() { reload() }
 
+    /// A status-menu link must select its meeting even with a search/filter active.
+    func reveal(_ dir: URL) async -> Bool {
+        applyFilter(.allMeetings, clearSearch: true)
+        reload()
+        await settled()
+        guard let row = items.firstIndex(where: { $0.dir.standardizedFileURL.path == dir.standardizedFileURL.path }) else { return false }
+        table.selectRowIndexes([row], byExtendingSelection: false)
+        table.scrollRowToVisible(row)
+        showDetail()
+        return true
+    }
+
     private func show(_ found: [SessionInventory.Item]) {
         reloadingList = true
         defer { reloadingList = false }
