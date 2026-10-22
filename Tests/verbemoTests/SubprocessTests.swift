@@ -9,6 +9,16 @@ import Testing
 // Assert the timeout/cancellation outcome, with a separate runaway-test limit.
 @Suite(.timeLimit(.minutes(1)))
 struct SubprocessTests {
+    @Test("Meeting CLI calls disable Hindsight hooks while preserving the inherited environment")
+    func meetingCLIDisablesHindsight() async throws {
+        let inheritedPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        let output = try await LLMBackend.run(
+            executable: "/bin/sh",
+            arguments: ["-c", "printf '%s:%s' \"${HINDSIGHT_DISABLE_HOOKS-}\" \"${PATH-}\""],
+            input: "", timeout: 2)
+        #expect(output == "1:\(inheritedPath)")
+    }
+
     @Test("Explicit child environment is isolated from inherited process variables")
     func childEnvironment() async throws {
         let result = try await Subprocess.run(

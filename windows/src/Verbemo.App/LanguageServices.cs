@@ -252,6 +252,8 @@ public static class CommandLineTools
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        // Meeting processing must not create or populate coding-agent memory banks.
+        start.Environment["HINDSIGHT_DISABLE_HOOKS"] = "1";
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)
             ?? throw new ProcessingFailure(FailureKind.Environmental, T($"Could not start {executable}", $"Не удалось запустить {executable}"));

@@ -390,9 +390,12 @@ struct LLMBackend: Sendable {
         input: String,
         timeout: TimeInterval
     ) async throws -> String {
+        var environment = ProcessInfo.processInfo.environment
+        // Meeting processing must not create or populate coding-agent memory banks.
+        environment["HINDSIGHT_DISABLE_HOOKS"] = "1"
         let result = try await Subprocess.run(
             executable: executable, arguments: arguments,
-            input: Data(input.utf8), timeout: timeout)
+            input: Data(input.utf8), timeout: timeout, environment: environment)
         guard result.status == 0 else {
             throw LLMError.exit(
                 Int(result.status),
