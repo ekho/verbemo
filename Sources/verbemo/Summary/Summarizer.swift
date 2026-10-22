@@ -107,9 +107,9 @@ enum Summarizer {
                         backend: backend.name, model: backend.model)),
                     .reason: .text(lastReason.rawValue),
                 ])
-                log(LLMError.isUsageLimit(error)
+                log(LLMError.signInAdvice(error, backend: backend.name) ?? (LLMError.isUsageLimit(error)
                     ? "\(backend.name) is out of allowance — trying the next backend"
-                    : "summary via \(backend.name) failed: \(error)")
+                    : "summary via \(backend.name) failed: \(error)"))
             }
         }
 

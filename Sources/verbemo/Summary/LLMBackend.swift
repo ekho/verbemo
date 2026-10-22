@@ -442,10 +442,51 @@ struct LLMBackend: Sendable {
         guard result.status == 0 else {
             throw LLMError.exit(
                 Int(result.status),
-                String(decoding: result.stderr.prefix(600), as: UTF8.self)
-                    + String(decoding: result.stdout.suffix(600), as: UTF8.self))
+                failureText(stderr: result.stderr, stdout: result.stdout, input: input))
         }
         return String(decoding: result.stdout, as: UTF8.self)
+    }
+
+
+    /// Remove the echoed request before truncation or classification, in both streams.
+    static func failureText(stderr: Data, stdout: Data, input: String) -> String {
+        let lastLine = input.split(separator: "\n").last { !$0.allSatisfy(\.isWhitespace) } ?? ""
+        // Word boundaries survive CLI wrapping, quoting and Markdown formatting.
+        let words = lastLine.components(separatedBy: .alphanumerics.inverted).filter { !$0.isEmpty }
+        let echoPattern = words.map(NSRegularExpression.escapedPattern(for:)).joined(separator: #"[\W_]*"#)
+        let echo = echoPattern.isEmpty ? nil : try? NSRegularExpression(pattern: echoPattern)
+        func normalized(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let request = normalized(input)
+        func diagnostic(_ data: Data, limit: Int) -> String {
+            var text = String(decoding: data, as: UTF8.self)
+            if let match = echo?.matches(in: text, range: NSRange(text.startIndex..., in: text)).last,
+               let range = Range(match.range, in: text) {
+                text = "[input]" + text[range.upperBound...]
+            }
+            // A truncated echo has no final line; remove its repeated fragments too.
+            text = text.components(separatedBy: "\n").map { line in
+                let unnumbered = line.replacingOccurrences(
+                    of: #"^\s*(?:(?:>\s*)|(?:[-*]\s+)|(?:\d+[.)|:]?\s+))*"#,
+                    with: "", options: .regularExpression)
+                let fragment = normalized(unnumbered)
+                return !fragment.isEmpty && request.contains(fragment) ? "[input]" : line
+            }.joined(separator: "\n")
+            // Redact before cutting: truncation must not leave half a credential behind.
+            for (pattern, replacement) in [
+                (#"\bsk-[A-Za-z0-9_-]+"#, "[redacted]"),
+                (#"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+"#, "Bearer [redacted]"),
+                (#"(?i)(\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)[\"']?\s*[:=]\s*)(?:\"(?:\\.|[^\"\\])*(?:\"|$)|'(?:\\.|[^'\\])*(?:'|$)|[^\s,\"';}]+)"#, "$1[redacted]"),
+                (#"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"#, "[redacted]"),
+            ] {
+                text = text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+            }
+            guard text.count > limit else { return text }
+            let end = text.suffix(limit)
+            guard let newline = end.firstIndex(of: "\n") else { return "…" + end }
+            return "…" + end[end.index(after: newline)...]
+        }
+        return [("stderr", diagnostic(stderr, limit: 1000)), ("stdout", diagnostic(stdout, limit: 400))]
+            .filter { !$0.1.isEmpty }.map { "\($0.0):\n\($0.1)" }.joined(separator: "\n")
     }
 
 }
@@ -470,6 +511,7 @@ enum LLMError: Error, CustomStringConvertible {
     /// to the next backend is the expected, healthy path here, and reads as an
     /// error otherwise.
     var isUsageLimit: Bool {
+        guard !isSignedOut else { return false }
         let haystack: String
         switch self {
         case .http(let code, let body):
@@ -483,6 +525,31 @@ enum LLMError: Error, CustomStringConvertible {
         return Self.usageLimitMarkers.contains { haystack.contains($0) }
     }
 
+    /// CLI login failures require a person; background retries cannot repair them.
+    var isSignedOut: Bool {
+        guard case .exit(_, let output) = self else { return false }
+        return output.components(separatedBy: "\nstdout:\n").contains { stream in
+            stream.split(separator: "\n").suffix(4).contains { line in
+                let text = line.trimmingCharacters(in: .whitespaces).lowercased()
+                guard !text.contains("mcp") else { return false }
+                return text == "not logged in" || text == "error: not logged in"
+                    || Self.signedOutMarkers.contains { text.contains($0) }
+            }
+        }
+    }
+
+    private static let signedOutMarkers = [
+        "please run /login", "run codex login", "oauth session expired",
+        "oauth token expired", "oauth token revoked", "access token could not be refreshed",
+    ]
+
+    static func signInAdvice(_ error: Error, backend: String) -> String? {
+        guard (error as? LLMError)?.isSignedOut == true,
+              ["claude-cli", "codex-cli"].contains(backend) else { return nil }
+        let command = backend == "claude-cli" ? "claude /login" : "codex login"
+        return "\(backend) is signed out — sign in again with `\(command)`; trying the next backend"
+    }
+
     /// Whether the same request would plausibly succeed later: no network, a
     /// server that fell over, a local model that isn't running yet.
     ///
@@ -491,6 +558,7 @@ enum LLMError: Error, CustomStringConvertible {
     /// a malformed answer must not be retried for ever. A spent allowance
     /// counts as transient: it comes back.
     var isTransient: Bool {
+        guard !isSignedOut else { return false }
         switch self {
         case .http(let code, _):
             return code == 429 || code >= 500
