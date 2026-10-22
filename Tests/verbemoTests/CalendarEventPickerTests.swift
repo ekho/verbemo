@@ -101,6 +101,40 @@ struct CalendarEventPickerTests {
         #expect(picker.selectedMeeting?.id == previous.id)
     }
 
+    @Test(.freshHome, arguments: ["Планирование old", "Название вручную", nil] as [String?])
+    func changingEventUpdatesOnlyAnInheritedMeetingTitle(title: String?) async throws {
+        var meta = MeetingContext(meeting: event("old"), app: nil, confirmed: true).metaFields
+        meta["title"] = title
+        let fixture = try SessionFixture.make(meta: meta)
+        let root = fixture.appendingPathExtension("library")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let dir = root.appendingPathComponent("meeting")
+        try FileManager.default.moveItem(at: fixture, to: dir)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        await library.settled()
+        let heading = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTextField }
+            .first { $0.identifier?.rawValue == "meeting.title" })
+
+        for id in ["next", "last"] {
+            library.calendarPicker.choose(event(id))
+            await library.calendarPicker.settled()
+            await library.settled()
+            let expected = title == "Название вручную" ? "Название вручную" : "Планирование \(id)"
+            #expect(SessionState.value(dir, "title") as? String == expected)
+            #expect(MeetingCalendarMetadata.read(from: dir)?.eventID == id)
+            #expect(heading.stringValue == expected)
+        }
+        library.calendarPicker.clearSelection()
+        await library.settled()
+        #expect(MeetingCalendarMetadata.read(from: dir) == nil)
+        #expect(heading.stringValue == (title == "Название вручную" ? "Название вручную" : "Планирование last"))
+    }
+
     @Test(.freshHome) func linkChangeAndClearPreserveAllResultsAndManualNames() throws {
         let dir = try SessionFixture.make(meta: ["title": "Название вручную", "custom": 42])
         defer { try? FileManager.default.removeItem(at: dir) }

@@ -57,9 +57,17 @@ struct MeetingCalendarMetadata {
         if let meeting, !meeting.hasPersistentID || meeting.id.isEmpty { throw CalendarSelectionError.missingEvent }
         try SessionClaim.acquire(dir, stage: .finish)
         defer { SessionClaim.release(dir) }
-        // Only the meeting snapshot changes; names and transcript versions are independent files.
         let snapshot = meeting.flatMap { MeetingContext(meeting: $0, app: nil, confirmed: true).metaFields["calendar"] }
-        try SessionState.amend(dir, with: ["calendar": snapshot])
+        try SessionLock.withLock(dir) {
+            let meta = SessionState.read(dir)
+            let previousTitle = (meta?["calendar"] as? [String: Any])?["title"] as? String
+            var fields: [String: Any?] = ["calendar": snapshot]
+            if let meeting, let previousTitle,
+               (meta?["title"] as? String ?? previousTitle) == previousTitle {
+                fields["title"] = meeting.title
+            }
+            try SessionState.amend(dir, with: fields)
+        }
     }
 
 }
