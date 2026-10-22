@@ -39,8 +39,11 @@ public sealed class RetranscriptionTests
             (model, _) => { Assert.Equal("parakeet", model); return engine; });
         var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var updates = 0;
-        processor.SessionsChanged += (_, _) => Interlocked.Increment(ref updates);
-        processor.StatusChanged += (_, status) => { if (status.Stage == (fail ? "deferred" : "complete")) settled.TrySetResult(); };
+        processor.SessionsChanged += (_, _) =>
+        {
+            Interlocked.Increment(ref updates);
+            if (processor.StatusFor(directory) is { IsBusy: false } status && status.Stage == (fail ? "deferred" : "complete")) settled.TrySetResult();
+        };
         try
         {
             await processor.RetranscribeAsync(directory, "parakeet");

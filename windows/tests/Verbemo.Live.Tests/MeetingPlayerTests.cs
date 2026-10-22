@@ -29,7 +29,7 @@ public sealed class MeetingPlayerTests
             {
                 player.Load(Path.Combine(root, "first"));
                 Until(() => RecordingActionsTests.Field<List<MediaPlayer>>(player, "players").All(track => track.NaturalDuration.HasTimeSpan)
-                    && RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
+                    && RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused, player);
                 Assert.True(RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
                 var controls = ((DockPanel)((StackPanel)player.Child).Children[0]).Children;
                 controls.OfType<Slider>().Single(slider => System.Windows.Automation.AutomationProperties.GetName(slider)
@@ -38,7 +38,7 @@ public sealed class MeetingPlayerTests
                 player.Load(Path.Combine(root, "second"));
                 player.Seek(.25);
                 player.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.FrameworkElement.UnloadedEvent));
-                Until(() => Math.Abs(RecordingActionsTests.Field<Slider>(player, "position").Value - .25) < .01);
+                Until(() => Math.Abs(RecordingActionsTests.Field<Slider>(player, "position").Value - .25) < .01, player);
                 Assert.All(RecordingActionsTests.Field<List<MediaPlayer>>(player, "players"), track => Assert.Equal(0, track.Volume));
                 Assert.Equal(2, RecordingActionsTests.Field<ClockGroup>(player, "clock").Controller!.SpeedRatio);
                 Assert.True(RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
@@ -50,7 +50,7 @@ public sealed class MeetingPlayerTests
         finally { Directory.Delete(root, true); }
     });
 
-    private static void Until(Func<bool> condition)
+    private static void Until(Func<bool> condition, MeetingPlayer player)
     {
         var frame = new DispatcherFrame();
         var elapsed = System.Diagnostics.Stopwatch.StartNew();
@@ -58,7 +58,10 @@ public sealed class MeetingPlayerTests
         tick.Tick += (_, _) => { if (condition() || elapsed.Elapsed > TimeSpan.FromSeconds(5)) { tick.Stop(); frame.Continue = false; } };
         tick.Start();
         Dispatcher.PushFrame(frame);
-        Assert.True(condition(), "Timed out waiting for the native media clock.");
+        Assert.True(condition(), "Timed out waiting for the native media clock. "
+            + RecordingActionsTests.Field<TextBlock>(player, "error").Text
+            + "; paused=" + RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused
+            + "; durations=" + string.Join(",", RecordingActionsTests.Field<List<MediaPlayer>>(player, "players").Select(track => track.NaturalDuration)));
     }
 
     [Fact]
