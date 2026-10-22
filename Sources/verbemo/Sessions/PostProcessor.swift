@@ -152,27 +152,93 @@ enum PostProcessor {
     /// machine owner has turned on this week.
     @discardableResult
     static func finish(_ dir: URL, policy: Policy = .configured, retryFailed: Bool = false) async -> Work {
-        // Both steps hand the transcript to a model chosen by the config, so
-        // they wait while it cannot be read — see `Config.Unreadable`.
-        if let reason = Config.unreadableReason {
-            appendSessionLog(
-                "post-processing waits — config.json can't be read (\(reason))", to: dir)
-            return Work()
-        }
         do {
-            try SessionClaim.acquire(dir, stage: .finish)
+            return try await finishWork(dir, policy: policy, retryFailed: retryFailed)
         } catch {
             appendSessionLog("post-processing skipped — \(error)", to: dir)
             return Work()
         }
-        defer { SessionClaim.release(dir) }
+    }
+
+    enum Completion {
+        case completed, failed, deferred, nothingToDo
+        case refused(String, String)
+
+        var succeeded: Bool {
+            switch self { case .completed, .nothingToDo: return true; default: return false }
+        }
+        var description: String {
+            switch self {
+            case .completed: return "Processing completed."
+            case .failed: return "Processing failed again. See transcribe.log in the recording folder; fix the cause and try Finish processing again."
+            case .deferred: return "Processing deferred. See transcribe.log in the recording folder; it can retry when the backend is available."
+            case .nothingToDo: return "Everything that can be done here is already done."
+            case .refused(let english, _): return english
+            }
+        }
+        var described: String {
+            switch self {
+            case .completed: return localised(description, "Обработка завершена.")
+            case .failed: return localised(description, "Снова не удалось завершить обработку. Причина — в transcribe.log в папке записи. После исправления нажмите «Доделать» ещё раз.")
+            case .deferred: return localised(description, "Обработка отложена. Подробности — в transcribe.log в папке записи. Повтор возможен, когда сервис станет доступен.")
+            case .nothingToDo: return localised(description, "Всё, что можно было сделать, уже сделано.")
+            case .refused(_, let translated): return translated
+            }
+        }
+    }
+
+    /// The button and command share the explicit retry and its outcome; the sweep uses finish.
+    static func finishManually(_ dir: URL, policy: Policy = .configured) async -> Completion {
+        do {
+            let work = try await finishWork(dir, policy: policy, retryFailed: true)
+            guard !work.isEmpty else { return .nothingToDo }
+            let meta = SessionState.read(dir) ?? [:]
+            let missingNames = work.names && !FileManager.default.fileExists(atPath: dir.appendingPathComponent(SpeakerNames.file).path)
+            let missingSummary = work.summary && !hasCurrentSummary(dir, meta: meta)
+            guard missingNames || missingSummary else { return .completed }
+            if let reason = Config.unreadableReason {
+                let english = "Processing paused — config.json can't be read (\(reason)). Completed stages are preserved."
+                return .refused(english, localised(english,
+                    "Обработка приостановлена: не читается config.json (\(reason)). Готовые результаты сохранены."))
+            }
+            if (work.names && !Config.speakerNames().enabled)
+                || (work.summary && MeetingEgress.route(for: .summary) == nil) {
+                let english = "Processing settings changed during the attempt. Completed stages are preserved."
+                return .refused(english, localised(english,
+                    "Настройки обработки изменились во время попытки. Готовые результаты сохранены."))
+            }
+            if (missingNames && meta[SessionState.Key.speakersStatus] as? String == SessionState.failed)
+                || (missingSummary && meta[SessionState.Key.summaryStatus] as? String == SessionState.failed) {
+                return .failed
+            }
+            return .deferred
+        } catch {
+            appendSessionLog("post-processing skipped — \(error)", to: dir)
+            if let busy = error as? SessionClaim.Busy { return .refused(busy.description, busy.described) }
+            if let refusal = error as? Refusal { return .refused(refusal.description, refusal.described) }
+            return .refused("Processing could not start. See transcribe.log in the recording folder.",
+                localised("Processing could not start. See transcribe.log in the recording folder.",
+                    "Не удалось начать обработку. Подробности — в transcribe.log в папке записи."))
+        }
+    }
+
+    private static func finishWork(_ dir: URL, policy: Policy, retryFailed: Bool) async throws -> Work {
+        if let reason = Config.unreadableReason { throw Refusal.configUnreadable(reason) }
+        let root = try validatedSessionRoot(for: dir)
+        try SessionClaim.acquire(root, stage: .finish)
+        defer { SessionClaim.release(root) }
+        if let reason = Config.unreadableReason { throw Refusal.configUnreadable(reason) }
+        guard !TranscriptVersions.isRequested(root), !TranscriptVersions.isRequested(dir),
+              !FileManager.default.fileExists(atPath: root.appendingPathComponent(".recording.json").path),
+              DiarizationState.persisted(in: dir).isFinal else {
+            throw SummaryRegenerationError.unavailable("A finished transcript is required before post-processing.")
+        }
 
         let work = outstanding(dir, policy: policy, retryFailed: retryFailed)
         guard !work.isEmpty else { return work }
 
         guard let transcript = readTranscript(dir) else {
-            appendSessionLog("post-processing skipped — can't read transcript.json", to: dir)
-            return Work()
+            throw SummaryRegenerationError.unavailable("Can't read transcript.json.")
         }
 
         let meta = SessionState.read(dir) ?? [:]
@@ -447,9 +513,12 @@ enum PostProcessor {
     /// cannot write each other's work away.
     private static func validatedSessionRoot(for dir: URL) throws -> URL {
         let parent = dir.deletingLastPathComponent()
-        guard parent.lastPathComponent == "transcripts" else { return dir }
         let root = parent.deletingLastPathComponent()
-        guard dir.resolvingSymlinksInPath().deletingLastPathComponent().path == root.resolvingSymlinksInPath().appendingPathComponent("transcripts").path,
+        guard parent.lastPathComponent == "transcripts",
+              FileManager.default.fileExists(atPath: root.appendingPathComponent("meta.json").path)
+        else { return dir }
+        guard SessionState.read(root) != nil,
+              dir.resolvingSymlinksInPath().deletingLastPathComponent().path == root.resolvingSymlinksInPath().appendingPathComponent("transcripts").path,
               TranscriptVersions.read(root).contains(where: { $0.dir.standardizedFileURL.path == dir.standardizedFileURL.path && !$0.isRequest }) else {
             throw SummaryRegenerationError.unavailable(localised("This transcript version is unavailable.", "Эта версия расшифровки недоступна."))
         }

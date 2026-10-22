@@ -144,9 +144,9 @@ enum SpeakerNamer {
                 lastBackend = backend.name
                 lastModel = backend.model
                 lastReason = Analytics.reason(for: error)
-                log(LLMError.isUsageLimit(error)
+                log(LLMError.signInAdvice(error, backend: backend.name) ?? (LLMError.isUsageLimit(error)
                     ? "\(backend.name) is out of allowance — trying the next backend"
-                    : "naming via \(backend.name) failed: \(error)")
+                    : "naming via \(backend.name) failed: \(error)"))
             }
         }
 
