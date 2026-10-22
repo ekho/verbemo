@@ -29,6 +29,9 @@ The Windows edition also uses [Markdig 1.4.0](https://github.com/xoofx/markdig)
 under the BSD 2-Clause license to parse Markdown previews. Its license is
 included in the Windows distribution at `Licenses/Markdig.txt`.
 
+Calendar agendas on Windows use [HtmlAgilityPack 1.12.4](https://github.com/zzzprojects/html-agility-pack)
+under the MIT license. Its license is included at `Licenses/HtmlAgilityPack.txt`.
+
 The LocalVQE build uses a small Amanu macOS packaging patch to produce one
 self-contained Intel dylib instead of runtime-loaded CPU-variant libraries.
 The inference implementation and model are otherwise the pinned upstream work.

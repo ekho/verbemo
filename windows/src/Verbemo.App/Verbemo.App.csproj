@@ -20,6 +20,7 @@
     <Page Include="App.xaml" />
     <Resource Include="Assets\Verbemo.ico" />
     <Content Include="../../Licenses/Markdig.txt" Link="Licenses/Markdig.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../Licenses/HtmlAgilityPack.txt" Link="Licenses/HtmlAgilityPack.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- WinForms is here for the tray icon alone; its names must not shadow WPF's. -->
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
@@ -27,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="../Verbemo.Core/Verbemo.Core.csproj" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="HtmlAgilityPack" />
     <PackageReference Include="NAudio" />
     <PackageReference Include="Velopack" />
   </ItemGroup>

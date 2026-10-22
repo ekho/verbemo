@@ -48,11 +48,15 @@ final class MeetingCalendarView: NSStackView {
         if metadata.isConfirmed {
             if let notes = metadata.agenda {
                 addArrangedSubview(JournalStyle.caption(localised("AGENDA", "ПОВЕСТКА")))
-                let preview = Self.agendaPreview(notes)
-                let text = body(agendaExpanded ? notes : preview)
+                let rendered = CalendarAgenda.render(notes)
+                let preview = Self.agendaPreview(rendered.string)
+                let text = body("")
+                text.allowsEditingTextAttributes = true
+                text.attributedStringValue = agendaExpanded ? rendered : rendered.attributedSubstring(
+                    from: NSRange(location: 0, length: preview.utf16.count))
                 text.identifier = .init("calendar.agenda")
                 addArrangedSubview(text)
-                if preview != notes {
+                if preview != rendered.string {
                     addArrangedSubview(expansionButton(
                         agendaExpanded ? localised("Show less", "Свернуть") : localised("Show in full", "Показать полностью"),
                         id: "calendar.expand-agenda", action: #selector(toggleAgenda)))

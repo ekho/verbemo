@@ -32,7 +32,7 @@ function Assert-Payload([string] $Directory) {
         if ($libraries.Count -eq 0) { throw "Missing native libraries in $runtime" }
         foreach ($library in $libraries) { Assert-OwnSignature $library.FullName }
     }
-    foreach ($license in @('Licenses/Verbemo-LICENSE.txt', 'Licenses/Markdig.txt',
+    foreach ($license in @('Licenses/Verbemo-LICENSE.txt', 'Licenses/Markdig.txt', 'Licenses/HtmlAgilityPack.txt',
         'local-runtime/licenses/transcribe.cpp-LICENSE', 'local-runtime/licenses/ggml-LICENSE',
         'live-runtime/licenses/transcribe.cpp-LICENSE', 'live-runtime/licenses/ggml-LICENSE')) {
         $path = Join-Path $Directory $license

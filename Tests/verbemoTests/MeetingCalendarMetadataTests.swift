@@ -102,6 +102,70 @@ struct SpeakerParticipantMappingTests {
 
 @Suite(.serialized) @MainActor
 struct MeetingCalendarViewTests {
+    @Test func htmlAgendaRendersFormattingAndLinksBeforeTruncation() throws {
+        let view = MeetingCalendarView()
+        view.update(MeetingCalendarMetadata([
+            "event_id": "html", "association": "confirmed", "title": "Planning",
+            "agenda": "<p><b>План</b> &amp; <i>цели</i><br><a href=\"https://example.test/agenda\">Документ</a></p><ul><li>Обсуждение</li></ul>",
+        ]))
+        let field = try #require(view.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "calendar.agenda" })
+        let text = field.attributedStringValue
+        #expect(text.string.components(separatedBy: .newlines).prefix(2) == ["План & цели", "Документ"])
+        #expect(text.string.contains("Обсуждение"))
+        #expect(!text.string.contains("<"))
+        #expect(!view.allDescendants.contains { $0.identifier?.rawValue == "calendar.expand-agenda" })
+        let font = try #require(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        #expect(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
+        let link = (text.string as NSString).range(of: "Документ")
+        try #require(link.location != NSNotFound)
+        #expect(text.attribute(.link, at: link.location, effectiveRange: nil) as? URL == URL(string: "https://example.test/agenda"))
+    }
+
+    @Test func longHtmlAgendaExpandsAndCollapsesRenderedText() throws {
+        let view = MeetingCalendarView()
+        let notes = String(repeating: "Тема 👩🏽‍💻 встречи ", count: 12).trimmingCharacters(in: .whitespaces)
+        view.update(MeetingCalendarMetadata([
+            "event_id": "html", "association": "confirmed", "agenda": "<b>\(notes)</b>",
+        ]))
+        func field() throws -> NSTextField {
+            try #require(view.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "calendar.agenda" })
+        }
+        let preview = try field().stringValue
+        #expect(preview.count <= 100 && !preview.contains("<"))
+        for expected in [notes, preview] {
+            let button = try #require(view.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "calendar.expand-agenda" })
+            #expect(button.sendAction(button.action, to: button.target))
+            #expect(try field().stringValue == expected)
+            let font = try #require(try field().attributedStringValue.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+            #expect(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
+        }
+    }
+
+    @Test func plainAgendaKeepsLiteralCharactersAndNewlines() throws {
+        let view = MeetingCalendarView()
+        let notes = "План: 2 < 3 & 5 > 4\n**буквально** <person@example.test>"
+        view.update(MeetingCalendarMetadata(["event_id": "plain", "association": "confirmed", "agenda": notes]))
+        let field = try #require(view.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "calendar.agenda" })
+        #expect(field.stringValue == notes)
+    }
+
+    @Test func htmlAgendaIgnoresActiveContentAndUnsafeLinks() {
+        let text = CalendarAgenda.render("""
+            <p style="background:url(https://example.test/track)">Текст<script>hidden()</script>
+            <img src="https://example.test/pixel"><iframe src="https://example.test">hidden</iframe>
+            <a href="file:///private/data">Файл</a><a href="javascript:alert(1)">Скрипт</a>
+            <b>Незакрытый &nbsp; &#128512;
+            """)
+        #expect(text.string.contains("Текст"))
+        #expect(text.string.contains("Незакрытый"))
+        #expect(text.string.contains("😀"))
+        #expect(!text.string.contains("hidden"))
+        text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, _, _ in
+            #expect(attributes[.link] == nil)
+            #expect(attributes[.attachment] == nil)
+        }
+    }
+
     @Test func agendaPreviewKeepsWholeWordsAtTheBoundary() {
         let word = String(repeating: "я", count: 98)
         #expect(MeetingCalendarView.agendaPreview(word + " и далее") == word + " и")
