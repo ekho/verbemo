@@ -19,6 +19,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     private let modelsTotal = NSTextField(labelWithString: "")
     private var shownModels: [ModelStorage.Model] = []
     private var restartNotice = ""
+    private var summaryConnection = [Config.summary().ollamaBaseURL, Config.summary().ollamaModel]
 
     private struct Row {
         let entry: SettingsSchema.Entry
@@ -54,10 +55,20 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         return found
     }
 
+    func reload() {
+        let summary = Config.summary()
+        summaryConnection = [summary.ollamaBaseURL, summary.ollamaModel]
+        setup.reload()
+    }
+
     func content(for destination: ApplicationNavigationState.Destination) -> NSView {
         guard let page = pages[destination] else { preconditionFailure("Not a settings destination") }
-        setup.reload()
-        refresh()
+        // Config/download observers keep pages current without a full refresh on every tab.
+        if destination == .storage { refreshModels() }
+        if destination == .summary && panel.isVisible {
+            let summary = Config.summary()
+            if [summary.ollamaBaseURL, summary.ollamaModel] != summaryConnection { reload() }
+        }
         return page
     }
 
