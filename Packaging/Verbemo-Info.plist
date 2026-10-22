@@ -24,8 +24,8 @@
     <string>__BUILD_VERSION__</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.2</string>
-    <!-- A Dock icon and a menu bar item, not an accessory: the app switches
-         to .accessory at runtime when someone turns the Dock icon off. -->
+    <!-- With the Dock preference off, the app becomes an accessory only
+         while its workspace is minimized or closed. -->
     <key>LSUIElement</key>
     <false/>
     <key>NSHighResolutionCapable</key>

@@ -533,16 +533,15 @@ enum SettingsSchema {
             Entry(["dock_icon"],
                   localised("Show in the Dock", "Показывать в доке"),
                   localised(
-                      "Off makes verbemo a menu-bar-only accessory — which the menu bar hides when it runs out of room.",
-                      "Выключено — verbemo живёт только в строке меню, а строка меню прячет значок, "
-                          + "когда ей не хватает места."),
+                      "Off hides the Dock icon only when the window is minimized or closed.",
+                      "Выключено — значок в доке скрывается только при свёрнутом или закрытом окне."),
                   .toggle, default: true, askedInSetup: true),
             Entry(["menu_bar_icon"],
                   localised("Show in the menu bar", "Показывать в строке меню"),
                   localised(
-                      "Off with the Dock icon too leaves verbemo with no icon anywhere: open Verbemo "
+                      "With both icons off, minimizing or closing the window hides verbemo: open Verbemo "
                           + "again to bring its window back.",
-                      "Выключено вместе со значком в доке — verbemo нигде не видно: чтобы вернуть "
+                      "Когда оба значка выключены, свёрнутое или закрытое окно скрывает verbemo: чтобы вернуть "
                           + "окно, откройте Verbemo ещё раз."),
                   .toggle, default: true, askedInSetup: true),
             Entry(["window"],
