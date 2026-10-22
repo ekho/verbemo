@@ -151,6 +151,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         library.onNavigateSettings = { [weak self] in self?.navigate($0) }
     }
     func navigate(_ destination: ApplicationNavigationState.Destination) {
+        let enteringSettings = navigation.destination.isMeetings || navigation.destination == .about
         showingLive = false
         navigation.navigate(destination)
         sidebar.select(destination)
@@ -168,6 +169,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         } else if destination == .about {
             content = SetupLayout.scroller(around: about.contentView)
         } else if !destination.isMeetings {
+            if enteringSettings && isVisible { settings.reload() }
             let about = NSButton(title: localised("About", "О приложении"), target: self, action: #selector(showAbout))
             about.isBordered = false
             actions.setViews([about], in: .center)
@@ -217,6 +219,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     }
     func show() {
         if navigation.destination.isMeetings { libraryProvider?()?.refresh() }
+        else if !isVisible && navigation.destination != .about { settings.reload() }
         updateActivationPolicy(windowVisible: true)
         if panel.isMiniaturized { panel.deminiaturize(nil) }
         panel.orderFront(nil)
