@@ -543,11 +543,12 @@ enum LLMError: Error, CustomStringConvertible {
         "oauth token expired", "oauth token revoked", "access token could not be refreshed",
     ]
 
-    static func signInAdvice(_ error: Error, backend: String) -> String? {
+    static func signInAdvice(_ error: Error, backend: String, hasNextBackend: Bool = true) -> String? {
         guard (error as? LLMError)?.isSignedOut == true,
               ["claude-cli", "codex-cli"].contains(backend) else { return nil }
         let command = backend == "claude-cli" ? "claude /login" : "codex login"
-        return "\(backend) is signed out — sign in again with `\(command)`; trying the next backend"
+        return "\(backend) is signed out — sign in again with `\(command)`"
+            + (hasNextBackend ? "; trying the next backend" : "")
     }
 
     /// Whether the same request would plausibly succeed later: no network, a

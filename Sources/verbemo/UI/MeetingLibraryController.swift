@@ -983,9 +983,9 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         case .transcribe(let clearingFirst):
             return .transcribe(clearingFirst: clearingFirst)
         case .finish:
-            return PostProcessor.outstanding(item.dir, policy: policy, retryFailed: true).isEmpty
-                ? .nothingOwed
-                : .finish
+            if !PostProcessor.outstanding(item.dir, policy: policy, retryFailed: true).isEmpty { return .finish }
+            if let refusal = PostProcessor.manualSummaryRefusal(item.dir) { return .refuse(refusal.described) }
+            return .nothingOwed
         }
     }
 

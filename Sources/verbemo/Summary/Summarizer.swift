@@ -66,7 +66,7 @@ enum Summarizer {
         // particular: given a participant list, the summarizer writes "Anna
         // will send the contract" instead of "them will send the contract".
         let header = context.isEmpty ? "" : context.joined(separator: "\n") + "\n"
-        for backend in backends {
+        for (index, backend) in backends.enumerated() {
             guard !Task.isCancelled else { return nil }
             do {
                 if request != nil { try await backend.checkAccess() }
@@ -107,8 +107,9 @@ enum Summarizer {
                         backend: backend.name, model: backend.model)),
                     .reason: .text(lastReason.rawValue),
                 ])
-                log(LLMError.signInAdvice(error, backend: backend.name) ?? (LLMError.isUsageLimit(error)
-                    ? "\(backend.name) is out of allowance — trying the next backend"
+                let hasNext = index + 1 < backends.count
+                log(LLMError.signInAdvice(error, backend: backend.name, hasNextBackend: hasNext) ?? (LLMError.isUsageLimit(error)
+                    ? "\(backend.name) is out of allowance" + (hasNext ? " — trying the next backend" : "")
                     : "summary via \(backend.name) failed: \(error)"))
             }
         }
@@ -128,15 +129,15 @@ enum Summarizer {
         case .deferred:
             deferred = true
             log("no backend answered, and at least one could not be reached — summary deferred, "
-                + "will be retried later")
+                + (request == nil ? "will be retried later" : "use Create a new summary to retry this choice"))
         case .gaveUp(let deferrals?):
             deferred = false
             log("no backend has answered in \(deferrals) tries — giving up on the summary until "
-                + "the summary settings, keys or backends change")
+                + (request == nil ? "the summary settings, keys or backends change" : "you use Create a new summary to retry"))
         case .gaveUp(nil):
             deferred = false
             log("every backend failed for good — giving up on the summary until the "
-                + "summary settings, keys or backends change")
+                + (request == nil ? "summary settings, keys or backends change" : "next explicit attempt with Create a new summary"))
         }
         Analytics.track(.summaryFailed, [
             .backend: .text(settings.backend),

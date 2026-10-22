@@ -31,7 +31,20 @@ struct SummaryRequest: Sendable {
         for backend in backends {
             try Task.checkCancellation()
             do { try await backend.checkAccess(); return }
-            catch { failure = error }
+            catch {
+                if error is CancellationError || Task.isCancelled { throw CancellationError() }
+                if let advice = LLMError.signInAdvice(error, backend: backend.name, hasNextBackend: false) {
+                    let command = backend.name == "claude-cli" ? "claude /login" : "codex login"
+                    failure = PostProcessor.SummaryRegenerationError.unavailable(localised(advice,
+                        "Нет входа в \(backend.name). Выполните \(command) и повторите попытку."))
+                } else if error is PostProcessor.SummaryRegenerationError {
+                    failure = error
+                } else {
+                    failure = PostProcessor.SummaryRegenerationError.unavailable(localised(
+                        "Could not verify access to \(backend.name). Check its connection and Summary settings, then retry.",
+                        "Не удалось проверить доступ к \(backend.name). Проверьте подключение и настройки сводки, затем повторите попытку."))
+                }
+            }
         }
         throw failure ?? Self.unavailable()
     }

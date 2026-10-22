@@ -195,10 +195,20 @@ enum PostProcessor {
         }
     }
 
+    static func manualSummaryRefusal(_ dir: URL) -> Completion? {
+        let meta = SessionState.read(dir) ?? [:]
+        guard meta[SessionState.Key.summaryManual] as? Bool == true,
+              !hasCurrentSummary(dir, meta: meta) else { return nil }
+        let english = "This summary needs an explicit provider choice. Use Create a new summary to retry."
+        return .refused(english, localised(english,
+            "Для этой сводки нужно выбрать способ создания. Нажмите «Создать новую сводку», чтобы повторить попытку."))
+    }
+
     /// The button and command share the explicit retry and its outcome; the sweep uses finish.
     static func finishManually(_ dir: URL, policy: Policy = .configured) async -> Completion {
         do {
             let work = try await finishWork(dir, policy: policy, retryFailed: true)
+            if let refusal = manualSummaryRefusal(dir) { return refusal }
             guard !work.isEmpty else { return .nothingToDo }
             let meta = SessionState.read(dir) ?? [:]
             let missingNames = work.names && !FileManager.default.fileExists(atPath: dir.appendingPathComponent(SpeakerNames.file).path)
