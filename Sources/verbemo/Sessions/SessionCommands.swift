@@ -222,20 +222,11 @@ struct ProcessSession: ParsableCommand {
             }
 
         case .finish:
-            let work = try runBlocking { await PostProcessor.finish(dir) }
+            let result = try runBlocking { await PostProcessor.finishManually(dir) }
             StopHook.fireIfOwed(dir)
-            if work.isEmpty {
-                // Nothing done has two meanings and only one of them is good
-                // news. A session the app is naming and summarizing right now
-                // must not be reported as finished.
-                if let holder = SessionClaim.holder(dir), holder.isAlive {
-                    print("")
-                    print(SessionClaim.Busy(session: dir.lastPathComponent, holder: holder))
-                    throw ExitCode(1)
-                }
-                print("\nNothing to do — everything that can be done is done.")
-                return
-            }
+            print("\n" + result.description)
+            if !result.succeeded { throw ExitCode(1) }
+
         }
 
         print("")

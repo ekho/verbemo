@@ -1023,13 +1023,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     @objc private func finishClicked() {
         guard let item = selected else { return }
         if let version = selectedVersion, !version.isRequest, version.dir != item.dir {
-            working = true
-            updateButtons()
-            Task {
-                await PostProcessor.finish(version.dir, retryFailed: true)
-                working = false
-                reload()
-            }
+            finishManually(version.dir, about: item)
             return
         }
         switch Self.decision(for: item) {
@@ -1051,14 +1045,18 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             reload()
 
         case .finish:
-            working = true
-            updateButtons()
-            Task {
-                let work = await PostProcessor.finish(item.dir, retryFailed: true)
-                working = false
-                reload()
-                if work.isEmpty { say(Self.nothingDoneLine(for: item.dir), about: item) }
-            }
+            finishManually(item.dir, about: item)
+        }
+    }
+
+    private func finishManually(_ dir: URL, about item: SessionInventory.Item) {
+        working = true
+        updateButtons()
+        Task {
+            let result = await PostProcessor.finishManually(dir)
+            working = false
+            reload()
+            say(result.described, about: item)
         }
     }
 
