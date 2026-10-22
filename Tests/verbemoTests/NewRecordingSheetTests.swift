@@ -256,7 +256,7 @@ struct NewRecordingSheetTests {
 
     @Test(.freshHome)
     func selectedEventAndCustomTitleSurviveRecordingAndRecoveryMetadata() throws {
-        let context = MeetingContext(meeting: meeting("event"), app: "Call app", appFamilies: ["call.app"], confirmed: true)
+        let context = MeetingContext(meeting: meeting("event"), app: "Call app", appFamilies: ["call.app"])
         let session = try RecordingSession(root: Home.current.url, context: context, title: "  Своя запись  ",
             mic: FakeMicRecorder(), system: FakeSystemRecorder())
         try session.start()

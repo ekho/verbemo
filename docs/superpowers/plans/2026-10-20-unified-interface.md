@@ -228,6 +228,8 @@
 
 ### Task 8: Сохранённый календарный контекст и сопоставление говорящих
 
+**Уточнение 2026-10-22:** для новых записей найденное событие с постоянным непустым ID сразу получает полную связь независимо от способа запуска. Описанный ниже этап кандидата больше не применяется; пользователь при необходимости меняет событие вручную. Чтение старых снимков остаётся совместимым, автоматической миграции нет.
+
 **Modify macOS:** `Meetings/CalendarWatcher.swift`, `MeetingContext.swift`, `AutoRecordController.swift`, `Sessions/SessionInventory.swift`, `PostProcessor.swift`, `Transcription/Transcript.swift`, `UI/MeetingDetailView.swift`. **Create:** `Sessions/MeetingCalendarMetadata.swift`, `UI/MeetingCalendarView.swift`.
 
 **Modify Windows:** `Core/Processing/SessionInventory.cs`, `Core/Processing/TranscriptDocument.cs`, `App/ProcessingCoordinator.cs`, `App/MeetingDetailView.cs`; создать `Core/Sessions/MeetingCalendarMetadata.cs`, `App/MeetingCalendarView.cs` для чтения снимка метаданных. Новый автоматический Windows-календарный провайдер не добавлять.

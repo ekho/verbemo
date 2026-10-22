@@ -189,7 +189,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         let title = NSTextField(labelWithString: event.title)
         title.font = .systemFont(ofSize: 13, weight: .medium)
         title.lineBreakMode = .byTruncatingTail
-        let snapshot = MeetingCalendarMetadata(MeetingContext(meeting: event, app: nil, confirmed: true).metaFields["calendar"] as? [String: Any] ?? [:])
+        let snapshot = MeetingCalendarMetadata(MeetingContext(meeting: event, app: nil).metaFields["calendar"] as? [String: Any] ?? [:])
         let detail = NSTextField(labelWithString: [snapshot.map { MeetingCalendarView.dateLine($0) }, event.calendarTitle].compactMap { $0 }.joined(separator: " · "))
         detail.font = .systemFont(ofSize: 11); detail.textColor = .secondaryLabelColor
         detail.lineBreakMode = .byTruncatingTail

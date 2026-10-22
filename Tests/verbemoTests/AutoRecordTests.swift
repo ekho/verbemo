@@ -308,6 +308,47 @@ final class AutoRecordHarness {
 
 @MainActor
 struct AutoRecordLoopTests {
+    @Test(.freshHome, arguments: [false, true])
+    func automaticCalendarLinkMatchesManualAssociation(calendarTrigger: Bool) throws {
+        let calendar = FakeCalendar()
+        let h = AutoRecordHarness(calendar: calendar) {
+            $0.calendar = calendarTrigger
+            $0.startDelay = 0
+        }
+        let event = CalendarWatcher.Meeting(id: "event", title: "Planning", start: h.now,
+            end: h.now.addingTimeInterval(1800), attendees: ["Anna"], link: nil, looksLikeCall: true,
+            agenda: "Discuss the release",
+            participants: [CalendarParticipant(id: "anna", name: "Anna", email: "anna@example.test")])
+        calendar.meetings = [event]
+        h.micActive = true
+        var captured: MeetingContext?
+        h.controller.startRecording = { trigger, context in
+            #expect(trigger == (calendarTrigger ? .calendar : .micActivity))
+            captured = context
+            return true
+        }
+        h.controller.tick()
+
+        let context = try #require(captured)
+        let session = try RecordingSession(root: Home.current.url, context: context,
+            trigger: calendarTrigger ? .calendar : .micActivity,
+            mic: FakeMicRecorder(), system: FakeSystemRecorder())
+        try session.start()
+        let active = try #require(MeetingCalendarMetadata.read(from: session.dir))
+        #expect(active.isConfirmed)
+        #expect(active.eventID == "event")
+        #expect(active.agenda == "Discuss the release")
+        #expect(active.participants == event.participants)
+        session.stop(reason: "manual")
+
+        let saved = try #require(SessionState.read(session.dir)?["calendar"] as? [String: Any])
+        #expect(MeetingCalendarMetadata(saved)?.isConfirmed == true)
+        #expect(MeetingCalendarMetadata.modelAttendees(saved) == ["Anna"])
+        try MeetingCalendarMetadata.associate(event, in: session.dir)
+        let manual = try #require(SessionState.read(session.dir)?["calendar"] as? [String: Any])
+        #expect(NSDictionary(dictionary: saved).isEqual(to: manual))
+    }
+
     /// The backstop exists for an app that never lets go of the microphone.
     /// It used to stop the recording and, five seconds later, see the same
     /// app on the mic for longer than the start delay and start again —
