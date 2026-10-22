@@ -63,6 +63,32 @@ internal sealed class MarkdownPreview : RichTextBox
         ScrollToHome();
     }
 
+    public void ShowTranscript(string markdown, Action<double> seek)
+    {
+        ShowMarkdown(markdown);
+        foreach (var paragraph in Document.Blocks.OfType<Paragraph>().ToArray())
+        {
+            if (paragraph.Inlines.FirstInline is not Span span) continue;
+            var runs = span.Inlines.TakeWhile(inline => inline is Run).Cast<Run>().ToArray();
+            var match = System.Text.RegularExpressions.Regex.Match(string.Concat(runs.Select(run => run.Text)), @"^\[(\d{1,4}:[0-5]\d(?::[0-5]\d)?)\]");
+            if (!match.Success) continue;
+            var seconds = match.Groups[1].Value.Split(':').Select(int.Parse).Aggregate(0d, (total, part) => total * 60 + part);
+            var link = new Hyperlink(new Run(match.Value)) { ToolTip = T("Play from here", "Воспроизвести отсюда") };
+            link.SetResourceReference(TextElement.ForegroundProperty, "JournalAccent");
+            System.Windows.Automation.AutomationProperties.SetName(link, T("Play from ", "Воспроизвести с ") + match.Groups[1].Value);
+            link.Click += (_, _) => seek(seconds);
+            span.Inlines.InsertBefore(span.Inlines.FirstInline, link);
+            var remaining = match.Length;
+            foreach (var run in runs)
+            {
+                var length = Math.Min(remaining, run.Text.Length);
+                run.Text = run.Text[length..];
+                remaining -= length;
+                if (remaining == 0) break;
+            }
+        }
+    }
+
     private static FlowDocument NewDocument()
     {
         var document = new FlowDocument

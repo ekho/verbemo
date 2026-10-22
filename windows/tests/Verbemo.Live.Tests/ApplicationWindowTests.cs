@@ -46,6 +46,17 @@ public sealed class ApplicationWindowTests
         finally { runtime.DisposeAsync().AsTask().GetAwaiter().GetResult(); Directory.Delete(root, true); }
     });
 
+    internal static void Until(Func<bool> condition)
+    {
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        var tick = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
+        tick.Tick += (_, _) => { if (condition() || elapsed.Elapsed > TimeSpan.FromSeconds(5)) { tick.Stop(); frame.Continue = false; } };
+        tick.Start();
+        System.Windows.Threading.Dispatcher.PushFrame(frame);
+        Assert.True(condition(), "Timed out waiting for the UI operation to finish.");
+    }
+
     internal static void OnSta(Action test)
     {
         Exception? failure = null;

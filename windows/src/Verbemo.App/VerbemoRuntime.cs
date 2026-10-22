@@ -168,6 +168,8 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         ?? "0.0.0";
 
     public string DataDirectory { get; }
+    internal double? MicrophoneDecibels => State.IsRecording && !State.IsPaused ? capture.MicrophoneLevel.Decibels : null;
+    internal double? SystemDecibels => State.IsRecording && !State.IsPaused ? capture.SystemLevel.Decibels : null;
     public string ConfigPath => store.ConfigPath;
     public string SetupPath { get; }
     public bool IsSetupComplete => File.Exists(SetupPath);

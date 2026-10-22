@@ -31,6 +31,8 @@ public sealed class WindowsAudioCapture : IAudioCapture, ILiveAudioSource
     private long startedAt100ns;
     private volatile bool paused;
     private volatile bool running;
+    internal AudioLevel MicrophoneLevel { get; } = new();
+    internal AudioLevel SystemLevel { get; } = new();
 
     public bool IsRunning => running;
     public long ElapsedMs => (TrackWriter.Now100ns() - startedAt100ns) / 10_000;
@@ -54,6 +56,8 @@ public sealed class WindowsAudioCapture : IAudioCapture, ILiveAudioSource
         if (microphone is not null || system is not null) throw new InvalidOperationException("Capture is already running.");
         cancellationToken.ThrowIfCancellationRequested();
         startedAt100ns = TrackWriter.Now100ns();
+        MicrophoneLevel.Reset();
+        SystemLevel.Reset();
         try
         {
             microphone = await new WasapiRecorderBuilder().WithDefaultDeviceStreamRouting().BuildAsync();
@@ -120,6 +124,8 @@ public sealed class WindowsAudioCapture : IAudioCapture, ILiveAudioSource
     {
         cancellationToken.ThrowIfCancellationRequested();
         paused = value;
+        MicrophoneLevel.Reset();
+        SystemLevel.Reset();
         return Task.CompletedTask;
     }
 
@@ -128,6 +134,7 @@ public sealed class WindowsAudioCapture : IAudioCapture, ILiveAudioSource
         var silent = paused || flags.HasFlag(AudioClientBufferFlags.Silent);
         var invalidTime = flags.HasFlag(AudioClientBufferFlags.TimestampError);
         microphoneTrack?.Write(buffer, silent, qpcPosition, invalidTime);
+        if (microphone is not null) MicrophoneLevel.Update(buffer, microphone.WaveFormat, silent);
         if (microphone is not null) LiveAudioAvailable?.Invoke(true, buffer, microphone.WaveFormat, silent,
             ((qpcPosition > 0 && !invalidTime ? qpcPosition : TrackWriter.Now100ns()) - startedAt100ns) / 10_000);
     }
@@ -137,6 +144,7 @@ public sealed class WindowsAudioCapture : IAudioCapture, ILiveAudioSource
         var silent = paused || flags.HasFlag(AudioClientBufferFlags.Silent);
         var invalidTime = flags.HasFlag(AudioClientBufferFlags.TimestampError);
         systemTrack?.Write(buffer, silent, qpcPosition, invalidTime);
+        if (system is not null) SystemLevel.Update(buffer, system.WaveFormat, silent);
         if (system is not null) LiveAudioAvailable?.Invoke(false, buffer, system.WaveFormat, silent,
             ((qpcPosition > 0 && !invalidTime ? qpcPosition : TrackWriter.Now100ns()) - startedAt100ns) / 10_000);
     }

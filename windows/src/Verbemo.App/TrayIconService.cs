@@ -49,13 +49,12 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(new Separator());
         menu.Items.Add(autoRecordItem);
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item(T("Show Verbemo window", "Показать окно Verbemo"), window.Reveal));
+        menu.Items.Add(Item(T("Meetings", "Встречи"), App.ShowRecordings));
         menu.Items.Add(Item(T("Open recordings folder", "Открыть папку записей"), () =>
         {
             runtime.TrackArtifact("recordings_root");
             VerbemoRuntime.Open(runtime.Settings.RecordingsDirectory);
         }));
-        menu.Items.Add(Item(T("Manage recordings…", "Управление записями…"), App.ShowRecordings));
         menu.Items.Add(Item(T("Import…", "Импортировать…"), () => _ = App.ImportAsync(null)));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item(T("Settings…", "Настройки…"), () => App.ShowSettings(0)));

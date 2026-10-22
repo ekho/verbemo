@@ -16,12 +16,15 @@
       <Setter Property="Padding" Value="12"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
         <Border x:Name="Card" CornerRadius="8" Padding="{TemplateBinding Padding}" BorderThickness="1"
-                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="Transparent">
+                Background="Transparent" BorderBrush="Transparent">
           <ContentPresenter/>
         </Border>
         <ControlTemplate.Triggers>
-          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/></Trigger>
-          <Trigger Property="IsSelected" Value="True"><Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/></Trigger>
+          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="Background" Value="{DynamicResource JournalSelection}"/></Trigger>
+          <Trigger Property="IsSelected" Value="True">
+            <Setter TargetName="Card" Property="Background" Value="{DynamicResource JournalSelection}"/>
+            <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource JournalAccent}"/>
+          </Trigger>
           <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource TextFillColorPrimaryBrush}"/></Trigger>
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
