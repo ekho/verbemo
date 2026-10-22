@@ -204,6 +204,7 @@ enum SessionInventory {
             hasAudio: audioSurvives(dir, meta: meta),
             isDiarized: transcript?.segments.contains { segment in
                 !segment.speaker.isEmpty && segment.speaker != "me" && segment.speaker != "them"
+                    && segment.speaker != "speaker"
             } == true
         )
     }
