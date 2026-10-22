@@ -971,10 +971,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised("In the Dock", "В доке")),
             detail: SetupLayout.detail(
                 localised(
-                    "And in ⌘-Tab. The Dock cannot run out of room the way the menu bar can, "
-                        + "and clicking the icon shows the window.",
-                    "И в ⌘-Tab. В доке, в отличие от строки меню, место не кончается, "
-                        + "а по щелчку значка открывается окно."),
+                    "Keep the icon in the Dock and ⌘-Tab when the window is minimized or closed. "
+                        + "The icon is always shown while the window is open.",
+                    "Оставлять значок в доке и ⌘-Tab, когда окно свёрнуто или закрыто. "
+                        + "При открытом окне значок виден всегда."),
                 lines: 2, width: 520))
     }
 
@@ -1004,9 +1004,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     nonisolated static func noIconsNote(menuBar: Bool, dock: Bool) -> String {
         guard !menuBar, !dock else { return "" }
         return localised(
-            "verbemo keeps recording with no icon anywhere. To bring the window back, open Verbemo "
+            "When the window is minimized or closed, verbemo keeps recording without an icon. To bring it back, open Verbemo "
                 + "again — from Spotlight, or from Applications.",
-            "verbemo продолжит записывать, но её нигде не будет видно. Чтобы вернуть окно, "
+            "Когда окно свёрнуто или закрыто, verbemo продолжит записывать без значка. Чтобы вернуть окно, "
                 + "откройте Verbemo ещё раз — из Spotlight или из папки «Программы».")
     }
 

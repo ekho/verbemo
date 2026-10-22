@@ -123,7 +123,7 @@ struct Run: ParsableCommand {
         // Settled before the first window is built, and never again: every
         // label, menu item and banner reads it as it is created, so a language
         // that changed underneath them would leave one window in each. It is
-        // the same promise the Dock icon and the startup window make — the
+        // the same promise the startup window makes — the
         // setting takes effect at the next launch, and the window says so.
         // Interface language and the NSApplication were settled before the
         // possible move-from-DMG prompt; no window existed before that point.
@@ -524,14 +524,7 @@ final class AppController {
     /// program to find out.
     private func applyIconPreferences() {
         menuBar.setVisible(Config.menuBarIcon())
-
-        let wanted: NSApplication.ActivationPolicy = Config.dockIcon() ? .regular : .accessory
-        guard NSApp.activationPolicy() != wanted else { return }
-        NSApp.setActivationPolicy(wanted)
-        // Coming back to .regular hands the menu bar to whatever was in front
-        // while verbemo had no place in the switcher, so its own windows are
-        // left in front of an application menu belonging to someone else.
-        if wanted == .regular { NSApp.activate(ignoringOtherApps: true) }
+        window.applyDockPreference()
     }
 
     /// Resume processing and optional calendar prompts after setup. Microphone

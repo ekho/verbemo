@@ -2,7 +2,7 @@ import AppKit
 
 /// The only ordinary application window. Runtime work outlives its content.
 @MainActor
-final class ApplicationWindow: NSObject {
+final class ApplicationWindow: NSObject, NSWindowDelegate {
     let panel: NSWindow
     private let sidebar = SidebarView()
     private let recordingBar = RecordingBarView()
@@ -55,15 +55,17 @@ final class ApplicationWindow: NSObject {
         set { recordingBar.title = newValue; liveView.title = newValue }
     }
     private var appearance: AppearanceController?
+    private var keepsDockIcon = Config.dockIcon()
     var toolbarIsHidden: Bool { toolbar.isHidden }
     var primaryActionsAreVisible: Bool { !sidebar.isHidden }
     var recordingBarIsVisible: Bool { !recordingBar.isHidden }
-    var isVisible: Bool { panel.isVisible }
+    var isVisible: Bool { panel.isVisible && !panel.isMiniaturized }
 
     override init() {
         panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
+        panel.delegate = self
         panel.title = "Verbemo"
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
@@ -210,9 +212,41 @@ final class ApplicationWindow: NSObject {
         sidebar.select(.allMeetings)
         mount(liveView)
     }
-    func show() { if navigation.destination.isMeetings { libraryProvider?()?.refresh() }; panel.orderFront(nil) }
-    func bringToFront() { if navigation.destination.isMeetings { libraryProvider?()?.refresh() }; NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) }
-    func hide() { panel.orderOut(nil) }
+    func show() {
+        if navigation.destination.isMeetings { libraryProvider?()?.refresh() }
+        updateActivationPolicy(windowVisible: true)
+        if panel.isMiniaturized { panel.deminiaturize(nil) }
+        panel.orderFront(nil)
+    }
+    func bringToFront() {
+        show()
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+    }
+    func hide() {
+        panel.orderOut(nil)
+        updateActivationPolicy(windowVisible: false)
+    }
+    func applyDockPreference() {
+        keepsDockIcon = Config.dockIcon()
+        updateActivationPolicy(windowVisible: isVisible)
+    }
+    private func updateActivationPolicy(windowVisible: Bool) {
+        let wanted: NSApplication.ActivationPolicy = keepsDockIcon || windowVisible ? .regular : .accessory
+        guard NSApp.activationPolicy() != wanted else { return }
+        NSApp.setActivationPolicy(wanted)
+        // Restoring a regular app must also restore its own menu bar.
+        if wanted == .regular, windowVisible { NSApp.activate(ignoringOtherApps: true) }
+    }
+    func windowDidMiniaturize(_ notification: Notification) {
+        updateActivationPolicy(windowVisible: false)
+    }
+    func windowDidDeminiaturize(_ notification: Notification) {
+        updateActivationPolicy(windowVisible: true)
+    }
+    func windowWillClose(_ notification: Notification) {
+        updateActivationPolicy(windowVisible: false)
+    }
     func update(state: MenuBarController.State, elapsed: String?) {
         let wasRecording = recordingBarIsVisible
         recordingBar.update(state: state, elapsed: elapsed)
