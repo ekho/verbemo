@@ -10,7 +10,44 @@ namespace Verbemo.Live.Tests;
 public sealed class MeetingPlayerTests
 {
     [Fact]
-    public void Volume_and_speed_survive_switching_meetings() => ApplicationWindowTests.OnSta(() =>
+    public void Volume_and_speed_survive_switching_meetings() => WithPlayer((player, root) =>
+    {
+        player.Load(Path.Combine(root, "first"));
+        var controls = ((DockPanel)((StackPanel)player.Child).Children[0]).Children;
+        controls.OfType<Slider>().Single(slider => System.Windows.Automation.AutomationProperties.GetName(slider)
+            == Verbemo.Core.Localization.Localized.T("Playback volume", "Громкость воспроизведения")).Value = 0;
+        controls.OfType<ComboBox>().Single().SelectedIndex = 4;
+        player.Load(Path.Combine(root, "second"));
+        Until(() => RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused, player);
+        Assert.All(RecordingActionsTests.Field<List<MediaPlayer>>(player, "players"), track => Assert.Equal(0, track.Volume));
+        Assert.Equal(2, RecordingActionsTests.Field<ClockGroup>(player, "clock").Controller!.SpeedRatio);
+    });
+
+    [AudioPlaybackFact]
+    public void Native_seek_waits_for_loading_and_stays_paused_after_unload() => WithPlayer((player, root) =>
+    {
+        player.Load(Path.Combine(root, "first"));
+        Until(() => RecordingActionsTests.Field<List<MediaPlayer>>(player, "players").All(track => track.NaturalDuration.HasTimeSpan)
+            && RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused, player);
+        player.Load(Path.Combine(root, "second"));
+        player.Seek(.25);
+        player.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.FrameworkElement.UnloadedEvent));
+        Until(() => Math.Abs(RecordingActionsTests.Field<Slider>(player, "position").Value - .25) < .01, player);
+        Assert.True(RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
+        Assert.InRange(RecordingActionsTests.Field<ClockGroup>(player, "clock").CurrentTime!.Value.TotalSeconds, .24, .26);
+        Assert.InRange(RecordingActionsTests.Field<Slider>(player, "position").Value, .24, .26);
+    });
+
+    public sealed class AudioPlaybackFactAttribute : FactAttribute
+    {
+        public AudioPlaybackFactAttribute()
+        {
+            if (NAudio.Wave.WaveOut.DeviceCount == 0)
+                Skip = "Requires a Windows playback device; run this native-media check on a Windows desktop before release.";
+        }
+    }
+
+    private static void WithPlayer(Action<MeetingPlayer, string> test) => ApplicationWindowTests.OnSta(() =>
     {
         var root = Path.Combine(Path.GetTempPath(), "verbemo-journal-player", Guid.NewGuid().ToString("N"));
         try
@@ -25,26 +62,7 @@ public sealed class MeetingPlayerTests
             using var player = new MeetingPlayer();
             var window = new System.Windows.Window { Content = player, Width = 400, Height = 150 };
             window.Show();
-            try
-            {
-                player.Load(Path.Combine(root, "first"));
-                Until(() => RecordingActionsTests.Field<List<MediaPlayer>>(player, "players").All(track => track.NaturalDuration.HasTimeSpan)
-                    && RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused, player);
-                Assert.True(RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
-                var controls = ((DockPanel)((StackPanel)player.Child).Children[0]).Children;
-                controls.OfType<Slider>().Single(slider => System.Windows.Automation.AutomationProperties.GetName(slider)
-                    == Verbemo.Core.Localization.Localized.T("Playback volume", "Громкость воспроизведения")).Value = 0;
-                controls.OfType<ComboBox>().Single().SelectedIndex = 4;
-                player.Load(Path.Combine(root, "second"));
-                player.Seek(.25);
-                player.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.FrameworkElement.UnloadedEvent));
-                Until(() => Math.Abs(RecordingActionsTests.Field<Slider>(player, "position").Value - .25) < .01, player);
-                Assert.All(RecordingActionsTests.Field<List<MediaPlayer>>(player, "players"), track => Assert.Equal(0, track.Volume));
-                Assert.Equal(2, RecordingActionsTests.Field<ClockGroup>(player, "clock").Controller!.SpeedRatio);
-                Assert.True(RecordingActionsTests.Field<ClockGroup>(player, "clock").IsPaused);
-                Assert.InRange(RecordingActionsTests.Field<ClockGroup>(player, "clock").CurrentTime!.Value.TotalSeconds, .24, .26);
-                Assert.InRange(RecordingActionsTests.Field<Slider>(player, "position").Value, .24, .26);
-            }
+            try { test(player, root); }
             finally { window.Close(); }
         }
         finally { Directory.Delete(root, true); }
