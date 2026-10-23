@@ -8,7 +8,7 @@ final class SidebarView: JournalSurface {
     var onToggleAutomatic: (() -> Void)?
     private let libraryHost = NSView()
     private let start = NSButton()
-    private let settings = NSButton()
+    private let settings = SidebarSettingsButton()
     private let automatic = NSSwitch()
 
     init() {
@@ -58,7 +58,7 @@ final class SidebarView: JournalSurface {
         settings.keyEquivalentModifierMask = .command
         settings.target = self
         settings.action = #selector(settingsClicked)
-        settings.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        settings.heightAnchor.constraint(equalToConstant: 40).isActive = true
         automatic.controlSize = .small
         automatic.target = self
         automatic.action = #selector(automaticClicked)
@@ -97,8 +97,10 @@ final class SidebarView: JournalSurface {
         ])
     }
     func select(_ destination: ApplicationNavigationState.Destination) {
+        settings.state = destination.isMeetings ? .off : .on
         settings.contentTintColor = destination.isMeetings ? JournalStyle.ink : JournalStyle.accent
         settings.setAccessibilityValue(destination.isMeetings ? 0 : 1)
+        settings.needsDisplay = true
     }
     func updateRecording(_ recording: Bool) { start.isEnabled = !recording }
     func updateAutomatic(_ enabled: Bool, reason: String?) {
@@ -117,6 +119,27 @@ final class SidebarView: JournalSurface {
     @objc private func importClicked() { onImport?() }
     @objc private func settingsClicked() { onNavigate?(.general) }
     @objc private func automaticClicked() { onToggleAutomatic?() }
+}
+
+@MainActor
+private final class SidebarSettingsButton: NSButton {
+    override class var cellClass: AnyClass? {
+        get { Cell.self }
+        set {}
+    }
+    private final class Cell: NSButtonCell {
+        override func drawInterior(withFrame frame: NSRect, in controlView: NSView) {
+            super.drawInterior(withFrame: frame.insetBy(dx: 12, dy: 0), in: controlView)
+        }
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        if state == .on {
+            JournalStyle.selection.setFill()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6).fill()
+        }
+        super.draw(dirtyRect)
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
 
 private extension NSView {

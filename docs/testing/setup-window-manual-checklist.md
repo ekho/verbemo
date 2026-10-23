@@ -5,6 +5,12 @@ The [original dated checklist](../history/amanu-setup-window-manual-checklist.md
 preserves imported observations. Use a disposable validation profile and record
 source SHA, bundle hash, language, permissions and actual results.
 
+The current Journal permission page has a status-only footer. Permission
+actions remain in their rows. Leave through the sidebar, hide or close the
+window, or quit: setup is marked completed. Permission checks still apply at
+startup. References below to footer **Later**, **Done**, or a next-step button
+describe the earlier layout; those buttons are no longer present.
+
 ## Before installing
 
 - Confirm the menu and status window both say the recording has stopped.

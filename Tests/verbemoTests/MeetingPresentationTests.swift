@@ -4,6 +4,23 @@ import Testing
 @testable import verbemo
 
 struct MeetingPresentationTests {
+    @Test(.freshHome, .speaking(.russian)) func summaryFailureIsLocalizedInRussian() throws {
+        try expectSummaryFailure("Сбой создания сводки")
+    }
+
+    @Test(.freshHome, .speaking(.english)) func summaryFailureIsLocalizedInEnglish() throws {
+        try expectSummaryFailure("Summary creation failed")
+    }
+
+    private func expectSummaryFailure(_ title: String) throws {
+        let dir = try SessionFixture.make(meta: [SessionState.Key.summaryStatus: "failed"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(SessionInventory.item(for: dir, policy: .init(names: false, summary: true)))
+        let summary = try #require(MeetingPresentation.stages(item).last)
+        #expect(summary.state == .failed)
+        #expect(summary.title == title)
+    }
+
     @Test(.freshHome) func twoSeparatedVoicesHaveDiarizationBadge() throws {
         let dir = try SessionFixture.make(segments: [
             .init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Hello"),

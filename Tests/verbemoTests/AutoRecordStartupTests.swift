@@ -24,7 +24,7 @@ struct AutoRecordStartupTests {
         #expect(SetupState.isPending, "watching must not silently complete the setup wizard")
         let finished = Gate()
         #expect(app.prepareForTermination { finished.open() })
-        #expect(SetupState.isPending)
+        #expect(!SetupState.isPending, "quitting dismisses the first-run page")
         await finished.pass()
     }
 

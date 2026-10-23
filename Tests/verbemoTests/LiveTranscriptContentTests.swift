@@ -6,6 +6,27 @@ import Testing
 /// The live page keeps its rows separate as transcript and import states change.
 @Suite(.serialized)
 struct LiveTranscriptContentTests {
+    @Test(.freshHome, .speaking(.russian)) @MainActor
+    func missingModelOffersAnExplicitDownloadAndErrorsOfferRetry() throws {
+        let content = LiveTranscriptContent()
+        var requests: [Bool] = []
+        content.onToggleLive = { requests.append($0) }
+        content.updateLive(.init(isRecording: true, isEnabled: true, entries: [], status: .modelMissing))
+        let download = try #require(content.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "live.download" })
+        #expect(!download.isHidden)
+        #expect(download.title == "Скачать модель")
+        #expect(NSApp.sendAction(try #require(download.action), to: download.target, from: download))
+        #expect(requests == [true])
+        content.updateLive(.init(isRecording: true, isEnabled: false, entries: [], status: .paused))
+        #expect(download.isHidden)
+        content.updateLive(.init(isRecording: true, isEnabled: true, entries: [], status: .error("Offline")))
+        #expect(!download.isHidden)
+        #expect(download.title == "Повторить")
+        content.updateLive(.init(isRecording: false, isEnabled: true, entries: [], status: .idle))
+        #expect(download.isHidden)
+    }
+
     @Test("Live speaker labels use the adaptive label colour", .freshHome, .speaking(.english))
     @MainActor
     func liveSpeakerLabelsFollowTheAppearance() throws {

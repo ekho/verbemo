@@ -25,11 +25,10 @@ final class MenuBarController {
     private var state: State = .idle
     private var elapsed: String?
     private let stateLabel: NSMenuItem
-    private let transcriptionLabel: NSMenuItem
+    private let recordingRow = RecordingMenuRow()
     /// Says the config file cannot be used, and opens the settings page —
     /// the one surface that names the file and offers to reveal it.
     private let configProblemItem: NSMenuItem
-    private let startItem: NSMenuItem
     private let toggleItem: NSMenuItem
     private let pauseItem: NSMenuItem
     private let autoRecordItem: NSMenuItem
@@ -40,29 +39,20 @@ final class MenuBarController {
     var onTogglePause: (() -> Void)?
     var onToggleAutoRecord: (() -> Void)?
     var onShowMeetings: (() -> Void)?
+    var onShowRecording: (() -> Void)?
     var onImport: (() -> Void)?
     var onShowSettings: (() -> Void)?
     var onShowSetup: (() -> Void)?
-    var onShowTranscription: (() -> Void)?
     var onQuit: (() -> Void)?
 
     init(visible: Bool = true) {
         menu = NSMenu()
         menu.autoenablesItems = false
-        // The first line of the menu carries the same clock the icon does,
-        // and it ticks while the menu is open. Setting the font on the menu
-        // rather than on that one item is what keeps the rest of it alone:
-        // an item drawn from an attributed title loses the grey the system
-        // gives a disabled one, and the state line is disabled.
         menu.font = NSFont.menuFont(ofSize: 0).tabularFigures
 
-        stateLabel = .sectionHeader(title: "")
+        stateLabel = NSMenuItem(title: "", action: #selector(statusClicked), keyEquivalent: "")
+        stateLabel.view = recordingRow
         menu.addItem(stateLabel)
-
-        startItem = NSMenuItem(title: localised("Start recording", "Начать запись"),
-            action: #selector(toggleClicked), keyEquivalent: "r")
-        startItem.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil)
-        menu.addItem(startItem)
 
         pauseItem = NSMenuItem(title: localised("Pause", "Пауза"),
             action: #selector(pauseClicked), keyEquivalent: "p")
@@ -70,10 +60,11 @@ final class MenuBarController {
             action: #selector(toggleClicked), keyEquivalent: "r")
         menu.addItem(pauseItem)
         menu.addItem(toggleItem)
-
-        transcriptionLabel = NSMenuItem(title: "", action: #selector(transcriptionClicked), keyEquivalent: "")
-        transcriptionLabel.isHidden = true
-        menu.addItem(transcriptionLabel)
+        // shortcut: inline controls use ⌘P/⌘R; add individual focus navigation if Tab support is required.
+        for item in [pauseItem, toggleItem] {
+            item.isHidden = true
+            item.allowsKeyEquivalentWhenHidden = true
+        }
 
         let importItem = NSMenuItem(title: localised("Import recording…", "Импортировать запись…"),
             action: #selector(importClicked), keyEquivalent: "i")
@@ -103,10 +94,13 @@ final class MenuBarController {
             action: #selector(quitClicked), keyEquivalent: "q")
         menu.addItem(quit)
 
-        for item in [startItem, toggleItem, pauseItem, transcriptionLabel, autoRecordItem,
+        for item in [stateLabel, toggleItem, pauseItem, autoRecordItem,
                      autoRecordStatus, importItem, settings, configProblemItem, setupItem, meetings, quit] {
             item.target = self
         }
+        recordingRow.onOpen = { [weak self] in self?.statusClicked() }
+        recordingRow.onToggle = { [weak self] in self?.toggleClicked() }
+        recordingRow.onPause = { [weak self] in self?.pauseClicked() }
         update(state: .idle, elapsed: nil)
         setVisible(visible)
     }
@@ -190,18 +184,13 @@ final class MenuBarController {
         // the icon comes back.
         self.state = state
         self.elapsed = elapsed
-        startItem.keyEquivalent = state == .idle ? "r" : ""
-        toggleItem.keyEquivalent = state == .idle ? "" : "r"
         pauseItem.keyEquivalent = state == .idle ? "" : "p"
-        stateLabel.isHidden = state == .idle
-        startItem.isHidden = state != .idle
-        startItem.isEnabled = state == .idle
-        pauseItem.isHidden = state == .idle
-        toggleItem.isHidden = state == .idle
-        toggleItem.isEnabled = state != .idle
+        toggleItem.title = state == .idle
+            ? localised("Start recording", "Начать запись")
+            : localised("Finish recording", "Завершить запись")
         switch state {
         case .idle:
-            stateLabel.title = localised("ready", "готов")
+            stateLabel.title = localised("Start recording", "Начать запись")
             pauseItem.title = localised("Pause", "Пауза")
             pauseItem.isEnabled = false
             statusItem?.button?.image = Self.icon(color: nil)
@@ -222,14 +211,7 @@ final class MenuBarController {
             statusItem?.button?.title =
                 " " + (elapsed ?? "0:00") + localised(" paused", " пауза")
         }
-    }
-
-    /// Show transcription progress/failure as a second status line in the
-    /// menu; nil hides it. Independent of recording state — a new recording
-    /// can run while the last one transcribes.
-    func updateTranscription(_ text: String?) {
-        transcriptionLabel.title = text ?? ""
-        transcriptionLabel.isHidden = text == nil
+        recordingRow.update(state: state, title: stateLabel.title)
     }
 
     /// The config file's problem in one line, or nil when it has none.
@@ -255,11 +237,98 @@ final class MenuBarController {
 
     @objc private func toggleClicked() { onToggle?() }
     @objc private func pauseClicked() { onTogglePause?() }
+    @objc private func statusClicked() {
+        if state == .idle { onToggle?() }
+        else { onShowRecording?() }
+    }
     @objc private func autoRecordClicked() { onToggleAutoRecord?() }
     @objc private func showSettingsClicked() { onShowSettings?() }
     @objc private func showSetupClicked() { onShowSetup?() }
     @objc private func showMeetingsClicked() { onShowMeetings?() }
     @objc private func importClicked() { onImport?() }
-    @objc private func transcriptionClicked() { onShowTranscription?() }
     @objc private func quitClicked() { onQuit?() }
+}
+
+@MainActor
+private final class RecordingMenuRow: NSView {
+    var onOpen: (() -> Void)?
+    var onToggle: (() -> Void)?
+    var onPause: (() -> Void)?
+    private let headline = NSButton()
+    private let start = NSButton()
+    private let pause = NSButton()
+    private let stop = NSButton()
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 44))
+        autoresizingMask = [.width]
+        identifier = .init("tray.recording")
+        headline.isBordered = false
+        headline.alignment = .left
+        headline.font = NSFont.menuFont(ofSize: 0).tabularFigures
+        headline.cell?.lineBreakMode = .byTruncatingTail
+        headline.identifier = .init("tray.recording.open")
+        headline.target = self
+        headline.action = #selector(openClicked)
+        headline.setContentHuggingPriority(.init(1), for: .horizontal)
+        headline.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        for (button, id, symbol, title, action) in [
+            (start, "start", "record.circle", localised("Start recording", "Начать запись"), #selector(toggleClicked)),
+            (pause, "pause", "pause.fill", localised("Pause recording", "Приостановить запись"), #selector(pauseClicked)),
+            (stop, "stop", "stop.fill", localised("Finish recording", "Завершить запись"), #selector(toggleClicked)),
+        ] {
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            button.imagePosition = .imageOnly
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.identifier = .init("tray.recording.\(id)")
+            button.setAccessibilityLabel(title)
+            button.toolTip = title + (button === pause ? " (⌘P)" : " (⌘R)")
+            button.target = self
+            button.action = action
+            button.widthAnchor.constraint(equalToConstant: 28).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        }
+        start.contentTintColor = .systemRed
+        stop.contentTintColor = .systemRed
+        let controls = NSStackView(views: [start, pause, stop])
+        controls.spacing = 6
+        controls.setContentHuggingPriority(.required, for: .horizontal)
+        let row = NSStackView(views: [headline, controls])
+        row.distribution = .fill
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor),
+            headline.heightAnchor.constraint(equalToConstant: 32),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func update(state: MenuBarController.State, title: String) {
+        headline.attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: NSFont.menuFont(ofSize: 0).tabularFigures, .foregroundColor: NSColor.labelColor,
+        ])
+        headline.toolTip = state == .idle ? title : localised("Open current recording", "Открыть текущую запись")
+        start.isHidden = state != .idle
+        pause.isHidden = state == .idle
+        stop.isHidden = state == .idle
+        let paused = state == .paused
+        let pauseTitle = paused ? localised("Resume recording", "Продолжить запись")
+            : localised("Pause recording", "Приостановить запись")
+        pause.image = NSImage(systemSymbolName: paused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+        pause.setAccessibilityLabel(pauseTitle)
+        pause.toolTip = pauseTitle + " (⌘P)"
+    }
+    override func mouseUp(with event: NSEvent) { openClicked() }
+    private func perform(_ action: (() -> Void)?) {
+        enclosingMenuItem?.menu?.cancelTracking()
+        action?()
+    }
+    @objc private func openClicked() { perform(onOpen) }
+    @objc private func toggleClicked() { perform(onToggle) }
+    @objc private func pauseClicked() { perform(onPause) }
 }

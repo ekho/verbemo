@@ -31,6 +31,42 @@ enum JournalStyle {
 }
 
 @MainActor
+final class JournalTabButton: NSButton {
+    init(title: String, symbol: String, target: AnyObject?, action: Selector?) {
+        super.init(frame: .zero)
+        self.title = title
+        self.target = target
+        self.action = action
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        imagePosition = .imageLeading
+        imageHugsTitle = true
+        isBordered = false
+        setButtonType(.toggle)
+        setAccessibilityRole(.radioButton)
+        font = .systemFont(ofSize: 13, weight: .semibold)
+        heightAnchor.constraint(equalToConstant: 40).isActive = true
+        let preferredWidth = widthAnchor.constraint(equalToConstant: intrinsicContentSize.width + 12)
+        preferredWidth.priority = .defaultHigh
+        preferredWidth.isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func select(_ selected: Bool) {
+        state = selected ? .on : .off
+        font = .systemFont(ofSize: 13, weight: selected ? .semibold : .regular)
+        contentTintColor = selected ? JournalStyle.ink : JournalStyle.muted
+        needsDisplay = true
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if state == .on {
+            JournalStyle.accent.setFill()
+            NSBezierPath(roundedRect: NSRect(x: 0, y: isFlipped ? bounds.height - 3 : 0,
+                                            width: bounds.width, height: 3), xRadius: 1.5, yRadius: 1.5).fill()
+        }
+    }
+}
+
+@MainActor
 class JournalSurface: NSView {
     var color: NSColor { didSet { needsDisplay = true } }
     init(_ color: NSColor) { self.color = color; super.init(frame: .zero); wantsLayer = true; clipsToBounds = true }

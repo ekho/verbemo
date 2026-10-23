@@ -61,6 +61,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         set { recordingBar.title = newValue; liveView.title = newValue }
     }
     private var appearance: AppearanceController?
+    private var presentedSetup: SetupPage?
     private var keepsDockIcon = Config.dockIcon()
     var toolbarIsHidden: Bool { toolbar.isHidden }
     var primaryActionsAreVisible: Bool { !sidebar.isHidden }
@@ -138,9 +139,12 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     }
     private func connectLibrary() {
         guard let library = libraryProvider?() else { return }
+        library.activeRecordingView = liveView
         sidebar.mountLibrary(library.listContentView)
+        library.setMeetingSelectionActive(navigation.destination.isMeetings)
         library.onSelectMeeting = { [weak self, weak library] in
             guard let self, let library else { return }
+            library.setMeetingSelectionActive(true)
             self.showingLive = false
             self.navigation.navigate(library.currentFilter)
             self.sidebar.select(library.currentFilter)
@@ -158,6 +162,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         let enteringSettings = navigation.destination.isMeetings || navigation.destination == .about
         showingLive = false
         navigation.navigate(destination)
+        libraryProvider?()?.setMeetingSelectionActive(destination.isMeetings)
         sidebar.select(destination)
         toolbar.isHidden = destination == .about
         updateHeading()
@@ -185,6 +190,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     }
     func stopForTermination() -> [Task<Void, Never>] {
         stopping = true
+        finishSetup()
         recordingSheet?.cancel()
         if let sheet = panel.attachedSheet { panel.endSheet(sheet, returnCode: .cancel) }
         return settingsBuilt ? settings.stopForTermination() : []
@@ -204,6 +210,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
 
     private func mount(_ view: NSView) {
         if view.superview === contentHost { return }
+        finishSetup()
         contentHost.subviews.forEach { $0.removeFromSuperview() }
         view.translatesAutoresizingMaskIntoConstraints = false
         contentHost.addSubview(view)
@@ -225,6 +232,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         settingsNavigation.isHidden = true
         actions.isHidden = true
         mount(setup.contentView)
+        presentedSetup = setup
         setup.prepare()
         bringToFront()
     }
@@ -232,14 +240,22 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         guard recordingBarIsVisible else { return }
         showingLive = true
         navigation.navigate(.allMeetings)
+        libraryProvider?()?.setMeetingSelectionActive(true)
         navigation.showsDetail = true
         navigation.resultTab = "transcript"
         toolbar.isHidden = false
         updateHeading()
-        actions.setViews([], in: .center)
+        actions.isHidden = false
         settingsNavigation.isHidden = true
         sidebar.select(.allMeetings)
-        mount(liveView)
+        if let library = libraryProvider?(), library.selectActiveRecording() {
+            actions.setViews([library.toolbarContent], in: .center)
+            mount(library.contentView)
+            library.updateCompactLayout()
+        } else {
+            actions.setViews([], in: .center)
+            mount(liveView)
+        }
     }
     func show() {
         if navigation.destination.isMeetings { libraryProvider?()?.refresh() }
@@ -254,6 +270,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
     }
     func hide() {
+        if presentedSetup != nil { navigate(.allMeetings) }
         panel.orderOut(nil)
         updateActivationPolicy(windowVisible: false)
     }
@@ -275,7 +292,13 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         updateActivationPolicy(windowVisible: true)
     }
     func windowWillClose(_ notification: Notification) {
+        if presentedSetup != nil { navigate(.allMeetings) }
         updateActivationPolicy(windowVisible: false)
+    }
+    private func finishSetup() {
+        let setup = presentedSetup
+        presentedSetup = nil
+        setup?.finish()
     }
     func update(state: MenuBarController.State, elapsed: String?) {
         guard !stopping else { return }
@@ -340,7 +363,7 @@ private final class WorkspaceSurface: JournalSurface {
 private final class JournalSettingsNavigation: NSStackView {
     private let destinations: [ApplicationNavigationState.Destination] = [.general, .recording, .transcription, .summary, .calendar, .storage]
     private let tabs = NSStackView()
-    private var buttons: [JournalSettingsTab] = []
+    private var buttons: [JournalTabButton] = []
     private var tabsWidth: CGFloat = 48 + 5 * 16
     private let compact = NSPopUpButton()
     var onSelect: ((ApplicationNavigationState.Destination) -> Void)?
@@ -362,22 +385,10 @@ private final class JournalSettingsNavigation: NSStackView {
             case .storage: localised("Files & models", "Файлы и модели")
             default: destination.title
             }
-            let button = JournalSettingsTab(title: title, target: self, action: #selector(selected(_:)))
+            let button = JournalTabButton(title: title, symbol: symbols[index], target: self, action: #selector(selected(_:)))
             button.tag = index
             button.identifier = .init("settings.tab.\(destination.rawValue)")
-            button.image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: nil)
-            button.imagePosition = .imageLeading
-            button.imageHugsTitle = true
-            button.isBordered = false
-            button.setButtonType(.toggle)
-            button.setAccessibilityRole(.radioButton)
-            button.font = .systemFont(ofSize: 13, weight: .semibold)
-            button.heightAnchor.constraint(equalToConstant: 40).isActive = true
-            let width = button.intrinsicContentSize.width + 12
-            let preferredWidth = button.widthAnchor.constraint(equalToConstant: width)
-            preferredWidth.priority = .defaultHigh
-            preferredWidth.isActive = true
-            tabsWidth += width
+            tabsWidth += button.intrinsicContentSize.width + 12
             tabs.addArrangedSubview(button)
             buttons.append(button)
             compact.addItem(withTitle: title)
@@ -395,10 +406,7 @@ private final class JournalSettingsNavigation: NSStackView {
     func select(_ destination: ApplicationNavigationState.Destination) {
         guard let index = destinations.firstIndex(of: destination) else { return }
         for (offset, button) in buttons.enumerated() {
-            button.state = offset == index ? .on : .off
-            button.font = .systemFont(ofSize: 13, weight: offset == index ? .semibold : .regular)
-            button.contentTintColor = offset == index ? JournalStyle.ink : JournalStyle.muted
-            button.needsDisplay = true
+            button.select(offset == index)
         }
         compact.selectItem(at: index)
     }
@@ -412,17 +420,5 @@ private final class JournalSettingsNavigation: NSStackView {
         let narrow = newSize.width < tabsWidth
         tabs.isHidden = narrow
         compact.isHidden = !narrow
-    }
-}
-
-@MainActor
-private final class JournalSettingsTab: NSButton {
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        if state == .on {
-            JournalStyle.accent.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 0, y: isFlipped ? bounds.height - 3 : 0,
-                                            width: bounds.width, height: 3), xRadius: 1.5, yRadius: 1.5).fill()
-        }
     }
 }

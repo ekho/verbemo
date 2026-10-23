@@ -40,9 +40,9 @@ enum SetupState {
     /// Record that the window has been through. Failure is not worth
     /// escalating: the cost is the window opening again, not a lost recording.
     ///
-    /// True when this is what finished it — the setup
-    /// window marks it on every way out, Later and the close button
-    /// included, and `setup_completed` is one event per completed setup, not
+    /// True when this is what finished it — leaving the setup page,
+    /// hiding or closing the window, and quitting all mark it completed.
+    /// `setup_completed` is one event per completed setup, not
     /// one per closing of a window that was already done with.
     @discardableResult
     static func markCompleted(at stateURL: URL = path) -> Bool {
