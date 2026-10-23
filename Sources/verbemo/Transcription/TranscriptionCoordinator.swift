@@ -340,6 +340,7 @@ actor TranscriptionCoordinator {
             // good recording after three unlucky launches, so the folder is
             // simply left where it is: the filesystem is the queue, and the
             // next `resumePending` offers it again once the owner is done.
+            operations.reportFailure(busy.described)
             log(dir, "\(busy)")
         } catch is CancellationError {
             cancelledInDrain.insert(Self.identity(of: dir))
@@ -353,10 +354,12 @@ actor TranscriptionCoordinator {
             // everything behind it would be held for the same reason. The
             // folders stay where they are and are offered again when the
             // file can be read.
+            operations.reportFailure(String(describing: held))
             log(dir, "\(held)")
             discardQueuedOperations()
         } catch let held as UnreadableDiarizationRequest {
             // The saved request needs repair, not another ASR attempt.
+            operations.reportFailure(String(describing: held))
             log(dir, "\(held)")
         } catch {
             if Task.isCancelled {
@@ -364,6 +367,7 @@ actor TranscriptionCoordinator {
                 await releaseEngine()
                 throw CancellationError()
             }
+            operations.reportFailure(String(describing: error))
             log(dir, "transcription failed: \(error)")
             lastFailure = dir
             let outcome = TranscriptionFailurePolicy.record(
@@ -512,7 +516,10 @@ actor TranscriptionCoordinator {
                         body: dir.lastPathComponent, opening: dir)
                 }
             } catch is CancellationError { throw CancellationError() }
-            catch { log(dir, "diarization remains unfinished: \(error)") }
+            catch {
+                operations.reportFailure(String(describing: error))
+                log(dir, "diarization remains unfinished: \(error)")
+            }
             return
         }
         var fallbackUsed = false
@@ -578,7 +585,10 @@ actor TranscriptionCoordinator {
                             body: dir.lastPathComponent, opening: dir)
                     }
                 } catch is CancellationError { throw CancellationError() }
-                catch { log(dir, "diarization remains unfinished: \(error)") }
+                catch {
+                    operations.reportFailure(String(describing: error))
+                    log(dir, "diarization remains unfinished: \(error)")
+                }
             }
         } else {
             await PostProcessor.finish(dir)

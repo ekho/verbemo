@@ -151,4 +151,66 @@ struct ProcessingOperationsTests {
         #expect(operations.snapshot().isEmpty)
     }
 
+    @Test("A retained snapshot distinguishes cancellation from a completed generation")
+    func snapshotCompletion() async throws {
+        let operations = ProcessingOperations()
+        let session = URL(fileURLWithPath: "/synthetic/a")
+        let completed = try operations.register(session: session, kind: .summary)
+        let completedSnapshot = try #require(operations.snapshot().first)
+        try await completed.run {}
+        #expect(await operations.cancelAndWait(completedSnapshot) == .completed)
+        let waiting = try operations.register(session: session, kind: .summary)
+        let waitingSnapshot = try #require(operations.snapshot().first)
+        #expect(await operations.cancelAndWait(waitingSnapshot) == .cancelled)
+        #expect(await operations.cancelAndWait(completedSnapshot) == .completed)
+        do { try await waiting.run {}; Issue.record("Cancelled reservation started") }
+        catch is CancellationError {}
+        #expect(operations.isAccepting)
+    }
+
+    @Test("Snapshot outcome waits for cleanup and preserves a real failure")
+    func snapshotFailureBarrier() async throws {
+        let operations = ProcessingOperations(), entered = Gate(), release = Gate(), cancelled = Gate()
+        let ticket = try operations.register(session: URL(fileURLWithPath: "/synthetic/a"), kind: .summary)
+        let snapshot = try #require(operations.snapshot().first)
+        let task = Task {
+            try await ticket.run {
+                await withTaskCancellationHandler {
+                    entered.open(); await release.pass()
+                } onCancel: { cancelled.open() }
+                throw CocoaError(.fileReadCorruptFile)
+            }
+        }
+        await entered.pass()
+        let stop = Task { await operations.cancelAndWait(snapshot) }
+        await cancelled.pass()
+        #expect(operations.snapshot().first?.state == .cancelling)
+        release.open()
+        let outcome = await stop.value
+        if case .failed(let message) = outcome { #expect(!message.isEmpty) }
+        else { Issue.record("A real error was replaced by cancellation: \(outcome)") }
+        _ = try? await task.value
+        #expect(operations.snapshot().isEmpty)
+    }
+
+    @Test("Normal completion wins even when cancellation was requested during cleanup")
+    func successfulCompletionAfterRequest() async throws {
+        let operations = ProcessingOperations(), entered = Gate(), release = Gate(), cancelled = Gate()
+        let ticket = try operations.register(session: URL(fileURLWithPath: "/synthetic/a"), kind: .summary)
+        let snapshot = try #require(operations.snapshot().first)
+        let task = Task {
+            try await ticket.run {
+                await withTaskCancellationHandler {
+                    entered.open(); await release.pass()
+                } onCancel: { cancelled.open() }
+                return "published result"
+            }
+        }
+        await entered.pass()
+        let stop = Task { await operations.cancelAndWait(snapshot) }
+        await cancelled.pass(); release.open()
+        #expect(await stop.value == .completed)
+        #expect(try await task.value == "published result")
+    }
+
 }

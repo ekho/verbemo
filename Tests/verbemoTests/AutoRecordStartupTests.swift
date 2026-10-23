@@ -8,21 +8,24 @@ import Testing
 @Suite(.serialized, .freshHome)
 struct AutoRecordStartupTests {
     @Test("An unfinished setup does not prevent the app from watching a granted microphone")
-    func pendingSetupStillWatchesMeetings() {
+    func pendingSetupStillWatchesMeetings() async {
         #expect(SetupState.isPending)
         var settings = Config.AutoRecordSettings()
         settings.startDelay = 3600
         let watcher = AutoRecordController(
             settings: settings, calendar: nil, loadSettings: { settings },
             checkMic: { _ in Self.zoom }, now: { Date(timeIntervalSince1970: 1_800_000_000) })
-        let app = AppController(root: Home.current.defaultRecordings, autoRecord: watcher)
+        let app = AppController(root: Home.current.defaultRecordings, autoRecord: watcher, operations: ProcessingOperations())
         defer {
             watcher.stop()
-            app.finishForTermination()
             for window in NSApp.windows { window.orderOut(nil) }
         }
         #expect(watcher.lastDecision == "zoom.us on the mic for 0s")
         #expect(SetupState.isPending, "watching must not silently complete the setup wizard")
+        let finished = Gate()
+        #expect(app.prepareForTermination { finished.open() })
+        #expect(SetupState.isPending)
+        await finished.pass()
     }
 
     @Test("Both triggers wait for microphone access without requesting a recording or backing off",

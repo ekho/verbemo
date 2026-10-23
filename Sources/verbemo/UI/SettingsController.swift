@@ -9,6 +9,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     var isProcessing: (() -> Bool)?
     private let panel: NSWindow
     let setup = SetupForm(mode: .settings)
+    private var deletionTask: Task<Void, Never>?
     private var pages: [ApplicationNavigationState.Destination: NSView] = [:]
     private var pageNotices: [NSTextField] = []
     private var providerRows: [(SettingsSchema.Entry, NSView)] = []
@@ -53,6 +54,12 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             }
         }
         return found
+    }
+
+    func stopForTermination() -> [Task<Void, Never>] {
+        configWatch = nil
+        deletionTask?.cancel()
+        return setup.stopForTermination() + [deletionTask].compactMap { $0 }
     }
 
     func reload() {
@@ -334,7 +341,8 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         alert.addButton(withTitle: localised("Delete", "Удалить"))
         alert.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
         alert.buttons.first?.hasDestructiveAction = true
-        Task { @MainActor [self] in
+        deletionTask = Task { @MainActor [self] in
+            defer { deletionTask = nil }
             guard panel.attachedSheet == nil,
                   await alert.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
             if let reason = modelDeletionReason(model) {

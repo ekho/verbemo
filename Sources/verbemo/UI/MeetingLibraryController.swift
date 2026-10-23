@@ -36,7 +36,11 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private let inspectorButton = NSButton()
     private let pipeline = NSStackView()
     private let route = NSTextField(wrappingLabelWithString: "")
-    private let cancelPlaceholder = JournalUnavailableView(.cancelProcessing, title: localised("Cancel processing", "Отменить обработку"))
+    private let cancelProcessingButton = NSButton()
+    private let processingStatus = NSTextField(wrappingLabelWithString: "")
+    private let processingCancellation: MeetingProcessingCancellation
+    private var processingMonitor: Task<Void, Never>?
+    private var terminating = false
     private var inspectorRequested: Bool?
     private var reloadingList = false
     private let pasteboard: NSPasteboard
@@ -113,12 +117,14 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private let deletionNotice = NSStackView()
     private let deletionLabel = NSTextField(labelWithString: "")
     private var undoDeletionID: UUID?
-    var isProcessing: Bool { working || deletion.hasWork }
+    var isProcessing: Bool { working || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var summarySheet: SummaryRegenerationSheet?
     private var working = false { didSet { onActivityChange?() } }
 
-    init(root: URL, pasteboard: NSPasteboard = .general, hostWindow: NSWindow) {
+    init(root: URL, pasteboard: NSPasteboard = .general,
+         operations: ProcessingOperations = .shared, hostWindow: NSWindow) {
+        processingCancellation = MeetingProcessingCancellation(operations: operations)
         self.root = root
         self.pasteboard = pasteboard
         panel = hostWindow
@@ -131,6 +137,41 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         meetingTranscript.onPlayFrom = { [weak self] seconds in self?.audioPlayer.play(from: seconds) }
         // Populate the first view synchronously; later scans run off the main thread.
         show(SessionInventory.scan(root: root))
+        processingCancellation.onChange = { [weak self] in
+            guard let self, !self.terminating else { return }
+            self.updateCancellationControls()
+            self.onActivityChange?()
+            if self.processingCancellation.outcome != nil { self.reload() }
+        }
+        processingMonitor = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.updateCancellationControls()
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            }
+        }
+    }
+
+    deinit { processingMonitor?.cancel() }
+
+    /// Stop UI-owned work synchronously; the application awaits these after its processing barrier.
+    func stopForTermination() -> [Task<Void, Never>] {
+        terminating = true
+        audioPlayer.setMeeting(nil)
+        calendarPicker.cancel()
+        let monitor = processingMonitor
+        monitor?.cancel()
+        processingMonitor = nil
+        cancelPendingDeletion()
+        scans += 1
+        let scans = Array(scansInFlight.values)
+        for task in scans { task.cancel() }
+        scan = nil
+        var cleanup = scans + processingCancellation.stopObserving()
+        if let monitor { cleanup.append(monitor) }
+        cleanup.append(deletion.stopForTermination())
+        cleanup.append(Task { [audioPlayer] in await audioPlayer.settled() })
+        if let task = summarySheet?.task { task.cancel(); cleanup.append(task) }
+        return cleanup
     }
 
     // MARK: - building
@@ -178,12 +219,17 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             (skipDiarizationButton, localised("Skip diarization", "Пропустить диаризацию"),
              #selector(skipDiarizationClicked)),
             (finishButton, localised("Finish processing", "Доделать"), #selector(finishClicked)),
+            (cancelProcessingButton, localised("Cancel processing", "Отменить обработку"), #selector(cancelProcessingClicked)),
         ] as [(NSButton, String, Selector)] {
             button.title = title
             button.bezelStyle = .rounded
             button.target = self
             button.action = action
         }
+        cancelProcessingButton.identifier = .init("meeting.cancel-processing")
+        processingStatus.identifier = .init("meeting.processing-status")
+        processingStatus.font = .systemFont(ofSize: 11)
+        processingStatus.textColor = JournalStyle.muted
         retryDiarizationButton.identifier = .init("diarization.retry")
         skipDiarizationButton.identifier = .init("diarization.skip")
 
@@ -548,6 +594,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// one's answer.
     private var scan: Task<Void, Never>?
     private var scans = 0
+    private var scansInFlight: [Int: Task<Void, Never>] = [:]
 
     /// Read the folder again, off the main thread.
     ///
@@ -556,6 +603,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// answering for as long as the archive took to read — on every opening,
     /// every rename and every delete, and growing with every meeting kept.
     private func reload() {
+        guard !terminating else { return }
         scans += 1
         let generation = scans
         let root = self.root
@@ -566,10 +614,13 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             let found = await Task.detached(priority: .userInitiated) {
                 Home.$scoped.withValue(home) { SessionInventory.scan(root: root) }
             }.value
-            guard let self, generation == self.scans else { return }
+            guard let self else { return }
+            self.scansInFlight.removeValue(forKey: generation)
+            guard !Task.isCancelled, generation == self.scans, !self.terminating else { return }
             self.show(found)
             self.scan = nil
         }
+        scansInFlight[generation] = scan
     }
 
     /// Wait for the latest scan to be on screen. For tests, which would
@@ -1090,6 +1141,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// An answer with nothing to decide: the recording it is about, and one
     /// sentence saying what happened to it.
     private func say(_ sentence: String, about item: SessionInventory.Item) {
+        guard !terminating else { return }
         let alert = NSAlert()
         alert.messageText = item.title ?? item.name
         alert.informativeText = sentence
@@ -1407,7 +1459,7 @@ private extension MeetingLibraryController {
             SetupLayout.hairline(), JournalStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
             calendarPicker,
             SetupLayout.hairline(), JournalStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
-            diarizationLabel, diarizationActions, finishButton, cancelPlaceholder,
+            diarizationLabel, diarizationActions, finishButton, cancelProcessingButton, processingStatus,
             SetupLayout.hairline(), JournalStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
         ])
         inspector.orientation = .vertical
@@ -1466,6 +1518,40 @@ private extension MeetingLibraryController {
         return container
     }
 
+    @objc private func cancelProcessingClicked() {
+        processingCancellation.select(selected?.dir)
+        processingCancellation.cancel()
+        updateCancellationControls()
+    }
+
+    private func updateCancellationControls() {
+        guard !terminating else { return }
+        processingCancellation.select(selected?.dir)
+        let cancelling = processingCancellation.isCancelling
+        cancelProcessingButton.isHidden = !processingCancellation.canCancel && !cancelling
+        cancelProcessingButton.isEnabled = processingCancellation.canCancel
+        cancelProcessingButton.title = cancelling ? localised("Cancelling…", "Отменяется…")
+            : localised("Cancel processing", "Отменить обработку")
+        let message: String
+        if cancelling { message = localised("Cancelling…", "Отменяется…") }
+        else {
+            switch processingCancellation.outcome {
+            case .cancelled:
+                message = localised("Processing cancelled. Completed results are preserved.", "Обработка отменена. Готовые результаты сохранены.")
+            case .completed:
+                message = localised("Processing completed before cancellation.", "Обработка успела завершиться до отмены.")
+            case .failed(let reason):
+                message = localised("Processing error: ", "Ошибка обработки: ") + reason
+            case nil: message = ""
+            }
+        }
+        processingStatus.isHidden = message.isEmpty
+        if processingStatus.stringValue != message {
+            processingStatus.stringValue = message
+            NSAccessibility.post(element: processingStatus, notification: .valueChanged)
+        }
+    }
+
     func updateInspector() {
         pipeline.arrangedSubviews.forEach { pipeline.removeArrangedSubview($0); $0.removeFromSuperview() }
         if let item = selected {
@@ -1497,7 +1583,7 @@ private extension MeetingLibraryController {
             message.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
         }
         updateButtons()
-        cancelPlaceholder.isHidden = !(working || selected.map { SessionClaim.isHeld($0.dir) } == true)
+        updateCancellationControls()
         let choice = TranscriptionChoice.read(engine: Config.transcriptionEngine(),
             cloudProvider: Config.transcriptionCloudProvider(), enabled: Config.transcriptionEnabled(),
             localModels: Platform.supportsLocalModels, localEngine: Config.transcriptionLocalEngine())

@@ -55,4 +55,20 @@ struct QuitGateTests {
         #expect(completion != nil)
         withExtendedLifetime(delegate) {}
     }
+    @Test("Repeated quit requests prepare once and answer AppKit once")
+    func repeatedRequestsShareCleanup() {
+        let delegate = AppDelegate()
+        var prepareCount = 0, replies = 0
+        var completion: (() -> Void)?
+        delegate.replyToTermination = { _ in replies += 1 }
+        delegate.onPrepareTermination = { done in
+            prepareCount += 1; completion = done; return true
+        }
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        #expect(prepareCount == 1)
+        completion?(); completion?()
+        #expect(replies == 1)
+    }
+
 }
