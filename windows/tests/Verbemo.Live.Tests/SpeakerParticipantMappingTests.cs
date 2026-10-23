@@ -8,6 +8,27 @@ namespace Verbemo.Live.Tests;
 
 public sealed class SpeakerParticipantMappingTests
 {
+    [Fact]
+    public async Task No_self_email_or_auto_identity_does_not_read_or_change_the_transcript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "verbemo-self-mapping", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var settings = AppSettings.CreateConservative(root);
+        using var http = new HttpClient();
+        await using var analytics = new AnalyticsService(root, () => settings, () => false, http);
+        await using var processor = new ProcessingCoordinator(() => settings, () => true, new SecretStore(), new ModelManager(root, http), http, analytics);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "meta.json"), "{}");
+            File.WriteAllText(Path.Combine(root, "transcript.json"), "not a transcript");
+            await processor.RefreshSelfParticipantAsync(root);
+            Assert.Equal("not a transcript", File.ReadAllText(Path.Combine(root, "transcript.json")));
+            Assert.False(File.Exists(Path.Combine(root, "speakers.json")));
+            Assert.False(processor.IsBusy);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Theory]
     [InlineData("me", " ME@EXAMPLE.TEST ", "confirmed", "self")]
     [InlineData("them A", "me@example.test", "confirmed", null)]

@@ -127,8 +127,8 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
 
     public void Start()
     {
-        worker ??= Task.Run(() => WorkerAsync(lifetime.Token));
         Rescan();
+        worker ??= Task.Run(() => WorkerAsync(lifetime.Token));
     }
 
     /// <summary>
@@ -395,6 +395,14 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
 
     public async Task RefreshSelfParticipantAsync(string directory, CancellationToken cancellationToken = default)
     {
+        var current = settings();
+        var stored = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
+        var source = stored.Sources.GetValueOrDefault(SpeakerLabels.Me);
+        if (string.IsNullOrWhiteSpace(current.UserEmail) && source != "calendar-auto"
+            || source is "manual" or "calendar"
+            || stored.ParticipantIds.ContainsKey(SpeakerLabels.Me) && source != "calendar-auto") return;
+        var existing = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
+        if (!existing.Segments.Any(segment => segment.Speaker == SpeakerLabels.Me)) return;
         var root = TranscriptVersions.ValidatedSessionRoot(directory);
         using var reservation = TryReserveIdleSession(root);
         if (reservation is null || Has(root, ".recording.json") || Has(root, TranscriptVersions.RequestFile)) return;

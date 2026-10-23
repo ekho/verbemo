@@ -12,6 +12,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     private var original: String
     private var participantID: String?
     private var saving = false
+    private var reverting = false
 
     init(speaker: String, title: String, entry: SpeakerNames.Entry?, participants: [CalendarParticipant], canEdit: Bool, inline: Bool) {
         self.participants = participants
@@ -80,7 +81,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         choice.selectText(nil)
     }
     func comboBoxSelectionDidChange(_ notification: Notification) {
-        guard !saving else { return }
+        guard !saving, !reverting else { return }
         let index = choice.indexOfSelectedItem
         guard index >= 0 else { return }
         if index > 0, participantID == participants[index - 1].id,
@@ -98,7 +99,8 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         return false
     }
     private func commitText() {
-        guard !saving, choice.stringValue != original else { endEditing(); return }
+        guard !saving, !reverting else { return }
+        guard choice.stringValue != original else { endEditing(); return }
         save(participant: nil, manual: choice.stringValue)
     }
     private func save(participant: CalendarParticipant?, manual: String?) {
@@ -112,7 +114,20 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             choice.stringValue = original
             endEditing()
         } catch {
-            if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
+            reverting = true
+            choice.stringValue = original
+            // AppKit is still selecting; changing the selected index here can crash it.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let participantID, let index = participants.firstIndex(where: { $0.id == participantID }) {
+                    choice.selectItem(at: index + 1)
+                } else if choice.indexOfSelectedItem >= 0 {
+                    choice.deselectItem(at: choice.indexOfSelectedItem)
+                }
+                choice.stringValue = original
+                reverting = false
+                if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
+            }
         }
     }
     private func endEditing() {

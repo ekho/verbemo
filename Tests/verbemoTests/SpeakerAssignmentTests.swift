@@ -126,4 +126,18 @@ struct SpeakerAssignmentTests {
         #expect(SpeakerNames.read(from: dir)?.speakers["them A"]?.name == nil)
         #expect(try Data(contentsOf: dir.appendingPathComponent("transcript.json")) == raw)
     }
+
+    @Test func failedSelectionDoesNotTurnIntoAManualNameOnFocusLoss() async {
+        let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1",
+            entry: .init(name: "Original", source: .manual),
+            participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: false)
+        var attempts = 0
+        editor.onAssign = { _, _ in attempts += 1; throw CocoaError(.fileWriteUnknown) }
+        editor.choice.selectItem(at: 1)
+        editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
+        editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
+        await Task.yield()
+        #expect(editor.choice.stringValue == "Original")
+        #expect(attempts == 1)
+    }
 }

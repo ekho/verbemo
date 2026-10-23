@@ -92,15 +92,13 @@ public sealed class JournalLayoutTests
 
     [Fact]
     public void Participant_name_can_be_typed_without_calendar_or_a_separate_edit_click() => ApplicationWindowTests.OnSta(() =>
-        RecordingActionsTests.WithWindow((window, root) =>
+        RecordingActionsTests.WithWindow((window, root) => InterfaceRegressionTests.RunAsync(async () =>
         {
             File.WriteAllText(Path.Combine(root, "meta.json"), "{\"title\":\"Test\"}");
-            TranscriptWriter.WriteAsync(root, "Test", new("whisper", "tiny", DateTimeOffset.UtcNow,
-                [new(2000, 3000, "Sample", "A"), new(4000, 5000, "Later", "A"), new(6000, 7000, "Unknown", "?")])).GetAwaiter().GetResult();
-            var show = (Task)typeof(RecordingsWindow).GetMethod("ShowSpeakersAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
+            await TranscriptWriter.WriteAsync(root, "Test", new("whisper", "tiny", DateTimeOffset.UtcNow,
+                [new(2000, 3000, "Sample", "A"), new(4000, 5000, "Later", "A"), new(6000, 7000, "Unknown", "?")]));
+            await (Task)typeof(RecordingsWindow).GetMethod("ShowSpeakersAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(window, [root, "Test", RecordingActionsTests.Field<int>(window, "transcriptShown")])!;
-            ApplicationWindowTests.Until(() => show.IsCompleted);
-            show.GetAwaiter().GetResult();
             var combo = Assert.Single(Descendants(RecordingActionsTests.Field<StackPanel>(window, "speakers")).OfType<ComboBox>());
             Assert.True(combo.IsEditable);
             combo.Text = "Manual Name";
@@ -108,7 +106,7 @@ public sealed class JournalLayoutTests
                 Environment.TickCount, combo, null) { RoutedEvent = UIElement.LostKeyboardFocusEvent });
             ApplicationWindowTests.Until(() => File.ReadAllText(Path.Combine(root, "transcript.md")).Contains("Manual Name"));
             Assert.Equal("Manual Name", SpeakerFile.ReadAsync(root, default).GetAwaiter().GetResult().Names["A"]);
-        }));
+        })));
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {

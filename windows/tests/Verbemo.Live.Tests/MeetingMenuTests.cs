@@ -12,7 +12,8 @@ public sealed class MeetingMenuTests
         RecordingActionsTests.WithWindow((window,root) =>
         {
             var tabs = RecordingActionsTests.Field<TabControl>(window,"tabs");
-            Assert.Equal(new[] { Verbemo.Core.Localization.Localized.T("Summary", "Сводка"), Verbemo.Core.Localization.Localized.T("Transcript", "Расшифровка") },tabs.Items.Cast<TabItem>().Select(tab => tab.Header));
+            Assert.Equal(new[] { Verbemo.Core.Localization.Localized.T("Summary", "Сводка"), Verbemo.Core.Localization.Localized.T("Transcript", "Расшифровка"),
+                Verbemo.Core.Localization.Localized.T("Participants", "Участники") },tabs.Items.Cast<TabItem>().Select(tab => tab.Header));
             RecordingActionsTests.Select(window,new(root,"Pending",DateTimeOffset.Now,1,"manual","whisper",ProcessingStep.Pending,
                 ProcessingStep.Pending,ProcessingStep.Pending,0,true),null);
             Assert.False(RecordingActionsTests.Field<Button>(window,"regenerate").IsEnabled);

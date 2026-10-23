@@ -33,7 +33,7 @@ struct MacUXFollowupTests {
         #expect(!buttons.contains { $0.title == "Delete" })
     }
 
-    @Test(.freshHome) func participantMappingCanBeChangedFromInspectorAndTranscript() async throws {
+    @Test(.freshHome) func participantMappingCanBeChangedFromParticipantsAndTranscript() async throws {
         let fixture = try SessionFixture.make(meta: ["title": "Planning", "calendar": [
             "schema_version": 2, "event_id": "test-event", "association": "confirmed", "title": "Planning",
             "participants": [["id": "anna", "name": "Anna", "email": "anna@example.test"]],
@@ -52,29 +52,33 @@ struct MacUXFollowupTests {
         await library.settled()
         let tabs = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTabView }.first)
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let inspector = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
-        let participantsScroll = try #require(inspector.allDescendants.compactMap { $0 as? NSScrollView }.first)
-        let document = try #require(participantsScroll.documentView as? NSStackView)
+        tabs.selectTabViewItem(withIdentifier: "participants")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let document = try #require(tabs.selectedTabViewItem?.view?.allDescendants.first { $0.identifier?.rawValue == "meeting.participants" } as? NSStackView)
+        let participantsScroll = try #require(document.enclosingScrollView)
         let firstLabel = try #require(document.arrangedSubviews.first)
         let clip = participantsScroll.contentView
         let firstFrame = firstLabel.convert(firstLabel.bounds, to: clip)
         let topGap = clip.isFlipped ? firstFrame.minY - clip.bounds.minY : clip.bounds.maxY - firstFrame.maxY
         #expect(topGap >= -1 && topGap < 40, "participants must start at top, gap: \(topGap)")
-        let picker = try #require(inspector.allDescendants.compactMap { $0 as? NSPopUpButton }.first { $0.identifier?.rawValue.hasPrefix("participant\n") == true })
-        let speaker = try #require(picker.identifier?.rawValue.components(separatedBy: "\n").last)
-        let anna = try #require(picker.itemArray.first { $0.representedObject as? String == "anna" })
-        picker.select(anna)
-        _ = NSApplication.shared.sendAction(try #require(picker.action), to: picker.target, from: picker)
+        let editor = try #require(document.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        let speaker = try #require(SessionFixture.meeting.first?.speaker)
+        editor.choice.selectItem(at: 1)
+        editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
         #expect(SpeakerNames.read(from: dir)?.speakers[speaker]?.participantID == "anna")
+        await Task.yield()
         tabs.selectTabViewItem(withIdentifier: "transcript")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         let scroll = try #require(tabs.selectedTabViewItem?.view?.allDescendants.compactMap { $0 as? MeetingTranscriptView }.first)
         let table = try #require(scroll.documentView as? NSTableView)
         let row = try #require(SessionFixture.meeting.firstIndex { $0.speaker == speaker })
-        let cell = try #require(table.view(atColumn: 0, row: row, makeIfNecessary: true))
-        let other = try #require(cell.allDescendants.compactMap { $0 as? NSPopUpButton }.first)
-        #expect(other.selectedItem?.representedObject as? String == "anna")
-        other.selectItem(at: 0)
-        _ = NSApplication.shared.sendAction(try #require(other.action), to: other.target, from: other)
+        let cell = try #require(scroll.tableView(table, viewFor: table.tableColumns[0], row: row))
+        let other = try #require(cell.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        #expect(other.choice.indexOfSelectedItem == 1)
+        #expect(other.link.sendAction(other.link.action, to: other.link.target))
+        #expect(!other.choice.isHiddenOrHasHiddenAncestor)
+        other.choice.selectItem(at: 0)
+        other.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
         #expect(SpeakerNames.read(from: dir)?.speakers[speaker]?.participantID == nil)
         #expect(try String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8).contains("Anna") == false)
     }
