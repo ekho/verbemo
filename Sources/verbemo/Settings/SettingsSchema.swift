@@ -493,6 +493,11 @@ enum SettingsSchema {
                   .text,
                   describedAs: localised(
                       "the account's full name", "полное имя учётной записи")),
+            Entry(["user_email"],
+                  localised("Your email", "Ваш email"),
+                  localised("Matches you to a calendar invitee by email. Used locally; never sent to a model.",
+                            "Связывает вас с участником календаря по email. Используется локально и не отправляется модели."),
+                  .text, describedAs: localised("not set", "не указан")),
             Entry(["speaker_names", "backend"],
                   localised("Which model to ask", "У какой модели спрашивать"),
                   localised(

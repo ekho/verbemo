@@ -507,6 +507,9 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public Task SetSpeakerParticipantAsync(string directory, string label, CalendarParticipant? participant, CancellationToken cancellationToken = default) =>
         processing.SetSpeakerParticipantAsync(directory,label,participant,cancellationToken);
 
+    public Task RefreshSelfParticipantAsync(string directory, CancellationToken cancellationToken = default) =>
+        processing.RefreshSelfParticipantAsync(directory, cancellationToken);
+
     /// <summary>Moves a session to the Recycle Bin, where it can still be got back.</summary>
     public void DeleteSession(string directory)
     {

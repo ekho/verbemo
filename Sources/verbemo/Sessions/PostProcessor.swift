@@ -597,12 +597,13 @@ enum PostProcessor {
         return root
     }
 
-    static func setSpeakerParticipant(_ speakerID: String, participant: CalendarParticipant?, in dir: URL) throws {
+    static func setSpeakerParticipant(_ speakerID: String, participant: CalendarParticipant?, name: String? = nil, in dir: URL) throws {
         let root = try validatedSessionRoot(for: dir)
         try SessionClaim.acquire(root, stage: .finish)
         defer { SessionClaim.release(root) }
         guard !TranscriptVersions.isRequested(root) else { throw CocoaError(.fileLocking) }
-        guard let transcript = readTranscript(dir), transcript.segments.contains(where: { $0.speaker == speakerID }),
+        guard !SpeakerNames.isUnknown(speakerID),
+              let transcript = readTranscript(dir), transcript.segments.contains(where: { $0.speaker == speakerID }),
               DiarizationState.persisted(in: dir).isFinal else { throw CocoaError(.fileReadUnknown) }
         let calendar = MeetingCalendarMetadata.read(from: root)
         if let participant, !(calendar?.isConfirmed == true && calendar?.participants.contains(where: { $0.id == participant.id }) == true) {
@@ -612,7 +613,10 @@ enum PostProcessor {
         try SessionLock.withLock(dir) {
             var names = SpeakerNames.read(from: dir) ?? SpeakerNames()
             let previous = names.speakers[speakerID]
-            let manual = previous?.participantID == nil && previous?.source == .manual ? previous?.name : previous?.manualName
+            let stored = previous?.participantID == nil && previous?.source == .manual ? previous?.name
+                : previous?.manualName ?? (speakerID == "me" ? Config.userName() : nil)
+            let cleaned = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let manual = name == nil ? stored : (cleaned?.isEmpty == false ? cleaned : nil)
             let known = participant.flatMap { person in calendar?.participants.first { $0.id == person.id } }
             names.speakers[speakerID] = SpeakerNames.Entry(name: known?.name ?? manual, source: .manual,
                 participantID: known?.id, manualName: manual)

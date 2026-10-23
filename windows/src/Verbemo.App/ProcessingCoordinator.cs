@@ -328,13 +328,17 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         var root = TranscriptVersions.ValidatedSessionRoot(directory);
         using var reservation = TryReserveIdleSession(root) ?? throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
         var transcript = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
+        if (Has(root, ".recording.json") || Has(root, TranscriptVersions.RequestFile))
+            throw new InvalidOperationException(T("A finished transcript is required.", "Сначала нужна готовая расшифровка."));
+        if (SpeakerLabels.IsUnknown(label) || !transcript.Segments.Any(segment => segment.Speaker == label))
+            throw new InvalidOperationException(T("This voice cannot be identified.", "Этот голос нельзя определить."));
         var file = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
         var names = new Dictionary<string, string>(file.Names);
         var sources = new Dictionary<string, string>(file.Sources);
         if (string.IsNullOrWhiteSpace(name))
         {
             names.Remove(label);
-            sources.Remove(label);
+            sources[label] = "manual";
         }
         else
         {
@@ -357,9 +361,9 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         using var reservation = TryReserveIdleSession(root) ?? throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
         if(Has(root,".recording.json") || Has(root,TranscriptVersions.RequestFile)) throw new InvalidOperationException(T("A finished transcript is required.", "Сначала нужна готовая расшифровка."));
         var calendar = await MeetingCalendarMetadata.ReadAsync(root,cancellationToken).ConfigureAwait(false);
-        if(calendar?.IsConfirmed != true) throw new InvalidOperationException("This meeting has no confirmed calendar event.");
+        if(participant is not null && calendar?.IsConfirmed != true) throw new InvalidOperationException("This meeting has no confirmed calendar event.");
         var document = await ReadTranscriptAsync(directory,cancellationToken).ConfigureAwait(false);
-        if(!document.IsDiarized) throw new InvalidOperationException(T("Speaker separation is required for matching participants.", "Для сопоставления участников нужно разделение говорящих."));
+        if(SpeakerLabels.IsUnknown(speakerId) || participant is not null && !document.IsDiarized && speakerId != SpeakerLabels.Me) throw new InvalidOperationException(T("Speaker separation is required for matching participants.", "Для сопоставления участников нужно разделение говорящих."));
         if(!document.Segments.Any(s => s.Speaker == speakerId)) throw new InvalidOperationException("Unknown speaker.");
         var stored = await SpeakerFile.ReadAsync(directory,cancellationToken).ConfigureAwait(false);
         var names = new Dictionary<string,string>(stored.Names);
@@ -368,7 +372,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         var manual = new Dictionary<string,string>(stored.ManualNames);
         if(participant is not null)
         {
-            var known = calendar.Participants.FirstOrDefault(p => p.Id == participant.Id) ?? throw new InvalidOperationException("This person is not invited to the event.");
+            var known = calendar!.Participants.FirstOrDefault(p => p.Id == participant.Id) ?? throw new InvalidOperationException("This person is not invited to the event.");
             if(!ids.ContainsKey(speakerId) && sources.GetValueOrDefault(speakerId) == "manual" && names.TryGetValue(speakerId,out var typed)) manual[speakerId] = typed;
             names[speakerId] = known.Name;
             sources[speakerId] = "calendar";
@@ -376,13 +380,28 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         }
         else
         {
-            ids.Remove(speakerId);
+            var linked = ids.Remove(speakerId);
+            var configuredName = settings().UserName?.Trim();
             if(manual.Remove(speakerId,out var typed)) { names[speakerId] = typed; sources[speakerId] = "manual"; }
-            else { names.Remove(speakerId); sources.Remove(speakerId); }
+            else if(linked && speakerId == SpeakerLabels.Me && !string.IsNullOrEmpty(configuredName))
+            { names[speakerId] = configuredName; sources[speakerId] = "manual"; }
+            else if(linked) { names.Remove(speakerId); sources[speakerId] = "manual"; }
+            else sources[speakerId] = "manual";
         }
         await SpeakerFile.WriteAsync(directory,new SpeakerFile.Contents(names,sources) { ParticipantIds = ids, ManualNames = manual },cancellationToken).ConfigureAwait(false);
         await TranscriptWriter.WriteAsync(directory,await ReadTitleAsync(root,cancellationToken),document,names,cancellationToken).ConfigureAwait(false);
         SessionsChanged?.Invoke(this,EventArgs.Empty);
+    }
+
+    public async Task RefreshSelfParticipantAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        var root = TranscriptVersions.ValidatedSessionRoot(directory);
+        using var reservation = TryReserveIdleSession(root);
+        if (reservation is null || Has(root, ".recording.json") || Has(root, TranscriptVersions.RequestFile)) return;
+        var document = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
+        if (await SpeakerFile.ApplySelfParticipantAsync(directory, document, settings(), cancellationToken).ConfigureAwait(false))
+            await TranscriptWriter.WriteAsync(directory, await ReadTitleAsync(root, cancellationToken).ConfigureAwait(false), document,
+                (await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false)).Names, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task WorkerAsync(CancellationToken cancellationToken)
@@ -613,6 +632,9 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
     /// <returns>Whether naming is done, off, or given up on — anything but waiting.</returns>
     private async Task<bool> NameSpeakersAsync(string directory, string title, TranscriptDocument transcript, CancellationToken cancellationToken)
     {
+        if (await SpeakerFile.ApplySelfParticipantAsync(directory, transcript, settings(), cancellationToken).ConfigureAwait(false))
+            await TranscriptWriter.WriteAsync(directory, title, transcript,
+                (await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false)).Names, cancellationToken).ConfigureAwait(false);
         var current = settings();
         if (!current.SpeakerNames.Enabled)
         {

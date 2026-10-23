@@ -3,7 +3,7 @@ import Foundation
 /// Every schema entry belongs to one task-oriented page, including rare options.
 enum SettingsPage {
     static func destination(for path: [String]) -> ApplicationNavigationState.Destination {
-        if path == ["auto_record", "calendar"] || path == ["user_name"] { return .calendar }
+        if path == ["auto_record", "calendar"] || path == ["user_name"] || path == ["user_email"] { return .calendar }
         switch path.first {
         case "transcription", "live_transcription", "transcript_echo_filter": return .transcription
         case "summary", "speaker_names": return .summary

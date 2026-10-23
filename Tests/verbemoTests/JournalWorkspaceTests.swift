@@ -91,18 +91,18 @@ struct JournalWorkspaceTests {
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let tabs = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.result-tabs" } as? NSStackView)
         let buttons = tabs.arrangedSubviews.compactMap { $0 as? NSButton }
-        try #require(buttons.count == 2)
+        try #require(buttons.count == 3)
         let pages = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
-        #expect(buttons.map(\.title) == ["Сводка", "Расшифровка"])
+        #expect(buttons.map(\.title) == ["Сводка", "Расшифровка", "Участники"])
         #expect(buttons.allSatisfy { !$0.isBordered && $0.image != nil })
-        #expect(buttons.map(\.state) == [.on, .off])
+        #expect(buttons.map(\.state) == [.on, .off, .off])
         #expect(pages.selectedTabViewItem?.identifier as? String == "summary")
-        for index in [1, 1, 0] {
+        for index in [1, 2, 2, 0] {
             let button = buttons[index]
             #expect(NSApplication.shared.sendAction(try #require(button.action), to: button.target, from: button))
             #expect(buttons.filter { $0.state == .on }.count == 1)
             #expect(button.state == .on)
-            #expect(pages.selectedTabViewItem?.identifier as? String == (index == 1 ? "transcript" : "summary"))
+            #expect(pages.selectedTabViewItem?.identifier as? String == ["summary", "transcript", "participants"][index])
         }
         #expect(app.panel.contentLayoutRect.width <= CGFloat(width + 2))
         #expect(buttons.allSatisfy { $0.frame.width >= $0.intrinsicContentSize.width })
@@ -509,7 +509,7 @@ struct JournalWorkspaceTests {
         #expect(!title.isHiddenOrHasHiddenAncestor)
         #expect(app.panel.contentLayoutRect.width <= 762)
         let tabs = try #require(views.compactMap { $0 as? NSTabView }.first)
-        #expect(tabs.tabViewItems.map { $0.identifier as? String } == ["summary", "transcript"])
+        #expect(tabs.tabViewItems.map { $0.identifier as? String } == ["summary", "transcript", "participants"])
     }
 
     @Test(.freshHome, .speaking(.english)) func selectingActiveRecordingClearsPreviousSpeakerEditors() async throws {
@@ -523,6 +523,9 @@ struct JournalWorkspaceTests {
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
         await library.settled()
+        let participants = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.result.participants" })
+        #expect(participants.sendAction(participants.action, to: participants.target))
         #expect(library.contentView.allDescendants.contains { $0 is MeetingSpeakerView })
         let finish = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }.first { $0.title == "Finish processing" })
         #expect(!finish.isHidden)

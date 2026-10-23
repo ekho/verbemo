@@ -98,7 +98,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             let entries = SettingsSchema.sections.flatMap(\.entries).filter {
                 SettingsPage.destination(for: $0.path) == destination && !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
             }
-            let common: Set<String> = ["interface_theme", "interface_language", "window", "calendar", "system_audio", "transcription.language", "transcription.model", "summary.language", "summary.template", "user_name", "speaker_names.enabled"]
+            let common: Set<String> = ["interface_theme", "interface_language", "window", "calendar", "system_audio", "transcription.language", "transcription.model", "summary.language", "summary.template", "user_name", "user_email", "speaker_names.enabled"]
             let rare = NSStackView()
             rare.orientation = .vertical
             rare.alignment = .leading

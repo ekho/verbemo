@@ -40,6 +40,7 @@ extension Config {
         case transcriptEchoFilter = "transcript_echo_filter"
         case offlineEchoCancellation = "offline_echo_cancellation"
         case userName = "user_name"
+        case userEmail = "user_email"
         case speakerNamesEnabled = "speaker_names.enabled"
         case speakerNamesBackend = "speaker_names.backend"
         case speakerNamesModel = "speaker_names.model"

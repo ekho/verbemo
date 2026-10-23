@@ -5,6 +5,17 @@ namespace Verbemo.Core.Tests;
 
 public sealed class ProcessingContractTests
 {
+    [Theory]
+    [InlineData("?")]
+    [InlineData("them ?")]
+    public void Unknown_voice_keeps_its_label_even_if_old_names_file_had_a_mapping(string label)
+    {
+        var markdown = TranscriptWriter.RenderMarkdown("Test", new("whisper", "tiny", DateTimeOffset.UtcNow,
+            [new(0, 1000, "Uncertain", label)]), new Dictionary<string, string> { [label] = "Incorrect Name" });
+        Assert.Contains(label + ":** Uncertain", markdown);
+        Assert.DoesNotContain("Incorrect Name", markdown);
+    }
+
     [Fact]
     public async Task TranscriptWriter_creates_human_and_machine_readable_completion_files()
     {

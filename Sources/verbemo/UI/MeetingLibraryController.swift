@@ -273,11 +273,13 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
 
         speakersStack.orientation = .vertical
         speakersStack.alignment = .leading
-        speakersStack.spacing = 6
+        speakersStack.spacing = 8
+        speakersStack.identifier = .init("meeting.participants")
 
         for (id, label, view) in [
             ("summary", localised("Summary", "Сводка"), previewScroll(summaryText)),
             ("transcript", localised("Transcript", "Расшифровка"), transcriptContent()),
+            ("participants", localised("Participants", "Участники"), SetupLayout.scroller(around: speakersStack)),
         ] as [(String, String, NSView)] {
             let tab = NSTabViewItem(identifier: id)
             tab.label = label
@@ -321,6 +323,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         for (index, (id, title, symbol)) in [
             ("summary", localised("Summary", "Сводка"), "checklist"),
             ("transcript", localised("Transcript", "Расшифровка"), "text.bubble"),
+            ("participants", localised("Participants", "Участники"), "person.2"),
         ].enumerated() {
             let button = JournalTabButton(title: title, symbol: symbol, target: self, action: #selector(resultSelected(_:)))
             button.tag = index
@@ -458,7 +461,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     }
     @objc private func resultSelected(_ sender: NSButton) {
         for case let button as JournalTabButton in resultPicker.arrangedSubviews { button.select(button === sender) }
-        detailTabs.selectTabViewItem(withIdentifier: sender.tag == 1 ? "transcript" : "summary")
+        detailTabs.selectTabViewItem(withIdentifier: ["summary", "transcript", "participants"][sender.tag])
     }
     @objc private func filterSelected() {
         let filters: [ApplicationNavigationState.Destination] = [.allMeetings, .processing, .attention]
@@ -600,7 +603,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         guard currentActions.reason(for: transcript ? .copyTranscript : .copySummary) == nil,
               let dir = artifactDirectory else { updateButtons(); return }
         let markdown: String?
-        if transcript { markdown = (try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)) ?? PostProcessor.readTranscript(dir)?.rendered(title: selected?.title ?? "", names: SpeakerNames.read(from: dir)) }
+        if transcript { markdown = PostProcessor.readTranscript(dir)?.rendered(title: selected?.title ?? "", names: SpeakerNames.read(from: dir)) ?? (try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)) }
         else { markdown = summaryToCopy }
         if let markdown { _ = Self.copyContent(markdown, plainText: plainText, to: pasteboard) }
     }
@@ -852,112 +855,74 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         }
 
         let names = SpeakerNames.read(from: dir)
-        var participantChoices: [CalendarParticipant] = []
-        if let calendar = MeetingCalendarMetadata.read(from: item.dir), calendar.isConfirmed {
-            let diarized = DiarizationState.read(dir).map { $0.status == .completed } ?? (!Config.localEngines.contains(transcript.engine) || Set(transcript.segments.map(\.speaker)).count > 2)
-            if diarized {
-                participantChoices = calendar.participants
-                meetingTranscript.update(transcript: transcript, names: names, participants: calendar.participants, canEdit: !working && !SessionClaim.isHeld(item.dir) && DiarizationState.persisted(in: dir).isFinal, canPlay: !audioPlayer.isHidden)
-                meetingTranscript.onMap = { [weak self] speaker, participant in
-                    try PostProcessor.setSpeakerParticipant(speaker, participant: participant, in: dir)
-                    self?.showDetail()
-                }
-                meetingTranscript.isHidden = false
-                plainTranscriptScroll?.isHidden = true
-            }
+        let calendar = MeetingCalendarMetadata.read(from: item.dir)
+        let diarized = DiarizationState.read(dir).map { $0.status == .completed }
+            ?? (!Config.localEngines.contains(transcript.engine) || Set(transcript.segments.map(\.speaker)).count > 2)
+        let participantChoices = calendar?.isConfirmed == true ? calendar!.participants : []
+        let canEdit = !working && !SessionClaim.isHeld(item.dir) && !TranscriptVersions.isRequested(item.dir)
+            && DiarizationState.persisted(in: dir).isFinal
+        meetingTranscript.onAssign = { [weak self] speaker, participant, name in
+            try PostProcessor.setSpeakerParticipant(speaker, participant: participant, name: name, in: dir)
+            Task { @MainActor [weak self] in self?.showDetail() }
         }
-        meetingTranscript.update(transcript: transcript, names: names, participants: participantChoices, canEdit: !working && !SessionClaim.isHeld(item.dir) && DiarizationState.persisted(in: dir).isFinal, canPlay: !audioPlayer.isHidden)
+        meetingTranscript.update(transcript: transcript, names: names, participants: participantChoices,
+                                 canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatchParticipants: diarized)
         meetingTranscript.isHidden = false
         plainTranscriptScroll?.isHidden = true
+        let hint = NSTextField(wrappingLabelWithString: localised(
+            "Listen to a voice, then choose a participant or type a name. The assignment applies to all their lines in this transcript version.",
+            "Прослушайте голос, затем выберите участника или введите имя. Сопоставление применяется ко всем его репликам в этой версии расшифровки."))
+        hint.font = .systemFont(ofSize: 12)
+        hint.textColor = JournalStyle.muted
+        speakersStack.addArrangedSubview(hint)
+        hint.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
         for sample in SessionInventory.samples(transcript: transcript, names: names) {
-            let row = speakerRow(sample, in: dir, transcript: transcript, names: names, participants: participantChoices)
+            let row = speakerRow(sample, in: dir, transcript: transcript, names: names,
+                                 participants: diarized || sample.label == "me" ? participantChoices : [])
             speakersStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
         }
         updateButtons()
     }
 
-    /// One speaker: what they said, and a field for who they are.
-    ///
-    /// Both samples are shown because they answer different questions — the
-    /// first line is where somebody gets greeted by name, and the longest turn
-    /// is what identifies a person by what they were talking about when nobody
-    /// said any names at all.
     private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
-        let speaker = MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments)
-        let label = NSTextField(labelWithString: speaker)
-        label.font = .systemFont(ofSize: 12, weight: .medium)
-
-        let field = NSTextField(string: sample.name ?? "")
-        field.placeholderString = localised("name", "имя")
-        field.target = self
-        field.action = #selector(nameEdited(_:))
-        field.identifier = .init("\(dir.path)\n\(sample.label)")
-        field.setAccessibilityLabel(localised("Name for \(speaker)", "Имя для \(speaker)"))
-        if !participants.isEmpty {
-            field.isHidden = names?.speakers[sample.label]?.participantID != nil
-            field.placeholderString = localised("Name without Calendar", "Имя без календаря")
+        let title = MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments)
+        let canEdit = !working && !SessionClaim.isHeld(selected?.dir ?? dir)
+            && !TranscriptVersions.isRequested(selected?.dir ?? dir) && DiarizationState.persisted(in: dir).isFinal
+        let editor = SpeakerAssignmentEditor(speaker: sample.label, title: title,
+            entry: SpeakerNames.isUnknown(sample.label) ? nil : names?.speakers[sample.label],
+            participants: participants, canEdit: canEdit, inline: false)
+        editor.onAssign = { [weak self] participant, name in
+            try PostProcessor.setSpeakerParticipant(sample.label, participant: participant, name: name, in: dir)
+            Task { @MainActor [weak self] in self?.showDetail() }
         }
-
-        let turns = localised("\(sample.turns) turns", "реплик: \(sample.turns)")
-        let provenance = NSTextField(labelWithString: sample.source.map {
-            "\($0.described) · " + turns
-        } ?? turns)
-        provenance.font = .systemFont(ofSize: 10)
-        provenance.textColor = .tertiaryLabelColor
-
-        let head = NSStackView(views: [label, field, provenance])
-        head.orientation = .vertical
-        head.alignment = .leading
-        head.spacing = 6
-
-        let quotes = NSTextField(wrappingLabelWithString: [
-            sample.first.isEmpty
-                ? nil : localised("first: ", "первая: ") + sample.first,
-            sample.longest == sample.first || sample.longest.isEmpty
-                ? nil : localised("longest: ", "самая длинная: ") + sample.longest,
-        ].compactMap { $0 }.joined(separator: "\n"))
-        quotes.font = .systemFont(ofSize: 11)
+        let play = NSButton(title: localised("Listen", "Прослушать"), target: self, action: #selector(playSpeaker(_:)))
+        play.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)
+        play.imagePosition = .imageLeading
+        play.bezelStyle = .rounded
+        play.identifier = .init("speaker.play")
+        play.tag = transcript.segments.first(where: { $0.speaker == sample.label })?.start_ms ?? 0
+        play.isEnabled = !audioPlayer.isHidden
+        play.setAccessibilityLabel(localised("Listen to ", "Прослушать: ") + title)
+        let head = NSStackView(views: [editor, play])
+        head.spacing = 8
+        let quotes = NSTextField(wrappingLabelWithString: [sample.first,
+            sample.longest == sample.first ? nil : sample.longest].compactMap { $0 }.joined(separator: "\n"))
+        quotes.font = .systemFont(ofSize: 12)
         quotes.textColor = .secondaryLabelColor
-        quotes.lineBreakMode = .byTruncatingTail
         quotes.maximumNumberOfLines = 4
-        quotes.preferredMaxLayoutWidth = 640
-
-        let row = NSStackView(views: [head])
-        row.orientation = .vertical
-        row.alignment = .leading
-        row.spacing = 6
-        if !participants.isEmpty {
-            let picker = NSPopUpButton()
-            MeetingTranscriptView.configureParticipants(picker, speaker: sample.label, names: names, participants: participants, fallback: speaker)
-            picker.identifier = .init("participant\n\(dir.path)\n\(sample.label)")
-            picker.target = self
-            picker.action = #selector(participantChanged(_:))
-            picker.isEnabled = !working && !SessionClaim.isHeld(selected?.dir ?? dir) && DiarizationState.persisted(in: dir).isFinal
-            picker.setAccessibilityLabel(localised("Calendar participant for \(speaker)", "Участник календаря для \(speaker)"))
-            picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            row.addArrangedSubview(picker)
-            picker.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor).isActive = true
-        }
-        row.addArrangedSubview(quotes)
-        for view in [head, field, quotes] { view.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true }
-        field.isEnabled = !working && !SessionClaim.isHeld(selected?.dir ?? dir) && DiarizationState.persisted(in: dir).isFinal
-        return MeetingSpeakerView(title: sample.name ?? speaker, subtitle: speaker,
-                                  unknown: SpeakerNames.isUnknown(sample.label), editor: row)
+        quotes.lineBreakMode = .byTruncatingTail
+        quotes.preferredMaxLayoutWidth = 400
+        let contents = NSStackView(views: [head, quotes])
+        contents.orientation = .vertical
+        contents.alignment = .leading
+        contents.spacing = 8
+        for view in [head, quotes] { view.widthAnchor.constraint(equalTo: contents.widthAnchor).isActive = true }
+        return MeetingSpeakerView(title: title + localised(" · \(sample.turns) turns", " · реплик: \(sample.turns)"), editor: contents)
     }
-    @objc private func participantChanged(_ sender: NSPopUpButton) {
-        guard sender.isEnabled, let fields = sender.identifier?.rawValue.components(separatedBy: "\n"), fields.count == 3 else { return }
-        let dir = URL(fileURLWithPath: fields[1])
-        let id = sender.selectedItem?.representedObject as? String
-        let person = selected.flatMap { MeetingCalendarMetadata.read(from: $0.dir) }?.participants.first { $0.id == id }
-        do {
-            try PostProcessor.setSpeakerParticipant(fields[2], participant: person, in: dir)
-            showDetail()
-        } catch {
-            showDetail()
-            detailError.stringValue = error.localizedDescription
-            detailError.isHidden = false
-        }
+    @objc private func playSpeaker(_ sender: NSButton) {
+        guard sender.isEnabled else { return }
+        audioPlayer.play(from: Double(sender.tag) / 1000)
     }
 
     private func updateButtons() {
@@ -1073,14 +1038,6 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     }
 
     // MARK: - actions
-
-    @objc private func nameEdited(_ sender: NSTextField) {
-        guard let id = sender.identifier?.rawValue else { return }
-        let parts = id.components(separatedBy: "\n")
-        guard parts.count == 2 else { return }
-        PostProcessor.rename(parts[1], to: sender.stringValue, in: URL(fileURLWithPath: parts[0]))
-        reload()
-    }
 
     /// What Finish processing does about one recording.
     enum Decision: Equatable {
@@ -1529,8 +1486,7 @@ private extension MeetingLibraryController {
         settings.font = .systemFont(ofSize: 11)
         let inspector = FlippedStackView(views: [
             JournalStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")),
-            JournalStyle.caption(localised("SPEAKERS", "УЧАСТНИКИ")), speakersStack,
-            SetupLayout.hairline(), JournalStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
+            JournalStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
             calendarPicker,
             SetupLayout.hairline(), JournalStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
             diarizationLabel, diarizationActions, finishButton, cancelProcessingButton, processingStatus,

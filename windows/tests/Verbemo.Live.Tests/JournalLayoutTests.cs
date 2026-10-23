@@ -70,7 +70,7 @@ public sealed class JournalLayoutTests
         }));
 
     [Fact]
-    public void Participants_are_in_inspector_and_list_survives_narrow_layout() => ApplicationWindowTests.OnSta(() =>
+    public void Participants_have_their_own_tab_and_list_survives_narrow_layout() => ApplicationWindowTests.OnSta(() =>
         RecordingActionsTests.WithWindow((window, root) =>
         {
             RecordingActionsTests.Select(window, new(root, "Meeting", DateTimeOffset.Now, 120, "manual", "whisper",
@@ -79,10 +79,35 @@ public sealed class JournalLayoutTests
             content.Measure(new Size(850, 600));
             content.Arrange(new Rect(0, 0, 850, 600));
             content.UpdateLayout();
-            Assert.Equal(2, RecordingActionsTests.Field<TabControl>(window, "tabs").Items.Count);
+            var tabs = RecordingActionsTests.Field<TabControl>(window, "tabs");
+            Assert.Equal(3, tabs.Items.Count);
+            Assert.Contains(RecordingActionsTests.Field<StackPanel>(window, "speakers"),
+                Descendants((DependencyObject)((TabItem)tabs.Items[2]).Content));
+            Assert.DoesNotContain(RecordingActionsTests.Field<StackPanel>(window, "speakers"),
+                Descendants(RecordingActionsTests.Field<Border>(window, "inspector")));
             Assert.Equal(Visibility.Visible, RecordingActionsTests.Field<DockPanel>(window, "listPanel").Visibility);
             Assert.Equal(Visibility.Visible, RecordingActionsTests.Field<Grid>(window, "detail").Visibility);
             Assert.Contains(RecordingActionsTests.Field<StackPanel>(window, "speakers"), Descendants(content));
+        }));
+
+    [Fact]
+    public void Participant_name_can_be_typed_without_calendar_or_a_separate_edit_click() => ApplicationWindowTests.OnSta(() =>
+        RecordingActionsTests.WithWindow((window, root) =>
+        {
+            File.WriteAllText(Path.Combine(root, "meta.json"), "{\"title\":\"Test\"}");
+            TranscriptWriter.WriteAsync(root, "Test", new("whisper", "tiny", DateTimeOffset.UtcNow,
+                [new(2000, 3000, "Sample", "A"), new(4000, 5000, "Later", "A"), new(6000, 7000, "Unknown", "?")])).GetAwaiter().GetResult();
+            var show = (Task)typeof(RecordingsWindow).GetMethod("ShowSpeakersAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [root, "Test", RecordingActionsTests.Field<int>(window, "transcriptShown")])!;
+            ApplicationWindowTests.Until(() => show.IsCompleted);
+            show.GetAwaiter().GetResult();
+            var combo = Assert.Single(Descendants(RecordingActionsTests.Field<StackPanel>(window, "speakers")).OfType<ComboBox>());
+            Assert.True(combo.IsEditable);
+            combo.Text = "Manual Name";
+            combo.RaiseEvent(new System.Windows.Input.KeyboardFocusChangedEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+                Environment.TickCount, combo, null) { RoutedEvent = UIElement.LostKeyboardFocusEvent });
+            ApplicationWindowTests.Until(() => File.ReadAllText(Path.Combine(root, "transcript.md")).Contains("Manual Name"));
+            Assert.Equal("Manual Name", SpeakerFile.ReadAsync(root, default).GetAwaiter().GetResult().Names["A"]);
         }));
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)

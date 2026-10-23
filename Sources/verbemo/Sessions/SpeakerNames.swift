@@ -93,16 +93,39 @@ struct SpeakerNames: Codable {
     }
 
     static func read(from dir: URL) -> SpeakerNames? {
-        guard let data = try? Data(contentsOf: dir.appendingPathComponent(file)) else {
-            return nil
+        let data = try? Data(contentsOf: dir.appendingPathComponent(file))
+        let names = data.flatMap { try? JSONDecoder().decode(SpeakerNames.self, from: $0) }
+        if data != nil && names == nil { return nil }
+        let resolved = (names ?? SpeakerNames()).resolvingOwner(in: dir)
+        return names == nil && resolved.speakers.isEmpty ? nil : resolved
+    }
+
+    private func resolvingOwner(in dir: URL) -> SpeakerNames {
+        guard speakers["me"]?.source != .manual else { return self }
+        var result = self
+        let root = dir.deletingLastPathComponent().lastPathComponent == "transcripts"
+            ? dir.deletingLastPathComponent().deletingLastPathComponent() : dir
+        let calendar = MeetingCalendarMetadata.read(from: root)
+        let email = Config.userEmail()
+        let matching = calendar?.isConfirmed == true && email != nil ? calendar!.participants.filter {
+            $0.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == email
+        } : []
+        let previous = speakers["me"]
+        if matching.count == 1, let person = matching.first,
+           DiarizationState.persisted(in: dir).isFinal,
+           PostProcessor.readTranscript(dir)?.segments.contains(where: { $0.speaker == "me" }) == true {
+            result.speakers["me"] = Entry(name: Config.userName() ?? person.name, source: .config,
+                participantID: person.id, manualName: previous?.participantID == nil ? previous?.name : previous?.manualName)
+        } else if previous?.source == .config, previous?.participantID != nil {
+            result.speakers["me"] = Entry(name: Config.userName() ?? previous?.manualName, source: .config)
         }
-        return try? JSONDecoder().decode(SpeakerNames.self, from: data)
+        return result
     }
 
     func write(to dir: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(self).write(
+        try encoder.encode(resolvingOwner(in: dir)).write(
             to: dir.appendingPathComponent(Self.file), options: .atomic
         )
     }

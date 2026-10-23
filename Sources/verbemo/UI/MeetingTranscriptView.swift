@@ -4,13 +4,14 @@ import AppKit
 @MainActor
 final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableViewDelegate {
     var onPlayFrom: ((TimeInterval) -> Void)?
-    var onMap: ((String, CalendarParticipant?) throws -> Void)?
+    var onAssign: ((String, CalendarParticipant?, String?) throws -> Void)?
     private let table = NSTableView()
     private var segments: [Transcript.Segment] = []
     private var names: SpeakerNames?
     private var participants: [CalendarParticipant] = []
     private var canEdit = false
     private var canPlay = false
+    private var canMatchParticipants = true
     init() {
         super.init(frame: .zero)
         hasVerticalScroller = true
@@ -28,12 +29,13 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         documentView = table
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false) {
+    func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false, canMatchParticipants: Bool = true) {
         segments = transcript.segments
         self.names = names
         self.participants = participants
         self.canEdit = canEdit
         self.canPlay = canPlay
+        self.canMatchParticipants = canMatchParticipants
         table.reloadData()
     }
     func numberOfRows(in tableView: NSTableView) -> Int { segments.count }
@@ -59,51 +61,34 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.time.setAccessibilityLabel(cell.time.toolTip)
         cell.body.stringValue = segment.text
         cell.body.preferredMaxLayoutWidth = max(160, tableView.tableColumns[0].width - 20)
-        Self.configureParticipants(cell.person, speaker: segment.speaker, names: names,
-                                   participants: participants, fallback: Self.speakerTitle(segment.speaker, in: segments))
-        cell.person.tag = row
-        cell.person.target = self
-        cell.person.action = #selector(mapped(_:))
-        cell.person.isEnabled = canEdit && !participants.isEmpty
-        cell.person.setAccessibilityLabel(localised("Who is speaking at \(cell.time.title)?", "Кто говорит в \(cell.time.title)?"))
+        let editor = SpeakerAssignmentEditor(speaker: segment.speaker, title: Self.speakerTitle(segment.speaker, in: segments),
+            entry: SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker],
+            participants: canMatchParticipants || segment.speaker == "me" ? participants : [], canEdit: canEdit, inline: true)
+        let assign = onAssign
+        editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
+        cell.setEditor(editor)
         return cell
     }
     @objc private func playFrom(_ sender: NSButton) {
         guard canPlay, segments.indices.contains(sender.tag) else { return }
         onPlayFrom?(Double(segments[sender.tag].start_ms) / 1000)
     }
-    @objc private func mapped(_ sender: NSPopUpButton) {
-        guard canEdit, segments.indices.contains(sender.tag) else { return }
-        let id = sender.selectedItem?.representedObject as? String
-        let participant = participants.first { $0.id == id }
-        do { try onMap?(segments[sender.tag].speaker, participant) }
-        catch { if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }; table.reloadData() }
-    }
     static func speakerTitle(_ speaker: String, in segments: [Transcript.Segment]) -> String {
         if SpeakerNames.isUnknown(speaker) { return SpeakerNames.described(label: speaker) }
+        if speaker == "me" { return SpeakerNames.described(label: speaker) }
         var labels: [String] = []
         for segment in segments where !SpeakerNames.isUnknown(segment.speaker) && !labels.contains(segment.speaker) { labels.append(segment.speaker) }
         let number = (labels.firstIndex(of: speaker) ?? 0) + 1
         return localised("Speaker \(number)", "Говорящий \(number)")
-    }
-    static func configureParticipants(_ popup: NSPopUpButton, speaker: String, names: SpeakerNames?, participants: [CalendarParticipant], fallback: String) {
-        popup.removeAllItems()
-        let entry = names?.speakers[speaker]
-        let manual = entry?.participantID == nil ? entry?.name : entry?.manualName
-        popup.addItem(withTitle: (manual ?? fallback) + localised(" · not matched", " · не сопоставлен"))
-        for participant in participants {
-            popup.addItem(withTitle: participant.name + (participant.email.map { " · " + $0 } ?? ""))
-            popup.lastItem?.representedObject = participant.id
-        }
-        if let id = entry?.participantID, let index = popup.itemArray.firstIndex(where: { $0.representedObject as? String == id }) { popup.selectItem(at: index) }
     }
 }
 
 @MainActor
 private final class SegmentCell: NSTableCellView {
     let time = NSButton(title: "", target: nil, action: nil)
-    let person = NSPopUpButton()
     let body = NSTextField(wrappingLabelWithString: "")
+    private let head = NSStackView()
+    private var editor: NSView?
     init() {
         super.init(frame: .zero)
         time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -112,8 +97,7 @@ private final class SegmentCell: NSTableCellView {
         time.identifier = .init("transcript.playFrom")
         body.font = .systemFont(ofSize: 14)
         body.isSelectable = true
-        person.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let head = NSStackView(views: [time, person])
+        head.addArrangedSubview(time)
         head.spacing = 12
         let stack = NSStackView(views: [head, body])
         stack.orientation = .vertical
@@ -128,6 +112,11 @@ private final class SegmentCell: NSTableCellView {
             body.widthAnchor.constraint(equalTo: stack.widthAnchor),
             head.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
         ])
+    }
+    func setEditor(_ view: NSView) {
+        if let editor { head.removeArrangedSubview(editor); editor.removeFromSuperview() }
+        editor = view
+        head.addArrangedSubview(view)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }

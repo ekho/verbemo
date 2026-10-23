@@ -51,6 +51,7 @@ public static class TranscriptWriter
         TranscriptDocument transcript,
         IReadOnlyDictionary<string, string>? speakerNames = null)
     {
+        speakerNames = speakerNames?.Where(pair => !SpeakerLabels.IsUnknown(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
         var result = new StringBuilder()
             .Append("# ").AppendLine(title)
             .AppendLine()

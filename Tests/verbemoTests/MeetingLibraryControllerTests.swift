@@ -194,7 +194,7 @@ struct MeetingLibraryControllerTests {
         #expect(!library.contentView.allDescendants.contains { $0 is NSSplitView })
     }
 
-    @Test("Long speaker excerpts leave name fields visible in the inspector")
+    @Test("Long speaker excerpts leave assignment fields visible in Participants")
     func speakerFieldsStayVisible() throws {
         let root = try Self.folder()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -214,13 +214,14 @@ struct MeetingLibraryControllerTests {
         let view = recordings.contentView
         app.panel.setContentSize(NSSize(width: 1340, height: 820))
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let inspector = try #require(view.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
-        let speaker = try #require(inspector.allDescendants.compactMap { $0 as? MeetingSpeakerView }.first)
-        let edit = try #require(speaker.allDescendants.compactMap { $0 as? NSButton }.first)
-        #expect(edit.sendAction(edit.action, to: edit.target))
+        let tab = try #require(view.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.result.participants" })
+        #expect(tab.sendAction(tab.action, to: tab.target))
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let scroll = try #require(inspector.allDescendants.compactMap { $0 as? NSScrollView }.first)
-        let field = try #require(speaker.allDescendants.compactMap { $0 as? NSTextField }.first { $0.isEditable })
+        let participants = try #require(view.allDescendants.first { $0.identifier?.rawValue == "meeting.participants" })
+        let speaker = try #require(participants.allDescendants.compactMap { $0 as? MeetingSpeakerView }.first)
+        let field = try #require(speaker.allDescendants.compactMap { $0 as? NSComboBox }.first)
+        #expect(!field.isHiddenOrHasHiddenAncestor)
+        let scroll = try #require(participants.enclosingScrollView)
         let visible = field.convert(field.bounds, to: scroll.contentView)
         #expect(visible.intersects(scroll.contentView.bounds), "the excerpt must not push names out of view")
         withExtendedLifetime(recordings) {}
@@ -245,18 +246,16 @@ struct MeetingLibraryControllerTests {
         app.panel.setContentSize(NSSize(width: 760, height: 700))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         recordings.updateCompactLayout()
-        let inspector = try #require(view.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
-        let toggle = try #require(recordings.toolbarContent.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.inspector" })
-        #expect(inspector.isHidden)
-        #expect(toggle.sendAction(toggle.action, to: toggle.target))
+        let tab = try #require(view.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.result.participants" })
+        #expect(tab.sendAction(tab.action, to: tab.target))
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        #expect(!inspector.isHidden)
-        #expect(inspector.frame.width <= view.bounds.width + 1)
+        let participants = try #require(view.allDescendants.first { $0.identifier?.rawValue == "meeting.participants" })
+        #expect(participants.frame.width <= view.bounds.width + 1)
         #expect(app.panel.contentView?.bounds.width == 760)
         withExtendedLifetime(recordings) {}
     }
 
-    @Test("Switching meetings keeps the speaker inspector anchored beside the document")
+    @Test("Switching meetings keeps the inspector anchored after moving speakers to a tab")
     func speakerPaneDoesNotDrift() throws {
         let root = try Self.folder()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -278,7 +277,7 @@ struct MeetingLibraryControllerTests {
             table.selectRowIndexes([index % 2], byExtendingSelection: false)
             app.panel.contentView?.layoutSubtreeIfNeeded()
             #expect(inspector.frame == original)
-            #expect(inspector.allDescendants.contains { $0 is MeetingSpeakerView })
+            #expect(!inspector.allDescendants.contains { $0 is MeetingSpeakerView })
         }
         withExtendedLifetime(recordings) {}
     }
