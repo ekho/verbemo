@@ -27,7 +27,10 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     var isProcessing: (() -> Bool)?
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
     var onRenameRecording: ((String) throws -> Void)?
+    private var settingsBuilt = false
+    private var stopping = false
     lazy var settings: SettingsController = {
+        settingsBuilt = true
         let settings = SettingsController(hostWindow: panel)
         settings.isProcessing = { [weak self] in self?.isProcessing?() == true }
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
@@ -151,6 +154,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         library.onNavigateSettings = { [weak self] in self?.navigate($0) }
     }
     func navigate(_ destination: ApplicationNavigationState.Destination) {
+        guard !stopping else { return }
         let enteringSettings = navigation.destination.isMeetings || navigation.destination == .about
         showingLive = false
         navigation.navigate(destination)
@@ -179,6 +183,25 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         }
         mount(content)
     }
+    func stopForTermination() -> [Task<Void, Never>] {
+        stopping = true
+        recordingSheet?.cancel()
+        if let sheet = panel.attachedSheet { panel.endSheet(sheet, returnCode: .cancel) }
+        return settingsBuilt ? settings.stopForTermination() : []
+    }
+
+    func showStopping(_ text: String) {
+        toolbar.isHidden = true
+        sidebar.isHidden = true
+        recordingBar.isHidden = true
+        settingsNavigation.isHidden = true
+        let note = NSTextField(labelWithString: text)
+        note.alignment = .center
+        note.font = .systemFont(ofSize: 16)
+        note.identifier = .init("application.stopping")
+        mount(note)
+    }
+
     private func mount(_ view: NSView) {
         if view.superview === contentHost { return }
         contentHost.subviews.forEach { $0.removeFromSuperview() }
@@ -196,6 +219,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         heading.isHidden = destination == .allMeetings
     }
     func presentSetup(_ setup: SetupPage) {
+        guard !stopping else { return }
         showingLive = false
         toolbar.isHidden = true
         settingsNavigation.isHidden = true
@@ -254,6 +278,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         updateActivationPolicy(windowVisible: false)
     }
     func update(state: MenuBarController.State, elapsed: String?) {
+        guard !stopping else { return }
         let wasRecording = recordingBarIsVisible
         recordingBar.update(state: state, elapsed: elapsed)
         liveView.refreshAudioLevels()
@@ -280,6 +305,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     @objc private func sectionClicked() { if navigation.destination.isMeetings { showAll() } else { navigate(.general) } }
     @objc private func showAbout() { navigate(.about) }
     func newRecording() {
+        guard !stopping else { return }
         guard !recordingBarIsVisible, panel.attachedSheet == nil else { return }
         let sheet = NewRecordingSheet(calendarEnabled: Config.useCalendar(), loadCalendar: recordingCalendar)
         if let calendarSearch { sheet.calendarPicker.loadEvents = calendarSearch }

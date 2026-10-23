@@ -28,6 +28,8 @@
          while its workspace is minimized or closed. -->
     <key>LSUIElement</key>
     <false/>
+    <key>NSPrincipalClass</key>
+    <string>VerbemoApplication</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticTermination</key>

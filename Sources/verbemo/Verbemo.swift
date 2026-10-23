@@ -43,7 +43,7 @@ struct Run: ParsableCommand {
         // The release image is deliberately read-only. Offer the ordinary Mac
         // installation before anything stores a path to that temporary volume.
         InterfaceLanguage.adoptFromSystem()
-        let app = NSApplication.shared
+        let app = VerbemoApplication.shared
         app.setActivationPolicy(Config.dockIcon() ? .regular : .accessory)
         DockPresentation.update(state: .idle, elapsed: nil, application: app)
         if ApplicationRelocation.offerMoveIfNeeded() { return }
@@ -139,7 +139,6 @@ struct Run: ParsableCommand {
         delegate.onReopen = { alreadyActive in
             MainActor.assumeIsolated { controller.toggleWindow(alreadyActive: alreadyActive) }
         }
-        delegate.onTerminate = { MainActor.assumeIsolated { controller.finishForTermination() } }
         delegate.onPrepareTermination = { completion in
             MainActor.assumeIsolated {
                 controller.prepareForTermination(completion: completion)
@@ -164,7 +163,7 @@ struct Run: ParsableCommand {
         let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         sigint.setEventHandler {
             FileHandle.standardError.write(Data("\nshutting down\n".utf8))
-            MainActor.assumeIsolated { controller.shutdown() }
+            Self.quitFromTheRunLoop { MainActor.assumeIsolated { controller.shutdown() } }
         }
         sigint.resume()
         signal(SIGINT, SIG_IGN)
@@ -177,7 +176,7 @@ struct Run: ParsableCommand {
         let sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         sigterm.setEventHandler {
             FileHandle.standardError.write(Data("\nSIGTERM — finalizing\n".utf8))
-            MainActor.assumeIsolated { controller.shutdown() }
+            Self.quitFromTheRunLoop { MainActor.assumeIsolated { controller.shutdown() } }
         }
         sigterm.resume()
         signal(SIGTERM, SIG_IGN)
@@ -198,6 +197,13 @@ struct Run: ParsableCommand {
         // weak, and a deallocated one silently stops handling Dock clicks.
         withExtendedLifetime(delegate) {}
     }
+    // Adapted from dm0xa's upstream safe-quit work; provenance is in docs/history.
+    private static func quitFromTheRunLoop(_ quit: @escaping @MainActor () -> Void) {
+        RunLoop.main.perform(inModes: [.common]) {
+            MainActor.assumeIsolated { quit() }
+        }
+    }
+
 }
 
 struct Doctor: ParsableCommand {
@@ -227,7 +233,9 @@ final class AppController {
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
     private let window = ApplicationWindow()
+    private var setupBuilt = false
     private lazy var setupPage: SetupPage = {
+        setupBuilt = true
         let setup = SetupPage()
         setup.isRecording = { [weak self] in self?.isRecording == true }
         setup.onFinished = { [weak self] in
@@ -249,7 +257,7 @@ final class AppController {
     // recording leaves a gap before the actor has accepted its work.
     private var pendingProcessing = 0
     private var isBusyForUpdate: Bool {
-        isRecording || pendingProcessing > 0 || imports.isRunning || mediaImportTask != nil
+        isStopping || isRecording || pendingProcessing > 0 || imports.isRunning || mediaImportTask != nil
             || sweeps?.isBusy == true || (recordingsBuilt && recordings.isProcessing)
     }
     private func processingStarted() {
@@ -260,7 +268,12 @@ final class AppController {
         pendingProcessing -= 1
         updates.activityDidChange()
     }
-    private let transcription = TranscriptionCoordinator()
+    private let operations: ProcessingOperations
+    private let transcription: TranscriptionCoordinator
+    private lazy var termination = AppTermination(operations: operations)
+    private let liveTransitions = LiveTranscriptionTransitions()
+    private var uiCleanup: [Task<Void, Never>] = []
+    private var isStopping: Bool { !operations.isAccepting }
     /// The sweep of the recordings folder, after the queue and one at a time
     /// — see `SweepScheduler`. It sweeps whatever folder is current when it
     /// runs.
@@ -362,10 +375,13 @@ final class AppController {
     /// after it can wait for it: arriving late, it would stop the new run.
     private var importStop: Task<Void, Never>?
 
-    init(root: URL, followsConfiguredRoot: Bool = true, autoRecord watcher: AutoRecordController? = nil) {
+    init(root: URL, followsConfiguredRoot: Bool = true, autoRecord watcher: AutoRecordController? = nil,
+         operations: ProcessingOperations = .shared) {
         self.root = root
         self.followsConfiguredRoot = followsConfiguredRoot
-        mediaImport = MediaImportCoordinator(root: root)
+        self.operations = operations
+        transcription = TranscriptionCoordinator(operations: operations)
+        mediaImport = MediaImportCoordinator(root: root, operations: operations)
 
         let settings = Config.autoRecord()
         // The calendar is worth reading for names even when it isn't a
@@ -377,10 +393,10 @@ final class AppController {
         sweeps = SweepScheduler(
             waitForQueue: { [transcription] in await transcription.waitUntilIdle() },
             sweep: { [weak self] in
-                guard let self else { return }
+                guard let self, !isStopping else { return }
                 await PostProcessor.sweep(root: root)
                 sessionsChanged()
-            })
+            }, operations: operations)
         sweeps.onActivityChange = { [weak self] in self?.updates.activityDidChange() }
 
         menuBar.onToggle = { [weak self] in self?.toggle() }
@@ -533,7 +549,7 @@ final class AppController {
     /// Resume processing and optional calendar prompts after setup. Microphone
     /// watching starts independently, so this window cannot suppress meetings.
     private func startAutomaticFeatures(requestCalendarAccess: Bool) {
-        guard !automaticFeaturesStarted else { return }
+        guard !isStopping, !automaticFeaturesStarted else { return }
         automaticFeaturesStarted = true
 
         processingStarted()
@@ -582,6 +598,7 @@ final class AppController {
     /// Both menu commands end here, so there is one picker and one import
     /// pipeline regardless of where a person starts from.
     func chooseMediaToImport() {
+        guard !isStopping else { return }
         guard let files = MediaImportPicker.choose(), !files.isEmpty else { return }
         importFiles(files)
     }
@@ -590,9 +607,9 @@ final class AppController {
     /// publishes complete filesystem sessions; only then are they handed to
     /// the ordinary transcription queue, exactly like a recording just ended.
     func importFiles(_ files: [URL]) {
-        guard ProcessingOperations.shared.isAccepting else { imports.close(); return }
+        guard operations.isAccepting else { imports.close(); return }
         if let id = importOperationID,
-           !ProcessingOperations.shared.snapshot().contains(where: { $0.id == id && $0.state != .cancelling }) {
+           !operations.snapshot().contains(where: { $0.id == id && $0.state != .cancelling }) {
             noteImportCancellation(id)
         }
         if imports.add(files) { startImportRun() }
@@ -602,7 +619,7 @@ final class AppController {
     /// One run of the importer: batch after batch until nothing is waiting
     /// or somebody cancels, then one summary for the whole run.
     private func startImportRun() {
-        guard let ticket = try? ProcessingOperations.shared.register(session: nil, kind: .importMedia) else {
+        guard let ticket = try? operations.register(session: nil, kind: .importMedia) else {
             imports.close()
             _ = imports.runEnded()
             return
@@ -630,7 +647,7 @@ final class AppController {
             mediaImportTask = nil
             importOperationID = nil
             cancelledImportOperationID = nil
-            if !ProcessingOperations.shared.isAccepting { imports.close() }
+            if !operations.isAccepting { imports.close() }
             // Files dropped while this run was stopping are a new request.
             if imports.runEnded() {
                 startImportRun()
@@ -674,7 +691,7 @@ final class AppController {
     private func noteImportCancellation(_ id: UUID) {
         guard importOperationID == id, cancelledImportOperationID != id else { return }
         cancelledImportOperationID = id
-        if ProcessingOperations.shared.isAccepting { imports.cancel() } else { imports.close() }
+        if operations.isAccepting { imports.cancel() } else { imports.close() }
     }
 
     func cancelImport() {
@@ -687,19 +704,43 @@ final class AppController {
         }
     }
 
-    /// AppKit can defer quit, so use that time to wait for the import actor's
-    /// cancellation handler and staging-folder cleanup rather than leaving a
-    /// half-written `.import-*` folder behind.
+    /// Entered only after QuitGate accepts quitting; admission closes before capture stops.
     func prepareForTermination(completion: @escaping () -> Void) -> Bool {
-        guard let running = mediaImportTask else { return false }
-        imports.close()
-        running.cancel()
-        Task { [mediaImport] in
-            await mediaImport.cancel()
-            await running.value
-            completion()
-        }
+        let task = termination.begin(stop: { [self] in
+            stopServices()
+            stopSession(reason: "app-quit")
+            let text = localised("Stopping…", "Останавливаю…")
+            menuBar.updateTranscription(text)
+            window.showStopping(text)
+        }, finishRecording: { [self] in
+            await liveTransitions.wait()
+            await liveTranscription.finishRecording()
+        }, finishServices: { [self] in
+            await importStop?.value
+            await mediaImportTask?.value
+            for task in uiCleanup { await task.value }
+            uiCleanup.removeAll()
+            if let awake { ProcessInfo.processInfo.endActivity(awake); self.awake = nil }
+        })
+        Task { await task.value; completion() }
         return true
+    }
+
+    private func stopServices() {
+        ticker?.invalidate(); ticker = nil
+        autoRecord.stop()
+        network?.stop(); network = nil
+        settingsApplier = nil
+        configDiskWatch = nil
+        if let setupRequestObserver { DistributedNotificationCenter.default().removeObserver(setupRequestObserver) }
+        if let recordRequestObserver { DistributedNotificationCenter.default().removeObserver(recordRequestObserver) }
+        if let activateObserver { DistributedNotificationCenter.default().removeObserver(activateObserver) }
+        if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
+        imports.close()
+        cancelImport()
+        uiCleanup = window.stopForTermination()
+        if recordingsBuilt { uiCleanup += recordings.stopForTermination() }
+        if setupBuilt { uiCleanup += setupPage.stopForTermination() }
     }
 
     private func showImport(_ update: MediaImportCoordinator.Update) {
@@ -712,23 +753,8 @@ final class AppController {
         recordings.finishImport(result)
     }
 
-    /// Stop any live session cleanly (finalizing files) and exit.
-    func shutdown() {
-        finishForTermination()
-        NSApp.terminate(nil)
-    }
-
-    /// Close a live recording without exiting — the half of shutdown that has
-    /// to happen when the quit came from ⌘Q or the Dock rather than from us.
-    /// Idempotent: stopSession does nothing without a session.
-    func finishForTermination() {
-        if recordingsBuilt { recordings.cancelPendingDeletion() }
-        // `applicationShouldTerminate` normally waits for this cancellation.
-        // Keep the request here too for shutdown paths that skip that hook.
-        mediaImportTask?.cancel()
-        Task { [mediaImport] in await mediaImport.cancel() }
-        stopSession(reason: "app-quit")
-    }
+    /// Signals use the same AppKit confirmation and deferred cleanup as menu/Dock quit.
+    func shutdown() { NSApp.terminate(nil) }
 
     /// What `verbemo record` asks for. Asking to start what is already running,
     /// or to stop what isn't, is not an error — it is the state the caller
@@ -743,6 +769,7 @@ final class AppController {
     }
 
     private func toggle() {
+        guard !isStopping else { return }
         if session == nil {
             autoRecord.noteManualStart()
             startSession(trigger: .manual, context: currentContext())
@@ -753,7 +780,7 @@ final class AppController {
     }
 
     private func togglePause() {
-        guard let session else { return }
+        guard !isStopping, let session else { return }
         if session.isPaused {
             session.resume()
         } else {
@@ -766,6 +793,7 @@ final class AppController {
     /// `auto_record.enabled` like every other surface does, so the answer
     /// survives a relaunch and Settings shows the same thing.
     private func toggleAutoRecord() {
+        guard !isStopping else { return }
         autoRecord.setEnabled(!autoRecord.enabled)
         showAutoRecord()
     }
@@ -780,12 +808,14 @@ final class AppController {
     /// setup form's switch does; the recording is rewired by `take`, which
     /// hears both.
     private func toggleLive(_ enabled: Bool) {
+        guard !isStopping else { return }
         Config.update(
             path: ["live_transcription", "enabled"], value: enabled ? true : nil)
     }
 
     /// One setting that changed while verbemo was running.
     private func take(_ change: SettingsApplier.Change) {
+        guard !isStopping else { return }
         switch change {
         case .liveTranscription(let enabled):
             window.updateLivePreference(enabled: enabled)
@@ -809,7 +839,7 @@ final class AppController {
     /// shows what is in it. A recording or an import under way finishes where
     /// it started — a session is one folder — and the move waits for it.
     private func adoptPendingRoot() {
-        guard let folder = pendingRoot, session == nil, mediaImportTask == nil else { return }
+        guard !isStopping, let folder = pendingRoot, session == nil, mediaImportTask == nil else { return }
         pendingRoot = nil
         guard folder != root.standardizedFileURL else { return }
         root = folder
@@ -817,7 +847,7 @@ final class AppController {
         // For the same reason `Run` sits in the recordings folder at launch:
         // an agent CLI started anywhere else goes looking around it.
         FileManager.default.changeCurrentDirectoryPath(folder.path)
-        mediaImport = MediaImportCoordinator(root: folder)
+        mediaImport = MediaImportCoordinator(root: folder, operations: operations)
         FileHandle.standardError.write(Data("recordings → \(folder.path)\n".utf8))
         // The new folder may be an old one, with its own leftovers: a crash
         // to adopt, sessions nobody transcribed.
@@ -828,13 +858,13 @@ final class AppController {
 
     /// Start or stop the live transcript under a recording already running.
     private func rewireLive(_ enabled: Bool) {
-        guard let session else { return }
+        guard !isStopping, let session else { return }
 
         // Close the old epoch synchronously. Any partial result already in
         // flight is rejected by the coordinator's epoch check.
         session.installLiveAudioSinks(mic: nil, system: nil)
         let language = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
-        Task { [liveTranscription] in
+        liveTransitions.append { [liveTranscription] in
             await liveTranscription.setEnabled(enabled, language: language)
         }
     }
@@ -861,6 +891,7 @@ final class AppController {
     /// loop decides from the answer when to try again.
     @discardableResult
     private func startSession(trigger: RecordingSession.Trigger, context: MeetingContext, title: String? = nil) -> Bool {
+        guard !isStopping else { return false }
         guard session == nil else { return true }
         do {
             let newSession = try RecordingSession(root: root, context: context, trigger: trigger, title: title)
@@ -902,7 +933,7 @@ final class AppController {
         guard let newSession = session else { return true }
         let liveEnabled = Config.liveTranscriptionEnabled()
         let liveLanguage = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
-        Task { [weak self, liveTranscription] in
+        liveTransitions.append { [weak self, liveTranscription] in
             await liveTranscription.beginRecording(
                 enabled: liveEnabled,
                 language: liveLanguage,
@@ -963,7 +994,7 @@ final class AppController {
                     + "minimum for an automatic recording\n").utf8
             ))
             session.discard()
-            Task { [self, liveTranscription] in
+            liveTransitions.append { [self, liveTranscription] in
                 await liveTranscription.finishRecording()
                 processingFinished()
             }
@@ -982,12 +1013,15 @@ final class AppController {
                 ("not queued: \(dir.lastPathComponent) has no meta.json yet — recovery "
                     + "finishes it at the next launch\n").utf8))
         }
-        Task { [self, liveTranscription] in
+        let handoff = liveTransitions.append { [liveTranscription] in
             // Drop the large streaming model before Parakeet begins its final,
             // canonical pass so the two heavyweight ASR pipelines don't
             // compete for memory or the Neural Engine.
             await liveTranscription.finishRecording()
             await queue?.enqueue(dir)
+        }
+        Task { [self] in
+            await handoff.value
             await queue?.waitUntilIdle()
             processingFinished()
         }
@@ -1033,6 +1067,7 @@ final class AppController {
     /// file — and gets the queue asked twice, which it takes as once, and
     /// one sweep.
     private func catchUp() {
+        guard !isStopping else { return }
         let folder = root
         processingStarted()
         Task { [transcription, self] in
@@ -1044,6 +1079,7 @@ final class AppController {
     }
 
     private func showTranscription(_ status: TranscriptionCoordinator.Status) {
+        guard !isStopping else { return }
         let text = Self.transcriptionLine(for: status)
         menuBar.updateTranscription(text)
         switch status {
@@ -1094,6 +1130,7 @@ final class AppController {
 
     /// Settings use the same window as meetings, including menu-bar activation.
     func showSettings() {
+        guard !isStopping else { return }
         NSApp.activate(ignoringOtherApps: true)
         window.navigate(.general)
         window.bringToFront()
@@ -1114,6 +1151,7 @@ final class AppController {
     /// so the menus are asked again here, and the item is on offer for as
     /// long as the first run is unfinished.
     func showSetup() {
+        guard !isStopping else { return }
         NSApp.activate(ignoringOtherApps: true)
         offerSetup()
         window.presentSetup(setupPage)
@@ -1154,6 +1192,7 @@ final class AppController {
     }
 
     private func tick() {
+        guard !isStopping else { return }
         let decision = autoRecord.enabled ? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
@@ -1173,6 +1212,7 @@ final class AppController {
     }
 
     private func showMeetings() {
+        guard !isStopping else { return }
         // A session put back in the queue should start transcribing now, not
         // at the next launch — the person asking for it is watching.
         recordings.onRetranscribe = { [weak self] _ in

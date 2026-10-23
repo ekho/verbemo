@@ -60,6 +60,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// The system-audio test: a tone out of the speakers and a tap listening
     /// for it. A seam so a test can prove when it is *not* played without
     /// playing it.
+    var requestMicrophone: @MainActor () async -> SetupPermissions.State = { await SetupPermissions.requestMicrophone() }
+    var requestCalendar: @MainActor () async -> SetupPermissions.State = { await SetupPermissions.requestCalendar() }
+    var openPermissionSettings: @MainActor (SetupPermissions.Pane) -> Void = { SetupPermissions.openSettings($0) }
     var playTestTone: @MainActor () async -> SetupPermissions.SystemAudioResult = {
         await SetupPermissions.testSystemAudio()
     }
@@ -342,6 +345,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// `auto_record.enabled`, and a form showing yesterday's answer is worse
     /// than no form at all.
     func reload() {
+        guard !stopping else { return }
         if parakeetDownload?.isCancelled == false, parakeetProgress == nil {
             watchParakeetSize()
         }
@@ -350,13 +354,38 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         // Detection runs off the main thread: finding `claude` can mean
         // starting the login shell, and a form that freezes while it asks
         // would be a worse first impression than one that fills in.
-        Task { await detectTools() }
+        startService { [self] in await detectTools() }
     }
 
     /// Pause polling when the host puts the form away.
     ///
     /// The Parakeet download itself is left running; `reload` restores its
     /// progress poll. The other local downloads pause when setup closes.
+    private var stopping = false
+    private var services: [UUID: Task<Void, Never>] = [:]
+
+    private func startService(_ operation: @escaping @MainActor () async -> Void) {
+        guard !stopping else { return }
+        let id = UUID()
+        services[id] = Task { [self] in
+            await operation()
+            services[id] = nil
+        }
+    }
+
+    /// Cancel consumers, never the shared store; the app awaits these after pipeline cleanup.
+    func stopForTermination() -> [Task<Void, Never>] {
+        stopping = true
+        configWatch = nil; activation = nil; nemotronObserver = nil
+        cloudKeyChecks.removeAll()
+        parakeetProgress?.invalidate(); parakeetProgress = nil
+        let tasks = [whisperDownloadTask, gigaAMDownloadTask, parakeetDownload].compactMap { $0 }
+            + Array(nemotronDownloads.values) + Array(diarizationDownloads.values)
+            + Array(services.values)
+        for task in tasks { task.cancel() }
+        return tasks
+    }
+
     func stop() {
         parakeetProgress?.invalidate()
         parakeetProgress = nil
@@ -1042,7 +1071,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
     private func wireActions() {
         micRow.onAct = { [weak self] in Task { await self?.askMicrophone() } }
-        audioRow.onAct = { [weak self] in Task { await self?.testSystemAudio() } }
+        audioRow.onAct = { [weak self] in self?.startService { [weak self] in await self?.testSystemAudio() } }
         calendarRow.onAct = { [weak self] in Task { await self?.askCalendar() } }
     }
 
@@ -1327,15 +1356,19 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     }
 
     private func askMicrophone() async {
-        let state = await SetupPermissions.requestMicrophone()
-        if state == .denied { SetupPermissions.openSettings(.microphone) }
+        guard !stopping else { return }
+        let state = await requestMicrophone()
+        guard !stopping, !Task.isCancelled else { return }
+        if state == .denied { openPermissionSettings(.microphone) }
         refresh()
     }
 
     private func askCalendar() async {
-        let state = await SetupPermissions.requestCalendar()
+        guard !stopping else { return }
+        let state = await requestCalendar()
+        guard !stopping, !Task.isCancelled else { return }
         calendarGrant = state
-        if state == .denied { SetupPermissions.openSettings(.calendar) }
+        if state == .denied { openPermissionSettings(.calendar) }
         refresh()
     }
 
@@ -1354,6 +1387,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// The setup page's button reaches this as well as the row's, so the refusal
     /// is here rather than on either button.
     private func testSystemAudio() async {
+        guard !stopping else { return }
         if isRecording?() == true {
             toneRefused = true
             refresh()
@@ -1361,6 +1395,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
         audioRow.working(localised("playing a tone…", "играет тон…"))
         let result = await playTestTone()
+        guard !stopping else { return }
         systemAudio = result
         if result == .heard { SetupState.rememberSystemAudioHeard() }
         switch result {
@@ -1565,9 +1600,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else { return }
         if let target = cloudKeys.first(where: { $0.value === field })?.key {
-            Task { await saveCloudKey(for: target) }
+            startService { [self] in await saveCloudKey(for: target) }
         }
-        if field === summaryKey { Task { await saveSummaryKey() } }
+        if field === summaryKey { startService { [self] in await saveSummaryKey() } }
         let summaryPaths: [(NSTextField, String)] = [
             (summaryOpenAIBaseURL, "openai_base_url"),
             (summaryOpenAIModel, "openai_model"),
@@ -1649,7 +1684,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// only sign was every later meeting failing to transcribe with HTTP 401.
     /// A key that isn't accepted never reaches the file.
     func saveCloudKey(for target: String) async {
-        guard let field = cloudKeys[target], let status = cloudKeyStatuses[target] else { return }
+        guard !stopping, let field = cloudKeys[target], let status = cloudKeyStatuses[target] else { return }
         let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, !Config.settingsUnknown else { return }
         let slot = Credentials.transcriptionSlot(for: target, in: Config.raw())
@@ -1716,6 +1751,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// The same order as the cloud key, into the slot the summary actually
     /// reads — which for an OpenAI-compatible endpoint is not OpenAI's.
     func saveSummaryKey() async {
+        guard !stopping else { return }
         let key = summaryKey.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         let backend = selectedKeyBackend
@@ -1730,6 +1766,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             ? .anthropic
             : .openAI(baseURL: Config.summary(in: config).openAIBaseURL)
         let verdict = await checkKey(Credentials.Check(service: service, key: key))
+        guard !stopping, !Task.isCancelled else { return }
         guard verdict == .works else {
             summaryKeyStatus.stringValue = verdict.sentence(
                 keepingSaved: Config.secret(at: slot.path) != nil)
@@ -1866,6 +1903,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// subprocesses, no network — those write into fields this only reads.
     /// Other settings pages write the same keys, so visible controls follow them.
     func refresh() {
+        guard !stopping else { return }
         let loginState = loginItemStatus()
         launchSwitch.state = loginState == .enabled ? .on : .off
         launchSwitch.isEnabled = loginState != .unavailable
@@ -2201,7 +2239,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         switch progress.next {
         case .startAtLogin: return { [weak self] in self?.startAtLogin() }
         case .askMicrophone: return { [weak self] in Task { await self?.askMicrophone() } }
-        case .testSystemAudio: return { [weak self] in Task { await self?.testSystemAudio() } }
+        case .testSystemAudio: return { [weak self] in self?.startService { [weak self] in await self?.testSystemAudio() } }
         case .downloadLocalModel: return { [weak self] in self?.downloadLocalIfNeeded() }
         case .downloadLiveModel: return { [weak self] in self?.downloadLiveModel() }
         case nil: return nil

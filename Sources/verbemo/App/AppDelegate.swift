@@ -4,13 +4,13 @@ import AppKit
 /// how the window comes back after you close it; and verbemo must not quit just
 /// because its only window was closed — it's a recorder, the window is a view
 /// onto it.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Called on a Dock click, with `alreadyActive` false when that click was
     /// the one that brought verbemo forward.
     var onReopen: ((_ alreadyActive: Bool) -> Void)?
     var onTerminate: (() -> Void)?
-    /// Gives asynchronous filesystem work a chance to cancel and remove its
-    /// unpublished staging folder before the process exits. Returning true
+    /// Waits for capture, processing and owned services before the process exits. Returning true
     /// means the callback will answer AppKit's deferred termination request.
     var onPrepareTermination: ((_ completion: @escaping () -> Void) -> Bool)?
     /// The app menu's Settings item hangs off the delegate because it is the
@@ -24,6 +24,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Answers whether ⌘Q needs to ask first. The default gate knows of no
     /// recording, which is the right answer for a delegate nobody wired up.
     var quitGate = QuitGate()
+
+    var replyToTermination: (NSApplication) -> Void = { $0.reply(toApplicationShouldTerminate: true) }
+    private var terminationPending = false
+    private var terminationReplied = false
+    private var confirmingQuit = false
 
     private var becameActiveAt = Date.distantPast
 
@@ -54,7 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// alert leads with the elapsed time and then says exactly that (.issues/005,
     /// where a quit during a call cost three minutes of it).
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if terminationPending { return .terminateLater }
+        if confirmingQuit { return .terminateCancel }
         if case .ask(let elapsed) = quitGate.decide() {
+            confirmingQuit = true
+            defer { confirmingQuit = false }
             let running = AppController.format(elapsed)
             let alert = NSAlert()
             alert.messageText = localised(
@@ -79,9 +88,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        let deferred = onPrepareTermination? {
-            sender.reply(toApplicationShouldTerminate: true)
+        terminationPending = true
+        let deferred = onPrepareTermination? { [weak self] in
+            guard let self, !self.terminationReplied else { return }
+            self.terminationReplied = true
+            self.replyToTermination(sender)
         } ?? false
+        if !deferred { terminationPending = false }
         return deferred ? .terminateLater : .terminateNow
     }
 

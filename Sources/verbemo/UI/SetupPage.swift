@@ -68,6 +68,8 @@ final class SetupPage: NSObject {
         updateFooter()
     }
 
+    func stopForTermination() -> [Task<Void, Never>] { form.stopForTermination() }
+
     func prepare() {
         if !isVisible { Analytics.track(.setupOpened) }
         form.reload()

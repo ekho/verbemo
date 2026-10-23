@@ -43,6 +43,8 @@ actor LiveTranscriptionCoordinator {
     }
 
     private let modelStore: NemotronModelStore
+    private let preload: @Sendable (URL) async throws -> SharedNemotronMultilingualModels
+    private var retirement: Task<Void, Never>?
     private var transcript = LiveTranscriptState()
     private var status: Status = .idle
     private var isRecording = false
@@ -69,8 +71,12 @@ actor LiveTranscriptionCoordinator {
     private var sharedModels: SharedNemotronMultilingualModels?
     private var sharedModelDirectory: URL?
 
-    init(modelStore: NemotronModelStore = .init()) {
+    init(modelStore: NemotronModelStore = .init(),
+         preload: @escaping @Sendable (URL) async throws -> SharedNemotronMultilingualModels = {
+             try await StreamingNemotronMultilingualAsrManager.preloadShared(from: $0)
+         }) {
         self.modelStore = modelStore
+        self.preload = preload
     }
 
     var snapshot: Snapshot {
@@ -127,9 +133,8 @@ actor LiveTranscriptionCoordinator {
         // In contrast to a temporary toggle, meeting stop is a hard memory
         // boundary: wait for an in-progress preload and both managers to let
         // go before the canonical Parakeet job is allowed to start.
-        let detached = detachPipeline()
-        await detached.load?.value
-        for manager in detached.managers { await manager.cleanup() }
+        stopPipeline(releaseSharedModels: false)
+        await retirement?.value
         sharedModels = nil
         sharedModelDirectory = nil
     }
@@ -210,8 +215,7 @@ actor LiveTranscriptionCoordinator {
             if let sharedModels, sharedModelDirectory == directory {
                 shared = sharedModels
             } else {
-                shared = try await StreamingNemotronMultilingualAsrManager.preloadShared(
-                    from: directory)
+                shared = try await preload(directory)
             }
             guard transcript.epoch == epoch, transcript.isEnabled else { return }
             sharedModels = shared
@@ -374,28 +378,33 @@ actor LiveTranscriptionCoordinator {
         pendingSinks = nil
         attach?(nil)
         let detached = detachPipeline()
-        let oldManagers = detached.managers
-        if !oldManagers.isEmpty {
-            Task {
-                for manager in oldManagers { await manager.cleanup() }
+        if detached.load != nil || !detached.managers.isEmpty || !detached.consumers.isEmpty {
+            let previous = retirement
+            retirement = Task {
+                await previous?.value
+                await detached.load?.value
+                for consumer in detached.consumers { await consumer.value }
+                for manager in detached.managers { await manager.cleanup() }
             }
         }
         if releaseSharedModels { sharedModels = nil; sharedModelDirectory = nil }
     }
 
     private func detachPipeline() -> (
-        load: Task<Void, Never>?, managers: [StreamingNemotronMultilingualAsrManager]
+        load: Task<Void, Never>?, consumers: [Task<Void, Never>],
+        managers: [StreamingNemotronMultilingualAsrManager]
     ) {
         let oldLoad = loadTask
         oldLoad?.cancel()
         loadTask = nil
         continuations.forEach { $0.finish() }
         continuations.removeAll(keepingCapacity: false)
-        consumerTasks.forEach { $0.cancel() }
+        let oldConsumers = consumerTasks
+        oldConsumers.forEach { $0.cancel() }
         consumerTasks.removeAll(keepingCapacity: false)
         let oldManagers = Array(managers.values)
         managers.removeAll(keepingCapacity: false)
-        return (oldLoad, oldManagers)
+        return (oldLoad, oldConsumers, oldManagers)
     }
 
     private func publish() {

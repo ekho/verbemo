@@ -13,6 +13,8 @@ final class SessionDeletionController {
     private let recycle: Recycle
     private var pending: [UUID: Pending] = [:]
     private var recycling: Set<URL> = []
+    private var accepting = true
+    private var waiters: [CheckedContinuation<Void, Never>] = []
     var hasWork: Bool { !pending.isEmpty || !recycling.isEmpty }
     func isPending(_ dir: URL) -> Bool { recycling.contains(dir) || pending.values.contains { $0.dir == dir } }
 
@@ -30,6 +32,7 @@ final class SessionDeletionController {
 
     @discardableResult
     func schedule(_ dir: URL, completion: @escaping (Result<Void, Error>) -> Void) throws -> UUID {
+        guard accepting else { throw CancellationError() }
         guard !FileManager.default.fileExists(atPath: dir.appendingPathComponent(".recording.json").path) else {
             throw CocoaError(.fileLocking)
         }
@@ -59,6 +62,22 @@ final class SessionDeletionController {
             SessionClaim.release(item.dir)
             self?.recycling.remove(item.dir)
             item.completion(error.map { .failure($0) } ?? .success(()))
+            if let self, self.recycling.isEmpty {
+                let waiting = self.waiters
+                self.waiters.removeAll()
+                for waiter in waiting { waiter.resume() }
+            }
+        }
+    }
+
+    func stopForTermination() -> Task<Void, Never> {
+        accepting = false
+        cancelAll()
+        return Task {
+            await withCheckedContinuation { continuation in
+                if recycling.isEmpty { continuation.resume() }
+                else { waiters.append(continuation) }
+            }
         }
     }
 

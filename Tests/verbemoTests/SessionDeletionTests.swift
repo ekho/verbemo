@@ -44,4 +44,24 @@ struct SessionDeletionTests {
         #expect(!controller.hasWork)
         #expect(!SessionClaim.isHeld(dir))
     }
+    @Test(.freshHome) func quitWaitsForCommittedRecycleAndClaimRelease() async throws {
+        let dir = try SessionFixture.make()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var completion: (@MainActor @Sendable (Error?) -> Void)?
+        let controller = SessionDeletionController(delay: 60) { _, done in completion = done }
+        let id = try controller.schedule(dir) { _ in }
+        controller.commit(id)
+        let cleanup = controller.stopForTermination()
+        let returned = Flag()
+        let wait = Task { await cleanup.value; returned.raise() }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!returned.isRaised)
+        #expect(SessionClaim.isHeld(dir))
+        completion?(nil)
+        await wait.value
+        #expect(!controller.hasWork)
+        #expect(!SessionClaim.isHeld(dir))
+        #expect(throws: CancellationError.self) { try controller.schedule(dir) { _ in } }
+    }
+
 }

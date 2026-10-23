@@ -176,6 +176,7 @@ enum PostProcessor {
         } catch is CancellationError {
             return Work()
         } catch {
+            ProcessingOperations.shared.reportFailure(String(describing: error))
             appendSessionLog("post-processing skipped — \(error)", to: dir)
             return Work()
         }
@@ -224,7 +225,9 @@ enum PostProcessor {
         do {
             let root = try validatedSessionRoot(for: dir)
             return try await ProcessingOperations.shared.run(session: root, kind: .postProcessing) {
-                try await finishManuallyWork(dir, policy: policy)
+                let result = try await finishManuallyWork(dir, policy: policy)
+                if !result.succeeded { ProcessingOperations.shared.reportFailure(result.described) }
+                return result
             }
         } catch is CancellationError {
             return .cancelled
@@ -293,13 +296,19 @@ enum PostProcessor {
         try Task.checkCancellation()
         var names = SpeakerNames.read(from: dir)
         if work.names {
-            names = await SpeakerNamer.name(
+            let named = await SpeakerNamer.name(
                 transcript: transcript,
                 title: title,
                 attendees: attendees,
                 app: app,
                 into: dir
-            ) ?? names
+            )
+            names = named ?? names
+            if named == nil {
+                ProcessingOperations.shared.reportFailure(localised(
+                    "Speaker naming did not finish. See the session log.",
+                    "Не удалось определить имена участников. Подробности в журнале встречи."))
+            }
         }
 
         try Task.checkCancellation()
@@ -312,9 +321,14 @@ enum PostProcessor {
             if let app { context.append("Recorded from: \(app)") }
             // The summarizer reads speaker labels straight off the segments,
             // so hand it a renamed copy rather than a note about the names.
-            await Summarizer.summarize(
+            let generated = await Summarizer.summarize(
                 transcript: transcript.named(with: names), context: context, into: dir
             )
+            if generated == nil {
+                ProcessingOperations.shared.reportFailure(localised(
+                    "The summary was not created. See the session log.",
+                    "Не удалось создать сводку. Подробности в журнале встречи."))
+            }
         }
 
         try Task.checkCancellation()
