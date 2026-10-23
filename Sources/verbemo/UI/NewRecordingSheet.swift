@@ -37,6 +37,7 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
         panel.backgroundColor = JournalStyle.paper
         let heading = NSTextField(labelWithString: panel.title)
         heading.font = JournalStyle.titleFont(20)
+        heading.textColor = JournalStyle.ink
         let detail = NSTextField(wrappingLabelWithString: localised(
             "You can close the window while recording. Audio capture follows your recording settings.",
             "Во время записи можно закрыть окно. Источники звука определяются настройками записи."))

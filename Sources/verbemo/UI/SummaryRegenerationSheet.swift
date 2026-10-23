@@ -21,21 +21,24 @@ final class SummaryRegenerationSheet {
     init(onSettings: (() -> Void)? = nil, run: @escaping (SummaryRequest) async throws -> Void, completion: @escaping () -> Void) {
         self.run = run; self.completion = completion; self.onSettings = onSettings
         window.title = localised("Create a new summary", "Создать новую сводку")
+        window.backgroundColor = JournalStyle.paper
         window.isReleasedWhenClosed = false
         let heading = NSTextField(labelWithString: window.title)
-        heading.font = .systemFont(ofSize: 18, weight: .semibold)
+        heading.font = JournalStyle.titleFont(20)
+        heading.textColor = JournalStyle.ink
         let note = NSTextField(wrappingLabelWithString: localised(
             "Uses the selected transcript version. The previous summary is kept on failure or cancellation.",
             "Используется выбранная версия расшифровки. При ошибке или отмене предыдущая сводка сохранится."))
-        note.textColor = .secondaryLabelColor
+        note.textColor = JournalStyle.muted
         picker.addItems(withTitles: [localised("From settings", "Из настроек"), "Codex", "Claude Code", "OpenAI API", "Anthropic API", "Ollama"])
         picker.identifier = .init("summary.provider")
         picker.setAccessibilityLabel(localised("Provider for this summary", "Способ для этой сводки"))
         picker.target = self; picker.action = #selector(selectionChanged)
         disclosure.identifier = .init("summary.destination")
         disclosure.font = .systemFont(ofSize: 12)
+        disclosure.textColor = JournalStyle.ink
         status.identifier = .init("summary.status")
-        status.textColor = .secondaryLabelColor
+        status.textColor = JournalStyle.muted
         create.bezelStyle = .rounded; create.keyEquivalent = "\r"
         create.identifier = .init("summary.create")
         create.target = self; create.action = #selector(start)

@@ -318,7 +318,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         detailMeta.stringValue = [MeetingPresentation.date(item.started), duration, invited].compactMap { $0 }.joined(separator: " · ")
         calendarView.onOpen = { [weak self] in
             guard let self, let metadata, let reason = CalendarEventOpener.open(metadata) else { return }
-            let alert = NSAlert(); alert.messageText = reason; alert.beginSheetModal(for: self.panel)
+            let alert = NSAlert(); alert.messageText = reason; alert.beginJournalSheetModal(for: self.panel)
         }
 
     }
@@ -1094,7 +1094,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         alert.messageText = item.title ?? item.name
         alert.informativeText = sentence
         alert.addButton(withTitle: localised("OK", "Ладно"))
-        alert.beginSheetModal(for: panel)
+        alert.beginJournalSheetModal(for: panel)
     }
 
     private func confirmRetranscription(engine: String?) {
@@ -1115,12 +1115,12 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         let options = RetranscriptionOptionsView(session: item.dir, engine: engine)
         alert.accessoryView = options
         alert.addButton(withTitle: localised("Transcribe again", "Расшифровать заново"))
-        alert.addButton(withTitle: localised("Cancel", "Отмена"))
+        alert.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
         options.onValidation = { [weak alert] valid in alert?.buttons.first?.isEnabled = valid }
         options.changed()
         Task { @MainActor in
             guard panel.attachedSheet == nil else { return }
-            guard await alert.beginSheetModal(for: panel) == .alertFirstButtonReturn,
+            guard await alert.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn,
                   let request = options.request else { return }
             if let why = await RetranscriptionOptionsView.refusal(for: request) {
                 say(why, about: item)
@@ -1166,7 +1166,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
                     alert.messageText = localised(
                         "Could not open the transcript", "Не удалось открыть расшифровку")
                     alert.informativeText = file.path
-                    alert.beginSheetModal(for: self.panel)
+                    alert.beginJournalSheetModal(for: self.panel)
                     return
                 }
                 NSWorkspace.shared.open(
@@ -1174,7 +1174,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
                     configuration: NSWorkspace.OpenConfiguration()
                 ) { _, error in
                     if let error {
-                        Task { @MainActor in NSAlert(error: error).beginSheetModal(for: self.panel, completionHandler: nil) }
+                        Task { @MainActor in NSAlert(error: error).beginJournalSheetModal(for: self.panel, completionHandler: nil) }
                     }
                 }
             })
@@ -1230,24 +1230,24 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             "The audio and all transcript versions will move to the macOS Trash after a short Undo period.",
             "Аудио и все версии расшифровки будут перемещены в корзину macOS. В течение нескольких секунд удаление можно отменить.")
         alert.addButton(withTitle: localised("Delete", "Удалить"))
-        alert.addButton(withTitle: localised("Cancel", "Отмена"))
+        alert.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
         Task { @MainActor [self] in
             guard panel.attachedSheet == nil else { return }
-            guard await alert.beginSheetModal(for: panel) == .alertFirstButtonReturn else { return }
+            guard await alert.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
             do {
                 let id = try deletion.schedule(item.dir) { [weak self] result in
                     guard let self else { return }
                     self.deletionNotice.isHidden = true
                     self.onActivityChange?()
                     self.reload()
-                    if case .failure(let error) = result { NSAlert(error: error).beginSheetModal(for: self.panel) }
+                    if case .failure(let error) = result { NSAlert(error: error).beginJournalSheetModal(for: self.panel) }
                 }
                 undoDeletionID = id
                 deletionLabel.stringValue = localised("Meeting deleted", "Встреча удалена")
                 deletionNotice.isHidden = false
                 onActivityChange?()
                 show(allItems)
-            } catch { NSAlert(error: error).beginSheetModal(for: panel, completionHandler: nil) }
+            } catch { NSAlert(error: error).beginJournalSheetModal(for: panel, completionHandler: nil) }
         }
     }
 
