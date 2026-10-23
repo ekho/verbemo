@@ -615,8 +615,9 @@ final class AppController {
         mediaImportTask = Task { [weak self, mediaImport] in
             do {
                 try await ticket.run { [weak self, mediaImport] in
+                    guard let self else { return }
                     await withTaskCancellationHandler {
-                        await self?.runImportBatches(ticket.id, after: stop, using: mediaImport)
+                        await self.runImportBatches(ticket.id, after: stop, using: mediaImport)
                     } onCancel: {
                         Task { @MainActor [weak self] in self?.noteImportCancellation(ticket.id) }
                     }
