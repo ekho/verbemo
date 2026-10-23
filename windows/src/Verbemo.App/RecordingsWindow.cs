@@ -131,6 +131,7 @@ internal sealed class RecordingsWindow : Window
         transcriptContent.Content = transcript;
         tabs.Items.Add(new TabItem { Header = T("Summary", "Сводка"), Content = summary });
         tabs.Items.Add(new TabItem { Header = T("Transcript", "Расшифровка"), Content = transcriptContent });
+        tabs.Items.Add(new TabItem { Header = T("Participants", "Участники"), Content = Ui.Scroll(speakers) });
 
         engineTabs.SelectionChanged += async (_, args) =>
         {
@@ -182,9 +183,6 @@ internal sealed class RecordingsWindow : Window
 
         var information = new StackPanel { Margin = new Thickness(18, 24, 18, 18) };
         information.Children.Add(Ui.Heading(T("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")));
-        information.Children.Add(Ui.Heading(T("PARTICIPANTS", "УЧАСТНИКИ")));
-        speakers.Margin = new Thickness(0, 8, 0, 16);
-        information.Children.Add(speakers);
         information.Children.Add(calendarPanel);
         information.Children.Add(Ui.Heading(T("PROCESSING", "ОБРАБОТКА")));
         information.Children.Add(processingStatus);
@@ -242,7 +240,8 @@ internal sealed class RecordingsWindow : Window
         layout.SizeChanged += (_, _) => UpdateLayoutMode();
         EventHandler changed = (_, _) => Dispatcher.InvokeAsync(ReloadAsync);
         runtime.SessionsChanged += changed;
-        Closed += (_, _) => { closed = true; runtime.SessionsChanged -= changed; player.Dispose(); };
+        runtime.SettingsChanged += changed;
+        Closed += (_, _) => { closed = true; runtime.SessionsChanged -= changed; runtime.SettingsChanged -= changed; player.Dispose(); };
         System.ComponentModel.PropertyChangedEventHandler motionChanged = (_, e) =>
         {
             if(e.PropertyName == nameof(SystemParameters.ClientAreaAnimation)) Dispatcher.InvokeAsync(ReloadAsync);
@@ -279,7 +278,7 @@ internal sealed class RecordingsWindow : Window
         regenerate.Visibility = retranscribe.Visibility = Visibility.Visible;
         regenerate.IsEnabled = state.Reason(MeetingAction.RegenerateSummary) is null;
         regenerate.ToolTip = state.Reason(MeetingAction.RegenerateSummary);
-        textCopy.Visibility = markdownCopy.Visibility = Selected is null ? Visibility.Collapsed : Visibility.Visible;
+        textCopy.Visibility = markdownCopy.Visibility = Selected is null || tabs.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
         textCopy.IsEnabled = markdownCopy.IsEnabled = state.Reason(summaryTab ? MeetingAction.CopySummary : MeetingAction.CopyTranscript) is null;
         var settings = runtime.Settings;
         processingSettings.Text = T("Transcription: ", "Расшифровка: ") + (settings.Transcription.Enabled ? EngineResolver.DisplayName(settings.Transcription.Engine) : T("Disabled", "Выключена"))
@@ -526,6 +525,12 @@ internal sealed class RecordingsWindow : Window
             speakers.Children.Add(Ui.Detail(T("Speakers appear once this transcript is ready.", "Участники появятся, когда эта расшифровка будет готова.")));
             return;
         }
+        try { await runtime.RefreshSelfParticipantAsync(directory); }
+        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            if (version == transcriptShown) Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t match your participant", "Не удалось сопоставить вашего участника"), error.Message);
+        }
+        if (version != transcriptShown) return;
         var text = await ReadAsync(Path.Combine(directory, "transcript.md")) ?? T("No transcript text available.", "Текст расшифровки недоступен.");
         var summaryText = await ReadAsync(Path.Combine(directory, "summary.md"))
             ?? (item?.Summary == ProcessingStep.Off ? T("Summaries are off.", "Создание сводки выключено.") : T("No summary yet.", "Сводки пока нет."));
@@ -534,8 +539,7 @@ internal sealed class RecordingsWindow : Window
         if (version != transcriptShown) return;
         transcript.ShowTranscript(text, seconds => player.Seek(seconds));
         summary.ShowMarkdown(summaryText);
-        if(item?.Calendar is { IsConfirmed: true, Participants.Count: > 0 } calendar)
-            await ShowTranscriptParticipantsAsync(directory,calendar,version);
+        await ShowTranscriptParticipantsAsync(directory, item?.Calendar, version);
         await ShowSpeakersAsync(directory, item?.Title ?? "", version);
         UpdateContentActions();
     }
@@ -546,117 +550,103 @@ internal sealed class RecordingsWindow : Window
         public override string ToString() => Label;
     }
 
+    private SpeakerIdentityEditor SpeakerEditor(string directory, string label, SpeakerFile.Contents names,
+        MeetingCalendarMetadata? calendar, int version, bool compact) => new(SpeakerLabels.Display(label),
+            names.Names.GetValueOrDefault(label) ?? "", names.ParticipantIds.GetValueOrDefault(label),
+            calendar?.IsConfirmed == true ? calendar.Participants : [], compact,
+            runtime.ProcessingStatusFor(Selected?.Item.Directory ?? directory)?.IsBusy != true,
+            () => version == transcriptShown,
+            async (participant, manual) =>
+            {
+                if (manual is null) await runtime.SetSpeakerParticipantAsync(directory, label, participant);
+                else await runtime.SetSpeakerNameAsync(directory, label, manual, title: Selected?.Item.Title);
+                var saved = await SpeakerFile.ReadAsync(directory, default);
+                return (saved.Names.GetValueOrDefault(label) ?? "", saved.ParticipantIds.GetValueOrDefault(label));
+            },
+            error => Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t save the name", "Не удалось сохранить имя"), error.Message));
+
     private async Task ShowSpeakersAsync(string directory, string meetingTitle, int version)
     {
-        var transcriptPath = Path.Combine(directory, "transcript.json");
-        if (!File.Exists(transcriptPath))
+        var json = await ReadAsync(Path.Combine(directory, "transcript.json"));
+        if (json is null)
         {
             speakers.Children.Add(Ui.Detail(T("Speakers appear once there is a transcript.", "Участники появятся, когда будет расшифровка.")));
             return;
         }
         TranscriptDocument? document;
-        try { document = JsonSerializer.Deserialize<TranscriptDocument>(await File.ReadAllTextAsync(transcriptPath)); }
+        try { document = JsonSerializer.Deserialize<TranscriptDocument>(json); }
         catch (JsonException) { return; }
         if (document is null) return;
-        var file = await SpeakerFile.ReadAsync(directory, CancellationToken.None);
+        var names = await SpeakerFile.ReadAsync(directory, default);
+        var calendar = Selected?.Item.Calendar;
         if (version != transcriptShown) return;
-        if(Selected?.Item.Calendar is { IsConfirmed: true } calendar)
-        {
-            speakers.Children.Add(Ui.Heading(T("Invited from calendar", "Приглашённые из календаря")));
+        speakers.Children.Add(Ui.Detail(T("Choose a participant or type a name. Each choice applies to this speaker throughout this version.",
+            "Выберите участника или введите имя. Выбор применяется ко всем репликам говорящего в этой версии.")));
+        if (calendar?.IsConfirmed == true)
             speakers.Children.Add(Ui.Detail(T("An invitation does not confirm attendance.", "Приглашение не подтверждает присутствие на встрече.")));
-            foreach(var person in calendar.Participants) speakers.Children.Add(Ui.Detail(person.Name+(person.Email is { } email ? " · "+email : "")));
-            speakers.Children.Add(Ui.Heading(T("Speakers in the recording", "Говорящие в записи")));
-        }
         foreach (var group in document.Segments.Where(segment => segment.Speaker is not null).GroupBy(segment => segment.Speaker!))
         {
-            var label = group.Key;
-            var row = new Grid { Margin = new Thickness(0, 0, 0, 12) };
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.RowDefinitions.Add(new RowDefinition());
-            row.RowDefinitions.Add(new RowDefinition());
-            row.RowDefinitions.Add(new RowDefinition());
-            row.RowDefinitions.Add(new RowDefinition());
-            var name = Ui.Title(SpeakerLabels.Display(label));
-            name.FontWeight = FontWeights.SemiBold;
-            name.VerticalAlignment = VerticalAlignment.Center;
-            row.Children.Add(name);
-            var (view, box) = Ui.Field(T("name", "имя"), 210);
-            box.Text = file.Names.GetValueOrDefault(label) ?? "";
-            Grid.SetRow(view, 1);
-            row.Children.Add(view);
-            var source = file.Sources.GetValueOrDefault(label) switch
-            {
-                "manual" => T("by hand · ", "вручную · "),
-                "model" => T("model · ", "модель · "),
-                "account" => T("your account · ", "ваша учётная запись · "),
-                _ => "",
-            };
-            var count = Ui.Status(source + T($"lines: {group.Count()}", $"реплик: {group.Count()}"));
-            count.Margin = new Thickness(0, 4, 0, 4);
-            Grid.SetRow(count, 2);
-            row.Children.Add(count);
-            var first = Ui.Detail(T("first: ", "первая: ") + group.First().Text.Trim());
+            var row = new StackPanel { Margin = new Thickness(0, 16, 0, 8) };
+            row.Children.Add(Ui.Heading(SpeakerLabels.Display(group.Key) + T($" · {group.Count()} lines", $" · реплик: {group.Count()}")));
+            if (SpeakerLabels.IsUnknown(group.Key))
+                row.Children.Add(Ui.Detail(T("Unknown voice — cannot be assigned reliably.", "Неизвестный голос — нельзя надёжно сопоставить.")));
+            else row.Children.Add(SpeakerEditor(directory, group.Key, names,
+                document.IsDiarized || group.Key == SpeakerLabels.Me ? calendar : null, version, compact: false));
+            var sample = group.First();
+            var time = TimeSpan.FromMilliseconds(Math.Max(0, sample.StartMs));
+            var play = Ui.Button("▶ " + time.ToString(@"hh\:mm\:ss"), () => player.Seek(time.TotalSeconds));
+            play.HorizontalAlignment = HorizontalAlignment.Left;
+            play.IsEnabled = Selected?.Item.HasAudio == true;
+            play.ToolTip = T("Listen to this speaker", "Послушать этого говорящего");
+            System.Windows.Automation.AutomationProperties.SetName(play, T("Listen to speaker ", "Послушать говорящего ") + SpeakerLabels.Display(group.Key));
+            row.Children.Add(play);
+            var first = Ui.Detail(sample.Text.Trim());
             first.TextTrimming = TextTrimming.CharacterEllipsis;
             first.TextWrapping = TextWrapping.NoWrap;
-            Grid.SetRow(first, 3);
-            Grid.SetColumnSpan(first, 3);
             row.Children.Add(first);
             speakers.Children.Add(row);
-
-            var stored = box.Text;
-            async Task CommitAsync()
-            {
-                if (box.Text.Trim() == stored) return;
-                stored = box.Text.Trim();
-                try { await runtime.SetSpeakerNameAsync(directory, label, stored, title: meetingTitle); }
-                catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
-                {
-                    Ui.ShowError(Ui.OwnerOf(layout), T("Couldn’t save the name", "Не удалось сохранить имя"), exception.Message);
-                }
-            }
-            box.LostKeyboardFocus += async (_, _) => await CommitAsync();
-            box.KeyDown += async (_, args) => { if (args.Key == Key.Enter) await CommitAsync(); };
         }
     }
 
-    private async Task ShowTranscriptParticipantsAsync(string directory, MeetingCalendarMetadata calendar, int version)
+    private async Task ShowTranscriptParticipantsAsync(string directory, MeetingCalendarMetadata? calendar, int version)
     {
-        var json = await ReadAsync(Path.Combine(directory,"transcript.json"));
-        if(json is null) return;
+        var json = await ReadAsync(Path.Combine(directory, "transcript.json"));
+        if (json is null) return;
         TranscriptDocument? document;
-        try { document = JsonSerializer.Deserialize<TranscriptDocument>(json); } catch(JsonException) { return; }
-        if(document?.IsDiarized != true) return;
-        var names = await SpeakerFile.ReadAsync(directory,default);
-        if(version != transcriptShown) return;
-        var lines = new StackPanel { Margin = new Thickness(8,12,8,12) };
-        lines.Children.Add(Ui.Detail(T("Choose an invited participant for a speaker. The choice applies to all their lines in this version.",
-            "Выберите приглашённого участника для говорящего. Выбор применяется ко всем его репликам в этой версии.")));
-        foreach(var segment in document.Segments)
+        try { document = JsonSerializer.Deserialize<TranscriptDocument>(json); } catch (JsonException) { return; }
+        if (document is null) return;
+        var names = await SpeakerFile.ReadAsync(directory, default);
+        if (version != transcriptShown) return;
+        var lines = new StackPanel { Margin = new Thickness(8, 12, 8, 12) };
+        foreach (var segment in document.Segments)
         {
-            var row = new StackPanel { Margin = new Thickness(0,18,0,8) };
+            var row = new StackPanel { Margin = new Thickness(0, 16, 0, 8) };
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            header.ColumnDefinitions.Add(new ColumnDefinition());
             var timestamp = TimeSpan.FromMilliseconds(Math.Max(0, segment.StartMs));
             var seek = Ui.Button(timestamp.ToString(@"hh\:mm\:ss"), () => player.Seek(timestamp.TotalSeconds));
-            seek.HorizontalAlignment = HorizontalAlignment.Left;
+            seek.Background = System.Windows.Media.Brushes.Transparent;
+            seek.BorderThickness = new Thickness(0);
+            seek.Padding = new Thickness(0);
+            seek.Margin = new Thickness(0, 0, 10, 0);
+            seek.FontSize = SystemFonts.MessageFontSize;
+            seek.SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, "JournalMuted");
+            seek.IsEnabled = Selected?.Item.HasAudio == true;
+            seek.Cursor = Cursors.Hand;
             System.Windows.Automation.AutomationProperties.SetName(seek, T("Play from ", "Воспроизвести с ") + timestamp);
-            row.Children.Add(seek);
-            if(segment.Speaker is { } speaker)
+            header.Children.Add(seek);
+            if (segment.Speaker is { } speaker)
             {
-                var combo = new System.Windows.Controls.ComboBox { MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
-                combo.Items.Add(new ComboBoxItem { Content = SpeakerLabels.Display(speaker)+T(" · not matched", " · не сопоставлен"), Tag = null });
-                foreach(var person in calendar.Participants)
-                    combo.Items.Add(new ComboBoxItem { Content = person.Name+(person.Email is { } email ? " · "+email : ""), Tag = person });
-                combo.SelectedItem = combo.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (i.Tag as CalendarParticipant)?.Id == names.ParticipantIds.GetValueOrDefault(speaker)) ?? combo.Items[0];
-                System.Windows.Automation.AutomationProperties.SetName(combo,T("Who is speaking? ", "Кто говорит? ")+SpeakerLabels.Display(speaker));
-                combo.IsEnabled = runtime.ProcessingStatusFor(Selected!.Item.Directory)?.IsBusy != true;
-                combo.SelectionChanged += async (_, _) =>
-                {
-                    try { await runtime.SetSpeakerParticipantAsync(directory,speaker,(combo.SelectedItem as ComboBoxItem)?.Tag as CalendarParticipant); }
-                    catch(Exception error) when(error is IOException or InvalidOperationException or UnauthorizedAccessException) { Ui.ShowError(Ui.OwnerOf(layout),"Verbemo",error.Message); }
-                };
-                row.Children.Add(combo);
+                FrameworkElement identity = SpeakerLabels.IsUnknown(speaker) ? Ui.Status(SpeakerLabels.Display(speaker))
+                    : SpeakerEditor(directory, speaker, names,
+                        document.IsDiarized || speaker == SpeakerLabels.Me ? calendar : null, version, compact: true);
+                Grid.SetColumn(identity, 1);
+                header.Children.Add(identity);
             }
+            row.Children.Add(header);
             var words = Ui.Title(segment.Text);
-            words.Margin = new Thickness(0,8,0,0);
+            words.Margin = new Thickness(0, 6, 0, 0);
             row.Children.Add(words);
             lines.Children.Add(row);
         }

@@ -195,7 +195,11 @@ only values that differ from the defaults. A compact example:
   first and skips the model;
   `transcript_echo_filter` removes proven duplicate far-end speech later;
   `system_audio` is `app` or `all`; `calendar` controls meeting context; and
-  `user_name` replaces “me” in named transcripts.
+  `user_name` replaces “me” in named transcripts. `user_email` links that known
+  microphone voice to a unique participant in a confirmed calendar event by an
+  exact email match (ignoring surrounding whitespace and case). It is optional
+  and stays local. Manual assignments and explicit unlinking take precedence;
+  unidentified or remote voices are never inferred from the email.
 - `interface_theme` is `system` (default), `light`, or `dark`. It changes only Verbemo; System follows the operating system.
 - `interface_language` is `auto`, `en`, or `ru`. `dock_icon`, `menu_bar_icon`,
   and `window` control where Verbemo appears.

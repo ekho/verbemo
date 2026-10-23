@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using Verbemo.Core.Configuration;
 using Verbemo.Core.Processing;
+using Verbemo.Core.Sessions;
 using static Verbemo.Core.Localization.Localized;
 
 namespace Verbemo.App;
@@ -313,21 +314,23 @@ public sealed class SpeakerNamingService(LanguageModels models, Func<AppSettings
 
     public async Task<Result> ResolveAsync(string sessionDirectory, TranscriptDocument transcript, CancellationToken cancellationToken)
     {
+        await SpeakerFile.ApplySelfParticipantAsync(sessionDirectory, transcript, settings(), cancellationToken).ConfigureAwait(false);
         var file = await SpeakerFile.ReadAsync(sessionDirectory, cancellationToken).ConfigureAwait(false);
         var names = new Dictionary<string, string>(file.Names, StringComparer.Ordinal);
         var sources = new Dictionary<string, string>(file.Sources, StringComparer.Ordinal);
         var labels = transcript.Segments.Select(segment => segment.Speaker).OfType<string>().Distinct().ToArray();
-        if (labels.Contains(SpeakerLabels.Me) && !names.ContainsKey(SpeakerLabels.Me) && OwnName(settings()) is { } me)
+        if (labels.Contains(SpeakerLabels.Me) && !names.ContainsKey(SpeakerLabels.Me)
+            && sources.GetValueOrDefault(SpeakerLabels.Me) != "manual" && OwnName(settings()) is { } me)
         {
             names[SpeakerLabels.Me] = me;
             sources[SpeakerLabels.Me] = "account";
         }
-        var unresolved = labels.Where(label => !names.ContainsKey(label)).ToArray();
+        var unresolved = labels.Where(label => !names.ContainsKey(label) && sources.GetValueOrDefault(label) != "manual" && !SpeakerLabels.IsUnknown(label)).ToArray();
         var asked = false;
         if (unresolved.Length > 0 && models.For(EgressPurpose.SpeakerNames).Count > 0)
         {
             var plain = string.Join("\n", transcript.Segments.Select(segment =>
-                $"{(segment.Speaker is { } label && names.TryGetValue(label, out var known) ? known : segment.Speaker)}: {segment.Text}"));
+                $"{(segment.Speaker is { } label && !SpeakerLabels.IsUnknown(label) && names.TryGetValue(label, out var known) ? known : segment.Speaker)}: {segment.Text}"));
             const string system = """
                 You identify speakers in a meeting transcript. Name a speaker only when the transcript itself
                 contains strong evidence: someone addresses them by name, or they introduce themselves.
@@ -394,6 +397,50 @@ public static class SpeakerFile
     {
         public IReadOnlyDictionary<string,string> ParticipantIds { get; init; } = new Dictionary<string,string>();
         public IReadOnlyDictionary<string,string> ManualNames { get; init; } = new Dictionary<string,string>();
+    }
+
+    public static async Task<bool> ApplySelfParticipantAsync(string directory, TranscriptDocument transcript, AppSettings settings, CancellationToken cancellationToken)
+    {
+        if (!transcript.Segments.Any(segment => segment.Speaker == SpeakerLabels.Me)) return false;
+        var file = await ReadAsync(directory, cancellationToken).ConfigureAwait(false);
+        var source = file.Sources.GetValueOrDefault(SpeakerLabels.Me);
+        if (source is "manual" or "calendar" || file.ParticipantIds.ContainsKey(SpeakerLabels.Me) && source != "calendar-auto") return false;
+        if (string.IsNullOrWhiteSpace(settings.UserEmail) && source != "calendar-auto") return false;
+        var root = TranscriptVersions.ValidatedSessionRoot(directory);
+        var calendar = await MeetingCalendarMetadata.ReadAsync(root, cancellationToken).ConfigureAwait(false);
+        var email = settings.UserEmail?.Trim();
+        CalendarParticipant[] matches = calendar?.IsConfirmed == true && !string.IsNullOrEmpty(email)
+            ? calendar.Participants.Where(person => string.Equals(person.Email?.Trim(), email, StringComparison.OrdinalIgnoreCase)).ToArray() : [];
+        var participant = matches.Length == 1 ? matches[0] : null;
+        if (participant is null && source != "calendar-auto") return false;
+        var name = string.IsNullOrWhiteSpace(settings.UserName) ? participant?.Name : settings.UserName.Trim();
+        if (participant is not null && file.ParticipantIds.GetValueOrDefault(SpeakerLabels.Me) == participant.Id
+            && file.Names.GetValueOrDefault(SpeakerLabels.Me) == name) return false;
+        var names = new Dictionary<string, string>(file.Names);
+        var sources = new Dictionary<string, string>(file.Sources);
+        var ids = new Dictionary<string, string>(file.ParticipantIds);
+        if (participant is null)
+        {
+            if (string.IsNullOrWhiteSpace(settings.UserName))
+            {
+                names.Remove(SpeakerLabels.Me);
+                sources.Remove(SpeakerLabels.Me);
+            }
+            else
+            {
+                names[SpeakerLabels.Me] = settings.UserName.Trim();
+                sources[SpeakerLabels.Me] = "account";
+            }
+            ids.Remove(SpeakerLabels.Me);
+        }
+        else
+        {
+            names[SpeakerLabels.Me] = name!;
+            sources[SpeakerLabels.Me] = "calendar-auto";
+            ids[SpeakerLabels.Me] = participant.Id;
+        }
+        await WriteAsync(directory, file with { Names = names, Sources = sources, ParticipantIds = ids }, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     public static async Task<Contents> ReadAsync(string directory, CancellationToken cancellationToken)

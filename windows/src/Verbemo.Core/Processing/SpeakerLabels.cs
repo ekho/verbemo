@@ -12,6 +12,8 @@ public static class SpeakerLabels
     public const string Me = "me";
     public const string Them = "them";
 
+    public static bool IsUnknown(string label) => label == "?" || label.EndsWith(" ?", StringComparison.Ordinal);
+
     /// <summary>A label an engine hands over before the sides are counted.</summary>
     public static string Raw(string? side, string? voice) => $"{side}\u001F{voice}";
 

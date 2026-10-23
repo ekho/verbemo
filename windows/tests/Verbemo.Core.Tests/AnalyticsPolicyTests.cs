@@ -22,6 +22,7 @@ public sealed class AnalyticsPolicyTests
             ["reason"] = "no_network",
             ["path"] = "C:\\Secret\\meeting.wav",
             ["api_key"] = "secret",
+            ["user_email"] = "private@example.test",
         });
 
         Assert.Equal("custom", result["engine"]);
@@ -29,5 +30,6 @@ public sealed class AnalyticsPolicyTests
         Assert.Equal("no_network", result["reason"]);
         Assert.DoesNotContain("path", result.Keys);
         Assert.DoesNotContain("api_key", result.Keys);
+        Assert.DoesNotContain("user_email", result.Keys);
     }
 }

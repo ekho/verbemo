@@ -40,6 +40,9 @@ public sealed class AppSettings
     [JsonPropertyName("user_name")]
     public string? UserName { get; set; }
 
+    [JsonPropertyName("user_email")]
+    public string? UserEmail { get; set; }
+
     /// <summary><c>app</c>: only the call app's process tree. <c>all</c>: everything Windows plays.</summary>
     [JsonPropertyName("system_audio")]
     public string SystemAudio { get; set; } = "app";

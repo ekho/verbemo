@@ -150,12 +150,13 @@ struct TranscriptVersionsTests {
         }
         #expect(text("transcript")?.contains("First answer.") == true)
         #expect(text("summary") == "First summary.")
-        let inspector = try #require(window.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
-        #expect(inspector.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.isEditable && $0.stringValue == "Alice" })
+        let participants = try #require(tabs.tabViewItems.first { $0.identifier as? String == "participants" }?.view)
+        #expect(participants.allDescendants.compactMap { $0 as? NSComboBox }.contains { $0.isEditable && $0.stringValue == "Alice" })
         selector.selectItem(at: 1)
         selector.sendAction(selector.action, to: selector.target)
         #expect(text("transcript")?.contains("Second answer.") == true)
         #expect(text("summary") == "Second summary.")
+        #expect(!participants.allDescendants.compactMap { $0 as? NSComboBox }.contains { $0.stringValue == "Alice" })
         withExtendedLifetime(window) {}
     }
     @Test("Queued retranscription snapshots diarization before settings change")

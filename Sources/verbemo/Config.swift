@@ -294,6 +294,10 @@ enum Config {
         text(.userName, in: load())?.trimmed
     }
 
+    static func userEmail() -> String? {
+        text(.userEmail, in: load())?.trimmed.lowercased()
+    }
+
     /// Putting real names to the transcript's mechanical speaker labels.
     struct SpeakerNamesSettings {
         var enabled = Config.defaultFlag(.speakerNamesEnabled)
