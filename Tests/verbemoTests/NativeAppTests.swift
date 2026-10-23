@@ -244,7 +244,8 @@ struct SetupOfferTests {
 
         menuBar.setVisible(true)
         #expect(menuBar.statusItemTitle == " 1:23")
-        #expect(menuBar.offeredItemTitles.contains("Finish recording"))
+        #expect(menuBar.offeredItemTitles.first == "● Recording · 1:23")
+        #expect(!menuBar.offeredItemTitles.contains("Finish recording"))
     }
 
     /// About is where a Mac user looks for a name, and there are two menus

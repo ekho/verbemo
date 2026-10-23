@@ -134,7 +134,8 @@ struct MacUXFollowupTests {
         let app = ApplicationWindow()
         defer { app.hide() }
         let setup = SetupPage()
-        setup.onFinished = { app.navigate(.allMeetings) }
+        var finished = 0
+        setup.onFinished = { finished += 1 }
         app.presentSetup(setup)
         let page = setup.contentView
         #expect(page.window === app.panel)
@@ -142,14 +143,41 @@ struct MacUXFollowupTests {
         #expect(page.allDescendants.contains { $0.identifier?.rawValue == "access.system-audio" })
         #expect(!page.allDescendants.contains { $0 is ChoiceCard || $0 is NSSecureTextField })
         #expect(!page.allDescendants.contains { $0.identifier?.rawValue == "access.login" })
+        let footer = try #require(page.subviews.compactMap { $0 as? NSStackView }.first)
+        #expect(footer.allDescendants.compactMap { $0 as? NSButton }.isEmpty)
+        #expect(footer.allDescendants.compactMap { $0 as? NSTextField }.contains { !$0.stringValue.isEmpty })
         app.navigate(.general)
         #expect(!setup.isVisible)
-        app.presentSetup(setup)
-        let later = try #require(page.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "setup.later" })
-        _ = NSApplication.shared.sendAction(try #require(later.action), to: later.target, from: later)
         #expect(!SetupState.isPending)
-        #expect(app.navigation.destination == .allMeetings)
+        #expect(finished == 1)
+        #expect(app.navigation.destination == .general)
         #expect(app.panel.contentView?.allDescendants.contains { $0 === page } == false)
+        app.navigate(.allMeetings)
+        #expect(finished == 1)
+    }
+
+    @Test(.freshHome, arguments: ["hide", "close", "quit"])
+    func leavingFirstRunCompletesSetupWithoutFooterButtons(exit: String) {
+        let app = ApplicationWindow()
+        let setup = SetupPage()
+        var finished = 0
+        setup.onFinished = { finished += 1 }
+        app.presentSetup(setup)
+        #expect(SetupState.isPending)
+        switch exit {
+        case "close": app.panel.performClose(nil)
+        case "quit": _ = app.stopForTermination()
+        default: app.hide()
+        }
+        #expect(!SetupState.isPending)
+        #expect(finished == 1)
+        if exit != "quit" {
+            app.show()
+            #expect(!setup.isVisible)
+            #expect(app.navigation.destination == .allMeetings)
+        }
+        app.hide()
+        #expect(finished == 1)
     }
 
     @Test(.freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet","model":"v2"}}"#))

@@ -70,7 +70,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         guard window != nil else { return }
         let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.window?.isVisible == true else { return }
+                guard let self, self.window?.isVisible == true, !self.isHiddenOrHasHiddenAncestor else { return }
                 self.refreshAudioLevels()
             }
         }
@@ -84,6 +84,8 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         micLevel.update(levels.0)
         systemLevel.update(levels.1)
     }
+
+    func beginRenaming() { name.selectText(nil) }
 
     func controlTextDidEndEditing(_ notification: Notification) {
         let proposed = name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)

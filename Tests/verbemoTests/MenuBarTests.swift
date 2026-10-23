@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct MenuBarTests {
-    @Test(.speaking(.russian)) func idleMenuOffersOnlyUsefulActionsInApprovedOrder() {
+    @Test(.speaking(.russian)) func idleMenuOffersOnlyUsefulActionsInApprovedOrder() throws {
         let tray = MenuBarController(visible: false)
         tray.setupAvailable(false)
         #expect(tray.offeredItemTitles == [
@@ -15,25 +15,26 @@ struct MenuBarTests {
         tray.onTogglePause = { pauses += 1 }
         #expect(!tray.performOfferedItem(titled: "Пауза"))
         #expect(pauses == 0)
+        #expect(try #require(tray.menu.items.first).view != nil)
     }
 
-    @Test(.speaking(.english)) func recordingControlsFollowStateWithoutLosingActions() {
+    @Test(.speaking(.english)) func recordingControlsFollowStateWithoutLosingActions() throws {
         let tray = MenuBarController(visible: false)
         var toggles = 0, pauses = 0
         tray.onToggle = { toggles += 1 }
         tray.onTogglePause = { pauses += 1 }
-        #expect(tray.performOfferedItem(titled: "Start recording"))
+        #expect(try pressInline("start", in: tray))
         tray.update(state: .recording, elapsed: "12:34")
-        #expect(!tray.performOfferedItem(titled: "Start recording"))
-        #expect(tray.performOfferedItem(titled: "Pause"))
+        #expect(!(try pressInline("start", in: tray)))
+        #expect(try pressInline("pause", in: tray))
         tray.update(state: .paused, elapsed: "12:35")
         #expect(!tray.performOfferedItem(titled: "Pause"))
-        #expect(tray.performOfferedItem(titled: "Resume"))
-        #expect(tray.performOfferedItem(titled: "Finish recording"))
+        #expect(try pressInline("pause", in: tray))
+        #expect(try pressInline("stop", in: tray))
         #expect(toggles == 2)
         #expect(pauses == 2)
         tray.update(state: .idle, elapsed: nil)
-        #expect(!tray.performOfferedItem(titled: "Finish recording"))
+        #expect(!(try pressInline("stop", in: tray)))
     }
 
     @Test(.speaking(.english)) func shortcutsStayAvailableInsideTheRecordingBlock() throws {
@@ -57,11 +58,75 @@ struct MenuBarTests {
         #expect(toggles == 2)
         #expect(pauses == 2)
         let controls = tray.menu.items.filter { !$0.isHidden && ["Resume", "Finish recording"].contains($0.title) }
-        #expect(controls.map(\.title) == ["Resume", "Finish recording"])
-        #expect(controls.allSatisfy { $0.view == nil && $0.isEnabled })
-        let finish = try #require(controls.last)
-        #expect(NSApp.sendAction(try #require(finish.action), to: finish.target, from: finish))
+        #expect(controls.isEmpty)
+        #expect(try pressInline("stop", in: tray))
         #expect(toggles == 3)
+    }
+
+    private func pressInline(_ action: String, in tray: MenuBarController) throws -> Bool {
+        let row = try #require(tray.menu.items.first?.view)
+        let button = try #require(row.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "tray.recording.\(action)" })
+        guard !button.isHiddenOrHasHiddenAncestor, button.isEnabled else { return false }
+        return NSApp.sendAction(try #require(button.action), to: button.target, from: button)
+    }
+
+    @Test(.speaking(.english)) func firstRowChangesStateAndOpensTheRecordingWithoutTogglingIt() throws {
+        let tray = MenuBarController(visible: false)
+        let item = try #require(tray.menu.items.first)
+        let row = try #require(item.view)
+        var opened = 0, toggles = 0
+        tray.onShowRecording = { opened += 1 }
+        tray.onToggle = { toggles += 1 }
+        for (state, title, pauseLabel) in [
+            (MenuBarController.State.recording, "● Recording · 12:34", "Pause recording"),
+            (.paused, "Ⅱ Recording paused · 12:34", "Resume recording"),
+        ] {
+            tray.update(state: state, elapsed: "12:34")
+            #expect(item.view === row && item.isEnabled)
+            #expect(item.title == title)
+            let pause = try #require(row.allDescendants.compactMap { $0 as? NSButton }
+                .first { $0.identifier?.rawValue == "tray.recording.pause" })
+            #expect(pause.accessibilityLabel() == pauseLabel)
+            #expect(try pressInline("open", in: tray))
+            #expect(tray.performOfferedItem(titled: title))
+            #expect(!tray.offeredItemTitles.contains("Finish recording"))
+        }
+        #expect(opened == 4)
+        #expect(toggles == 0)
+        tray.update(state: .recording, elapsed: "12:35")
+        #expect(item.title == "● Recording · 12:35")
+        #expect(item.view === row)
+        tray.update(state: .idle, elapsed: nil)
+        #expect(try pressInline("open", in: tray))
+        #expect(opened == 4 && toggles == 1)
+    }
+
+    @Test(.freshHome) func recordingRowReturnsFromSettingsToTheCurrentRecording() throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        app.update(state: .paused, elapsed: "12:34")
+        app.recordingTitle = "Current recording"
+        app.navigate(.summary)
+        app.hide()
+        let tray = MenuBarController(visible: false)
+        tray.update(state: .paused, elapsed: "12:34")
+        tray.onShowRecording = { app.showActiveRecording(); app.bringToFront() }
+        #expect(try pressInline("open", in: tray))
+        #expect(app.navigation.destination == .allMeetings)
+        #expect(app.navigation.resultTab == "transcript")
+        #expect(app.recordingTitle == "Current recording")
+        #expect(app.recordingBarIsVisible && app.isVisible)
+    }
+
+    @Test func recordingControlsStayAtTheRightEdge() throws {
+        let tray = MenuBarController(visible: false)
+        tray.update(state: .recording, elapsed: "12:34")
+        let row = try #require(tray.menu.items.first?.view)
+        row.layoutSubtreeIfNeeded()
+        let stop = try #require(row.allDescendants.first { $0.identifier?.rawValue == "tray.recording.stop" })
+        let frame = row.convert(stop.bounds, from: stop)
+        #expect(abs(row.bounds.maxX - frame.maxX - 12) < 1)
     }
 
     @Test(.speaking(.russian)) func onlyActionableNoticesCanOpenPermissions() {
@@ -135,7 +200,7 @@ struct MenuBarTests {
         #expect(updates == 1)
     }
 
-    @Test(.freshHome, .speaking(.english)) func processingLinkRevealsItsMeetingDespiteAnActiveFilter() async throws {
+    @Test(.freshHome, .speaking(.english)) func revealingAMeetingStillClearsAnActiveFilter() async throws {
         let root = Home.current.url.appendingPathComponent("recordings")
         let target = root.appendingPathComponent("a-target")
         let other = root.appendingPathComponent("z-other")
@@ -148,13 +213,7 @@ struct MenuBarTests {
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.navigate(.attention)
-        let tray = MenuBarController(visible: false)
-        let status = TranscriptionCoordinator.Status.failed(session: target)
-        tray.updateTranscription(AppController.transcriptionLine(for: status))
-        var opened: Task<Bool, Never>?
-        tray.onShowTranscription = { opened = Task { await library.reveal(target) } }
-        #expect(tray.performOfferedItem(titled: "Could not transcribe: a-target…"))
-        #expect(await opened?.value == true)
+        #expect(await library.reveal(target))
         #expect(library.contentView.allDescendants.compactMap { $0 as? NSTextField }
             .contains { $0.stringValue == "a-target" })
         #expect(!(await library.reveal(root.appendingPathComponent("missing"))))

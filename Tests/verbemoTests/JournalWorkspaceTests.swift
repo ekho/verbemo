@@ -4,6 +4,145 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct JournalWorkspaceTests {
+    @Test(.freshHome, arguments: ["light", "dark"])
+    func meetingSearchBackgroundUsesJournalPalette(theme: String) throws {
+        _ = NSApplication.shared
+        let previousAppearance = NSApp.appearance
+        Config.update(path: ["interface_theme"], value: theme)
+        let app = ApplicationWindow()
+        defer { app.hide(); NSApp.appearance = previousAppearance }
+        let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let search = try #require(library.listContentView.allDescendants.first { $0 is NSSearchField } as? NSSearchField)
+        let bitmap = try #require(search.bitmapImageRepForCachingDisplay(in: search.bounds))
+        search.cacheDisplay(in: search.bounds, to: bitmap)
+        let scale = CGFloat(bitmap.pixelsWide) / search.bounds.width
+        let actual = try #require(bitmap.colorAt(x: bitmap.pixelsWide - Int(32 * scale), y: bitmap.pixelsHigh / 2))
+        var expected: NSColor?
+        search.effectiveAppearance.performAsCurrentDrawingAppearance {
+            expected = JournalStyle.inset.usingColorSpace(bitmap.colorSpace)
+        }
+        let background = try #require(expected)
+        #expect(abs(actual.redComponent - background.redComponent) < 0.01)
+        #expect(abs(actual.greenComponent - background.greenComponent) < 0.01)
+        #expect(abs(actual.blueComponent - background.blueComponent) < 0.01)
+    }
+
+    @Test(.freshHome) func settingsSelectionReplacesMeetingSelectionAndPreservesContext() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for name in ["Planning one", "Planning two"] {
+            try FileManager.default.moveItem(at: SessionFixture.make(meta: ["title": name]), to: root.appendingPathComponent(name))
+        }
+        let dir = root.appendingPathComponent("Planning one")
+        try TranscriptVersions.archiveCurrent(dir)
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-10-23T10:00:00Z",
+            segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "New result")]).write(to: dir)
+        let app = ApplicationWindow()
+        defer { app.settings.setup.stop(); app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? MeetingTableView)
+        let search = try #require(library.listContentView.allDescendants.first { $0 is NSSearchField } as? NSSearchField)
+        let settings = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "journal.settings" })
+        search.stringValue = "Planning"
+        _ = NSApp.sendAction(try #require(search.action), to: search.target, from: search)
+        table.selectRowIndexes([1], byExtendingSelection: false)
+        let versions = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }
+            .first { $0.identifier?.rawValue == "transcript-versions" })
+        try #require(versions.numberOfItems == 2)
+        versions.selectItem(at: 0)
+        _ = NSApp.sendAction(try #require(versions.action), to: versions.target, from: versions)
+
+        for page in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage] {
+            app.navigate(page)
+            #expect(table.selectedRow == -1)
+            #expect(settings.state == .on)
+            library.refresh()
+            await library.settled()
+            #expect(table.selectedRow == -1, "A background refresh must not select a meeting in settings")
+            #expect(app.navigation.destination == page)
+        }
+        app.navigate(.allMeetings)
+        #expect(table.selectedRow == 1)
+        #expect(settings.state == .off)
+        #expect(search.stringValue == "Planning")
+        #expect(versions.indexOfSelectedItem == 0)
+        app.navigate(.general)
+        table.selectRowIndexes([1], byExtendingSelection: false)
+        _ = NSApp.sendAction(try #require(table.action), to: table.target, from: table)
+        #expect(app.navigation.destination == .allMeetings)
+        #expect(table.selectedRow == 1)
+        #expect(settings.state == .off)
+    }
+
+    @Test(.freshHome, .speaking(.russian), arguments: [760, 1340])
+    func resultTabsUseSettingsStyleAndKeepOneResultSelected(width: Int) throws {
+        let dir = Home.current.url.appendingPathComponent("meeting")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(#"{"title":"Planning"}"#.utf8).write(to: dir.appendingPathComponent("meta.json"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(NSSize(width: width, height: 680))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let tabs = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.result-tabs" } as? NSStackView)
+        let buttons = tabs.arrangedSubviews.compactMap { $0 as? NSButton }
+        try #require(buttons.count == 2)
+        let pages = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        #expect(buttons.map(\.title) == ["Сводка", "Расшифровка"])
+        #expect(buttons.allSatisfy { !$0.isBordered && $0.image != nil })
+        #expect(buttons.map(\.state) == [.on, .off])
+        #expect(pages.selectedTabViewItem?.identifier as? String == "summary")
+        for index in [1, 1, 0] {
+            let button = buttons[index]
+            #expect(NSApplication.shared.sendAction(try #require(button.action), to: button.target, from: button))
+            #expect(buttons.filter { $0.state == .on }.count == 1)
+            #expect(button.state == .on)
+            #expect(pages.selectedTabViewItem?.identifier as? String == (index == 1 ? "transcript" : "summary"))
+        }
+        #expect(app.panel.contentLayoutRect.width <= CGFloat(width + 2))
+        #expect(buttons.allSatisfy { $0.frame.width >= $0.intrinsicContentSize.width })
+    }
+
+    @Test(.freshHome) func doubleClickingMeetingTitleStartsInlineRenaming() throws {
+        let dir = Home.current.url.appendingPathComponent("meeting")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(#"{"title":"Planning"}"#.utf8).write(to: dir.appendingPathComponent("meta.json"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        let title = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTextField }
+            .first { $0.identifier?.rawValue == "meeting.title" })
+        #expect(!title.isEditable)
+        let doubleClick = try #require(title.gestureRecognizers.compactMap { $0 as? NSClickGestureRecognizer }
+            .first { $0.numberOfClicksRequired == 2 })
+        #expect(NSApplication.shared.sendAction(try #require(doubleClick.action), to: doubleClick.target, from: doubleClick))
+        #expect(title.isEditable)
+        let editor = try #require(title.currentEditor() as? NSTextView)
+        #expect(editor.selectedRange == NSRange(location: 0, length: "Planning".utf16.count))
+        #expect(!doubleClick.isEnabled, "Double clicks in the editor must keep native word selection")
+        title.stringValue = "Changed"
+        #expect(library.control(title, textView: editor, doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        #expect(!title.isEditable)
+        #expect(title.stringValue == "Planning")
+        #expect(title.currentEditor() == nil)
+        #expect(doubleClick.isEnabled)
+        #expect(SessionInventory.item(for: dir)?.title == "Planning")
+        #expect(NSApplication.shared.sendAction(try #require(doubleClick.action), to: doubleClick.target, from: doubleClick))
+        title.stringValue = "Renamed"
+        #expect(library.control(title, textView: try #require(title.currentEditor() as? NSTextView), doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(!title.isEditable)
+        #expect(title.currentEditor() == nil, "Saving must release the editor so the next double click reaches the title")
+        #expect(doubleClick.isEnabled)
+        #expect(SessionInventory.item(for: dir)?.title == "Renamed")
+    }
+
     @Test(.freshHome) func resultTabsFollowWhetherAMeetingIsSelected() async throws {
         let root = Home.current.url.appendingPathComponent("meetings")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

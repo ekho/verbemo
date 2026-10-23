@@ -241,8 +241,6 @@ final class AppController {
         setup.onFinished = { [weak self] in
             self?.startAutomaticFeatures(requestCalendarAccess: false)
             self?.offerSetup()
-            self?.window.navigate(.allMeetings)
-            self?.window.bringToFront()
         }
         return setup
     }()
@@ -404,6 +402,11 @@ final class AppController {
         menuBar.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
         window.onOpenFolder = { [weak self] in self?.openFolder() }
         menuBar.onShowMeetings = { [weak self] in self?.showMeetings() }
+        menuBar.onShowRecording = { [weak self] in
+            guard let self, self.session != nil else { return }
+            self.window.showActiveRecording()
+            self.window.bringToFront()
+        }
         menuBar.onImport = { [weak self] in self?.chooseMediaToImport() }
         menuBar.onShowSettings = { [weak self] in self?.showSettings() }
         menuBar.onShowSetup = { [weak self] in self?.showSetup() }
@@ -555,9 +558,9 @@ final class AppController {
         processingStarted()
         Task { [transcription, root, self] in
             defer { processingFinished() }
-            await transcription.setStatusHandler { status in
+            await transcription.setStatusHandler { _ in
                 Task { @MainActor [weak self] in
-                    self?.showTranscription(status)
+                    self?.processingStatusChanged()
                 }
             }
             await transcription.resumePending(root: root)
@@ -710,7 +713,6 @@ final class AppController {
             stopServices()
             stopSession(reason: "app-quit")
             let text = localised("Stopping…", "Останавливаю…")
-            menuBar.updateTranscription(text)
             window.showStopping(text)
         }, finishRecording: { [self] in
             await liveTransitions.wait()
@@ -809,8 +811,11 @@ final class AppController {
     /// hears both.
     private func toggleLive(_ enabled: Bool) {
         guard !isStopping else { return }
+        let wasEnabled = Config.liveTranscriptionEnabled()
         Config.update(
             path: ["live_transcription", "enabled"], value: enabled ? true : nil)
+        // Download/retry also works when the preference was already on.
+        if enabled && wasEnabled { rewireLive(true) }
     }
 
     /// One setting that changed while verbemo was running.
@@ -1027,27 +1032,6 @@ final class AppController {
         }
     }
 
-    /// What the menu and the window say while a recording is being
-    /// transcribed. A static function rather than a few lines inside the
-    /// method that shows it, because two surfaces say it and because a
-    /// sentence nothing can call is a sentence nothing can check.
-    static func transcriptionLine(for status: TranscriptionCoordinator.Status) -> String? {
-        switch status {
-        case .idle:
-            return nil
-        case .transcribing(let dir, let queued):
-            let name = dir.lastPathComponent
-            return queued > 0
-                ? localised("Transcribing: \(name) · \(queued) queued…",
-                            "Расшифровка: \(name) · в очереди \(queued)…")
-                : localised("Transcribing: \(name)…", "Расшифровка: \(name)…")
-        case .failed(let dir):
-            let name = dir.lastPathComponent
-            return localised("Could not transcribe: \(name)…",
-                             "Не удалось расшифровать: \(name)…")
-        }
-    }
-
     /// Say what is wrong with the config file, and pick up the work held
     /// while it could not be read once it can.
     private func showConfigProblems() {
@@ -1078,24 +1062,8 @@ final class AppController {
         }
     }
 
-    private func showTranscription(_ status: TranscriptionCoordinator.Status) {
+    private func processingStatusChanged() {
         guard !isStopping else { return }
-        let text = Self.transcriptionLine(for: status)
-        menuBar.updateTranscription(text)
-        switch status {
-        case .idle:
-            menuBar.onShowTranscription = nil
-        case .transcribing(let dir, _), .failed(let dir):
-            menuBar.onShowTranscription = { [weak self] in
-                guard let self else { return }
-                self.showMeetings()
-                Task { @MainActor in
-                    if !(await self.recordings.reveal(dir)) {
-                        NSWorkspace.shared.open(dir)
-                    }
-                }
-            }
-        }
         // Each change of status follows the end of a session's work — its
         // transcript, names and summary — or the start of the next, so the
         // meeting library reads again rather than going on offering
@@ -1117,7 +1085,7 @@ final class AppController {
             // The coordinator has closed its queues; detach here as well so
             // the real-time recorders stop making now-unused buffer copies.
             session?.installLiveAudioSinks(mic: nil, system: nil)
-        case .idle, .paused, .loading, .live, .modelMissing:
+        case .idle, .paused, .downloading, .loading, .live, .modelMissing:
             break
         }
     }

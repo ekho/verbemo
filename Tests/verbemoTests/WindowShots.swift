@@ -397,11 +397,10 @@ struct WindowGallery {
     }
 
     private func selectResult(_ id: String, in library: MeetingLibraryController) throws {
-        let picker = try #require(library.contentView.allDescendants
-            .compactMap { $0 as? NSSegmentedControl }
-            .first { $0.identifier?.rawValue == "meeting.result-tabs" })
-        picker.selectedSegment = id == "transcript" ? 1 : 0
-        _ = NSApp.sendAction(try #require(picker.action), to: picker.target, from: picker)
+        let button = try #require(library.contentView.allDescendants
+            .compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.result.\(id)" })
+        _ = NSApp.sendAction(try #require(button.action), to: button.target, from: button)
     }
 
     // MARK: - what the pictures are of

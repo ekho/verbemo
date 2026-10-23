@@ -48,7 +48,7 @@ struct StartupAlertTests {
         #expect(StartupAlert.body(for: [passing]).isEmpty)
     }
 
-    /// Later and the close button both mark setup done, on every way out,
+    /// Leaving setup and closing the window both mark it done,
     /// and each one reported another completed setup.
     @Test("Setup is completed once, however many times the window is closed afterwards")
     func completedOnce() throws {

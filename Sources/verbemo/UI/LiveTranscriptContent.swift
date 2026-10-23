@@ -15,6 +15,7 @@ final class LiveTranscriptContent {
         checkboxWithTitle: localised("Live transcript", "Расшифровка на лету"),
         target: nil, action: nil)
     private let liveStatus = NSTextField(labelWithString: "")
+    private let liveDownload = NSButton(title: "", target: nil, action: nil)
     private let liveReveal = NSButton(title: "", target: nil, action: nil)
     private let liveText = NSTextView()
     private let liveScroll = NSScrollView()
@@ -38,6 +39,11 @@ final class LiveTranscriptContent {
         liveStatus.font = .systemFont(ofSize: 11)
         liveStatus.textColor = .secondaryLabelColor
         liveStatus.lineBreakMode = .byTruncatingTail
+        liveStatus.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        liveDownload.identifier = .init("live.download")
+        liveDownload.target = self
+        liveDownload.action = #selector(downloadClicked)
+        liveDownload.isHidden = true
 
         // The way back to a transcript the end of the recording folded away.
         // It sits where the status line does: a recording that has stopped
@@ -68,7 +74,7 @@ final class LiveTranscriptContent {
         liveScroll.borderType = .bezelBorder
         liveScroll.isHidden = true
 
-        let liveHeader = NSStackView(views: [liveCheckbox, NSView(), liveStatus, liveReveal])
+        let liveHeader = NSStackView(views: [liveCheckbox, NSView(), liveStatus, liveDownload, liveReveal])
         liveHeader.orientation = .horizontal
         liveHeader.spacing = 8
         liveSection.setViews([liveHeader, liveScroll], in: .top)
@@ -132,12 +138,20 @@ final class LiveTranscriptContent {
         liveStatus.stringValue = switch snapshot.status {
         case .idle: ""
         case .paused: localised("off", "выключена")
+        case .downloading(let fraction): localised("Downloading Nemotron · ", "Загрузка Nemotron · ") + "\(Int(fraction * 100))%"
         case .loading: localised("loading model…", "загружаю модель…")
         case .live: localised("on this Mac", "на этом маке")
-        case .modelMissing: localised("model not downloaded", "модель не скачана")
+        case .modelMissing: localised("Nemotron model required", "Нужна модель Nemotron")
         case .overloaded:
             localised("stopped — Mac couldn't keep up", "остановлена — мак не успевает")
         case .error(let message): localised("stopped — ", "остановлена — ") + message
+        }
+        liveStatus.toolTip = liveStatus.stringValue
+        liveDownload.title = snapshot.status == .modelMissing
+            ? localised("Download model", "Скачать модель") : localised("Retry", "Повторить")
+        switch snapshot.status {
+        case .modelMissing, .error, .overloaded: liveDownload.isHidden = !snapshot.isRecording
+        default: liveDownload.isHidden = true
         }
 
         let rendered = NSMutableAttributedString()
@@ -228,6 +242,7 @@ final class LiveTranscriptContent {
     }
 
     @objc private func liveClicked() { onToggleLive?(liveCheckbox.state == .on) }
+    @objc private func downloadClicked() { onToggleLive?(true) }
     @objc private func liveRevealClicked() {
         liveRevealedAfterStop.toggle()
         showLiveText(liveRevealedAfterStop)

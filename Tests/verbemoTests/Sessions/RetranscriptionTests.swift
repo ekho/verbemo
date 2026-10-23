@@ -499,8 +499,7 @@ struct RetranscriptionTests {
         defer { withExtendedLifetime(app) {} }
         let table = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSTableView }.first)
         let menu = try #require(table.menu)
-        let results = try #require(library.contentView.allDescendants.compactMap { $0 as? NSSegmentedControl }.first { $0.identifier?.rawValue == "meeting.result-tabs" })
-        results.selectedSegment = 1
+        let results = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.result.transcript" })
         NSApplication.shared.sendAction(try #require(results.action), to: results.target, from: results)
         let repeatButton = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.retranscribe" })
         library.menuWillOpen(menu)

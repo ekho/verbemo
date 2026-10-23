@@ -65,7 +65,7 @@ enum MeetingPresentation {
                 case .live: Stage(symbol: "doc.text", title: localised("Transcribing live", "Расшифровка в реальном времени"), state: .active)
                 case .error(let reason): Stage(symbol: "doc.text", title: reason, state: .failed)
                 case .overloaded: Stage(symbol: "doc.text", title: localised("Live transcript overloaded", "Онлайн-расшифровка перегружена"), state: .failed)
-                case .loading, .modelMissing: Stage(symbol: "doc.text", title: localised("Waiting for the live model", "Ожидается модель онлайн-расшифровки"), state: .pending)
+                case .downloading, .loading, .modelMissing: Stage(symbol: "doc.text", title: localised("Waiting for the live model", "Ожидается модель онлайн-расшифровки"), state: .pending)
                 case .idle, .paused: Stage(symbol: "doc.text", title: localised("Live transcript is not running", "Онлайн-расшифровка не запущена"), state: .off)
                 }
             }
@@ -94,8 +94,10 @@ enum MeetingPresentation {
         transcript.diarized = item.diarization.map { $0.status != .skipped } ?? item.isDiarized
         if transcript.diarized { transcript.title += localised(" · diarization enabled", " · диаризация включена") }
         result.append(transcript)
-        result.append(stage(item.summary, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),
-            done: localised("Summary ready", "Сводка готова"), active: busy && ready && item.summary != .off))
+        var summary = stage(item.summary, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),
+            done: localised("Summary ready", "Сводка готова"), active: busy && ready && item.summary != .off)
+        if summary.state == .failed { summary.title = localised("Summary creation failed", "Сбой создания сводки") }
+        result.append(summary)
         return result
     }
 }

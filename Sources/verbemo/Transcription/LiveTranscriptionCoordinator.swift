@@ -14,6 +14,7 @@ actor LiveTranscriptionCoordinator {
     enum Status: Sendable, Equatable {
         case idle
         case paused
+        case downloading(Double)
         case loading
         case live
         case modelMissing
@@ -103,7 +104,7 @@ actor LiveTranscriptionCoordinator {
         let epoch = transcript.beginRecording(enabled: enabled)
         publish()
         guard enabled else { return }
-        startPipeline(language: language, epoch: epoch)
+        startPipeline(language: language, epoch: epoch, allowDownload: false)
     }
 
     /// The caller detaches the old sinks before calling this, so no audio can
@@ -116,7 +117,7 @@ actor LiveTranscriptionCoordinator {
         status = enabled ? .loading : .paused
         publish()
         guard enabled else { return }
-        startPipeline(language: language, epoch: epoch)
+        startPipeline(language: language, epoch: epoch, allowDownload: true)
     }
 
     func finishRecording() async {
@@ -146,11 +147,11 @@ actor LiveTranscriptionCoordinator {
     /// which used to be reported as "your Mac couldn't keep up" before a
     /// single word had been transcribed. The recorders start feeding the
     /// queues at the moment the model starts consuming them, and not before.
-    private func startPipeline(language: String, epoch: Int) {
+    private func startPipeline(language: String, epoch: Int, allowDownload: Bool) {
         let downloading: Bool
         if case .downloading = modelStore.state(language: language) { downloading = true }
         else { downloading = false }
-        guard modelStore.isReady(language: language) || downloading else {
+        guard allowDownload || modelStore.isReady(language: language) || downloading else {
             status = .modelMissing
             publish()
             return
@@ -207,10 +208,20 @@ actor LiveTranscriptionCoordinator {
         language: String,
         epoch: Int
     ) async {
+        guard !Task.isCancelled, transcript.epoch == epoch, transcript.isEnabled else { return }
         do {
-            // Join an explicitly requested download; starting a recording alone never downloads.
-            let directory = try await modelStore.download(language: language)
+            // Only an explicit enable or an existing download gets here with missing files.
+            if !modelStore.isReady(language: language) {
+                status = .downloading(0)
+                publish()
+            }
+            let directory = try await modelStore.download(language: language) { [weak self] fraction in
+                Task { await self?.downloadProgress(fraction, epoch: epoch) }
+            }
             try Task.checkCancellation()
+            guard transcript.epoch == epoch, transcript.isEnabled else { return }
+            status = .loading
+            publish()
             let shared: SharedNemotronMultilingualModels
             if let sharedModels, sharedModelDirectory == directory {
                 shared = sharedModels
@@ -267,6 +278,13 @@ actor LiveTranscriptionCoordinator {
             pulse?.withLock { $0 = true }
             Task { await self?.received(text, from: source, epoch: epoch) }
         }
+    }
+
+    private func downloadProgress(_ fraction: Double, epoch: Int) {
+        guard transcript.epoch == epoch, transcript.isEnabled,
+              case .downloading = status, fraction < 1 else { return }
+        status = .downloading(fraction)
+        publish()
     }
 
     nonisolated private func consume(

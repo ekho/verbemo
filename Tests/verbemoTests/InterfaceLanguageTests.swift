@@ -369,7 +369,7 @@ struct InterfaceLanguageTests {
         // A failure carries a message from CoreML, which arrives in whatever
         // language CoreML wrote it in; only the words around it are verbemo's.
         let statuses: [LiveTranscriptionCoordinator.Status] = [
-            .idle, .paused, .loading, .live, .modelMissing, .overloaded, .error("CoreML"),
+            .idle, .paused, .downloading(0.5), .loading, .live, .modelMissing, .overloaded, .error("CoreML"),
         ]
         for status in statuses {
             window.updateLive(snapshot(recording: true, status: status))
@@ -414,11 +414,7 @@ struct InterfaceLanguageTests {
         text.components(separatedBy: "\n").flatMap { $0.components(separatedBy: " · ") }
     }
 
-    /// Every state the menu bar item has, read after each. The two lines that
-    /// are filled in from outside — what is being transcribed, and why
-    /// auto-record last did what it did — are given verbemo's own name, because
-    /// a fake sentence would either differ between the runs for a reason that
-    /// is not translation or be reported as English left behind.
+    /// Every state and embedded control in the menu, including its recording row.
     @MainActor
     private static func readableMenuBar() -> [String] {
         _ = NSApplication.shared
@@ -430,14 +426,9 @@ struct InterfaceLanguageTests {
         var found: [String] = []
         for state in [MenuBarController.State.idle, .recording, .paused] {
             menuBar.update(state: state, elapsed: "1:23")
-            for status: TranscriptionCoordinator.Status in [
-                .idle, .transcribing(session: URL(fileURLWithPath: "/verbemo"), queued: 0),
-                .transcribing(session: URL(fileURLWithPath: "/verbemo"), queued: 2), .failed(session: URL(fileURLWithPath: "/verbemo")),
-            ] {
-                menuBar.updateTranscription(AppController.transcriptionLine(for: status))
-                found.append(contentsOf: menuBar.offeredItemTitles)
-                found.append(menuBar.statusItemTitle)
-            }
+            found.append(contentsOf: menuBar.offeredItemTitles)
+            found.append(menuBar.statusItemTitle)
+            if let row = menuBar.menu.items.first?.view { found.append(contentsOf: strings(in: row)) }
         }
         return found
     }
