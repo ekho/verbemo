@@ -88,7 +88,7 @@ public sealed class InterfaceRegressionTests
             await using var fixture = await SummaryRegenerationTests.Fixture.Create();
             fixture.Fail = true;
             var runtime = RecordingActionsTests.Field<VerbemoRuntime>(window, "runtime");
-            runtime.Update(s => { s.Summary.Enabled = true; s.Summary.Backend = "ollama"; s.RecordingsDirectory = Path.GetDirectoryName(fixture.Directory)!; });
+            runtime.Update(s => { s.Summary.Enabled = true; s.Summary.Backend = "ollama"; });
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             ApplicationWindowTests.Until(() => !RecordingActionsTests.Field<bool>(window, "loading"));
             var processing = typeof(VerbemoRuntime).GetField("processing", BindingFlags.Instance | BindingFlags.NonPublic)!;
