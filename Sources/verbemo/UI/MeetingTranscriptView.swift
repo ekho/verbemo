@@ -21,7 +21,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
-        table.intercellSpacing = NSSize(width: 0, height: 18)
+        table.intercellSpacing = NSSize(width: 0, height: 8)
         table.dataSource = self
         table.delegate = self
         table.setAccessibilityLabel(localised("Transcript and speaker assignments", "Расшифровка и сопоставление участников"))
@@ -43,7 +43,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         let width = max(160, tableView.tableColumns[0].width - 20)
         let rect = (segments[row].text as NSString).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 14)])
-        return max(78, ceil(rect.height) + 42)
+        return max(54, ceil(rect.height) + 36)
     }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("utterance")
@@ -118,7 +118,7 @@ private final class SegmentCell: NSTableCellView {
         let stack = NSStackView(views: [head, body])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 8
+        stack.spacing = 4
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
