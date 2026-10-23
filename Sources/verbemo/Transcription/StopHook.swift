@@ -48,8 +48,8 @@ enum StopHook {
     /// that session, however soon the file was fixed. The debt stays in
     /// meta.json, and the sweep that follows the fix pays it.
     @discardableResult
-    static func fireIfOwed(_ dir: URL, command: @autoclosure () -> String? = Config.onStop()) -> Bool {
-        guard SessionState.value(dir, key) as? String == owed else { return false }
+    static func fireIfOwed(_ dir: URL, command: @autoclosure @Sendable () -> String? = Config.onStop()) async -> Bool {
+        guard !Task.isCancelled, SessionState.value(dir, key) as? String == owed else { return false }
         if let reason = Config.unreadableReason {
             appendSessionLog(
                 "on_stop hook waits — config.json can't be read (\(reason))", to: dir)
@@ -64,26 +64,27 @@ enum StopHook {
             return false
         }
         defer { SessionClaim.release(dir) }
-        guard SessionState.value(dir, key) as? String == owed else { return false }
+        guard !Task.isCancelled, SessionState.value(dir, key) as? String == owed else { return false }
         SessionState.update(dir, with: [key: fired])
         guard let command = command() else { return false }
-        run(command, in: dir)
+        await run(command, in: dir)
         return true
     }
 
     /// The command with the folder as `$0`, so a path with spaces or quotes
     /// in it reaches the command as one argument rather than as shell text.
-    private static func run(_ command: String, in dir: URL) {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "\(command) \"$0\"", dir.path]
-        // The session it was fired for is the only sensible place to stand.
-        task.currentDirectoryURL = dir
+    private static func run(_ command: String, in dir: URL) async {
         do {
-            try task.run()
-            appendSessionLog("on_stop hook started", to: dir)
+            let output = try await Subprocess.run(
+                executable: "/bin/sh", arguments: ["-c", "\(command) \"$0\"", dir.path],
+                input: Data(), timeout: .infinity, currentDirectory: dir)
+            try? FileHandle.standardOutput.write(contentsOf: output.stdout)
+            try? FileHandle.standardError.write(contentsOf: output.stderr)
+            appendSessionLog("on_stop hook exited with status \(output.status)", to: dir)
+        } catch is CancellationError {
+            appendSessionLog("on_stop hook cancelled", to: dir)
         } catch {
-            appendSessionLog("on_stop hook failed to launch: \(error)", to: dir)
+            appendSessionLog("on_stop hook failed: \(error)", to: dir)
         }
     }
 }

@@ -355,6 +355,8 @@ final class AppController {
     private var recordingActivity: NSObjectProtocol?
     private var automaticFeaturesStarted = false
     private var mediaImportTask: Task<Void, Never>?
+    private var importOperationID: UUID?
+    private var cancelledImportOperationID: UUID?
     private var imports = ImportQueue()
     /// The request to stop the importer mid-file, kept so that a run started
     /// after it can wait for it: arriving late, it would stop the new run.
@@ -588,6 +590,11 @@ final class AppController {
     /// publishes complete filesystem sessions; only then are they handed to
     /// the ordinary transcription queue, exactly like a recording just ended.
     func importFiles(_ files: [URL]) {
+        guard ProcessingOperations.shared.isAccepting else { imports.close(); return }
+        if let id = importOperationID,
+           !ProcessingOperations.shared.snapshot().contains(where: { $0.id == id && $0.state != .cancelling }) {
+            noteImportCancellation(id)
+        }
         if imports.add(files) { startImportRun() }
         updates.activityDidChange()
     }
@@ -595,36 +602,36 @@ final class AppController {
     /// One run of the importer: batch after batch until nothing is waiting
     /// or somebody cancels, then one summary for the whole run.
     private func startImportRun() {
+        guard let ticket = try? ProcessingOperations.shared.register(session: nil, kind: .importMedia) else {
+            imports.close()
+            _ = imports.runEnded()
+            return
+        }
+        importOperationID = ticket.id
+        cancelledImportOperationID = nil
         window.navigate(.allMeetings)
         window.bringToFront()
         let stop = importStop
-        mediaImportTask = Task { [weak self, mediaImport, transcription] in
-            await stop?.value
-            guard let self else { return }
-            var combined = MediaImportCoordinator.Result()
-            while let batch = imports.nextBatch() {
-                let result = await mediaImport.importFiles(batch) { [weak self] update in
-                    Task { @MainActor [weak self] in self?.showImport(update) }
-                }
-                combined.imported.append(contentsOf: result.imported)
-                combined.duplicates.append(contentsOf: result.duplicates)
-                combined.failures.append(contentsOf: result.failures)
-                combined.cancelled = combined.cancelled || result.cancelled
-                for imported in result.imported {
-                    processingStarted()
-                    await transcription.enqueue(imported.session)
-                    Task { [self, transcription] in
-                        await transcription.waitUntilIdle()
-                        processingFinished()
+        mediaImportTask = Task { [weak self, mediaImport] in
+            do {
+                try await ticket.run { [weak self, mediaImport] in
+                    guard let self else { return }
+                    await withTaskCancellationHandler {
+                        await self.runImportBatches(ticket.id, after: stop, using: mediaImport)
+                    } onCancel: {
+                        Task { @MainActor [weak self] in self?.noteImportCancellation(ticket.id) }
                     }
                 }
-                if result.cancelled { break }
+            } catch {
+                self?.noteImportCancellation(ticket.id)
+                self?.finishImport(.init(cancelled: true))
             }
-            if Task.isCancelled { combined.cancelled = true }
-            finishImport(combined)
+            guard let self, importOperationID == ticket.id else { return }
             mediaImportTask = nil
-            // Files dropped while this run was stopping are a new request,
-            // not part of the one that was cancelled.
+            importOperationID = nil
+            cancelledImportOperationID = nil
+            if !ProcessingOperations.shared.isAccepting { imports.close() }
+            // Files dropped while this run was stopping are a new request.
             if imports.runEnded() {
                 startImportRun()
             } else {
@@ -634,8 +641,44 @@ final class AppController {
         }
     }
 
+    private func runImportBatches(_ id: UUID, after stop: Task<Void, Never>?,
+                                  using mediaImport: MediaImportCoordinator) async {
+        await stop?.value
+        var combined = MediaImportCoordinator.Result()
+        while !Task.isCancelled, let batch = imports.nextBatch() {
+            let result = await mediaImport.importFiles(batch) { [weak self] update in
+                Task { @MainActor [weak self] in self?.showImport(update) }
+            }
+            combined.imported.append(contentsOf: result.imported)
+            combined.duplicates.append(contentsOf: result.duplicates)
+            combined.failures.append(contentsOf: result.failures)
+            combined.cancelled = combined.cancelled || result.cancelled
+            for imported in result.imported {
+                guard !Task.isCancelled else { break }
+                processingStarted()
+                await transcription.enqueue(imported.session)
+                Task { [self, transcription] in
+                    await transcription.waitUntilIdle()
+                    processingFinished()
+                }
+            }
+            if result.cancelled { noteImportCancellation(id); break }
+        }
+        if Task.isCancelled {
+            noteImportCancellation(id)
+            combined.cancelled = true
+        }
+        finishImport(combined)
+    }
+
+    private func noteImportCancellation(_ id: UUID) {
+        guard importOperationID == id, cancelledImportOperationID != id else { return }
+        cancelledImportOperationID = id
+        if ProcessingOperations.shared.isAccepting { imports.cancel() } else { imports.close() }
+    }
+
     func cancelImport() {
-        imports.cancel()
+        if let id = importOperationID { noteImportCancellation(id) } else { imports.cancel() }
         mediaImportTask?.cancel()
         let previous = importStop
         importStop = Task { [mediaImport] in

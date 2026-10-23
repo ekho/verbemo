@@ -251,7 +251,7 @@ final class SharedDownload<Update: Sendable>: @unchecked Sendable {
     private var waiters: [UUID: Waiter] = [:]
     private var consumers: Set<UUID> = []
     private var result: Result<URL, Error>?
-    private var abandoned = false
+    private var abandonedBy: UUID?
     private var latestProgress: Update?
     private var task: Task<Void, Never>?
 
@@ -274,31 +274,39 @@ final class SharedDownload<Update: Sendable>: @unchecked Sendable {
     // Reserve while holding the registry lock, before a task can suspend or cancel.
     func reserve(_ id: UUID) -> Bool {
         lock.withLock {
-            guard !abandoned else { return false }
+            guard abandonedBy == nil else { return false }
             if result == nil { consumers.insert(id) }
             return true
         }
     }
 
     func wait(id: UUID, progress: @escaping @Sendable (Update) -> Void) async throws -> URL {
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                lock.lock()
-                if let result {
-                    lock.unlock()
-                    continuation.resume(with: result)
-                } else if Task.isCancelled {
-                    lock.unlock()
-                    continuation.resume(throwing: CancellationError())
-                } else {
-                    waiters[id] = Waiter(continuation: continuation, progress: progress)
-                    let latest = latestProgress
-                    lock.unlock()
-                    if let latest { progress(latest) }
+        do {
+            let url = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    lock.lock()
+                    if let result {
+                        lock.unlock()
+                        continuation.resume(with: result)
+                    } else if Task.isCancelled {
+                        lock.unlock()
+                        continuation.resume(throwing: CancellationError())
+                    } else {
+                        waiters[id] = Waiter(continuation: continuation, progress: progress)
+                        let latest = latestProgress
+                        lock.unlock()
+                        if let latest { progress(latest) }
+                    }
                 }
+            } onCancel: {
+                leave(id)
             }
-        } onCancel: {
-            leave(id)
+            try Task.checkCancellation()
+            return url
+        } catch {
+            let cleanup = lock.withLock { abandonedBy == id ? task : nil }
+            await cleanup?.value
+            throw error
         }
     }
 
@@ -306,9 +314,9 @@ final class SharedDownload<Update: Sendable>: @unchecked Sendable {
     private func leave(_ id: UUID) {
         lock.lock()
         let waiter = waiters.removeValue(forKey: id)
-        consumers.remove(id)
-        let nobodyLeft = consumers.isEmpty && result == nil
-        if nobodyLeft { abandoned = true }
+        let removed = consumers.remove(id) != nil
+        let nobodyLeft = removed && consumers.isEmpty && result == nil
+        if nobodyLeft { abandonedBy = id }
         let task = nobodyLeft ? self.task : nil
         lock.unlock()
         waiter?.continuation.resume(throwing: CancellationError())

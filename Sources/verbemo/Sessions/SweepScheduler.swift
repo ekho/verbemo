@@ -27,10 +27,13 @@ final class SweepScheduler {
     private var state = State.idle { didSet { onActivityChange?() } }
     private let waitForQueue: () async -> Void
     private let sweep: () async -> Void
+    private let operations: ProcessingOperations
 
-    init(waitForQueue: @escaping () async -> Void, sweep: @escaping () async -> Void) {
+    init(waitForQueue: @escaping () async -> Void, sweep: @escaping () async -> Void,
+         operations: ProcessingOperations = .shared) {
         self.waitForQueue = waitForQueue
         self.sweep = sweep
+        self.operations = operations
     }
 
     /// Whether a sweep is waiting or running.
@@ -47,19 +50,26 @@ final class SweepScheduler {
             state = .sweeping(again: true)
             return
         case .idle:
+            guard let ticket = try? operations.register(session: nil, kind: .sweep) else { return }
             state = .waiting
-            Task { await self.run() }
+            Task {
+                do { try await ticket.run { await self.run() } }
+                catch { self.state = .idle }
+            }
         }
     }
 
     private func run() async {
-        while true {
+        defer { state = .idle }
+        while !Task.isCancelled {
+            operations.stage(.sweep, state: .waiting)
             await waitForQueue()
+            guard !Task.isCancelled else { break }
             state = .sweeping(again: false)
+            operations.stage(.sweep)
             await sweep()
-            guard case .sweeping(again: true) = state else { break }
+            guard !Task.isCancelled, case .sweeping(again: true) = state else { break }
             state = .waiting
         }
-        state = .idle
     }
 }

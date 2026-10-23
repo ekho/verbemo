@@ -117,7 +117,7 @@ struct ConfigBreaksMidJobTests {
 
     @Test("The hook is neither run nor marked while the file is broken, and runs once it is fixed",
           .freshHome)
-    func hookWaitsForTheFile() throws {
+    func hookWaitsForTheFile() async throws {
         let dir = try TestAudio.rawSession()
         defer { try? FileManager.default.removeItem(at: dir) }
         let command = "true"
@@ -125,12 +125,12 @@ struct ConfigBreaksMidJobTests {
         StopHook.owe(dir)
         try Home.current.writeConfig(text: Self.broken)
 
-        #expect(!StopHook.fireIfOwed(dir))
+        #expect(!(await StopHook.fireIfOwed(dir)))
         #expect(SessionState.value(dir, StopHook.key) as? String == StopHook.owed,
                 "the debt was settled while the command could not be read")
 
         try Home.current.writeConfig(["on_stop": command])
-        #expect(StopHook.fireIfOwed(dir))
+        #expect(await StopHook.fireIfOwed(dir))
         #expect(SessionState.value(dir, StopHook.key) as? String == StopHook.fired)
     }
 

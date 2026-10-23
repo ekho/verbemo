@@ -44,6 +44,7 @@ actor MediaImportCoordinator {
     private let root: URL
     private let normalizer: any MediaNormalizing
     private let now: @Sendable () -> Date
+    private let operations: ProcessingOperations
     private var cancellationRequested = false
     private var activeHash: Task<String, Error>?
     private var activeNormalization: Task<Void, Error>?
@@ -51,11 +52,13 @@ actor MediaImportCoordinator {
     init(
         root: URL,
         normalizer: any MediaNormalizing = MediaNormalizer(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        operations: ProcessingOperations = .shared
     ) {
         self.root = root.standardizedFileURL.resolvingSymlinksInPath()
         self.normalizer = normalizer
         self.now = now
+        self.operations = operations
         Self.removeStaleStaging(in: self.root)
     }
 
@@ -77,6 +80,18 @@ actor MediaImportCoordinator {
     func importFiles(
         _ sources: [URL],
         progress: @escaping @Sendable (Update) -> Void = { _ in }
+    ) async -> Result {
+        do {
+            return try await operations.run(kind: .importMedia) {
+                await self.importFilesUntracked(sources, progress: progress)
+            }
+        } catch {
+            return Result(cancelled: true)
+        }
+    }
+
+    private func importFilesUntracked(
+        _ sources: [URL], progress: @escaping @Sendable (Update) -> Void
     ) async -> Result {
         cancellationRequested = false
         var result = Result()
@@ -103,11 +118,16 @@ actor MediaImportCoordinator {
                 result.cancelled = true
                 break
             } catch {
+                if cancellationRequested || Task.isCancelled {
+                    result.cancelled = true
+                    break
+                }
                 result.failures.append(Failure(source: source, message: "\(error)"))
             }
         }
         activeNormalization = nil
         activeHash = nil
+        if cancellationRequested || Task.isCancelled { result.cancelled = true }
         return result
     }
 
@@ -137,7 +157,11 @@ actor MediaImportCoordinator {
         try checkCancellation()
         let hashing = Task { try await Self.sha256(of: source) }
         activeHash = hashing
-        let digest = try await hashing.value
+        let digest = try await withTaskCancellationHandler {
+            try await hashing.value
+        } onCancel: {
+            hashing.cancel()
+        }
         activeHash = nil
         try checkCancellation()
         if let existing = existingSession(with: digest, bytes: probe.sourceBytes) {
@@ -162,7 +186,11 @@ actor MediaImportCoordinator {
         }
         activeNormalization = task
         defer { activeNormalization = nil }
-        try await task.value
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
         try checkCancellation()
 
         let importedAt = now()

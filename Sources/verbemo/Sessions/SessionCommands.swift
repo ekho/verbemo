@@ -223,7 +223,7 @@ struct ProcessSession: ParsableCommand {
 
         case .finish:
             let result = try runBlocking { await PostProcessor.finishManually(dir) }
-            StopHook.fireIfOwed(dir)
+            _ = try runBlocking { await StopHook.fireIfOwed(dir) }
             print("\n" + result.description)
             if !result.succeeded { throw ExitCode(1) }
 
