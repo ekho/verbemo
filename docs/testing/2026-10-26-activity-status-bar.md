@@ -54,3 +54,9 @@ Integration review identified and resolved two Windows import status/error cases
 On the actual Windows VM, the added regressions first reproduced three failures (cancel, missing file, incompatible refusal exception). With the fix, the focused suite passed **27/27** and the full Release solution passed **159 Core + 139 Live/WPF = 298 tests**, no failures or skips. The verified Windows source archive has SHA-256 `2abbcc6f68d349e4a808acf3b27596e5a3b313d78d32136239dc5318e5498fe2` (rebased source plus the two import-fix files). Evidence is retained under `.build/statusbar-qa/windows-evidence/integration/`.
 
 This integration pass found the VM already running and preserved that state. It used the existing task SDK/cache offline, without network, ACL or certificate changes. GUI acceptance was not repeated; the limitations above remain.
+
+### Concurrent master update and CI test repair
+
+During PR CI, master advanced to `260698b` (0.13.0, PR #53). Its existing Windows regression-test fix addresses the same failure observed in CI run `40372147833`: changing runtime settings after window creation could queue a library refresh that cleared the test's injected selection, preventing the intended summary operation. The upstream test configures settings before constructing the window and asserts the provider call; no assertion was removed or timeout increased.
+
+Master was merged into the published feature branch without rewriting it, carrying that repair and the multiple-calendar-email feature. Subsequent native integration results and the final-revision CI/merge state are recorded on [PR #55](https://github.com/ekho/verbemo/pull/55).
