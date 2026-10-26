@@ -227,27 +227,39 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         // Copied under a hidden name and renamed once whole, so a rescan never
         // picks up half a file.
         var staging = Path.Combine(root, "." + Path.GetFileName(directory));
-        using (TryReserveIdleSession(directory) ?? throw new InvalidOperationException(T("This file is already being imported.", "Этот файл уже импортируется.")))
+        using (var reservation = TryReserveIdleSession(directory) ?? throw new IOException(T("This file is already being imported.", "Этот файл уже импортируется.")))
         {
-            Publish(directory, "importing", T("Importing audio…", "Импортирую аудио…"), true);
-            Directory.CreateDirectory(staging);
-            var destination = Path.Combine(staging, "source" + Path.GetExtension(source).ToLowerInvariant());
-            await using (var input = File.OpenRead(source))
-            await using (var output = File.Create(destination))
-                await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
-            var duration = AudioPreprocessor.DurationSeconds(destination);
-            await AtomicFiles.WriteJsonAsync(Path.Combine(staging, "meta.json"), new
+            try
             {
-                started,
-                ended = started.AddSeconds(duration),
-                duration_seconds = duration,
-                title,
-                trigger = "import",
-                stop_reason = "imported",
-                platform = "windows",
-                files = new { source = Path.GetFileName(destination) },
-            }, cancellationToken).ConfigureAwait(false);
-            Directory.Move(staging, directory);
+                Publish(directory, "importing", T("Importing audio…", "Импортирую аудио…"), true);
+                Directory.CreateDirectory(staging);
+                var destination = Path.Combine(staging, "source" + Path.GetExtension(source).ToLowerInvariant());
+                await using (var input = File.OpenRead(source))
+                await using (var output = File.Create(destination))
+                    await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+                var duration = AudioPreprocessor.DurationSeconds(destination);
+                await AtomicFiles.WriteJsonAsync(Path.Combine(staging, "meta.json"), new
+                {
+                    started,
+                    ended = started.AddSeconds(duration),
+                    duration_seconds = duration,
+                    title,
+                    trigger = "import",
+                    stop_reason = "imported",
+                    platform = "windows",
+                    files = new { source = Path.GetFileName(destination) },
+                }, cancellationToken).ConfigureAwait(false);
+                Directory.Move(staging, directory);
+            }
+            catch (Exception error)
+            {
+                var cancelled = error is OperationCanceledException;
+                var terminal = new ProcessingStatus(directory, cancelled ? "idle" : "failed", cancelled ? "" : error.Message, false);
+                lock (queueLock) { statuses[directory] = terminal; reservation.Dispose(); }
+                StatusChanged?.Invoke(this, terminal);
+                SessionsChanged?.Invoke(this, EventArgs.Empty);
+                throw;
+            }
         }
         Enqueue(directory);
         SessionsChanged?.Invoke(this, EventArgs.Empty);

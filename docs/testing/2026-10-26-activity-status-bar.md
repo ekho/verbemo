@@ -1,6 +1,6 @@
 # Activity status bar verification — 2026-10-26
 
-Implementation commit: `01be51e` on `codex/activity-status-bar`.
+PR: [#55](https://github.com/ekho/verbemo/pull/55), branch `codex/activity-status-bar`. Initial local verification below predates integration onto master 0.12.1; refreshed integration evidence is recorded at the end.
 
 Scope: native persistent status bars in AppKit and WPF. Both project existing recording, automatic-recording, permission, processing and audio-meter state; neither owns a second scheduler. The sidebar automatic-recording control moves to the bottom bar. Existing recording controls remain available.
 
@@ -44,3 +44,13 @@ Temporary VM networking used shared networking and guest DHCP for SDK/NuGet prep
 ## Limits
 
 No real microphone/system capture, permission grants or revocations, live call, external recognition provider, screen-reader session, signing/notarization, installer, release or deployment was exercised. Tests of recording and capture-loss presentation use synthetic inputs. macOS system-audio readiness remains based on the existing dated tone-test evidence because the OS does not provide a direct query for that permission; the tooltip explains this limitation.
+
+## Integration before PR merge
+
+The branch was rebased onto `f9839cb` (master, 0.12.1), retaining the participant-assignment workspace from PR #51 and the tray resume icon from PR #52. Independent source review found no regression in these overlaps. The updated macOS tree passed `swift test --no-parallel`: **1193 tests in 173 suites**, 147.152 seconds, with 29 opt-in skip messages; log `/tmp/verbemo-status-mac-integration.log`.
+
+Integration review identified and resolved two Windows import status/error cases: repeated import reservation refusal now follows the UI's handled I/O error contract, and cancellation/failure publishes a terminal status after ownership is released so existing status consumers clear the import message. A repeated import cannot clear the existing owner's status. Independent follow-up source review confirmed both corrections without additional findings.
+
+On the actual Windows VM, the added regressions first reproduced three failures (cancel, missing file, incompatible refusal exception). With the fix, the focused suite passed **27/27** and the full Release solution passed **159 Core + 139 Live/WPF = 298 tests**, no failures or skips. The verified Windows source archive has SHA-256 `2abbcc6f68d349e4a808acf3b27596e5a3b313d78d32136239dc5318e5498fe2` (rebased source plus the two import-fix files). Evidence is retained under `.build/statusbar-qa/windows-evidence/integration/`.
+
+This integration pass found the VM already running and preserved that state. It used the existing task SDK/cache offline, without network, ACL or certificate changes. GUI acceptance was not repeated; the limitations above remain.

@@ -180,8 +180,10 @@ public sealed class ActivityStatusBarTests
             using (var audio = new NAudio.Wave.WaveFileWriter(source, new NAudio.Wave.WaveFormat(16000, 16, 1)))
                 audio.Write(new byte[32000], 0, 32000);
         ProcessingActivity? duringImport = null;
+        var events = new List<(ProcessingStatus Status, bool Owned)>();
         fixture.Processor.StatusChanged += (_, status) =>
         {
+            events.Add((status, fixture.Processor.StatusFor(status.SessionDirectory!)?.IsBusy == true));
             if (status.Stage == "importing") duringImport = fixture.Processor.Activity;
         };
         using var cancellation = new CancellationTokenSource();
@@ -194,7 +196,39 @@ public sealed class ActivityStatusBarTests
         Assert.Equal(0, duringImport.Waiting);
         Assert.Empty(fixture.Processor.Activity.Running);
         Assert.Equal(outcome == "success" ? 1 : 0, fixture.Processor.Activity.Waiting);
+        if (outcome != "success")
+        {
+            var terminal = events.Last();
+            Assert.False(terminal.Status.IsBusy);
+            Assert.False(terminal.Owned);
+            Assert.Equal(outcome == "cancel" ? "idle" : "failed", terminal.Status.Stage);
+        }
         if (outcome != "missing") Assert.True(File.Exists(source));
+    }
+
+    [Fact]
+    public async Task Import_reservation_refusal_uses_the_UI_error_contract_without_clearing_its_owner()
+    {
+        await using var fixture = await SummaryRegenerationTests.Fixture.Create();
+        fixture.Settings.RecordingsDirectory = Path.Combine(fixture.Directory, "imports");
+        var source = Path.Combine(fixture.Directory, "incoming.wav");
+        using (var audio = new NAudio.Wave.WaveFileWriter(source, new NAudio.Wave.WaveFormat(16000, 16, 1)))
+            audio.Write(new byte[32000], 0, 32000);
+        Exception? refusal = null;
+        ProcessingStatus? ownerAfterRefusal = null;
+        var events = new List<ProcessingStatus>();
+        fixture.Processor.StatusChanged += (_, status) =>
+        {
+            events.Add(status);
+            if (status.Stage != "importing") return;
+            refusal = Record.ExceptionAsync(() => fixture.Processor.ImportAsync(source)).GetAwaiter().GetResult();
+            ownerAfterRefusal = fixture.Processor.StatusFor(status.SessionDirectory!);
+        };
+        await fixture.Processor.ImportAsync(source);
+        Assert.IsAssignableFrom<IOException>(refusal);
+        Assert.Equal("importing", ownerAfterRefusal?.Stage);
+        Assert.True(ownerAfterRefusal?.IsBusy);
+        Assert.DoesNotContain(events, status => !status.IsBusy);
     }
 
     [Fact]
