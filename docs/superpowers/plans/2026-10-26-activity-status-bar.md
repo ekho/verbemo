@@ -44,6 +44,6 @@ Files: `windows/src/Verbemo.App/ApplicationWindow.cs`, `VerbemoRuntime.cs`, `Pro
 
 - [x] Review both diffs against the shared spec, including the five review-focus cases.
 - [x] Fix material defects and rerun affected checks.
-- [ ] Record exact results and limits in `docs/testing/2026-10-26-activity-status-bar.md`.
+- [x] Record exact results and limits in `docs/testing/2026-10-26-activity-status-bar.md`.
 
 Execution decision: proceed under the user's explicit “делай для обеих платформ”; no additional approval gate. Independent platform sources may be edited in parallel; the parent owns docs and macOS, the Windows worker owns `windows/`.
