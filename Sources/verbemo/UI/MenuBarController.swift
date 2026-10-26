@@ -319,7 +319,7 @@ private final class RecordingMenuRow: NSView {
         let paused = state == .paused
         let pauseTitle = paused ? localised("Resume recording", "Продолжить запись")
             : localised("Pause recording", "Приостановить запись")
-        pause.image = NSImage(systemSymbolName: paused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+        pause.image = NSImage(systemSymbolName: paused ? "record.circle" : "pause.fill", accessibilityDescription: nil)
         pause.setAccessibilityLabel(pauseTitle)
         pause.toolTip = pauseTitle + " (⌘P)"
     }
