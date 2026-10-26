@@ -31,6 +31,7 @@ struct ActivityAccess {
     var calendar: SetupPermissions.State?
     var micActivity = true
     var autoCalendar = false
+    var hasSelectedCalendar = true
 
     var denied: Bool {
         if microphone == .denied || calendar == .denied { return true }
@@ -42,7 +43,11 @@ struct ActivityAccess {
         if microphone != .granted { return localised("Microphone access needed", "Нужен доступ к микрофону") }
         if !micActivity && !autoCalendar { return localised("Enable microphone or calendar triggering", "Включите запуск по микрофону или календарю") }
         if !micActivity && calendar != .granted { return localised("Calendar access needed", "Нужен доступ к календарю") }
+        if !micActivity && !hasSelectedCalendar { return localised("Choose a calendar", "Выберите календарь") }
         return nil
+    }
+    var automaticDestination: ApplicationNavigationState.Destination {
+        microphone == .granted && !micActivity && autoCalendar && automaticBlockReason != nil ? .calendar : .recording
     }
     var title: String { localised("Access: ", "Доступ: ") + (ready ? "✓" : denied ? "!" : "?") }
     var destination: ApplicationNavigationState.Destination {
@@ -87,6 +92,7 @@ final class ActivityStatusBar: NSStackView {
     private var levelTimer: Timer?
     private var currentSession: URL?
     private var accessDestination = ApplicationNavigationState.Destination.recording
+    private var automaticDestination = ApplicationNavigationState.Destination.recording
     private var recordingState = MenuBarController.State.idle
     private var warningDetail: String?
     private var attentionCount = 0
@@ -164,6 +170,7 @@ final class ActivityStatusBar: NSStackView {
         access.setAccessibilityLabel(state.title + "\n" + state.detail)
         access.contentTintColor = state.denied ? .systemOrange : JournalStyle.muted
         accessDestination = state.destination
+        automaticDestination = state.automaticDestination
     }
 
     func updateRecording(_ state: MenuBarController.State, elapsed: String?) {
@@ -256,7 +263,7 @@ final class ActivityStatusBar: NSStackView {
         refreshWarning()
     }
     @objc private func automaticClicked() { onToggleAutomatic?() }
-    @objc private func automaticDetails() { onAccess?(.recording) }
+    @objc private func automaticDetails() { onAccess?(automaticDestination) }
     @objc private func accessClicked() { onAccess?(accessDestination) }
     @objc private func recordingClicked() { onRecording?() }
     @objc private func queueClicked() { onQueue?() }

@@ -810,7 +810,8 @@ final class AppController {
             systemAudio: SetupPermissions.rememberedSystemAudio(heardAt: SetupState.systemAudioHeardAt()),
             calendar: Config.useCalendar() || automatic.calendar
                 ? (calendarPermission == .notAsked && calendar.authorized ? .granted : calendarPermission) : nil,
-            micActivity: automatic.micActivity, autoCalendar: automatic.calendar)
+            micActivity: automatic.micActivity, autoCalendar: automatic.calendar,
+            hasSelectedCalendar: !automatic.calendar || automatic.micActivity || !calendar.selectedCalendars().isEmpty)
         let decision = autoRecord.enabled ? access.automaticBlockReason ?? autoRecord.notice?.title ?? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision,

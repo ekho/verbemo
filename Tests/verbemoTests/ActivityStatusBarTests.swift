@@ -92,6 +92,49 @@ struct ActivityStatusBarTests {
     }
 
     @Test(.freshHome, .speaking(.russian))
+    func selectedCalendarReadinessHandlesEmptyAndUnavailableSelectionsWithoutReadingEvents() {
+        let store = CalendarFixtureStore()
+        let work = store.addCalendar("Work")
+        let watcher = CalendarWatcher(store: store, authorizationStatus: { .fullAccess })
+        #expect(watcher.selectedCalendars().count == 1, "No explicit selection uses all calendars")
+        for selection in [[], ["missing"], [work.calendarIdentifier]] {
+            Config.update(path: ["calendar_ids"], value: selection)
+            let access = ActivityAccess(microphone: .granted, systemAudio: .heard, calendar: .granted,
+                micActivity: false, autoCalendar: true, hasSelectedCalendar: !watcher.selectedCalendars().isEmpty)
+            #expect((access.automaticBlockReason == nil) == (selection == [work.calendarIdentifier]))
+        }
+        store.calendarList = []
+        #expect(watcher.selectedCalendars().isEmpty, "A selected calendar can disappear after synchronization")
+        #expect(store.accessRequests == 0)
+        #expect(store.queryCount == 0, "Readiness depends on calendars, not whether an event is scheduled")
+    }
+
+    @Test(.freshHome, .speaking(.russian))
+    func calendarOnlyReadinessRequiresASelectedCalendarAndOpensItsSettings() throws {
+        var access = ActivityAccess(microphone: .granted, systemAudio: .heard, calendar: .granted,
+            micActivity: false, autoCalendar: true, hasSelectedCalendar: false)
+        #expect(access.ready, "Calendar selection is separate from permission")
+        #expect(access.automaticBlockReason == "Выберите календарь")
+        let bar = ActivityStatusBar()
+        var destination: ApplicationNavigationState.Destination?
+        bar.onAccess = { destination = $0 }
+        bar.updateAccess(access)
+        bar.updateAutomatic(true, reason: access.automaticBlockReason, blocked: access.automaticBlockReason != nil)
+        let automatic = try #require(bar.allDescendants.first { $0.identifier?.rawValue == "activity.automatic" } as? NSButton)
+        #expect(automatic.title.contains("!"))
+        #expect(NSApp.sendAction(try #require(automatic.action), to: automatic.target, from: automatic))
+        #expect(destination == .calendar)
+        access.hasSelectedCalendar = true
+        #expect(access.automaticBlockReason == nil)
+        access.hasSelectedCalendar = false
+        access.micActivity = true
+        #expect(access.automaticBlockReason == nil, "Microphone triggering remains usable with no selected calendars")
+        bar.updateAccess(access)
+        #expect(NSApp.sendAction(try #require(automatic.action), to: automatic.target, from: automatic))
+        #expect(destination == .recording)
+    }
+
+    @Test(.freshHome, .speaking(.russian))
     func countsRealWorkAndRetainsCancellationUntilCleanup() async throws {
         let operations = ProcessingOperations()
         let entered = Gate(), release = Gate()
