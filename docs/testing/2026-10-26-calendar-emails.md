@@ -50,6 +50,13 @@ References: [Apple: isCurrentUser](https://developer.apple.com/documentation/eve
   and exposed accessibility controls. The installed app/profile was not replaced.
 - Read-only review identified the System Settings authorization gap; it was
   corrected before the final focused run.
+- The first PR CI run exposed an existing Windows summary UI test race. A
+  diagnostic run on the Windows VM confirmed that a settings-triggered reload
+  cleared the synthetic meeting selection before the model was called. The
+  fixture now configures summary settings before creating the window, preserving
+  the error-display and old-summary assertions without changing product code.
+  All **124 Live tests passed in five consecutive full runs** after the fix.
+  Log: `/tmp/verbemo-live-ci-fix.log`.
 
 ## Limits
 
