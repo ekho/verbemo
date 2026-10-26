@@ -5,13 +5,13 @@ final class AudioLevelView: NSStackView {
     let meter = NSLevelIndicator()
     private let status = NSTextField(labelWithString: "")
 
-    init(title: String, source: String) {
+    init(title: String, source: String, compact: Bool = false) {
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
-        spacing = 5
+        spacing = compact ? 0 : 5
         let label = NSTextField(labelWithString: title)
-        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.font = .systemFont(ofSize: compact ? 9 : 12, weight: .medium)
         label.textColor = JournalStyle.ink
         meter.levelIndicatorStyle = .continuousCapacity
         meter.minValue = 0
@@ -33,7 +33,8 @@ final class AudioLevelView: NSStackView {
             addArrangedSubview(view)
             view.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
         }
-        meter.heightAnchor.constraint(equalToConstant: 12).isActive = true
+        status.isHidden = compact
+        meter.heightAnchor.constraint(equalToConstant: compact ? 5 : 12).isActive = true
         update(.off)
     }
 

@@ -687,9 +687,9 @@ internal sealed class SetupForm
                 MicrophoneAccess.State.Allowed => T("allowed", "разрешено"),
                 MicrophoneAccess.State.DeniedForDesktopApps => T("off for desktop apps", "выключено для классических приложений"),
                 MicrophoneAccess.State.DeniedForEveryone => T("off", "выключено"),
-                _ => "",
+                _ => T("not verified", "не проверено"),
             };
-            micStatus.SetResourceReference(TextBlock.ForegroundProperty, mic is MicrophoneAccess.State.Allowed or MicrophoneAccess.State.Unknown ? Ui.Good : Ui.Critical);
+            micStatus.SetResourceReference(TextBlock.ForegroundProperty, mic == MicrophoneAccess.State.Allowed ? Ui.Good : mic == MicrophoneAccess.State.Unknown ? Ui.Secondary : Ui.Critical);
             micSettings.Visibility = mic is MicrophoneAccess.State.Allowed ? Visibility.Collapsed : Visibility.Visible;
 
             var choice = SetupChoice.Read(settings.Transcription.Enabled, settings.Transcription.Engine, settings.Transcription.Cloud, settings.Transcription.LocalEngine);

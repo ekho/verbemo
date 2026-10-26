@@ -86,6 +86,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
         coordinator.StateChanged += (_, state) =>
         {
+            if (!state.IsRecording) RecordingWarning = null;
             StateChanged?.Invoke(this, state);
             SessionsChanged?.Invoke(this,EventArgs.Empty);
             if (state.IsRecording)
@@ -134,14 +135,16 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         };
         models.DownloadFailed += (_, item) => _ = analytics.RecordAsync("model_download_failed", new Dictionary<string, object?> { ["asset"] = AnalyticsAsset(item), ["reason"] = "unknown" });
         liveTranscription.LineReady += (_, line) => LiveLineReady?.Invoke(this, line);
-        capture.TrackLost += (_, track) => Notify(
-            T("A recording device went away", "Устройство записи пропало"),
-            track == "mic"
+        capture.TrackLost += (_, track) =>
+        {
+            var message = track == "mic"
                 ? T("The microphone stopped delivering sound; the recording goes on with the call audio.",
                     "Микрофон перестал давать звук; запись продолжается со звуком звонка.")
                 : T("The call audio stopped; the recording goes on with the microphone. Start a new recording to pick up the new device.",
-                    "Звук звонка пропал; запись продолжается с микрофоном. Чтобы подхватить новое устройство, начните запись заново."),
-            NotificationKind.Warning);
+                    "Звук звонка пропал; запись продолжается с микрофоном. Чтобы подхватить новое устройство, начните запись заново.");
+            RecordingWarning = State.IsRecording ? message : null;
+            Notify(T("A recording device went away", "Устройство записи пропало"), message, NotificationKind.Warning);
+        };
         liveTranscription.StatusChanged += (_, status) => LiveStatusChanged?.Invoke(this, status);
 
         try
@@ -191,6 +194,16 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     public RecordingState State => coordinator.State;
     public AutoRecordPolicy AutoRecord => coordinator.Policy;
     public bool IsProcessing => processing.IsBusy;
+    internal ProcessingActivity ProcessingActivity
+    {
+        get
+        {
+            var activity = processing.Activity;
+            return activity with { Running = activity.Running.Where(job => job.SessionDirectory is not { } directory || !Deletions.IsPending(directory)).ToArray() };
+        }
+    }
+    internal string? RecordingWarning { get; private set; }
+    internal string? AutoRecordWarning { get; private set; }
     public string LiveStatus => liveTranscription.Status;
     public LanguageModels LanguageModels => processing.LanguageModels;
     public HttpClient Http => httpClient;
@@ -442,11 +455,13 @@ public sealed class VerbemoRuntime : IAsyncDisposable
                     var observation = activityMonitor.Observe(now);
                     await coordinator.ObserveAsync(observation, cancellationToken);
                     monitorFailing = false;
+                    AutoRecordWarning = null;
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
                     if (monitorFailing) continue;
                     monitorFailing = true;
+                    AutoRecordWarning = exception.Message;
                     Notify(T("Can't see which app uses the microphone", "Не вижу, какое приложение занимает микрофон"),
                         exception.Message, NotificationKind.Warning);
                 }

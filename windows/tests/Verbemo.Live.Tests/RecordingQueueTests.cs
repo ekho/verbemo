@@ -48,6 +48,34 @@ public sealed class RecordingQueueTests
     }
 
     [Fact]
+    public async Task Activity_counts_worker_ownership_through_terminal_events_and_clears_after_cleanup()
+    {
+        await using var fixture = await QueueFixture.CreateAsync();
+        fixture.Processor.Enqueue(fixture.First);
+        fixture.Processor.Enqueue(fixture.First);
+        fixture.Processor.Enqueue(fixture.Second);
+        Assert.Empty(fixture.Processor.Activity.Running);
+        Assert.Equal(2, fixture.Processor.Activity.Waiting);
+        var terminal = new TaskCompletionSource<ProcessingActivity>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Processor.StatusChanged += (_, status) =>
+        {
+            if (status.SessionDirectory == fixture.First && status.Stage == "complete") terminal.TrySetResult(fixture.Processor.Activity);
+        };
+        fixture.Processor.SessionsChanged += (_, _) => { if (!fixture.Processor.IsBusy) drained.TrySetResult(); };
+        fixture.Processor.Start();
+        await fixture.Engine.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("transcribing", Assert.Single(fixture.Processor.Activity.Running).Stage);
+        Assert.Equal(1, fixture.Processor.Activity.Waiting);
+        fixture.Engine.Release.TrySetResult();
+        var finishing = await terminal.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("finishing", Assert.Single(finishing.Running).Stage);
+        await drained.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Empty(fixture.Processor.Activity.Running);
+        Assert.Equal(0, fixture.Processor.Activity.Waiting);
+    }
+
+    [Fact]
     public async Task Finishing_the_active_session_does_not_reset_its_files()
     {
         await using var fixture = await QueueFixture.CreateAsync();

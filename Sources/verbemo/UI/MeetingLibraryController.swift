@@ -701,6 +701,17 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
 
     func refresh() { reload() }
 
+    func activityTitle(for dir: URL) -> String {
+        activityTitles[dir] ?? dir.lastPathComponent
+    }
+    private var activityTitles: [URL: String] = [:]
+    var attentionCount: Int {
+        allItems.filter { item in
+            !deletion.isPending(item.dir) && (item.unreadableDiarization || item.diarization?.status == .failed
+                || [item.transcript, item.speakers, item.summary].contains { if case .failed = $0 { true } else { false } })
+        }.count + (activeRecording?.needsAttention == true ? 1 : 0)
+    }
+
     /// A status-menu link must select its meeting even with a search/filter active.
     func reveal(_ dir: URL) async -> Bool {
         applyFilter(.allMeetings, clearSearch: true)
@@ -718,6 +729,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         defer { reloadingList = false }
         let previous = selected?.dir ?? rememberedMeeting
         allItems = found.filter { $0.dir != activeRecording?.dir }
+        activityTitles = Dictionary(allItems.map { ($0.dir.standardizedFileURL.resolvingSymlinksInPath(), $0.title ?? $0.name) }, uniquingKeysWith: { first, _ in first })
         let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
         items = inventory.filter { !deletion.isPending($0.dir) && MeetingPresentation.matches($0, filter: meetingFilter, query: search.stringValue, active: activeRecording) }
         emptyView.isHidden = !items.isEmpty

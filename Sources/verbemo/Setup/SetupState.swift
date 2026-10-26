@@ -75,6 +75,11 @@ enum SetupState {
         write(["system_audio_heard_at": ISO8601DateFormatter().string(from: now)], at: stateURL)
     }
 
+    static func rememberSystemAudioTest(_ result: SetupPermissions.SystemAudioResult, at stateURL: URL = path) {
+        if result == .heard { rememberSystemAudioHeard(at: stateURL) }
+        else { write(["system_audio_heard_at": NSNull()], at: stateURL) }
+    }
+
     static func systemAudioHeardAt(at stateURL: URL = path) -> Date? {
         guard
             let data = try? Data(contentsOf: stateURL),

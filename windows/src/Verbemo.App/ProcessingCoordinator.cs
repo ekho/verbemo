@@ -13,6 +13,7 @@ using static Verbemo.Core.Localization.Localized;
 namespace Verbemo.App;
 
 public sealed record ProcessingStatus(string? SessionDirectory, string Stage, string Message, bool IsBusy);
+internal sealed record ProcessingActivity(IReadOnlyList<ProcessingStatus> Running, int Waiting);
 
 /// <summary>What one session's processing has cost so far, kept in its processing.json.</summary>
 public sealed record ProcessingLedger(
@@ -88,12 +89,31 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
         lock (queueLock)
         {
-            if (preparing.Contains(directory))
-                return new(directory, "preparing", T("Preparing processing…", "Подготавливаю обработку…"), true);
+            if (preparing.Contains(directory)) return RunningStatus(directory);
             return statuses.GetValueOrDefault(directory) is { } status
                 ? status with { IsBusy = queued.Contains(directory) } : null;
         }
     }
+
+    internal ProcessingActivity Activity
+    {
+        get
+        {
+            lock (queueLock)
+            {
+                var running = preparing.Order(StringComparer.OrdinalIgnoreCase).Select(RunningStatus).ToList();
+                if (current is not null) running.Insert(0, RunningStatus(current));
+                return new(running, queued.Count - (current is null ? 0 : 1));
+            }
+        }
+    }
+
+    private static ProcessingStatus PreparingStatus(string directory) =>
+        new(directory, "preparing", T("Preparing processing…", "Подготавливаю обработку…"), true);
+
+    // Ownership lasts until cleanup finishes, even after a completion/failure event.
+    private ProcessingStatus RunningStatus(string directory) => statuses.GetValueOrDefault(directory) is { IsBusy: true } status
+        ? status : new(directory, "finishing", T("Finishing processing…", "Завершаю обработку…"), true);
 
     /// <summary>Reserve this session while an action changes its files; other sessions can still queue.</summary>
     internal bool TryUseIdleSession(string directory, Action action)
@@ -110,6 +130,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         lock (queueLock)
         {
             if (queued.Contains(directory) || !preparing.Add(directory)) return null;
+            statuses[directory] = PreparingStatus(directory);
         }
         return new Reservation(() => { lock(queueLock) preparing.Remove(directory); });
     }
@@ -206,24 +227,40 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         // Copied under a hidden name and renamed once whole, so a rescan never
         // picks up half a file.
         var staging = Path.Combine(root, "." + Path.GetFileName(directory));
-        Directory.CreateDirectory(staging);
-        var destination = Path.Combine(staging, "source" + Path.GetExtension(source).ToLowerInvariant());
-        await using (var input = File.OpenRead(source))
-        await using (var output = File.Create(destination))
-            await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
-        var duration = AudioPreprocessor.DurationSeconds(destination);
-        await AtomicFiles.WriteJsonAsync(Path.Combine(staging, "meta.json"), new
+        using (var reservation = TryReserveIdleSession(directory) ?? throw new IOException(T("This file is already being imported.", "Этот файл уже импортируется.")))
         {
-            started,
-            ended = started.AddSeconds(duration),
-            duration_seconds = duration,
-            title,
-            trigger = "import",
-            stop_reason = "imported",
-            platform = "windows",
-            files = new { source = Path.GetFileName(destination) },
-        }, cancellationToken).ConfigureAwait(false);
-        Directory.Move(staging, directory);
+            try
+            {
+                Publish(directory, "importing", T("Importing audio…", "Импортирую аудио…"), true);
+                Directory.CreateDirectory(staging);
+                var destination = Path.Combine(staging, "source" + Path.GetExtension(source).ToLowerInvariant());
+                await using (var input = File.OpenRead(source))
+                await using (var output = File.Create(destination))
+                    await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+                var duration = AudioPreprocessor.DurationSeconds(destination);
+                await AtomicFiles.WriteJsonAsync(Path.Combine(staging, "meta.json"), new
+                {
+                    started,
+                    ended = started.AddSeconds(duration),
+                    duration_seconds = duration,
+                    title,
+                    trigger = "import",
+                    stop_reason = "imported",
+                    platform = "windows",
+                    files = new { source = Path.GetFileName(destination) },
+                }, cancellationToken).ConfigureAwait(false);
+                Directory.Move(staging, directory);
+            }
+            catch (Exception error)
+            {
+                var cancelled = error is OperationCanceledException;
+                var terminal = new ProcessingStatus(directory, cancelled ? "idle" : "failed", cancelled ? "" : error.Message, false);
+                lock (queueLock) { statuses[directory] = terminal; reservation.Dispose(); }
+                StatusChanged?.Invoke(this, terminal);
+                SessionsChanged?.Invoke(this, EventArgs.Empty);
+                throw;
+            }
+        }
         Enqueue(directory);
         SessionsChanged?.Invoke(this, EventArgs.Empty);
         return directory;
@@ -262,6 +299,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
                 throw new InvalidOperationException(T(
                     "This recording is being processed right now; try again when it finishes.",
                     "Эта запись сейчас обрабатывается — попробуйте, когда закончится."));
+            statuses[directory] = PreparingStatus(directory);
         }
         try
         {
@@ -296,6 +334,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         {
             if (queued.Contains(root) || !preparing.Add(root))
                 throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
+            statuses[root] = PreparingStatus(root);
         }
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime.Token);
         try
@@ -318,8 +357,10 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         }
         finally
         {
-            lock (queueLock) preparing.Remove(root);
-            Publish(root, "idle", "", false);
+            var idle = new ProcessingStatus(root, "idle", "", false);
+            lock (queueLock) { statuses[root] = idle; preparing.Remove(root); }
+            StatusChanged?.Invoke(this, idle);
+            SessionsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -418,7 +459,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         {
             await foreach (var directory in queue.Reader.ReadAllAsync(cancellationToken))
             {
-                lock (queueLock) current = directory;
+                lock (queueLock) { current = directory; statuses[directory] = PreparingStatus(directory); }
                 try
                 {
                     await ProcessAsync(directory, cancellationToken).ConfigureAwait(false);
@@ -926,7 +967,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
     private void Publish(string directory, string stage, string message, bool busy)
     {
         var status = new ProcessingStatus(directory, stage, message, busy);
-        statuses[directory] = status;
+        lock (queueLock) statuses[directory] = status;
         StatusChanged?.Invoke(this, status);
         SessionsChanged?.Invoke(this, EventArgs.Empty);
     }
