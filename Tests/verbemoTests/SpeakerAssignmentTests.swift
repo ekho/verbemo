@@ -87,6 +87,25 @@ struct SpeakerAssignmentTests {
         }
     }
 
+    @Test(.freshHome(config: #"{"user_email":["personal@example.test"," WORK@example.test ","work@example.test"]}"#))
+    func anyConfiguredEmailCanIdentifyTheOwnerWithoutGuessingBetweenMatches() throws {
+        for email in ["personal@example.test", "work@example.test"] {
+            let dir = try SessionFixture.make(meta: ["calendar": [
+                "event_id": "event", "association": "confirmed", "participants": [
+                    ["id": "owner", "name": "Calendar name", "email": email],
+                ],
+            ]])
+            #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.participantID == "owner")
+        }
+        let ambiguous = try SessionFixture.make(meta: ["calendar": [
+            "event_id": "event", "association": "confirmed", "participants": [
+                ["id": "personal", "name": "Personal", "email": "personal@example.test"],
+                ["id": "work", "name": "Work", "email": "work@example.test"],
+            ],
+        ]])
+        #expect(SpeakerNames.read(from: ambiguous)?.speakers["me"]?.participantID == nil)
+    }
+
     @Test func editableChoiceSavesTheSelectedIdentityAndFreeTextOnce() throws {
         let participants = [CalendarParticipant(id: "one", name: "Alex", email: "one@example.test"),
                             CalendarParticipant(id: "two", name: "Alex", email: "two@example.test")]

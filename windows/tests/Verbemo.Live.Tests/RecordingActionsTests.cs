@@ -58,12 +58,13 @@ public sealed class RecordingActionsTests
     internal static T Field<T>(object window, string name) =>
         (T)window.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
 
-    internal static void WithWindow(Action<RecordingsWindow, string> test)
+    internal static void WithWindow(Action<RecordingsWindow, string> test, Action<AppSettings>? configure = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "verbemo-actions-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var settings = AppSettings.CreateConservative(root);
         settings.RecordingsDirectory = Path.Combine(root, "recordings");
+        configure?.Invoke(settings);
         File.WriteAllText(Path.Combine(root, "config.json"), System.Text.Json.JsonSerializer.Serialize(settings, AppSettings.JsonOptions));
         var store = new AppSettingsStore(Path.Combine(root, "config.json"), root);
         var runtime = (VerbemoRuntime)typeof(VerbemoRuntime).GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance).Single()
