@@ -68,9 +68,14 @@ enum SetupPermissions {
     /// it is launched again. The request's own answer is the only fresh one
     /// there is, which is what `CalendarWatcher` has always relied on.
     static func requestCalendar() async -> State {
+        if calendar() == .granted {
+            CalendarEmailDiscovery.afterFirstGrant(in: EKEventStore())
+            return .granted
+        }
         guard calendar() == .notAsked else { return calendar() }
         let store = EKEventStore()
         let granted = (try? await store.requestFullAccessToEvents()) ?? false
+        if granted { CalendarEmailDiscovery.afterFirstGrant(in: store) }
         return granted ? .granted : calendar()
     }
 

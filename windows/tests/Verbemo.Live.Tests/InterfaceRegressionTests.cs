@@ -88,9 +88,6 @@ public sealed class InterfaceRegressionTests
             await using var fixture = await SummaryRegenerationTests.Fixture.Create();
             fixture.Fail = true;
             var runtime = RecordingActionsTests.Field<VerbemoRuntime>(window, "runtime");
-            runtime.Update(s => { s.Summary.Enabled = true; s.Summary.Backend = "ollama"; });
-            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            ApplicationWindowTests.Until(() => !RecordingActionsTests.Field<bool>(window, "loading"));
             var processing = typeof(VerbemoRuntime).GetField("processing", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var original = processing.GetValue(runtime);
             processing.SetValue(runtime, fixture.Processor);
@@ -102,12 +99,17 @@ public sealed class InterfaceRegressionTests
                 grid.SelectedItem = row;
                 await (Task)typeof(RecordingsWindow).GetMethod("ShowSelectedAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null)!;
                 await (Task)typeof(RecordingsWindow).GetMethod("PerformAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { MeetingAction.RegenerateSummary })!;
+                Assert.Equal(1, fixture.Calls);
                 Assert.NotEmpty(RecordingActionsTests.Field<TextBlock>(window, "problem").Text);
                 Assert.Equal("Old summary", File.ReadAllText(Path.Combine(fixture.Directory, "summary.md")));
-                Assert.Equal(1, fixture.Calls);
             }
             finally { processing.SetValue(runtime, original); }
-        })));
+        }), settings =>
+        {
+            // Configure before creating the window so a settings reload cannot clear its test selection.
+            settings.Summary.Enabled = true;
+            settings.Summary.Backend = "ollama";
+        }));
 
     private static SessionListItem Item(string root) => new(root, "Test", DateTimeOffset.Now, 1, "manual", "whisper",
         ProcessingStep.Done, ProcessingStep.Done, ProcessingStep.Done, 0, true);
