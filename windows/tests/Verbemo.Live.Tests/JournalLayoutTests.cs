@@ -102,10 +102,20 @@ public sealed class JournalLayoutTests
             var combo = Assert.Single(Descendants(RecordingActionsTests.Field<StackPanel>(window, "speakers")).OfType<ComboBox>());
             Assert.True(combo.IsEditable);
             combo.Text = "Manual Name";
-            combo.RaiseEvent(new System.Windows.Input.KeyboardFocusChangedEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
-                Environment.TickCount, combo, null) { RoutedEvent = UIElement.LostKeyboardFocusEvent });
-            ApplicationWindowTests.Until(() => File.ReadAllText(Path.Combine(root, "transcript.md")).Contains("Manual Name"));
-            Assert.Equal("Manual Name", SpeakerFile.ReadAsync(root, default).GetAwaiter().GetResult().Names["A"]);
+            var runtime = RecordingActionsTests.Field<VerbemoRuntime>(window, "runtime");
+            var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            // Only this save emits SessionsChanged in the unstarted fixture, after all persistence completes.
+            EventHandler onSaved = (_, _) => saved.TrySetResult();
+            runtime.SessionsChanged += onSaved;
+            try
+            {
+                combo.RaiseEvent(new System.Windows.Input.KeyboardFocusChangedEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+                    Environment.TickCount, combo, null) { RoutedEvent = UIElement.LostKeyboardFocusEvent });
+                await saved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            finally { runtime.SessionsChanged -= onSaved; }
+            Assert.Contains("Manual Name", await File.ReadAllTextAsync(Path.Combine(root, "transcript.md")));
+            Assert.Equal("Manual Name", (await SpeakerFile.ReadAsync(root, default)).Names["A"]);
         })));
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
