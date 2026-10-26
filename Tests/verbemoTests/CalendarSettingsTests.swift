@@ -286,4 +286,3 @@ final class CalendarFixtureStore: EKEventStore {
         eventList.filter { requestedIDs.contains($0.calendar.calendarIdentifier) }
     }
 }
-
