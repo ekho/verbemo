@@ -41,7 +41,7 @@ struct WindowShots {
     func setupPage() throws {
         for (name, appearance) in [("light", light), ("dark", dark)] {
             try withJournal(builtIn: appearance) { app, _ in
-                let setup = SetupPage()
+                let setup = SetupPage(calendar: CalendarWatcher(store: CalendarFixtureStore(), authorizationStatus: { .notDetermined }))
                 defer { withExtendedLifetime(setup) {} }
                 app.presentSetup(setup)
                 try write(app.panel, "setup-permissions-\(name)")
@@ -50,7 +50,7 @@ struct WindowShots {
             }
         }
         try withJournal(builtIn: light) { app, _ in
-            let setup = SetupPage()
+            let setup = SetupPage(calendar: CalendarWatcher(store: CalendarFixtureStore(), authorizationStatus: { .notDetermined }))
             defer { withExtendedLifetime(setup) {} }
             app.presentSetup(setup)
             show(app.panel, in: dark)
@@ -84,6 +84,39 @@ struct WindowShots {
             try write(app.panel, "settings-transcription-switched-to-light")
             show(app.panel, in: dark)
             try write(app.panel, "settings-transcription-switched-back-to-dark")
+        }
+    }
+
+    @Test("Calendar selection with synthetic calendars, at narrow and wide widths")
+    func calendarSelectionSettings() throws {
+        let store = CalendarFixtureStore()
+        let work = store.addCalendar("Рабочие встречи")
+        _ = store.addCalendar("Личный календарь")
+        _ = store.addCalendar("Очень длинное название общего календаря проектной команды")
+        Config.update(path: ["calendar_ids"], value: [work.calendarIdentifier])
+        for (name, appearance) in [("light", light), ("dark", dark)] {
+            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 780),
+                                 styleMask: [.titled], backing: .buffered, defer: false)
+            panel.isReleasedWhenClosed = false
+            let settings = SettingsController(hostWindow: panel,
+                calendar: CalendarWatcher(store: store, authorizationStatus: { .fullAccess }))
+            defer { _ = settings.stopForTermination(); panel.close() }
+            panel.contentView = settings.content(for: .calendar)
+            show(panel, in: appearance)
+            try write(panel, "calendar-selection-\(name)")
+            panel.setContentSize(NSSize(width: 500, height: 780))
+            try write(panel, "calendar-selection-\(name)-narrow")
+            #expect(panel.contentLayoutRect.width <= 502, "Long calendar titles must not widen the settings page")
+            try withJournal(builtIn: appearance) { app, _ in
+                let setup = SetupPage(calendar: CalendarWatcher(store: store, authorizationStatus: { .fullAccess }))
+                defer { _ = setup.stopForTermination() }
+                app.presentSetup(setup)
+                try write(app.panel, "setup-calendar-selection-\(name)")
+                app.panel.setContentSize(NSSize(width: 760, height: 680))
+                try write(app.panel, "setup-calendar-selection-\(name)-narrow")
+                scrollToBottom(in: setup.contentView)
+                try write(app.panel, "setup-calendar-selection-\(name)-narrow-bottom")
+            }
         }
     }
 

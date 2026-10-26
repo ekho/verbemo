@@ -12,13 +12,21 @@ final class SetupPage: NSObject {
     /// Called when the user leaves setup.
     var onFinished: (() -> Void)?
 
-    private let form = SetupForm(mode: .permissions)
+    private let form: SetupForm
+    private let calendarSelection: CalendarSettingsView
     private(set) var contentView = NSView()
     private let footerNote = NSTextField(labelWithString: "")
 
-    override init() {
+    init(calendar: CalendarWatcher = CalendarWatcher()) {
+        form = SetupForm(mode: .permissions, calendar: calendar)
+        calendarSelection = CalendarSettingsView(calendar: calendar)
         super.init()
 
+        let box = SetupLayout.box([SetupLayout.row(title: calendarSelection)])
+        calendarSelection.widthAnchor.constraint(equalTo: box.widthAnchor, constant: -38).isActive = true
+        let section = SetupLayout.section(localised("Calendars for events", "Календари для событий"), content: box)
+        form.view.addArrangedSubview(section)
+        section.widthAnchor.constraint(equalTo: form.view.widthAnchor, constant: -48).isActive = true
         let scroll = SetupLayout.scroller(around: form.view)
 
         footerNote.font = .systemFont(ofSize: 12)
@@ -52,7 +60,10 @@ final class SetupPage: NSObject {
         ])
         contentView = content
 
-        form.onStateChange = { [weak self] in self?.updateFooter() }
+        form.onStateChange = { [weak self] in
+            self?.calendarSelection.refresh()
+            self?.updateFooter()
+        }
         updateFooter()
     }
 

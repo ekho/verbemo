@@ -61,7 +61,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// for it. A seam so a test can prove when it is *not* played without
     /// playing it.
     var requestMicrophone: @MainActor () async -> SetupPermissions.State = { await SetupPermissions.requestMicrophone() }
-    var requestCalendar: @MainActor () async -> SetupPermissions.State = { await SetupPermissions.requestCalendar() }
+    var requestCalendar: @MainActor () async -> SetupPermissions.State
+    private let calendar: CalendarWatcher
     var openPermissionSettings: @MainActor (SetupPermissions.Pane) -> Void = { SetupPermissions.openSettings($0) }
     var playTestTone: @MainActor () async -> SetupPermissions.SystemAudioResult = {
         await SetupPermissions.testSystemAudio()
@@ -104,8 +105,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let calendarRow = AccessRow(
         title: localised("Calendar", "Календарь"),
         detail: localised(
-            "Names the folder and the speakers from the invitees.",
-            "По участникам события называет папку и говорящих."),
+            "Links recordings to calendar events.",
+            "Связывает записи с событиями."),
         action: localised("Allow", "Разрешить"),
         grantedNote: localised("allowed", "разрешено"),
         optional: true)
@@ -251,8 +252,13 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         }
         return paths
     }
-    init(mode: Mode) {
+    init(mode: Mode, calendar: CalendarWatcher = CalendarWatcher()) {
         self.mode = mode
+        self.calendar = calendar
+        requestCalendar = {
+            await calendar.requestAccess()
+            return calendar.authorized ? .granted : SetupPermissions.calendar()
+        }
         super.init()
 
         let form = view
@@ -270,9 +276,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title.font = JournalStyle.titleFont(32)
             title.textColor = JournalStyle.ink
             let intro = SetupLayout.detail(localised(
-                "Allow the microphone and test call audio before your first recording. Models and optional Calendar access are available in Settings.",
-                "Перед первой записью разрешите микрофон и проверьте звук звонка. Модели и необязательный доступ к календарю доступны в настройках."), lines: 4)
-            for child in [title, intro, configProblems, SetupLayout.box([micRow, audioRow])] {
+                "Allow the microphone and test call audio before your first recording. Calendar access is optional: allow it and choose calendars below. Models are available in Settings.",
+                "Перед первой записью разрешите микрофон и проверьте звук звонка. Доступ к календарю необязателен: разрешите его и выберите календари ниже. Модели доступны в настройках."), lines: 4)
+            for child in [title, intro, configProblems, SetupLayout.box([micRow, audioRow, calendarRow])] {
                 form.addArrangedSubview(child)
                 child.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             }
@@ -1367,16 +1373,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         guard !stopping else { return }
         let state = await requestCalendar()
         guard !stopping, !Task.isCancelled else { return }
-        calendarGrant = state
         if state == .denied { openPermissionSettings(.calendar) }
         refresh()
     }
-
-    /// What the calendar prompt answered, for as long as this window is open.
-    /// Kept because EventKit will not admit to a grant given in this process
-    /// until the next launch, and a row that still says "optional" after the
-    /// person has just said yes is the button looking broken all over again.
-    private var calendarGrant: SetupPermissions.State?
 
     /// Play a tone and listen for it through a tap of our own.
     ///
@@ -1925,7 +1924,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         launchDetail.textColor = loginItemError == nil ? .secondaryLabelColor : .systemRed
         launchSwitch.setAccessibilityHelp(launchDetail.stringValue)
         micRow.update(SetupPermissions.microphone())
-        calendarRow.update(calendarGrant ?? SetupPermissions.calendar())
+        calendarRow.update(calendar.authorized ? .granted : SetupPermissions.calendar())
 
         if toneRefused, isRecording?() != true { toneRefused = false }
         switch systemAudio {

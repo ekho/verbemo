@@ -8,7 +8,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     }
     var isProcessing: (() -> Bool)?
     private let panel: NSWindow
-    let setup = SetupForm(mode: .settings)
+    private let calendar: CalendarWatcher
+    private let calendarSelection: CalendarSettingsView
+    let setup: SetupForm
     private var deletionTask: Task<Void, Never>?
     private var emailLookupTask: Task<Void, Never>?
     private var pages: [ApplicationNavigationState.Destination: NSView] = [:]
@@ -28,17 +30,24 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         let control: NSControl
     }
 
-    init(hostWindow: NSWindow) {
+    init(hostWindow: NSWindow, calendar: CalendarWatcher = CalendarWatcher()) {
         panel = hostWindow
+        self.calendar = calendar
+        setup = SetupForm(mode: .settings, calendar: calendar)
+        calendarSelection = CalendarSettingsView(calendar: calendar)
         super.init()
         buildPages()
         configWatch = ConfigWatch.observe { [weak self] in self?.refresh() }
-        setup.onStateChange = { [weak self] in self?.refreshModels() }
+        setup.onStateChange = { [weak self] in
+            self?.refreshModels()
+            self?.calendarSelection.refresh()
+        }
         refresh()
     }
 
     var representedSettingsPaths: [String] {
         rows.map { $0.entry.path.joined(separator: ".") }
+            + [Config.Key.calendarIDs.rawValue]
             + Array(SetupForm.settingsCoveredPaths.intersection(Set(SettingsSchema.sections.flatMap(\.entries).map { $0.path.joined(separator: ".") })))
     }
     var renderedControls: [NSControl] { rows.map(\.control) }
@@ -68,12 +77,14 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         let summary = Config.summary()
         summaryConnection = [summary.ollamaBaseURL, summary.ollamaModel]
         setup.reload()
+        calendarSelection.refresh()
     }
 
     func content(for destination: ApplicationNavigationState.Destination) -> NSView {
         guard let page = pages[destination] else { preconditionFailure("Not a settings destination") }
         // Config/download observers keep pages current without a full refresh on every tab.
         if destination == .storage { refreshModels() }
+        if destination == .calendar { calendarSelection.refresh() }
         if destination == .summary && panel.isVisible {
             let summary = Config.summary()
             if [summary.ollamaBaseURL, summary.ollamaModel] != summaryConnection { reload() }
@@ -98,7 +109,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             form.insertArrangedSubview(notice, at: 0)
             notice.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             let entries = SettingsSchema.sections.flatMap(\.entries).filter {
-                SettingsPage.destination(for: $0.path) == destination && !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
+                SettingsPage.destination(for: $0.path) == destination
+                    && $0.path != Config.Key.calendarIDs.path
+                    && !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
             }
             let common: Set<String> = ["interface_theme", "interface_language", "window", "calendar", "system_audio", "transcription.language", "transcription.model", "summary.language", "summary.template", "user_name", "user_email", "speaker_names.enabled"]
             let rare = NSStackView()
@@ -113,6 +126,13 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 let container = common.contains(entry.path.joined(separator: ".")) ? form : rare
                 container.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: container.widthAnchor, constant: container === form ? -48 : 0).isActive = true
+                if entry.path == Config.Key.calendar.path {
+                    let box = SetupLayout.box([SetupLayout.row(title: calendarSelection)])
+                    calendarSelection.widthAnchor.constraint(equalTo: box.widthAnchor, constant: -38).isActive = true
+                    let section = SetupLayout.section(localised("Calendars for events", "Календари для событий"), content: box)
+                    form.addArrangedSubview(section)
+                    section.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
+                }
             }
             if !rare.arrangedSubviews.isEmpty {
                 let disclosure = NSButton(title: localised("More options", "Дополнительные параметры"), target: self, action: #selector(toggleOptions(_:)))
@@ -510,9 +530,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 editor.setSearching(true)
                 self.emailLookupTask = Task { [weak self, weak editor] in
                     defer { self?.emailLookupTask = nil; editor?.setSearching(false) }
-                    let watcher = CalendarWatcher()
-                    await watcher.requestAccess()
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled, let watcher = self?.calendar else { return }
                     guard watcher.authorized else {
                         editor?.report(CalendarSelectionError.accessDenied.localizedDescription, error: true)
                         return
@@ -524,6 +542,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                         editor?.report(localised("Could not save the addresses.", "Не удалось сохранить адреса."), error: true)
                         return
                     }
+                    SetupState.markCalendarEmailsImported()
                     editor?.show(merged)
                     editor?.report(found.isEmpty
                         ? localised("No addresses found. You can add them manually.", "Адреса не найдены. Их можно добавить вручную.")

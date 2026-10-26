@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 enum CalendarEmailDiscovery {
     static func addresses(in store: EKEventStore, now: Date = Date()) -> [String] {
-        let calendars = store.calendars(for: .event).filter { !$0.isSubscribed && !$0.source.isDelegate }
+        let calendars = store.calendars(for: .event).filter { !$0.isSubscribed && $0.source?.isDelegate == false }
         guard !calendars.isEmpty else { return [] }
         // shortcut: accounts without invitations within ±1 year need manual entry or another lookup later.
         let start = Calendar.current.date(byAdding: .year, value: -1, to: now)!

@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class ApplicationWindow: NSObject, NSWindowDelegate {
     let panel: NSWindow
+    private let calendar: CalendarWatcher
     private let sidebar = SidebarView()
     private let recordingBar = RecordingBarView()
     private let toolbar = NSStackView()
@@ -31,7 +32,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private var stopping = false
     lazy var settings: SettingsController = {
         settingsBuilt = true
-        let settings = SettingsController(hostWindow: panel)
+        let settings = SettingsController(hostWindow: panel, calendar: calendar)
         settings.isProcessing = { [weak self] in self?.isProcessing?() == true }
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
         return settings
@@ -68,7 +69,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     var recordingBarIsVisible: Bool { !recordingBar.isHidden }
     var isVisible: Bool { panel.isVisible && !panel.isMiniaturized }
 
-    override init() {
+    init(calendar: CalendarWatcher = CalendarWatcher()) {
+        self.calendar = calendar
         panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()

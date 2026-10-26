@@ -13,8 +13,8 @@ VERBEMO_SHOTS=/tmp/shots swift test --filter 'Window(Shots|Gallery)'
 The directory must already exist. Without `VERBEMO_SHOTS`, both suites are
 skipped. `WindowShots` captures content without window chrome; `WindowGallery`
 includes the title bar. Both use the Journal's normal 1340×820 content size and
-760×680 for narrow captures. No fixture creates a standalone setup, settings,
-status, About or recordings window.
+760×680 for narrow captures. The calendar checklist also has a standalone
+settings-component fixture at 680/500-point widths.
 
 Use separate directories for the two languages; filenames are the same:
 
@@ -33,10 +33,12 @@ The New recording fixture also renders the attached form with a synthetic calend
 
 | File | Contents |
 | --- | --- |
-| `setup-permissions-{light,dark}.png` and `-narrow` | First-run microphone and call-audio permissions inside Journal. |
+| `setup-permissions-{light,dark}.png` and `-narrow` | First-run microphone, call-audio and calendar permissions inside Journal, with calendar access not yet requested. |
 | `setup-permissions-switched-to-dark.png`, `setup-permissions-switched-back-to-light.png` | The same permissions page through an appearance change. |
 | `settings-{page}-{light,dark}.png` and `-narrow` | Each of the six settings pages. |
 | `settings-storage-{light,dark}-narrow-bottom.png` | Storage scrolled to the model files at the bottom. |
+| `calendar-selection-{light,dark}.png` and `-narrow` | Calendar settings component at 680/500 points, with synthetic calendars and an explicit selection; no real EventKit access. |
+| `setup-calendar-selection-{light,dark}.png`, `-narrow` and `-narrow-bottom` | The same synthetic calendar selection on the initial setup page, with granted calendar access. |
 | `settings-transcription-switched-to-light.png`, `settings-transcription-switched-back-to-dark.png` | Transcription settings through an appearance change. |
 | `settings-transcription-cloud-only-{light,dark}.png` and `-narrow` | Cloud-only transcription with local speaker separation unavailable. |
 | `settings-transcription-{light,dark}-narrow-diarization-error.png` | A long speaker-model error. |
@@ -76,7 +78,8 @@ capture. Where an audio source is needed, it writes valid silent test audio;
 it does not record or play audio. Download progress and errors are posed in
 existing controls without fetching a model.
 
-System permission and login-item status still comes from this Mac. These
+Microphone, system-audio and login-item status still comes from this Mac;
+the calendar-selection fixtures simulate calendar permission. These
 pictures cannot establish permission prompts, real capture, model downloads,
 playback, keyboard interaction or Windows behavior. They are macOS offscreen
 layout evidence, not a substitute for running the actual application.

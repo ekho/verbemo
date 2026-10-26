@@ -51,8 +51,8 @@ enum CalendarSelectionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .accessDenied:
-            localised("Calendar access is unavailable. Allow access in macOS, then reopen the list.",
-                      "Нет доступа к календарю. Разрешите доступ в macOS и откройте список снова.")
+            localised("Calendar access is unavailable. Allow access in Settings → Calendar, then reopen the list.",
+                      "Нет доступа к календарю. Разрешите доступ в Настройки → Календарь и откройте список снова.")
         case .integrationDisabled:
             localised("Enable Calendar integration in settings to choose an event.",
                       "Включите интеграцию с календарём в настройках для выбора события.")

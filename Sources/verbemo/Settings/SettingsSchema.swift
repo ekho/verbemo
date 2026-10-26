@@ -476,6 +476,11 @@ enum SettingsSchema {
                       "Называет встречу по событию и запоминает участников. Это не то же самое, что "
                           + "начинать запись по событию."),
                   .toggle, default: true, needsRestart: true),
+            Entry(["calendar_ids"],
+                  localised("Calendars for events", "Календари для событий"),
+                  localised("Used for matching, choosing events, and starting recordings from events.",
+                            "Используются для сопоставления, выбора событий и запуска записи по событиям."),
+                  .list, describedAs: localised("all calendars, including new ones", "все календари, включая новые")),
             Entry(["speaker_names", "enabled"],
                   localised("Put names to speakers", "Подставлять имена говорящих"),
                   localised(

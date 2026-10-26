@@ -232,14 +232,14 @@ final class AppController {
     /// one, waiting for that to finish.
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
-    private let window = ApplicationWindow()
+    private let window: ApplicationWindow
     private var setupBuilt = false
     private lazy var setupPage: SetupPage = {
         setupBuilt = true
-        let setup = SetupPage()
+        let setup = SetupPage(calendar: calendar)
         setup.isRecording = { [weak self] in self?.isRecording == true }
         setup.onFinished = { [weak self] in
-            self?.startAutomaticFeatures(requestCalendarAccess: false)
+            self?.startAutomaticFeatures()
             self?.offerSetup()
         }
         return setup
@@ -278,7 +278,7 @@ final class AppController {
     private var sweeps: SweepScheduler!
     private var mediaImport: MediaImportCoordinator
     private let liveTranscription = LiveTranscriptionCoordinator()
-    private let calendar = CalendarWatcher()
+    private let calendar: CalendarWatcher
     private let autoRecord: AutoRecordController
     private var session: RecordingSession?
     /// Whether a meeting is being recorded. The session itself stays private —
@@ -374,8 +374,10 @@ final class AppController {
     private var importStop: Task<Void, Never>?
 
     init(root: URL, followsConfiguredRoot: Bool = true, autoRecord watcher: AutoRecordController? = nil,
-         operations: ProcessingOperations = .shared) {
+         operations: ProcessingOperations = .shared, calendar: CalendarWatcher = CalendarWatcher()) {
         self.root = root
+        self.calendar = calendar
+        window = ApplicationWindow(calendar: calendar)
         self.followsConfiguredRoot = followsConfiguredRoot
         self.operations = operations
         transcription = TranscriptionCoordinator(operations: operations)
@@ -423,9 +425,7 @@ final class AppController {
         }
         window.onToggle = { [weak self] in self?.toggle() }
         window.recordingCalendar = { [weak self] date in
-            guard let self, Config.useCalendar() else { return nil }
-            await self.calendar.requestAccess()
-            guard self.calendar.authorized, Config.useCalendar() else { return nil }
+            guard let self, Config.useCalendar(), self.calendar.authorized else { return nil }
             return (self.calendar.bestMatch(for: Date()), self.calendar.meetings(on: date))
         }
         window.calendarSearch = { [weak self] query in
@@ -532,7 +532,7 @@ final class AppController {
         if SetupState.isPending {
             showSetup()
         } else {
-            startAutomaticFeatures(requestCalendarAccess: true)
+            startAutomaticFeatures()
         }
     }
 
@@ -549,9 +549,9 @@ final class AppController {
         window.applyDockPreference()
     }
 
-    /// Resume processing and optional calendar prompts after setup. Microphone
+    /// Resume processing after setup. Microphone
     /// watching starts independently, so this window cannot suppress meetings.
-    private func startAutomaticFeatures(requestCalendarAccess: Bool) {
+    private func startAutomaticFeatures() {
         guard !isStopping, !automaticFeaturesStarted else { return }
         automaticFeaturesStarted = true
 
@@ -583,10 +583,11 @@ final class AppController {
         monitor.start()
         network = monitor
 
-        // A calendar prompt can stay unanswered. It must never hold up the
-        // already-running microphone watcher.
-        if requestCalendarAccess && (Config.useCalendar() || Config.autoRecord().calendar) {
-            Task { [weak self] in await self?.calendar.requestAccess() }
+        if Config.useCalendar() || Config.autoRecord().calendar {
+            Task { [weak self] in
+                guard let self, !self.isStopping else { return }
+                self.calendar.importOwnEmailsIfNeeded()
+            }
         }
         autoRecord.reloadSettings()
         showAutoRecord()

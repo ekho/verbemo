@@ -7,6 +7,54 @@ import Testing
 @MainActor
 @Suite(.serialized, .freshHome)
 struct AutoRecordStartupTests {
+    @Test("Startup never requests calendar access, even with calendar features enabled", arguments: [false, true])
+    func startupDoesNotRequestCalendarPermission(setupCompleted: Bool) async {
+        if setupCompleted { SetupState.markCompleted() }
+        Config.update(path: ["calendar"], value: true)
+        Config.update(path: ["auto_record", "calendar"], value: true)
+        let store = CalendarFixtureStore()
+        let calendar = CalendarWatcher(store: store, authorizationStatus: { .notDetermined })
+        var settings = Config.AutoRecordSettings()
+        settings.enabled = false
+        let watcher = AutoRecordController(settings: settings, calendar: calendar, loadSettings: { settings })
+        let app = AppController(root: Home.current.defaultRecordings, autoRecord: watcher,
+                                operations: ProcessingOperations(), calendar: calendar)
+        defer {
+            watcher.stop()
+            for window in NSApp.windows { window.orderOut(nil) }
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(store.accessRequests == 0)
+        let finished = Gate()
+        #expect(app.prepareForTermination { finished.open() })
+        await finished.pass()
+        #expect(store.accessRequests == 0)
+    }
+
+    @Test("Existing calendar access imports own emails only when calendar features are enabled", arguments: [false, true])
+    func startupPreservesPassiveEmailDiscovery(enabled: Bool) async {
+        SetupState.markCompleted()
+        Config.update(path: ["calendar"], value: enabled)
+        Config.update(path: ["auto_record", "calendar"], value: enabled)
+        let store = CalendarFixtureStore()
+        let calendar = CalendarWatcher(store: store, authorizationStatus: { .fullAccess })
+        var settings = Config.AutoRecordSettings()
+        settings.enabled = false
+        let watcher = AutoRecordController(settings: settings, calendar: calendar, loadSettings: { settings })
+        let app = AppController(root: Home.current.defaultRecordings, autoRecord: watcher,
+                                operations: ProcessingOperations(), calendar: calendar)
+        defer {
+            watcher.stop()
+            for window in NSApp.windows { window.orderOut(nil) }
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(store.accessRequests == 0)
+        #expect(SetupState.calendarEmailsImported() == enabled)
+        let finished = Gate()
+        #expect(app.prepareForTermination { finished.open() })
+        await finished.pass()
+    }
+
     @Test("An unfinished setup does not prevent the app from watching a granted microphone")
     func pendingSetupStillWatchesMeetings() async {
         #expect(SetupState.isPending)

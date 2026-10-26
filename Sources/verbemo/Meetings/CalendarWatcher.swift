@@ -31,31 +31,53 @@ final class CalendarWatcher {
     }
 
     private static let matchWindow: TimeInterval = 8 * 60
-    private let store = EKEventStore()
-    private(set) var authorized = false
+    private let store: EKEventStore
+    private let authorizationStatus: () -> EKAuthorizationStatus
+    // EventKit can keep reporting notDetermined until relaunch after a successful prompt.
+    private var accessGranted = false
+    var authorized: Bool {
+        let status = authorizationStatus()
+        return status == .fullAccess || (status == .notDetermined && accessGranted)
+    }
 
-    /// Ask once, at startup, and only when the calendar trigger is enabled.
-    /// Denial is not an error: the mic trigger carries on alone.
+    init(store: EKEventStore = EKEventStore(),
+         authorizationStatus: @escaping () -> EKAuthorizationStatus = { EKEventStore.authorizationStatus(for: .event) }) {
+        self.store = store
+        self.authorizationStatus = authorizationStatus
+    }
+
+    /// nil means permission is unavailable; an empty array means there are no calendars.
+    func availableCalendars() -> [EKCalendar]? {
+        guard authorized else { return nil }
+        return store.calendars(for: .event)
+    }
+
+    /// Only the permission buttons in setup/settings may request access; reads never prompt.
     func requestAccess() async {
-        switch EKEventStore.authorizationStatus(for: .event) {
+        switch authorizationStatus() {
         case .fullAccess:
-            authorized = true
-        case .notDetermined where authorized:
+            break
+        case .notDetermined where accessGranted:
             break
         case .notDetermined:
-            authorized = (try? await store.requestFullAccessToEvents()) ?? false
-            if !authorized {
+            accessGranted = (try? await store.requestFullAccessToEvents()) ?? false
+            if !accessGranted {
                 FileHandle.standardError.write(Data(
                     "calendar access denied — auto-record falls back to mic activity only\n".utf8
                 ))
             }
         default:
-            authorized = false
+            accessGranted = false
             FileHandle.standardError.write(Data(
                 "calendar access not granted — sessions will be named by time\n".utf8
             ))
         }
-        if authorized { CalendarEmailDiscovery.afterFirstGrant(in: store) }
+        importOwnEmailsIfNeeded()
+    }
+
+    func importOwnEmailsIfNeeded() {
+        guard authorized else { return }
+        CalendarEmailDiscovery.afterFirstGrant(in: store)
     }
 
     func ownEmailAddresses() -> [String] {
@@ -100,7 +122,6 @@ final class CalendarWatcher {
 
     func search(_ query: CalendarEventQuery) async throws -> [Meeting] {
         guard Config.useCalendar() else { throw CalendarSelectionError.integrationDisabled }
-        await requestAccess()
         guard authorized else { throw CalendarSelectionError.accessDenied }
         return meetings(from: query.range.start, to: query.range.end, includeAllDay: true).filter(query.matches)
     }
@@ -122,7 +143,9 @@ final class CalendarWatcher {
 
     private func meetings(from start: Date, to end: Date, includeAllDay: Bool = false) -> [Meeting] {
         guard authorized else { return [] }
-        let calendars = store.calendars(for: .event)
+        guard Config.useCalendar() || Config.autoRecord().calendar else { return [] }
+        let selected = Config.calendarIDs().map(Set.init)
+        let calendars = (availableCalendars() ?? []).filter { selected?.contains($0.calendarIdentifier) ?? true }
         guard !calendars.isEmpty else { return [] }
 
         let predicate = store.predicateForEvents(

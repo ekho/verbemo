@@ -147,6 +147,8 @@ struct MacUXFollowupTests {
         #expect(page.allDescendants.contains { $0.identifier?.rawValue == "access.system-audio" })
         #expect(!page.allDescendants.contains { $0 is ChoiceCard || $0 is NSSecureTextField })
         #expect(!page.allDescendants.contains { $0.identifier?.rawValue == "access.login" })
+        #expect(page.allDescendants.contains { $0.identifier?.rawValue == "access.calendar" })
+        #expect(page.allDescendants.contains { $0 is CalendarSettingsView })
         let footer = try #require(page.subviews.compactMap { $0 as? NSStackView }.first)
         #expect(footer.allDescendants.compactMap { $0 as? NSButton }.isEmpty)
         #expect(footer.allDescendants.compactMap { $0 as? NSTextField }.contains { !$0.stringValue.isEmpty })

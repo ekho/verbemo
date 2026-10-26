@@ -207,13 +207,25 @@ only values that differ from the defaults. A compact example:
   unidentified or remote voices are never inferred from the email.
   On macOS, first granting calendar access adds addresses explicitly identified
   by EventKit as the current user. Later, **Get from calendars** / **Взять из
-  календарей** merges discovered addresses into the list. Automatic discovery
+  календарей** merges discovered addresses into the list using access granted
+  by the permission button above. Automatic discovery
   runs only once, including for already granted access after upgrading, so
   deleted addresses do not reappear on launch. Discovery
   reads attendees and organizers in events within one year before and after
   today, excludes subscribed and delegated sources, and never guesses from
   account titles or participant names. Some accounts may yield no address;
   manual entry remains available. Windows has no calendar discovery.
+- On macOS, Settings → Calendar lets you choose calendars for automatic matching,
+  manual event selection, and calendar-triggered recording. `calendar_ids` stores
+  their local EventKit identifiers. Omit it to use all calendars, including new
+  ones; an explicit array uses only those calendars, and `[]` uses none. Changes
+  apply without restarting and leave saved meeting details unchanged. Unavailable
+  identifiers remain selected but cannot match events; after a full calendar sync
+  or account reconnection, check the selection if macOS assigned new identifiers.
+  Initial setup also offers calendar permission and the same calendar selection.
+  Access is requested only by the permission button on either screen, never
+  automatically at startup, when opening a recording, or while searching for events.
+  Without access, recordings work without calendar context or calendar triggers.
 - `interface_theme` is `system` (default), `light`, or `dark`. It changes only Verbemo; System follows the operating system.
 - `interface_language` is `auto`, `en`, or `ru`. `dock_icon`, `menu_bar_icon`,
   and `window` control where Verbemo appears.

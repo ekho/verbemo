@@ -499,7 +499,10 @@ struct SettingsControllerTests {
         defer { withExtendedLifetime(application) {} }
         let entries = SettingsSchema.sections.flatMap(\.entries).filter {
             !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
+                && $0.path != ["calendar_ids"]
         }
+        // Calendar IDs are edited through the native checklist, not a text field.
+        #expect(settings.content(for: .calendar).allDescendants.contains { $0 is CalendarSettingsView })
         #expect(settings.renderedControls.count == entries.count)
         for entry in entries {
             application.navigate(SettingsPage.destination(for: entry.path))
