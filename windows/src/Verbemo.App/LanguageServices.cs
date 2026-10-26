@@ -405,12 +405,12 @@ public static class SpeakerFile
         var file = await ReadAsync(directory, cancellationToken).ConfigureAwait(false);
         var source = file.Sources.GetValueOrDefault(SpeakerLabels.Me);
         if (source is "manual" or "calendar" || file.ParticipantIds.ContainsKey(SpeakerLabels.Me) && source != "calendar-auto") return false;
-        if (string.IsNullOrWhiteSpace(settings.UserEmail) && source != "calendar-auto") return false;
+        if (settings.UserEmails.Count == 0 && source != "calendar-auto") return false;
         var root = TranscriptVersions.ValidatedSessionRoot(directory);
         var calendar = await MeetingCalendarMetadata.ReadAsync(root, cancellationToken).ConfigureAwait(false);
-        var email = settings.UserEmail?.Trim();
-        CalendarParticipant[] matches = calendar?.IsConfirmed == true && !string.IsNullOrEmpty(email)
-            ? calendar.Participants.Where(person => string.Equals(person.Email?.Trim(), email, StringComparison.OrdinalIgnoreCase)).ToArray() : [];
+        var emails = EmailAddresses.Normalize(settings.UserEmails).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        CalendarParticipant[] matches = calendar?.IsConfirmed == true && emails.Count > 0
+            ? calendar.Participants.Where(person => person.Email is { } email && emails.Contains(email.Trim())).ToArray() : [];
         var participant = matches.Length == 1 ? matches[0] : null;
         if (participant is null && source != "calendar-auto") return false;
         var name = string.IsNullOrWhiteSpace(settings.UserName) ? participant?.Name : settings.UserName.Trim();

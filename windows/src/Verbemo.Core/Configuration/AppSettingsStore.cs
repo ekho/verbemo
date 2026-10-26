@@ -158,6 +158,7 @@ public sealed class AppSettingsStore(string configPath, string homeDirectory)
     private static string? Expected(SettingEntry entry, JsonNode value)
     {
         var kind = value.GetValueKind();
+        if (entry.Path == "user_email" && kind == JsonValueKind.String) return null;
         return entry.Kind switch
         {
             SettingKind.Toggle => kind is JsonValueKind.True or JsonValueKind.False ? null : T("true or false", "true или false"),

@@ -55,6 +55,11 @@ final class CalendarWatcher {
                 "calendar access not granted — sessions will be named by time\n".utf8
             ))
         }
+        if authorized { CalendarEmailDiscovery.afterFirstGrant(in: store) }
+    }
+
+    func ownEmailAddresses() -> [String] {
+        authorized ? CalendarEmailDiscovery.addresses(in: store) : []
     }
 
     /// Meetings that started within the last `window` seconds (or are about to,

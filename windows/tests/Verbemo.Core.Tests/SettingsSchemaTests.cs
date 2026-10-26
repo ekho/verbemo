@@ -30,7 +30,7 @@ public sealed class SettingsSchemaTests
         settings.Summary.OpenAiCompatible = true;
         settings.SpeakerNames.Model = "m";
         settings.UserName = "me";
-        settings.UserEmail = "me@example.test";
+        settings.UserEmails = ["me@example.test"];
 
         var described = SettingsSchema.Entries.Select(entry => entry.Path).ToHashSet();
         var missing = Leaves(SettingsDocument.ToNode(settings)).Where(path => !described.Contains(path)).ToArray();
@@ -51,7 +51,7 @@ public sealed class SettingsSchemaTests
         settings.Summary.OpenAiCompatible = true;
         settings.SpeakerNames.Model = "m";
         settings.UserName = "me";
-        settings.UserEmail = "me@example.test";
+        settings.UserEmails = ["me@example.test"];
         var node = SettingsDocument.ToNode(settings);
 
         foreach (var entry in SettingsSchema.Entries)

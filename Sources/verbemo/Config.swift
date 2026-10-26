@@ -294,8 +294,9 @@ enum Config {
         text(.userName, in: load())?.trimmed
     }
 
-    static func userEmail() -> String? {
-        text(.userEmail, in: load())?.trimmed.lowercased()
+    static func userEmails() -> [String] {
+        let stored = value(.userEmail, in: load())
+        return EmailAddresses.normalize(stored as? [String] ?? (stored as? String).map { [$0] } ?? [])
     }
 
     /// Putting real names to the transcript's mechanical speaker labels.
