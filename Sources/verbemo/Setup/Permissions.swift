@@ -59,21 +59,6 @@ enum SetupPermissions {
         }
     }
 
-    /// The answer to the prompt, taken from the prompt itself.
-    ///
-    /// `authorizationStatus` is not asked again afterwards on purpose: EventKit
-    /// answers it from a cache that a grant made in this process does not
-    /// update. Measured on 19 August 2026 — tccd logs the request and returns
-    /// "allowed", and the same process goes on reporting `notDetermined` until
-    /// it is launched again. The request's own answer is the only fresh one
-    /// there is, which is what `CalendarWatcher` has always relied on.
-    static func requestCalendar() async -> State {
-        guard calendar() == .notAsked else { return calendar() }
-        let store = EKEventStore()
-        let granted = (try? await store.requestFullAccessToEvents()) ?? false
-        return granted ? .granted : calendar()
-    }
-
     // MARK: - launch at login
 
     /// Whether the Start-at-login row still has work in it. The bare binary

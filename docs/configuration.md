@@ -200,6 +200,17 @@ only values that differ from the defaults. A compact example:
   exact email match (ignoring surrounding whitespace and case). It is optional
   and stays local. Manual assignments and explicit unlinking take precedence;
   unidentified or remote voices are never inferred from the email.
+- On macOS, Settings → Calendar lets you choose calendars for automatic matching,
+  manual event selection, and calendar-triggered recording. `calendar_ids` stores
+  their local EventKit identifiers. Omit it to use all calendars, including new
+  ones; an explicit array uses only those calendars, and `[]` uses none. Changes
+  apply without restarting and leave saved meeting details unchanged. Unavailable
+  identifiers remain selected but cannot match events; after a full calendar sync
+  or account reconnection, check the selection if macOS assigned new identifiers.
+  Initial setup also offers calendar permission and the same calendar selection.
+  Access is requested only by the permission button on either screen, never
+  automatically at startup, when opening a recording, or while searching for events.
+  Without access, recordings work without calendar context or calendar triggers.
 - `interface_theme` is `system` (default), `light`, or `dark`. It changes only Verbemo; System follows the operating system.
 - `interface_language` is `auto`, `en`, or `ru`. `dock_icon`, `menu_bar_icon`,
   and `window` control where Verbemo appears.

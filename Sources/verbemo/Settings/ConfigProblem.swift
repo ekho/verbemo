@@ -49,6 +49,11 @@ extension Config {
                         + "и продолжает записывать, но расшифровка и сводка ждут, статистика не "
                         + "отправляется, а изменённые настройки не сохраняются.")
             case .unusable(let key, let found, let expected):
+                if key == Key.calendarIDs.rawValue {
+                    return localised(
+                        "\(key) in config.json is \(found); expected \(expected). Calendar events are disabled until the selection is fixed.",
+                        "\(key) в config.json — \(found); ожидается \(expected). События календарей отключены, пока выбор не исправлен.")
+                }
                 return localised(
                     "\(key) in config.json is \(found), which verbemo can't use: it expects "
                         + "\(expected), so the default applies.",
@@ -83,8 +88,8 @@ extension Config {
         for key in Key.allCases {
             guard let found = value(key, in: json) else { continue }
             // An empty string is how a setting is cleared by hand, and every
-            // reader treats it as absent.
-            if let string = found as? String,
+            // reader except the explicit calendar selection treats it as absent.
+            if key != .calendarIDs, let string = found as? String,
                string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
             let expected: String?
             switch entries[key.rawValue]?.kind {

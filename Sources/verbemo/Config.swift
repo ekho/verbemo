@@ -422,6 +422,14 @@ enum Config {
         flag(.calendar, in: load())
     }
 
+    /// Missing means all calendars; an empty or invalid selection means none.
+    static func calendarIDs() -> [String]? {
+        let json = load()
+        guard !settingsUnknown else { return [] }
+        guard let stored = value(.calendarIDs, in: json) else { return nil }
+        return stored as? [String] ?? []
+    }
+
     /// Show verbemo in the Dock (and in ⌘-Tab) rather than running as a
     /// menu-bar-only accessory. On by default: the menu bar hides its status
     /// item when it runs out of room, and a recorder whose only indicator can
