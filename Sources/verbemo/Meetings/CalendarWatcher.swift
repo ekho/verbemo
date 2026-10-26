@@ -52,6 +52,11 @@ final class CalendarWatcher {
         return store.calendars(for: .event)
     }
 
+    func selectedCalendars() -> [EKCalendar] {
+        let selected = Config.calendarIDs().map(Set.init)
+        return (availableCalendars() ?? []).filter { selected?.contains($0.calendarIdentifier) ?? true }
+    }
+
     /// Only the permission buttons in setup/settings may request access; reads never prompt.
     func requestAccess() async {
         switch authorizationStatus() {
@@ -144,8 +149,7 @@ final class CalendarWatcher {
     private func meetings(from start: Date, to end: Date, includeAllDay: Bool = false) -> [Meeting] {
         guard authorized else { return [] }
         guard Config.useCalendar() || Config.autoRecord().calendar else { return [] }
-        let selected = Config.calendarIDs().map(Set.init)
-        let calendars = (availableCalendars() ?? []).filter { selected?.contains($0.calendarIdentifier) ?? true }
+        let calendars = selectedCalendars()
         guard !calendars.isEmpty else { return [] }
 
         let predicate = store.predicateForEvents(
