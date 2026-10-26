@@ -465,6 +465,7 @@ final class AppController {
 
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: nil)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: nil)
+        tick()
 
         // Runs for the life of the daemon, not just while recording: the menu
         // also shows what the auto-record loop is thinking, and a status line
@@ -801,9 +802,19 @@ final class AppController {
     }
 
     private func showAutoRecord() {
-        let decision = autoRecord.enabled ? autoRecord.lastDecision : nil
+        let automatic = Config.autoRecord()
+        let calendarPermission = SetupPermissions.calendar()
+        let access = ActivityAccess(
+            microphone: SetupPermissions.microphone(),
+            systemAudio: SetupPermissions.rememberedSystemAudio(heardAt: SetupState.systemAudioHeardAt()),
+            calendar: Config.useCalendar() || automatic.calendar
+                ? (calendarPermission == .notAsked && calendar.authorized ? .granted : calendarPermission) : nil,
+            micActivity: automatic.micActivity, autoCalendar: automatic.calendar)
+        let decision = autoRecord.enabled ? access.automaticBlockReason ?? autoRecord.notice?.title ?? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
-        window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
+        window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision,
+            blocked: autoRecord.notice != nil || access.automaticBlockReason != nil)
+        window.updateActivity(operations.snapshot(), access: access)
     }
 
     /// The main window's live-transcript switch. It only writes, as the
@@ -1161,9 +1172,7 @@ final class AppController {
 
     private func tick() {
         guard !isStopping else { return }
-        let decision = autoRecord.enabled ? autoRecord.lastDecision : nil
-        menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
-        window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
+        showAutoRecord()
         guard let session else { return }
         present(
             session.isPaused ? .paused : .recording,

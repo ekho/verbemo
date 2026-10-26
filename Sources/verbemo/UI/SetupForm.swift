@@ -1397,7 +1397,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let result = await playTestTone()
         guard !stopping else { return }
         systemAudio = result
-        if result == .heard { SetupState.rememberSystemAudioHeard() }
+        SetupState.rememberSystemAudioTest(result)
         switch result {
         case .heard:
             break

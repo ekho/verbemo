@@ -6,6 +6,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     let panel: NSWindow
     private let sidebar = SidebarView()
     private let recordingBar = RecordingBarView()
+    private let activityBar = ActivityStatusBar()
     private let toolbar = NSStackView()
     private let title = NSButton()
     private let heading = NSTextField(labelWithString: "")
@@ -82,7 +83,17 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         sidebar.onNavigate = { [weak self] in self?.navigate($0) }
         sidebar.onStart = { [weak self] in self?.newRecording() }
         sidebar.onImport = { [weak self] in self?.onChooseImport?() }
-        sidebar.onToggleAutomatic = { [weak self] in self?.onToggleAutoRecord?() }
+        activityBar.onToggleAutomatic = { [weak self] in self?.onToggleAutoRecord?() }
+        activityBar.onRecording = { [weak self] in self?.showActiveRecording() }
+        activityBar.onQueue = { [weak self] in self?.navigate(.processing, clearSearch: true) }
+        activityBar.onAttention = { [weak self] in self?.navigate(.attention, clearSearch: true) }
+        activityBar.onAccess = { [weak self] in self?.navigate($0) }
+        activityBar.onJob = { [weak self] dir in
+            guard let self else { return }
+            self.navigate(.allMeetings)
+            if let dir { Task { [weak self] in _ = await self?.libraryProvider?()?.reveal(dir) } }
+        }
+        activityBar.readAudioLevels = { [weak self] in self?.readAudioLevels?() ?? (.off, .off) }
         recordingBar.onOpen = { [weak self] in self?.showActiveRecording() }
         recordingBar.onPause = { [weak self] in self?.pauseRecording() }
         recordingBar.onStop = { [weak self] in self?.stopRecording() }
@@ -125,9 +136,19 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         let container = WorkspaceSurface(JournalStyle.paper)
         root.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(root)
+        let statusDivider = NSBox()
+        statusDivider.boxType = .separator
+        for view in [statusDivider, activityBar] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(view)
+        }
         NSLayoutConstraint.activate([
-            root.topAnchor.constraint(equalTo: container.topAnchor), root.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            root.topAnchor.constraint(equalTo: container.topAnchor), root.bottomAnchor.constraint(equalTo: statusDivider.topAnchor),
             root.leadingAnchor.constraint(equalTo: container.leadingAnchor), root.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            statusDivider.leadingAnchor.constraint(equalTo: container.leadingAnchor), statusDivider.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            statusDivider.bottomAnchor.constraint(equalTo: activityBar.topAnchor),
+            activityBar.leadingAnchor.constraint(equalTo: container.leadingAnchor), activityBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            activityBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         panel.contentView = container
         panel.initialFirstResponder = container
@@ -157,7 +178,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         }
         library.onNavigateSettings = { [weak self] in self?.navigate($0) }
     }
-    func navigate(_ destination: ApplicationNavigationState.Destination) {
+    func navigate(_ destination: ApplicationNavigationState.Destination, clearSearch: Bool = false) {
         guard !stopping else { return }
         let enteringSettings = navigation.destination.isMeetings || navigation.destination == .about
         showingLive = false
@@ -172,7 +193,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         let content: NSView
         if destination.isMeetings, let library = libraryProvider?() {
             library.refresh()
-            library.applyFilter(destination)
+            library.applyFilter(destination, clearSearch: clearSearch)
             actions.setViews([library.toolbarContent], in: .center)
             content = library.contentView
         } else if destination == .about {
@@ -190,6 +211,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     }
     func stopForTermination() -> [Task<Void, Never>] {
         stopping = true
+        activityBar.stop()
         finishSetup()
         recordingSheet?.cancel()
         if let sheet = panel.attachedSheet { panel.endSheet(sheet, returnCode: .cancel) }
@@ -304,19 +326,33 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         guard !stopping else { return }
         let wasRecording = recordingBarIsVisible
         recordingBar.update(state: state, elapsed: elapsed)
+        activityBar.updateRecording(state, elapsed: elapsed)
         liveView.refreshAudioLevels()
         if wasRecording && state == .idle && showingLive { navigate(.allMeetings) }
         sidebar.updateRecording(state != .idle)
         if state != .idle { recordingSheet?.cancel() }
     }
-    func updateAutoRecord(enabled: Bool, decision: String?) {
-        sidebar.updateAutomatic(enabled, reason: decision)
+    func updateAutoRecord(enabled: Bool, decision: String?, blocked: Bool = false) {
+        activityBar.updateAutomatic(enabled, reason: decision, blocked: blocked)
+    }
+    func updateActivity(_ operations: [ProcessingOperations.Snapshot], access: ActivityAccess) {
+        let library = libraryProvider?()
+        activityBar.updateWork(operations) { [weak library] in library?.activityTitle(for: $0) ?? $0.lastPathComponent }
+        activityBar.updateAccess(access)
+        activityBar.updateAttention(count: library?.attentionCount ?? 0, detail: Config.unreadableReason)
     }
     func updateLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) { live.updateLive(snapshot) }
     func updateLivePreference(enabled: Bool) { live.updateLivePreference(enabled: enabled) }
     func updateConfigProblem(_ headline: String?) { live.updateConfigProblem(headline) }
-    func updateImport(_ update: MediaImportCoordinator.Update) { live.updateImport(update) }
-    func finishImport(_ result: MediaImportCoordinator.Result) { live.finishImport(result); libraryProvider?()?.sessionsChanged() }
+    func updateImport(_ update: MediaImportCoordinator.Update) {
+        live.updateImport(update)
+        activityBar.updateImport(MediaImportPresentation.progress(update))
+    }
+    func finishImport(_ result: MediaImportCoordinator.Result) {
+        activityBar.updateImport(nil)
+        live.finishImport(result)
+        libraryProvider?()?.sessionsChanged()
+    }
     func startRecording() {
         guard !recordingBarIsVisible else { return }
         onToggle?()

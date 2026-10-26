@@ -82,10 +82,14 @@ public static class MicrophoneAccess
         const string store = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
         try
         {
-            string? Value(RegistryKey hive, string path) => hive.OpenSubKey(path)?.GetValue("Value") as string;
+            string? Value(RegistryKey hive, string path)
+            {
+                using var key = hive.OpenSubKey(path);
+                return key?.GetValue("Value") as string;
+            }
             if (Value(Registry.LocalMachine, store) == "Deny" || Value(Registry.CurrentUser, store) == "Deny") return State.DeniedForEveryone;
             if (Value(Registry.CurrentUser, store + @"\NonPackaged") == "Deny") return State.DeniedForDesktopApps;
-            return Value(Registry.CurrentUser, store) is null ? State.Unknown : State.Allowed;
+            return Value(Registry.CurrentUser, store) == "Allow" ? State.Allowed : State.Unknown;
         }
         catch (Exception exception) when (exception is System.Security.SecurityException or UnauthorizedAccessException)
         {

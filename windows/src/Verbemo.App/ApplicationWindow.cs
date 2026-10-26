@@ -31,12 +31,11 @@ internal sealed class ApplicationWindow : Window
     private readonly Border setupNotice = new();
     private string? appliedTheme;
     private readonly DispatcherTimer meterTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
-    private readonly List<(ProgressBar Bar, TextBlock Label, bool Microphone)> meters = [];
+    private readonly ActivityStatusBar activityBar;
     private readonly Border recordingBar = new();
     private readonly Button recordingTitle;
     private readonly Button pause;
     private readonly TextBlock clockText = Ui.Status();
-    private readonly Button auto;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly Dictionary<ApplicationDestination,Button> navigationButtons = [];
     private bool allowClose;
@@ -69,6 +68,7 @@ internal sealed class ApplicationWindow : Window
         var root = new Grid().Brush(Panel.BackgroundProperty, "JournalPaper");
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition());
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var body = new Grid();
         body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(268) });
         body.ColumnDefinitions.Add(new ColumnDefinition());
@@ -89,10 +89,6 @@ internal sealed class ApplicationWindow : Window
         var bottom = new StackPanel();
         bottom.Children.Add(Ui.Button(T("⚙ Settings", "⚙ Настройки"), () => ShowDestination(ApplicationDestination.General)));
         bottom.Children.Add(NavigationButton(ApplicationDestination.About));
-        auto = Ui.Button("", () => ShowDestination(ApplicationDestination.Recording));
-        auto.HorizontalContentAlignment = HorizontalAlignment.Left;
-        auto.FontSize = 11;
-        bottom.Children.Add(auto);
         DockPanel.SetDock(bottom, Dock.Bottom);
         sidebar.Children.Add(bottom);
         create.Margin = new Thickness(0, 0, 0, 8);
@@ -178,29 +174,22 @@ internal sealed class ApplicationWindow : Window
         DockPanel.SetDock(clockText, Dock.Right);
         clockText.Margin = new Thickness(12,0,12,0);
         bar.Children.Add(clockText);
-        var levels = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(8, 0, 12, 0) };
-        foreach (var microphone in new[] { true, false })
-        {
-            var source = microphone ? T("Microphone", "Микрофон") : T("System audio", "Звук системы");
-            var label = Ui.Detail(source);
-            label.FontSize = 10;
-            var meter = new ProgressBar { Minimum = -60, Maximum = 0, Value = -60, Height = 4, Width = 76 };
-            System.Windows.Automation.AutomationProperties.SetName(meter, source);
-            var item = new StackPanel { Margin = new Thickness(4, 0, 4, 0) };
-            item.Children.Add(label); item.Children.Add(meter); levels.Children.Add(item);
-            meters.Add((meter, label, microphone));
-        }
-        DockPanel.SetDock(levels, Dock.Right);
-        bar.Children.Add(levels);
         recordingTitle = Ui.Button("", () => ShowDestination(ApplicationDestination.Live));
         bar.Children.Add(recordingTitle);
         recordingBar.Child = bar;
         recordingBar.SetResourceReference(Border.BackgroundProperty, "JournalInset");
         root.Children.Add(recordingBar);
+        activityBar = new ActivityStatusBar(runtime, destination =>
+        {
+            if (destination is ApplicationDestination.Processing or ApplicationDestination.Attention) recordings.ShowList();
+            ShowDestination(destination);
+        }, () => recordings.AttentionCount, recordings.TitleFor);
+        Grid.SetRow(activityBar, 2);
+        root.Children.Add(activityBar);
         Content = root;
         timer.Tick += (_, _) => Refresh();
         timer.Start();
-        meterTimer.Tick += (_, _) => RefreshMeters();
+        meterTimer.Tick += (_, _) => activityBar.RefreshMeters();
         meterTimer.Start();
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemThemeChanged;
         runtime.SettingsChanged += SettingsChanged;
@@ -275,18 +264,6 @@ internal sealed class ApplicationWindow : Window
 
     private void SettingsChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(() => { appliedTheme = null; Refresh(); });
     private void SystemThemeChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e) => Dispatcher.InvokeAsync(() => { appliedTheme = null; Refresh(); });
-    private void RefreshMeters()
-    {
-        foreach (var (bar, label, microphone) in meters)
-        {
-            var value = microphone ? runtime.MicrophoneDecibels : runtime.SystemDecibels;
-            var state = runtime.State.IsPaused ? T("Paused", "Пауза") : value is null ? T("Unavailable", "Недоступен")
-                : value <= -60 ? T("Silence", "Тишина") : $"{value:0} dBFS";
-            bar.Value = value ?? -60;
-            label.ToolTip = state;
-            System.Windows.Automation.AutomationProperties.SetHelpText(bar, state);
-        }
-    }
     private void RecordingChanged(object? sender, RecordingState e) => Dispatcher.InvokeAsync(() =>
     {
         if (e.IsRecording && recordingPrompt is { } prompt) prompt.DialogResult = false;
@@ -320,7 +297,7 @@ internal sealed class ApplicationWindow : Window
             }
             catch (Exception error) when (error is IOException or JsonException) { }
         }
-        auto.Content = T("↻ Auto recording ", "↻ Автозапись ") + (runtime.Settings.AutoRecord.Enabled ? T("on", "включена") : T("off", "выключена"));
+        activityBar.Refresh();
     }
 
     private void UpdateSettingsNavigation()

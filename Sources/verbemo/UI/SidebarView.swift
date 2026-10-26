@@ -5,11 +5,9 @@ final class SidebarView: JournalSurface {
     var onNavigate: ((ApplicationNavigationState.Destination) -> Void)?
     var onStart: (() -> Void)?
     var onImport: (() -> Void)?
-    var onToggleAutomatic: (() -> Void)?
     private let libraryHost = NSView()
     private let start = NSButton()
     private let settings = SidebarSettingsButton()
-    private let automatic = NSSwitch()
 
     init() {
         super.init(JournalStyle.sidebar)
@@ -59,15 +57,8 @@ final class SidebarView: JournalSurface {
         settings.target = self
         settings.action = #selector(settingsClicked)
         settings.heightAnchor.constraint(equalToConstant: 40).isActive = true
-        automatic.controlSize = .small
-        automatic.target = self
-        automatic.action = #selector(automaticClicked)
-        automatic.identifier = .init("navigation.auto-record")
-        let automaticLabel = JournalStyle.caption(localised("Auto-record calls", "Автозапись звонков"))
-        automatic.setAccessibilityLabel(automaticLabel.stringValue)
-        let autoRow = NSStackView(views: [automaticLabel, NSView(), automatic])
         let divider = NSBox(); divider.boxType = .separator
-        let stack = NSStackView(views: [identity, start, importButton, libraryHost, divider, settings, autoRow])
+        let stack = NSStackView(views: [identity, start, importButton, libraryHost, divider, settings])
         stack.orientation = .vertical
         stack.distribution = .fill
         stack.alignment = .leading
@@ -103,10 +94,6 @@ final class SidebarView: JournalSurface {
         settings.needsDisplay = true
     }
     func updateRecording(_ recording: Bool) { start.isEnabled = !recording }
-    func updateAutomatic(_ enabled: Bool, reason: String?) {
-        automatic.state = enabled ? .on : .off
-        automatic.toolTip = reason
-    }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
            event.characters == "f", let search = libraryHost.journalSearchField {
@@ -118,7 +105,6 @@ final class SidebarView: JournalSurface {
     @objc private func startClicked() { onStart?() }
     @objc private func importClicked() { onImport?() }
     @objc private func settingsClicked() { onNavigate?(.general) }
-    @objc private func automaticClicked() { onToggleAutomatic?() }
 }
 
 @MainActor

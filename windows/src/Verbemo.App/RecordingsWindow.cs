@@ -360,6 +360,8 @@ internal sealed class RecordingsWindow : Window
 
     public void SetFilter(MeetingFilter value) { filter = value; ApplyFilter(); }
     public void ShowList() { search.Text = ""; detailOpen = false; UpdateLayoutMode(); }
+    internal int AttentionCount => allRows.Count(row => MeetingPresentation.Matches(row.Item, MeetingFilter.Attention, "", false));
+    internal string? TitleFor(string directory) => allRows.FirstOrDefault(row => row.Item.Directory.Equals(directory, StringComparison.OrdinalIgnoreCase))?.Item.Title;
     public FrameworkElement ExtractSidebar()
     {
         sidebarExtracted = true;
