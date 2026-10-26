@@ -115,6 +115,7 @@ struct CalendarSettingsTests {
         await refreshed.pass()
         _ = settings.content(for: .calendar)
         #expect(store.accessRequests == 1)
+        #expect(SetupState.calendarEmailsImported())
         #expect(try button("all", in: page).isEnabled)
         #expect(try button(work.calendarIdentifier, in: page).state == .on)
         #expect(watcher.bestMatch(for: now)?.title == "Work meeting")
@@ -163,6 +164,49 @@ struct CalendarSettingsTests {
             try await watcher.search(CalendarEventQuery(date: now))
         }
         #expect(store.accessRequests == 0)
+        watcher.importOwnEmailsIfNeeded()
+        #expect(!SetupState.calendarEmailsImported())
+    }
+
+    @Test(.freshHome)
+    func emailLookupUsesSharedAccessWithoutRequestingPermission() async throws {
+        let store = CalendarFixtureStore()
+        let watcher = CalendarWatcher(store: store, authorizationStatus: { .notDetermined })
+        let app = ApplicationWindow(calendar: watcher)
+        defer { _ = app.stopForTermination(); app.hide() }
+        let page = app.settings.content(for: .calendar)
+        let editor = try #require(page.allDescendants.compactMap { $0 as? EmailAddressesEditor }.first)
+        editor.onLookup?()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(store.accessRequests == 0)
+        #expect(store.calendarReads == 0)
+        let permission = try #require(page.allDescendants.first { $0.identifier?.rawValue == "access.calendar" } as? AccessRow)
+        permission.onAct?()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(store.accessRequests == 1)
+        let reads = store.calendarReads
+        editor.onLookup?()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(store.calendarReads > reads)
+        #expect(store.accessRequests == 1)
+    }
+
+    @Test(.freshHome)
+    func manualEmailLookupCompletesFirstImportWithoutPrompting() async throws {
+        let store = CalendarFixtureStore()
+        let watcher = CalendarWatcher(store: store, authorizationStatus: { .fullAccess })
+        let app = ApplicationWindow(calendar: watcher)
+        defer { _ = app.stopForTermination(); app.hide() }
+        let page = app.settings.content(for: .calendar)
+        let editor = try #require(page.allDescendants.compactMap { $0 as? EmailAddressesEditor }.first)
+        #expect(!SetupState.calendarEmailsImported())
+        editor.onLookup?()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(SetupState.calendarEmailsImported())
+        #expect(store.accessRequests == 0)
+        let reads = store.calendarReads
+        watcher.importOwnEmailsIfNeeded()
+        #expect(store.calendarReads == reads, "Startup must not import again after a manual lookup")
     }
 
     @Test(.freshHome)
@@ -253,6 +297,7 @@ final class CalendarFixtureStore: EKEventStore {
     var requestedIDs: [String] = []
     var queryCount = 0
     var accessRequests = 0
+    var calendarReads = 0
 
     override func requestFullAccessToEvents(completion: @escaping EKEventStoreRequestAccessCompletionHandler) {
         accessRequests += 1
@@ -276,7 +321,10 @@ final class CalendarFixtureStore: EKEventStore {
         eventList.append(event)
     }
 
-    override func calendars(for entityType: EKEntityType) -> [EKCalendar] { calendarList }
+    override func calendars(for entityType: EKEntityType) -> [EKCalendar] {
+        calendarReads += 1
+        return calendarList
+    }
     override func predicateForEvents(withStart startDate: Date, end endDate: Date, calendars: [EKCalendar]?) -> NSPredicate {
         queryCount += 1
         requestedIDs = (calendars ?? calendarList).map(\.calendarIdentifier)

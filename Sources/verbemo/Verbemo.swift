@@ -583,6 +583,12 @@ final class AppController {
         monitor.start()
         network = monitor
 
+        if Config.useCalendar() || Config.autoRecord().calendar {
+            Task { [weak self] in
+                guard let self, !self.isStopping else { return }
+                self.calendar.importOwnEmailsIfNeeded()
+            }
+        }
         autoRecord.reloadSettings()
         showAutoRecord()
     }

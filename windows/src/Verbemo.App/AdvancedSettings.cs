@@ -88,11 +88,21 @@ internal sealed class AdvancedSettings
 
     private FrameworkElement Control(SettingEntry entry) => entry.Kind switch
     {
+        _ when entry.Path == "user_email" => Emails(entry),
         SettingKind.Toggle => Toggle(entry),
         SettingKind.Choice => Choice(entry),
         SettingKind.Command => Command(entry),
         _ => Text(entry),
     };
+
+    private FrameworkElement Emails(SettingEntry entry)
+    {
+        var editor = new EmailAddressesEditor();
+        editor.Save = addresses => Ui.TryUpdate(Ui.OwnerOf(View), () =>
+            runtime.SetValue(entry.Path, JsonSerializer.SerializeToNode(addresses, AppSettings.JsonOptions)));
+        refreshers.Add(() => editor.Show(runtime.Settings.UserEmails));
+        return editor;
+    }
 
     private FrameworkElement Toggle(SettingEntry entry)
     {

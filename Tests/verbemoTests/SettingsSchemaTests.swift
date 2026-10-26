@@ -508,6 +508,10 @@ struct SettingsControllerTests {
             application.navigate(SettingsPage.destination(for: entry.path))
             let control = try #require(settings.renderedControls.first { $0.identifier?.rawValue == entry.path.joined(separator: ".") })
             #expect(control.window === application.panel)
+            if entry.path == ["user_email"] {
+                #expect(control is EmailAddressesEditor)
+                continue
+            }
             switch entry.kind {
             case .toggle:
                 #expect(control is NSSwitch, "\(entry.path) should be a switch")

@@ -398,7 +398,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         var current = settings();
         var stored = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
         var source = stored.Sources.GetValueOrDefault(SpeakerLabels.Me);
-        if (string.IsNullOrWhiteSpace(current.UserEmail) && source != "calendar-auto"
+        if (current.UserEmails.Count == 0 && source != "calendar-auto"
             || source is "manual" or "calendar"
             || stored.ParticipantIds.ContainsKey(SpeakerLabels.Me) && source != "calendar-auto") return;
         var existing = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);

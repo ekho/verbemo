@@ -8,9 +8,11 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     }
     var isProcessing: (() -> Bool)?
     private let panel: NSWindow
+    private let calendar: CalendarWatcher
     private let calendarSelection: CalendarSettingsView
     let setup: SetupForm
     private var deletionTask: Task<Void, Never>?
+    private var emailLookupTask: Task<Void, Never>?
     private var pages: [ApplicationNavigationState.Destination: NSView] = [:]
     private var pageNotices: [NSTextField] = []
     private var providerRows: [(SettingsSchema.Entry, NSView)] = []
@@ -30,6 +32,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
 
     init(hostWindow: NSWindow, calendar: CalendarWatcher = CalendarWatcher()) {
         panel = hostWindow
+        self.calendar = calendar
         setup = SetupForm(mode: .settings, calendar: calendar)
         calendarSelection = CalendarSettingsView(calendar: calendar)
         super.init()
@@ -66,7 +69,8 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     func stopForTermination() -> [Task<Void, Never>] {
         configWatch = nil
         deletionTask?.cancel()
-        return setup.stopForTermination() + [deletionTask].compactMap { $0 }
+        emailLookupTask?.cancel()
+        return setup.stopForTermination() + [deletionTask, emailLookupTask].compactMap { $0 }
     }
 
     func reload() {
@@ -479,8 +483,15 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         }
         NSLayoutConstraint.activate([
             label.widthAnchor.constraint(lessThanOrEqualToConstant: 460),
-            control.widthAnchor.constraint(equalToConstant: controlWidth),
+            entry.path == ["user_email"]
+                ? control.widthAnchor.constraint(lessThanOrEqualToConstant: 460)
+                : control.widthAnchor.constraint(equalToConstant: controlWidth),
         ])
+        if entry.path == ["user_email"] {
+            let width = control.widthAnchor.constraint(equalTo: line.widthAnchor)
+            width.priority = .defaultHigh
+            width.isActive = true
+        }
 
         var helpText = entry.help
         if entry.path == ["interface_language"] {
@@ -511,6 +522,35 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     }
 
     private func makeControl(for entry: SettingsSchema.Entry) -> NSControl {
+        if entry.path == ["user_email"] {
+            let editor = EmailAddressesEditor()
+            editor.onChange = { Config.update(path: entry.path, value: $0.isEmpty ? nil : $0) }
+            editor.onLookup = { [weak self, weak editor] in
+                guard let self, let editor, self.emailLookupTask == nil else { return }
+                editor.setSearching(true)
+                self.emailLookupTask = Task { [weak self, weak editor] in
+                    defer { self?.emailLookupTask = nil; editor?.setSearching(false) }
+                    guard !Task.isCancelled, let watcher = self?.calendar else { return }
+                    guard watcher.authorized else {
+                        editor?.report(CalendarSelectionError.accessDenied.localizedDescription, error: true)
+                        return
+                    }
+                    let found = watcher.ownEmailAddresses()
+                    let current = Config.userEmails()
+                    let merged = EmailAddresses.normalize(current + found)
+                    guard merged == current || Config.update(path: entry.path, value: merged) else {
+                        editor?.report(localised("Could not save the addresses.", "Не удалось сохранить адреса."), error: true)
+                        return
+                    }
+                    SetupState.markCalendarEmailsImported()
+                    editor?.show(merged)
+                    editor?.report(found.isEmpty
+                        ? localised("No addresses found. You can add them manually.", "Адреса не найдены. Их можно добавить вручную.")
+                        : localised("Found \(found.count) addresses. The list has been updated.", "Найдено адресов: \(found.count). Список обновлён."))
+                }
+            }
+            return editor
+        }
         switch entry.kind {
         case .toggle:
             let toggle = NSSwitch()
@@ -571,6 +611,10 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     private func refresh() {
         let config = Config.raw()
         for row in rows {
+            if let editor = row.control as? EmailAddressesEditor {
+                editor.show(Config.userEmails())
+                continue
+            }
             if (row.control as? NSTextField)?.currentEditor() != nil { continue }
             let stored = value(at: row.entry.path, in: config)
             switch row.entry.kind {

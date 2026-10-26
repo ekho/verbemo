@@ -106,9 +106,9 @@ struct SpeakerNames: Codable {
         let root = dir.deletingLastPathComponent().lastPathComponent == "transcripts"
             ? dir.deletingLastPathComponent().deletingLastPathComponent() : dir
         let calendar = MeetingCalendarMetadata.read(from: root)
-        let email = Config.userEmail()
-        let matching = calendar?.isConfirmed == true && email != nil ? calendar!.participants.filter {
-            $0.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == email
+        let emails = Set(Config.userEmails())
+        let matching = calendar?.isConfirmed == true && !emails.isEmpty ? calendar!.participants.filter {
+            $0.email.map { emails.contains($0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) } == true
         } : []
         let previous = speakers["me"]
         if matching.count == 1, let person = matching.first,

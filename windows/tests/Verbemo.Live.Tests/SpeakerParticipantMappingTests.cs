@@ -8,6 +8,32 @@ namespace Verbemo.Live.Tests;
 
 public sealed class SpeakerParticipantMappingTests
 {
+    [Theory]
+    [InlineData("personal@example.test", false)]
+    [InlineData("work@example.test", false)]
+    [InlineData("personal@example.test", true)]
+    public async Task Any_self_email_matches_but_two_invited_identities_remain_ambiguous(string email, bool ambiguous)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "verbemo-self-mapping", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var settings = AppSettings.CreateConservative(root);
+            settings.UserEmails = ["personal@example.test", " WORK@example.test ", "work@example.test"];
+            var people = new List<CalendarParticipant> { new("self", "Owner", email) };
+            if (ambiguous) people.Add(new("second", "Other identity", "work@example.test"));
+            File.WriteAllText(Path.Combine(root, "meta.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                calendar = new { event_id = "event", association = "confirmed", participants = people },
+            }, AppSettings.JsonOptions));
+            var transcript = new TranscriptDocument("whisper", "tiny", DateTimeOffset.UtcNow, [new(0, 1000, "Hello", "me")]);
+            await SpeakerFile.ApplySelfParticipantAsync(root, transcript, settings, default);
+            var result = await SpeakerFile.ReadAsync(root, default);
+            Assert.Equal(ambiguous ? null : "self", result.ParticipantIds.GetValueOrDefault("me"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Fact]
     public async Task No_self_email_or_auto_identity_does_not_read_or_change_the_transcript()
     {
@@ -74,7 +100,7 @@ public sealed class SpeakerParticipantMappingTests
         var root = Path.Combine(Path.GetTempPath(), "verbemo-self-mapping", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var settings = AppSettings.CreateConservative(root);
-        settings.UserEmail = "me@example.test";
+        settings.UserEmails = ["me@example.test"];
         settings.UserName = userName;
         using var http = new HttpClient();
         await using var analytics = new AnalyticsService(root, () => settings, () => false, http);
@@ -93,12 +119,12 @@ public sealed class SpeakerParticipantMappingTests
             Assert.Contains(userName ?? "Calendar", File.ReadAllText(Path.Combine(archive, "transcript.md")));
             Assert.Equal(current, File.ReadAllBytes(Path.Combine(root, "transcript.json")));
             Assert.Empty((await SpeakerFile.ReadAsync(root, default)).ParticipantIds);
-            settings.UserEmail = null;
+            settings.UserEmails = [];
             await processor.RefreshSelfParticipantAsync(archive);
             var cleared = await SpeakerFile.ReadAsync(archive, default);
             Assert.Empty(cleared.ParticipantIds);
             Assert.Equal(userName, cleared.Names.GetValueOrDefault("me"));
-            settings.UserEmail = "me@example.test";
+            settings.UserEmails = ["me@example.test"];
             await processor.RefreshSelfParticipantAsync(archive);
             await processor.SetSpeakerParticipantAsync(archive, "me", null);
             await processor.RefreshSelfParticipantAsync(archive);

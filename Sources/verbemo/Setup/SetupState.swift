@@ -37,6 +37,16 @@ enum SetupState {
 
     static var isPending: Bool { isPending(at: path) }
 
+    static func calendarEmailsImported(at stateURL: URL = path) -> Bool {
+        let json = (try? Data(contentsOf: stateURL))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        return json?["calendar_emails_imported"] as? Bool == true
+    }
+
+    static func markCalendarEmailsImported(at stateURL: URL = path) {
+        write(["calendar_emails_imported": true], at: stateURL)
+    }
+
     /// Record that the window has been through. Failure is not worth
     /// escalating: the cost is the window opening again, not a lost recording.
     ///
@@ -103,13 +113,13 @@ enum SetupState {
     static func reset(at stateURL: URL = path) {
         guard
             let data = try? Data(contentsOf: stateURL),
-            var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let heard = json["system_audio_heard_at"]
+            var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             try? FileManager.default.removeItem(at: stateURL)
             return
         }
-        json = ["system_audio_heard_at": heard]
+        json.removeValue(forKey: "version")
+        json.removeValue(forKey: "completed_at")
         guard let rewritten = try? JSONSerialization.data(
             withJSONObject: json, options: [.prettyPrinted, .sortedKeys]
         ) else {

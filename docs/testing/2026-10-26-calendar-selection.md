@@ -49,3 +49,17 @@ synchronization acceptance. Full VoiceOver interaction was not tested.
 
 The installed application was not replaced and no release was published.
 Windows was not changed; it currently has no calendar integration.
+
+## Integration with calendar email discovery
+
+PR #53 reached master while PR #54 was awaiting merge. The integration keeps
+one-time email discovery for already granted access, gated by enabled calendar
+features, and uses the shared watcher for passive manual email lookup. Calendars
+without a source are excluded from email discovery. A successful manual lookup
+marks the first import complete so deleted addresses cannot return on startup.
+
+The missing-import-marker regression failed before its fix. After integration,
+65 tests in 7 suites passed (12.209 seconds), with no remaining read-only review
+findings. Logs: `/private/tmp/verbemo-calendar-email-merge-red.log` and
+`/private/tmp/verbemo-calendar-merge-focused-final.log`. The complete suite and
+CI for the updated branch are recorded in [PR #54](https://github.com/ekho/verbemo/pull/54).

@@ -499,10 +499,10 @@ enum SettingsSchema {
                   describedAs: localised(
                       "the account's full name", "полное имя учётной записи")),
             Entry(["user_email"],
-                  localised("Your email", "Ваш email"),
-                  localised("Matches you to a calendar invitee by email. Used locally; never sent to a model.",
-                            "Связывает вас с участником календаря по email. Используется локально и не отправляется модели."),
-                  .text, describedAs: localised("not set", "не указан")),
+                  localised("Your email addresses", "Ваши email-адреса"),
+                  localised("Addresses you use in different calendars. Matches you to a unique invitee locally; never sent to a model.",
+                            "Ваши адреса в разных календарях. Связывает вас с единственным подходящим участником локально, без отправки модели."),
+                  .list, describedAs: localised("Add email", "Добавить email")),
             Entry(["speaker_names", "backend"],
                   localised("Which model to ask", "У какой модели спрашивать"),
                   localised(
@@ -736,6 +736,10 @@ enum SettingsSchema {
             return .set(text)
 
         case (.text(let raw), .list):
+            if entry.path == ["user_email"] {
+                guard let items = EmailAddresses.parse(raw) else { return .invalid }
+                return items.isEmpty ? .clear : .set(items)
+            }
             let items = raw.split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }

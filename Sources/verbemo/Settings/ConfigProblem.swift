@@ -110,7 +110,7 @@ extension Config {
                     ? nil
                     : localised("one of ", "одно из: ") + options.joined(separator: ", ")
             case .list?:
-                expected = found as? [String] != nil
+                expected = found as? [String] != nil || (key == .userEmail && found is String)
                     ? nil : localised("a list of strings", "список строк")
             case .text?, .multilineText?, nil:
                 expected = found as? String != nil
