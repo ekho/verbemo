@@ -484,14 +484,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         NSLayoutConstraint.activate([
             label.widthAnchor.constraint(lessThanOrEqualToConstant: 460),
             entry.path == ["user_email"]
-                ? control.widthAnchor.constraint(lessThanOrEqualToConstant: 460)
+                ? control.widthAnchor.constraint(equalTo: line.widthAnchor)
                 : control.widthAnchor.constraint(equalToConstant: controlWidth),
         ])
-        if entry.path == ["user_email"] {
-            let width = control.widthAnchor.constraint(equalTo: line.widthAnchor)
-            width.priority = .defaultHigh
-            width.isActive = true
-        }
 
         var helpText = entry.help
         if entry.path == ["interface_language"] {
