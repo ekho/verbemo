@@ -103,6 +103,31 @@ for rep in NSBitmapImageRep.imageReps(with: data) {
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(output.exists())
 
+    def test_failed_final_flush_removes_only_its_new_output(self):
+        # Run the builder's publisher alone so a file-size limit affects its close,
+        # rather than hdiutil's earlier writes of the source image.
+        publisher = BUILDER.read_text().split("<<'PY'\n", 1)[1].split('\nPY', 1)[0]
+        limit = '''
+import resource, signal
+signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+resource.setrlimit(resource.RLIMIT_FSIZE, (65536, 65536))
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source.dmg'
+            source.write_bytes(b'x' * 65537)
+            for existing in (False, True):
+                with self.subTest(existing=existing):
+                    output = Path(directory) / 'output.dmg'
+                    if existing:
+                        output.write_bytes(b'keep published bytes')
+                    result = subprocess.run([sys.executable, '-c', limit + publisher,
+                                             str(source), str(output)], capture_output=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    if existing:
+                        self.assertEqual(output.read_bytes(), b'keep published bytes')
+                    else:
+                        self.assertFalse(output.exists(), 'failed final flush left a partial DMG')
+
 
 if __name__ == '__main__':
     unittest.main()

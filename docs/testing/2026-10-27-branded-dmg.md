@@ -5,13 +5,17 @@
 - 105 release-script tests passed. Fixture repositories used process-scoped
   `commit.gpgsign=false` because the sandbox cannot access the user's GPG agent;
   no user Git configuration was changed.
-- 15 macOS packaging tests passed, including three new DMG tests. A real temporary
+- 16 macOS packaging tests passed, including four new DMG tests. A real temporary
   image is built/mounted with spaces, an apostrophe and Unicode in its paths.
   Checks cover the Applications symlink, volume icon, saved positions/background
   alias, both TIFF representations (660×420 and 1320×840 at 660×420 logical size),
   executable permissions, bundle symlinks and the signature after copying out.
 - Existing-output rejection and missing-app failure were tested. The product
   independence guard and shell syntax checks passed.
+- Independent review found a final-flush failure could leave a partial image.
+  A regression test with a 65,536-byte file-size limit reproduced it before the
+  fix and passed afterwards. Cleanup now covers closing the file and preserves
+  an existing destination it did not create.
 - A packaging-only image of the installed Verbemo **0.15.1** was created with
   this branch's builder. This reused the app only as packaging input; it was not
   rebuilt, launched or replaced. Exact PR-source app builds are delegated to CI.

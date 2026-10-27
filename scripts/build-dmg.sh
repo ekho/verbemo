@@ -42,11 +42,14 @@ from pathlib import Path
 import shutil
 import sys
 source, destination = map(Path, sys.argv[1:])
-with destination.open('xb') as target:
-    try:
+created = False
+try:
+    with destination.open('xb') as target:
+        created = True
         with source.open('rb') as stream:
             shutil.copyfileobj(stream, target)
-    except BaseException:
+except BaseException:
+    if created:
         destination.unlink()
-        raise
+    raise
 PY
