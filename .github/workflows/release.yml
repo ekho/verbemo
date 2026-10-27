@@ -124,6 +124,7 @@ jobs:
           python-version: '3.12'
       - name: Test source without signing credentials
         run: |
+          python3 -m pip install --require-hashes -r Packaging/dmg/requirements.txt
           make verify-localvqe
           set -o pipefail
           VERBEMO_REQUIRE_LOCALVQE=1 swift test --no-parallel 2>&1 | tee "$RUNNER_TEMP/swift-tests.log"

@@ -38,12 +38,8 @@ if (info.get('CFBundleShortVersionString') != sys.argv[2] or info.get('CFBundleV
         or info.get('SUEnableAutomaticChecks') is not False or 'SUPublicEDKey' in info):
     sys.exit('Preview bundle identity or disabled updater validation failed')
 PY
-mkdir "$WORK/stage"
-ditto "$APP" "$WORK/stage/Verbemo.app"
-ln -s /Applications "$WORK/stage/Applications"
 NAME="Verbemo-$VERSION_ARG-macos-universal.dmg"
-hdiutil create -volname "Verbemo $VERSION_ARG Preview" -srcfolder "$WORK/stage" -format UDZO -quiet "$WORK/$NAME"
-hdiutil verify "$WORK/$NAME" >/dev/null
+bash scripts/build-dmg.sh "$APP" "Verbemo $VERSION_ARG Preview" "$WORK/$NAME"
 python3 scripts/release_manifest.py receipt --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
     --build-number "$BUILD" --output "$WORK" --prerelease
 python3 scripts/release_manifest.py validate-macos --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
