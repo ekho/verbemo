@@ -244,7 +244,7 @@ struct SetupOfferTests {
 
         menuBar.setVisible(true)
         #expect(menuBar.statusItemTitle == " 1:23")
-        #expect(menuBar.offeredItemTitles.first == "● Recording · 1:23")
+        #expect(menuBar.offeredItemTitles.contains("● Recording · 1:23"))
         #expect(!menuBar.offeredItemTitles.contains("Finish recording"))
     }
 

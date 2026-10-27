@@ -50,6 +50,18 @@ final class MenuBarController {
         menu.autoenablesItems = false
         menu.font = NSFont.menuFont(ofSize: 0).tabularFigures
 
+        let meetings = NSMenuItem(title: localised("Open Verbemo", "Открыть Verbemo"),
+            action: #selector(showMeetingsClicked), keyEquivalent: "l")
+        menu.addItem(meetings)
+        menu.addItem(.separator())
+
+        autoRecordItem = NSMenuItem(title: localised("Automatic meeting recording", "Автозапись встреч"),
+            action: #selector(autoRecordClicked), keyEquivalent: "")
+        menu.addItem(autoRecordItem)
+        autoRecordStatus = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        autoRecordStatus.isHidden = true
+        menu.addItem(autoRecordStatus)
+
         stateLabel = NSMenuItem(title: "", action: #selector(statusClicked), keyEquivalent: "")
         stateLabel.view = recordingRow
         menu.addItem(stateLabel)
@@ -69,12 +81,6 @@ final class MenuBarController {
         let importItem = NSMenuItem(title: localised("Import recording…", "Импортировать запись…"),
             action: #selector(importClicked), keyEquivalent: "i")
         menu.addItem(importItem)
-        autoRecordItem = NSMenuItem(title: localised("Automatic meeting recording", "Автозапись встреч"),
-            action: #selector(autoRecordClicked), keyEquivalent: "")
-        menu.addItem(autoRecordItem)
-        autoRecordStatus = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        autoRecordStatus.isHidden = true
-        menu.addItem(autoRecordStatus)
         menu.addItem(.separator())
 
         let settings = NSMenuItem(title: localised("Settings…", "Настройки…"),
@@ -86,11 +92,8 @@ final class MenuBarController {
         setupItem = NSMenuItem(title: localised("Finish setup…", "Завершить настройку…"),
             action: #selector(showSetupClicked), keyEquivalent: "")
         menu.addItem(setupItem)
-        let meetings = NSMenuItem(title: localised("Open Verbemo", "Открыть Verbemo"),
-            action: #selector(showMeetingsClicked), keyEquivalent: "l")
-        menu.addItem(meetings)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: localised("Quit Verbemo", "Выйти из Verbemo"),
+        let quit = NSMenuItem(title: localised("Quit", "Выйти"),
             action: #selector(quitClicked), keyEquivalent: "q")
         menu.addItem(quit)
 
@@ -227,7 +230,6 @@ final class MenuBarController {
         autoRecordStatus.isHidden = !enabled || notice == nil
         autoRecordStatus.action = notice == .microphoneAccess ? #selector(showSetupClicked) : nil
         autoRecordStatus.isEnabled = notice == .microphoneAccess
-        autoRecordStatus.indentationLevel = 1
     }
 
     /// Menu-bar status icons are nominally 18pt tall; 16 leaves a little air.
@@ -300,7 +302,8 @@ private final class RecordingMenuRow: NSView {
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            // Match the native menu title column, leaving room for its checkmark.
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
             headline.heightAnchor.constraint(equalToConstant: 32),

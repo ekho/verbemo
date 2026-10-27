@@ -8,14 +8,14 @@ struct MenuBarTests {
         let tray = MenuBarController(visible: false)
         tray.setupAvailable(false)
         #expect(tray.offeredItemTitles == [
-            "Начать запись", "Импортировать запись…", "Автозапись встреч", "",
-            "Настройки…", "Открыть Verbemo", "", "Выйти из Verbemo",
+            "Открыть Verbemo", "", "Автозапись встреч", "Начать запись", "Импортировать запись…", "",
+            "Настройки…", "", "Выйти",
         ])
         var pauses = 0
         tray.onTogglePause = { pauses += 1 }
         #expect(!tray.performOfferedItem(titled: "Пауза"))
         #expect(pauses == 0)
-        #expect(try #require(tray.menu.items.first).view != nil)
+        #expect(try #require(tray.menu.items.first { $0.title == "Начать запись" }).view != nil)
     }
 
     @Test(.speaking(.english)) func recordingControlsFollowStateWithoutLosingActions() throws {
@@ -64,16 +64,16 @@ struct MenuBarTests {
     }
 
     private func pressInline(_ action: String, in tray: MenuBarController) throws -> Bool {
-        let row = try #require(tray.menu.items.first?.view)
+        let row = try #require(tray.menu.items.compactMap(\.view).first)
         let button = try #require(row.allDescendants.compactMap { $0 as? NSButton }
             .first { $0.identifier?.rawValue == "tray.recording.\(action)" })
         guard !button.isHiddenOrHasHiddenAncestor, button.isEnabled else { return false }
         return NSApp.sendAction(try #require(button.action), to: button.target, from: button)
     }
 
-    @Test(.speaking(.english)) func firstRowChangesStateAndOpensTheRecordingWithoutTogglingIt() throws {
+    @Test(.speaking(.english)) func recordingRowChangesStateAndOpensTheRecordingWithoutTogglingIt() throws {
         let tray = MenuBarController(visible: false)
-        let item = try #require(tray.menu.items.first)
+        let item = try #require(tray.menu.items.first { $0.view != nil })
         let row = try #require(item.view)
         var opened = 0, toggles = 0
         tray.onShowRecording = { opened += 1 }
@@ -122,7 +122,7 @@ struct MenuBarTests {
     @Test func recordingControlsStayAtTheRightEdge() throws {
         let tray = MenuBarController(visible: false)
         tray.update(state: .recording, elapsed: "12:34")
-        let row = try #require(tray.menu.items.first?.view)
+        let row = try #require(tray.menu.items.compactMap(\.view).first)
         row.layoutSubtreeIfNeeded()
         let stop = try #require(row.allDescendants.first { $0.identifier?.rawValue == "tray.recording.stop" })
         let frame = row.convert(stop.bounds, from: stop)
