@@ -46,11 +46,8 @@ REQUIREMENT=$(codesign -d -r- "$APP" 2>&1)
 grep -q '^Authority=Developer ID Application:' <<<"$DETAILS" || die 'Developer ID signature missing'
 grep -q 'flags=.*runtime' <<<"$DETAILS" || die 'hardened runtime missing'
 grep -q 'name.ekho.verbemo' <<<"$REQUIREMENT" || die 'wrong designated requirement'
-mkdir "$WORK/stage"
-cp -R "$APP" "$WORK/stage/Verbemo.app"
-ln -s /Applications "$WORK/stage/Applications"
 NAME="Verbemo-$VERSION_ARG-macos-universal.dmg"
-hdiutil create -volname "Verbemo $VERSION_ARG" -srcfolder "$WORK/stage" -format UDZO -quiet "$WORK/$NAME"
+bash scripts/build-dmg.sh "$APP" "Verbemo $VERSION_ARG" "$WORK/$NAME"
 codesign --force --sign "$VERBEMO_SIGN_ID" --timestamp "$WORK/$NAME"
 codesign --verify --strict "$WORK/$NAME"
 xcrun notarytool submit "$WORK/$NAME" --key "$VERBEMO_NOTARY_KEY_FILE" \

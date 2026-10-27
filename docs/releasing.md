@@ -47,9 +47,31 @@ Authenticode requirements. Missing credentials fail that mode explicitly.
 To package a local macOS preview from a clean committed checkout:
 
 ```sh
+python3 -m venv .build/dmg-tools
+source .build/dmg-tools/bin/activate
+python3 -m pip install --require-hashes -r Packaging/dmg/requirements.txt
 bash scripts/build-macos-preview.sh --version "$(cat VERSION)" \
   --source-commit "$(git rev-parse HEAD)" --output /tmp/verbemo-preview-artifacts
 ```
+
+Both macOS routes use `scripts/build-dmg.sh` with the same Journal layout in
+`Packaging/dmg/settings.py`. The build-only dependencies are pinned with hashes;
+no Finder session is needed to package the image. `background.swift` renders
+the bilingual instructions and wave motif into a TIFF with 1×/2× representations.
+The mounted volume uses the existing Verbemo icon. Layout is applied before
+DMG signing, notarization, Sparkle signatures and receipt hashes.
+
+For a packaging-only check, pass an already signed app, volume name and new output:
+
+```sh
+bash scripts/build-dmg.sh .build/Verbemo.app "Verbemo DMG Test Preview" /tmp/verbemo-layout.dmg
+python3 -m unittest discover -s Tests/macos-scripts -p test_dmg.py
+```
+
+Open the result in Finder and check the background, app → Applications placement,
+labels in light/dark appearance, and Retina sharpness. Automated metadata checks
+do not replace that visual inspection. Copy to an isolated temporary folder for
+signature checks; do not overwrite an installed application for packaging tests.
 
 Signed macOS builds require these own values, never the imported author's keys:
 
