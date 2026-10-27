@@ -428,7 +428,7 @@ struct InterfaceLanguageTests {
             menuBar.update(state: state, elapsed: "1:23")
             found.append(contentsOf: menuBar.offeredItemTitles)
             found.append(menuBar.statusItemTitle)
-            if let row = menuBar.menu.items.first?.view { found.append(contentsOf: strings(in: row)) }
+            for row in menuBar.menu.items.compactMap(\.view) { found.append(contentsOf: strings(in: row)) }
         }
         return found
     }
