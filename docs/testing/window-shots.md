@@ -1,5 +1,18 @@
 # Seeing the Journal pages
 
+Ordinary `swift test --no-parallel` runs keep AppKit windows transparent and
+ignore application-activation requests, so the tests do not cover the desktop
+or take keyboard focus. Window ordering, visibility, layout, sheets and field
+editing still use AppKit. The `QuietTestWindows` bootstrap is linked only into
+the test bundle; the application is unaffected.
+
+For an intentional visible test run, use
+`VERBEMO_TEST_WINDOWS=1 swift test --no-parallel --filter <test>`.
+The interactive `VERBEMO_CALENDAR_ACCEPTANCE` fixture also enables visible
+windows. Foreground activation and real mouse/keyboard interaction require
+this visible mode; the ordinary run does not establish that acceptance.
+Offscreen screenshot fixtures below remain available in the quiet mode.
+
 `Tests/verbemoTests/WindowShots.swift` renders pages of the real
 `ApplicationWindow` to PNG files for human layout review. It also writes a view
 listing for the transcription settings page. The suite checks that its fixture

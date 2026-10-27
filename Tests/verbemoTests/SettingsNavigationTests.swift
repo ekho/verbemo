@@ -4,6 +4,31 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct SettingsNavigationTests {
+    @Test(.freshHome(config: #"{"user_email":["test@example.invalid"]}"#), .speaking(.russian))
+    func settingsPagesPreserveWindowWidth() throws {
+        let store = CalendarFixtureStore()
+        _ = store.addCalendar("Рабочие встречи")
+        let app = ApplicationWindow(calendar: CalendarWatcher(store: store, authorizationStatus: { .fullAccess }))
+        defer { _ = app.stopForTermination(); app.hide() }
+        app.show()
+        for width: CGFloat in [1340, 2000, 760, 1340] {
+            app.panel.setContentSize(NSSize(width: width, height: 820))
+            for destination in ApplicationNavigationState.Destination.allCases {
+                app.navigate(destination)
+                app.panel.contentView?.layoutSubtreeIfNeeded()
+                app.panel.layoutIfNeeded()
+                #expect(abs(app.panel.contentLayoutRect.width - width) < 2,
+                        "\(destination.rawValue) must preserve the requested width \(width)")
+                if destination == .calendar {
+                    let input = try #require(app.panel.contentView?.allDescendants.first {
+                        $0.identifier?.rawValue == "user_email.input"
+                    })
+                    #expect(input.frame.width >= 260, "The email input must remain usable after resizing")
+                }
+            }
+        }
+    }
+
     @Test(.freshHome, .enabled(if: Platform.supportsLocalModels))
     func switchingTabsDoesNotRepeatMachineChecksOrRebuildHiddenModels() throws {
         let app = ApplicationWindow()

@@ -23,6 +23,7 @@ class ChangesTests(unittest.TestCase):
         cases = [
             ('Sources/verbemo/Config.swift', {'macos_test', 'macos_build'}),
             ('Tests/verbemoTests/ConfigTests.swift', {'macos_test'}),
+            ('Tests/QuietTestWindows/QuietTestWindows.m', {'macos_test'}),
             ('windows/src/Verbemo.App/Config.cs', {'windows_test', 'windows_build'}),
             ('windows/src/Verbemo.App/App.xaml.cs', {'windows_test', 'windows_build', 'scripts'}),
             ('windows/tests/Verbemo.Core.Tests/ConfigTests.cs', {'windows_test'}),
