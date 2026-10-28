@@ -143,6 +143,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     var isProcessing: Bool { working || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var summarySheet: SummaryRegenerationSheet?
+    private var summaryDirectory: URL?
     private var working = false { didSet { onActivityChange?() } }
 
     init(root: URL, pasteboard: NSPasteboard = .general,
@@ -534,18 +535,31 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     @objc private func repeatTranscriptClicked() { guard currentActions.reason(for: .retranscribe) == nil else { return }; confirmRetranscription(engine: nil) }
     @objc private func regenerateClicked() { regenerateSummary() }
     private func regenerateSummary() {
-        guard currentActions.reason(for: .regenerateSummary) == nil, let dir = artifactDirectory, panel.attachedSheet == nil else { updateButtons(); return }
+        guard currentActions.reason(for: .regenerateSummary) == nil, let dir = artifactDirectory,
+              let item = selected, panel.attachedSheet == nil else { updateButtons(); return }
         working = true
         updateButtons()
+        if summaryDirectory == dir, let summarySheet {
+            summarySheet.selectionChanged()
+            panel.beginSheet(summarySheet.window)
+            return
+        }
         let sheet = SummaryRegenerationSheet(onSettings: { [weak self] in self?.onNavigateSettings?(.summary) }, run: { request in
             try await PostProcessor.regenerateSummary(dir, request: request)
+        }, onFailure: { [weak self] error in
+            guard let self else { return }
+            working = false
+            reload()
+            say(error.localizedDescription, about: item)
         }, completion: { [weak self] in
             guard let self else { return }
             summarySheet = nil
+            summaryDirectory = nil
             working = false
             reload()
         })
         summarySheet = sheet
+        summaryDirectory = dir
         panel.beginSheet(sheet.window)
     }
     @objc func beginRenamingMeeting() {

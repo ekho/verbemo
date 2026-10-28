@@ -49,6 +49,7 @@ The New recording fixture also renders the attached form with a synthetic calend
 | `setup-permissions-{light,dark}.png` and `-narrow` | First-run microphone, call-audio and calendar permissions inside Journal, with calendar access not yet requested. |
 | `setup-permissions-switched-to-dark.png`, `setup-permissions-switched-back-to-light.png` | The same permissions page through an appearance change. |
 | `settings-{page}-{light,dark}.png` and `-narrow` | Each of the six settings pages. |
+| `summary-provider-{light,dark,switched-back-to-light}.png` | Compact summary form with a synthetic provider; no summary request is sent. |
 | `settings-storage-{light,dark}-narrow-bottom.png` | Storage scrolled to the model files at the bottom. |
 | `calendar-selection-{light,dark}.png` and `-narrow` | Calendar settings component at 680/500 points, with synthetic calendars and an explicit selection; no real EventKit access. |
 | `setup-calendar-selection-{light,dark}.png`, `-narrow` and `-narrow-bottom` | The same synthetic calendar selection on the initial setup page, with granted calendar access. |
