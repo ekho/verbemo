@@ -4,6 +4,58 @@ import Testing
 
 @MainActor
 struct MenuBarTests {
+    @Test(.speaking(.english), arguments: [false, true])
+    func backgroundIconFollowsWorkAndPreservesRecordingPriority(cancel: Bool) async throws {
+        let tray = MenuBarController()
+        defer { tray.setVisible(false) }
+        let operations = ProcessingOperations()
+        let entered = Gate(), release = Gate()
+        defer { release.open() }
+        func expectIcon(_ color: NSColor?, sourceLocation: SourceLocation = #_sourceLocation) throws {
+            let image = try #require(tray.statusItemImage, sourceLocation: sourceLocation)
+            #expect(image.isTemplate == (color == nil), sourceLocation: sourceLocation)
+            #expect(image.tiffRepresentation == WaveIcon.image(size: 16, color: color)?.tiffRepresentation,
+                sourceLocation: sourceLocation)
+        }
+        try expectIcon(nil)
+        let ticket = try operations.register(session: URL(fileURLWithPath: "/synthetic/meeting"), kind: .transcription)
+        tray.updateActivity(operations.snapshot())
+        try expectIcon(nil)
+        let task = Task { try await ticket.run { entered.open(); await release.pass() } }
+        await entered.pass()
+        tray.updateActivity(operations.snapshot())
+        try expectIcon(.systemBlue)
+        #expect(tray.statusItemTitle.isEmpty)
+        #expect(tray.offeredItemTitles.contains("Start recording"))
+
+        for (state, color) in [(MenuBarController.State.recording, NSColor.systemRed), (.paused, .systemOrange)] {
+            tray.update(state: state, elapsed: "1:23")
+            tray.updateActivity(operations.snapshot())
+            try expectIcon(color)
+            #expect(tray.statusItemTitle.contains("1:23"))
+            tray.updateActivity([])
+            try expectIcon(color)
+        }
+        tray.updateActivity(operations.snapshot())
+        tray.update(state: .idle, elapsed: nil)
+        try expectIcon(.systemBlue)
+        tray.setVisible(false)
+        tray.updateActivity(operations.snapshot())
+        tray.setVisible(true)
+        try expectIcon(.systemBlue)
+
+        if cancel {
+            operations.cancel(ticket.id)
+            tray.updateActivity(operations.snapshot())
+            try expectIcon(.systemBlue)
+        }
+        release.open()
+        try await task.value
+        tray.updateActivity(operations.snapshot())
+        try expectIcon(nil)
+        #expect(tray.statusItemTitle.isEmpty)
+    }
+
     @Test(.speaking(.russian)) func idleMenuOffersOnlyUsefulActionsInApprovedOrder() throws {
         let tray = MenuBarController(visible: false)
         tray.setupAvailable(false)

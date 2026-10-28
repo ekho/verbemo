@@ -1,6 +1,6 @@
 import AppKit
 
-/// Status bar item in the top-right of the menu bar. Shows recording state at
+/// Status bar item in the top-right of the menu bar. Shows recording and processing state at
 /// a glance, and provides recording controls and navigation into the main window.
 ///
 /// The item can be taken away — `menu_bar_icon: false` — so it is held as an
@@ -24,6 +24,7 @@ final class MenuBarController {
     /// mid-meeting shows the meeting rather than an idle wave.
     private var state: State = .idle
     private var elapsed: String?
+    private var isProcessing = false
     private let stateLabel: NSMenuItem
     private let recordingRow = RecordingMenuRow()
     /// Says the config file cannot be used, and opens the settings page —
@@ -170,6 +171,12 @@ final class MenuBarController {
     /// well as a clock — "paused" is in there, and it is the one string in
     /// this class that is not in the menu at all.
     var statusItemTitle: String { statusItem?.button?.title ?? "" }
+    var statusItemImage: NSImage? { statusItem?.button?.image }
+
+    func updateActivity(_ operations: [ProcessingOperations.Snapshot]) {
+        isProcessing = ActivityWork(operations).running > 0
+        update(state: state, elapsed: elapsed)
+    }
 
     /// Reflect recording state in the icon and the menu. Called once a second
     /// while recording.
@@ -196,13 +203,11 @@ final class MenuBarController {
             stateLabel.title = localised("Start recording", "Начать запись")
             pauseItem.title = localised("Pause", "Пауза")
             pauseItem.isEnabled = false
-            statusItem?.button?.image = Self.icon(color: nil)
             statusItem?.button?.title = ""
         case .recording:
             stateLabel.title = localised("● Recording · ", "● Идёт запись · ") + (elapsed ?? "0:00")
             pauseItem.title = localised("Pause", "Пауза")
             pauseItem.isEnabled = true
-            statusItem?.button?.image = Self.icon(color: .systemRed)
             // The elapsed time next to the icon is the difference between
             // "something is recording" and "I know it's recording" at a glance.
             statusItem?.button?.title = " \(elapsed ?? "0:00")"
@@ -210,10 +215,12 @@ final class MenuBarController {
             stateLabel.title = localised("Ⅱ Recording paused · ", "Ⅱ Запись на паузе · ") + (elapsed ?? "0:00")
             pauseItem.title = localised("Resume", "Продолжить")
             pauseItem.isEnabled = true
-            statusItem?.button?.image = Self.icon(color: .systemOrange)
             statusItem?.button?.title =
                 " " + (elapsed ?? "0:00") + localised(" paused", " пауза")
         }
+        let color = WaveIcon.color(recording: state == .recording, paused: state == .paused)
+            ?? (isProcessing ? .systemBlue : nil)
+        statusItem?.button?.image = Self.icon(color: color)
         recordingRow.update(state: state, title: stateLabel.title)
     }
 
