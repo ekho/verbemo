@@ -41,6 +41,25 @@ enum MCPServer {
         func set(_ value: MCPJSON) { lock.withLock { self.value = value } }
         func get() -> MCPJSON? { lock.withLock { value } }
     }
+    /// The SDK can finish its response waiter without waiting for its handler. Seal admission
+    /// and join the concrete read before the HTTP host releases this request's operation slot.
+    private final class QueryWork: @unchecked Sendable {
+        private let lock = NSLock()
+        private var sealed = false
+        private var task: Task<MCPJSON, Error>?
+        func start(_ operation: @escaping @Sendable () throws -> MCPJSON) -> Task<MCPJSON, Error>? {
+            lock.withLock {
+                guard !sealed, task == nil else { return nil }
+                let next = Task.detached(operation: operation)
+                task = next
+                return next
+            }
+        }
+        func finish() async {
+            let pending = lock.withLock { sealed = true; return task }
+            _ = await pending?.result
+        }
+    }
     static func error(id: MCPJSON = .null, code: Int, message: String) -> Data {
         // Fixed messages and bounded request IDs make this error smaller than the hard response cap.
         let safeID: MCPJSON
@@ -79,7 +98,7 @@ enum MCPServer {
         if method == "tools/list", params?["cursor"] != nil { return (200, error(id: id ?? .null, code: -32602, message: "Invalid cursor")) }
         // Notifications must not execute data queries without an answer consumer.
         if id == nil { return (202, Data()) }
-        let captured = Result()
+        let captured = Result(), queries = QueryWork()
         let transport = StatelessHTTPServerTransport()
         let version = Runtime.appBundle?.infoDictionary?["CFBundleShortVersionString"] as? String ?? "development"
         let server = Server(name: "Verbemo", version: version, capabilities: .init(tools: .init(listChanged: false)), configuration: .default)
@@ -88,7 +107,7 @@ enum MCPServer {
         await server.withMethodHandler(CallTool.self) { parameters in
             guard parameters.name == name, let name, MCPContract.tools.contains(name) else { throw MCPError.invalidParams("Unknown tool") }
             let args = params?["arguments"]?.object ?? [:]
-            let work = Task.detached { () throws -> MCPJSON in
+            guard let work = queries.start({ () throws -> MCPJSON in
                 try context.runtime.check()
                 guard !scope.isCancelled else { throw MCPFailure(.serverStopping) }
                 do { return try MCPContract.resultEnvelope(query(name, args, context.runtime, context.settings)) }
@@ -96,16 +115,20 @@ enum MCPServer {
                     if [.invalidParams, .unknownTool].contains(failure.code) { throw MCPError.invalidParams(failure.code.rawValue) }
                     return self.failure(failure)
                 } catch { return self.failure(MCPFailure(.dataUnreadable)) }
-            }
+            }) else { throw MCPError.internalError("Request stopped") }
             scope.onCancel { work.cancel() }
             captured.set(try await work.value)
             return CallTool.Result()
         }
         do {
             try await server.start(transport: transport)
-            if scope.isCancelled { await transport.disconnect(); await server.stop(); return (503, error(code: -32603, message: "Server stopping")) }
+            if scope.isCancelled {
+                await transport.disconnect(); await server.stop(); await queries.finish()
+                return (503, error(code: -32603, message: "Server stopping"))
+            }
             let response = await transport.handleRequest(HTTPRequest(method: "POST", headers: headers, body: body))
             await server.stop()
+            await queries.finish()
             var data = response.bodyData ?? Data()
             if method == "tools/call", let saved = captured.get(),
                var envelope = try? MCPJSON.parse(data).object,
@@ -121,6 +144,7 @@ enum MCPServer {
             return (response.statusCode, data)
         } catch {
             await transport.disconnect(); await server.stop()
+            await queries.finish()
             return (500, self.error(id: id ?? .null, code: -32603, message: "Request failed"))
         }
     }

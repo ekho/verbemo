@@ -333,6 +333,57 @@ import CryptoKit
         for fd in sockets { close(fd) }
         await host.stop()
     }
+    @Test(arguments: [false, true]) func cancelledQueriesRetainCapacityAndStopWaitsForCompletion(deadline: Bool) async throws {
+        let root = try fixture(), token = String(repeating: "b", count: 64), port = deadline ? 55308 : 55307
+        let started = Counter(), cancelled = Counter(), released = Counter(), finished = Counter(), stopped = Counter()
+        let host = MCPHTTP(port: port, token: token, gate: { scope in
+            .init(runtime: .init(root: root, cancelled: { scope.isCancelled }), settings: nil)
+        }, query: { _, _, runtime, _ in
+            let ticket = started.increment()
+            while !runtime.cancelled() { usleep(1000) }
+            _ = cancelled.increment()
+            // Deliberately model a read/cleanup that cannot finish at the cancellation signal.
+            while released.count < ticket { usleep(1000) }
+            _ = finished.increment()
+            throw MCPFailure(.serverStopping)
+        })
+        try await host.start()
+        var sockets: [Int32] = []
+        defer {
+            for fd in sockets { close(fd) }
+            for _ in 0..<8 { _ = released.increment() }
+        }
+        let body = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_meeting"}}"#
+        let headers = "Host: 127.0.0.1:\(port)\r\nAuthorization: Bearer \(token)\r\n"
+        let request = Data("POST /mcp HTTP/1.1\r\n\(headers)Content-Type: application/json\r\nAccept: application/json\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)".utf8)
+        for _ in 0..<8 {
+            let fd = try socket(port: port); sockets.append(fd)
+            _ = request.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+        }
+        for _ in 0..<200 where started.count < 8 { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(started.count == 8)
+        if !deadline { for fd in sockets { close(fd) }; sockets.removeAll() }
+        for _ in 0..<(deadline ? 3500 : 200) where cancelled.count < 8 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(cancelled.count == 8)
+        #expect(finished.count == 0)
+        // Give the cancelled SDK response waiters time to unwind, while actual reads stay held.
+        try await Task.sleep(for: .milliseconds(100))
+        for _ in 0..<3 { #expect(try raw(port: port, headers: headers).contains(" 503 ")) }
+        #expect(started.count == 8)
+        _ = released.increment()
+        for _ in 0..<200 where finished.count == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(finished.count == 1)
+        #expect(try raw(port: port, headers: headers).contains(" 200 "))
+        let stopping = Task { await host.stop(); _ = stopped.increment() }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(stopped.count == 0)
+        for _ in 0..<7 { _ = released.increment() }
+        await stopping.value
+        #expect(finished.count == 8)
+        #expect(stopped.count == 1)
+    }
+
     @Test func jsonDeadlineCancelsHandlerAndTransportWaiter() async throws {
         let root = try fixture(), cancelled = Counter(), token = String(repeating: "f", count: 64)
         let host = MCPHTTP(port: 55301, token: token, gate: { scope in .init(runtime: .init(root: root, cancelled: { scope.isCancelled }), settings: nil) }, query: { _, _, runtime, _ in
