@@ -54,7 +54,7 @@ struct SummaryIntegrationTests {
         await Home.$scoped.withValue(home) {
             let sheet = SummaryRegenerationSheet(run: { request in
                 try await PostProcessor.regenerateSummary(dir, request: request)
-            }, completion: {})
+            }, onFailure: { _ in }, completion: {})
             sheet.picker.selectItem(at: 1); sheet.selectionChanged()
             sheet.start(); await sheet.task?.value
             #expect(sheet.status.stringValue.contains("codex login"))

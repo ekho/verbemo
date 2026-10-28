@@ -19,6 +19,22 @@ struct WindowShots {
     private var light: NSAppearance? { NSAppearance(named: .aqua) }
     private var dark: NSAppearance? { NSAppearance(named: .darkAqua) }
 
+    @Test("Summary provider form in both appearances, without calling a provider")
+    func summaryProviderSheet() throws {
+        let home = Home.withModels([FakeModel("codex-cli", answer: "unused")])
+        defer { try? FileManager.default.removeItem(at: home.url) }
+        try Home.$scoped.withValue(home) {
+            let sheet = SummaryRegenerationSheet(onSettings: {}, run: { _ in
+                Issue.record("The screenshot must not start a summary")
+            }, onFailure: { _ in }, completion: {})
+            defer { sheet.window.close() }
+            for (name, appearance) in [("light", light), ("dark", dark), ("switched-back-to-light", light)] {
+                show(sheet.window, in: appearance)
+                try write(sheet.window, "summary-provider-\(name)")
+            }
+        }
+    }
+
     @Test("New recording with and without a calendar event, in both appearances")
     func newRecordingSheet() async throws {
         let now = ISO8601DateFormatter().date(from: "2026-10-21T10:00:00Z")!
@@ -344,7 +360,7 @@ struct WindowShots {
 /// inside `draw` so the colour is the one this appearance asks for.
 private final class Ground: NSView {
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.setFill()
+        ((superview as? JournalSurface)?.color ?? NSColor.windowBackgroundColor).setFill()
         dirtyRect.fill()
     }
 }
