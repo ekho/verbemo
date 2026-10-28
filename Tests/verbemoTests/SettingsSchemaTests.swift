@@ -492,29 +492,19 @@ struct SettingsSchemaTests {
 @Suite(.serialized)
 @MainActor
 struct SettingsControllerTests {
-    @Test("MCP connection instructions follow edits and distinguish selected from listening", .freshHome)
-    func mcpInstructionsFollowSelectedPort() throws {
+    @Test("MCP schema fields have a dedicated inline editor", .freshHome(config: #"{"mcp":{"enabled":true}}"#))
+    func mcpUsesDedicatedInlineEditor() throws {
         let application = ApplicationWindow()
-        application.navigate(.general)
-        let settings = application.settings
-        defer { _ = settings.stopForTermination(); withExtendedLifetime(application) {} }
-        let controls = settings.content(for: .general).allDescendants
-        let open = try #require(controls.first { $0.identifier?.rawValue == "mcp.instructions" } as? NSButton)
-        open.performClick(nil)
-        let sheet = try #require(application.panel.attachedSheet)
-        let views = try #require(sheet.contentView).allDescendants
-        let text = try #require(views.first { $0.identifier?.rawValue == "mcp.instructions.text" } as? NSTextView)
-        let copy = try #require(views.first { $0.identifier?.rawValue == "mcp.instructions.copy" } as? NSButton)
-        let clients = try #require(views.first { $0.identifier?.rawValue == "mcp.instructions.client" } as? NSPopUpButton)
-        #expect(clients.numberOfItems == 5)
-        #expect(text.string.contains("52763")); #expect(text.string.contains("Off"))
-        let port = try #require(settings.renderedControls.first { $0.identifier?.rawValue == "mcp.port" } as? NSTextField)
-        port.stringValue = "55432"
-        settings.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
-        #expect(text.string.contains("55432")); #expect(!text.string.contains("52763")); #expect(copy.isEnabled)
-        port.stringValue = "wrong"
-        settings.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
-        #expect(!copy.isEnabled); #expect(!text.string.contains("55432"))
+        defer { _ = application.stopForTermination() }
+        application.navigate(.mcp)
+        let controls = application.settings.content(for: .mcp).allDescendants
+        let disclosure = try #require(controls.first { $0.identifier?.rawValue == "mcp.section.server" } as? NSButton)
+        disclosure.state = .on
+        _ = disclosure.sendAction(disclosure.action, to: disclosure.target)
+        let port = try #require(application.settings.renderedControls.first { $0.identifier?.rawValue == "mcp.port" } as? NSTextField)
+        #expect(port.window === application.panel)
+        #expect(application.panel.attachedSheet == nil)
+        #expect(application.settings.content(for: .general).allDescendants.allSatisfy { $0.identifier?.rawValue.hasPrefix("mcp.") != true })
     }
     @Test("Every schema setting not covered by the form gets a control", .freshHome)
     func rendersEverySetting() throws {
@@ -531,7 +521,10 @@ struct SettingsControllerTests {
         for entry in entries {
             application.navigate(SettingsPage.destination(for: entry.path))
             let control = try #require(settings.renderedControls.first { $0.identifier?.rawValue == entry.path.joined(separator: ".") })
-            #expect(control.window === application.panel)
+            if entry.path == ["mcp", "port"] {
+                #expect(control.window == nil)
+                #expect(!application.settings.content(for: .mcp).allDescendants.contains { $0 === control })
+            } else { #expect(control.window === application.panel) }
             if entry.path == ["user_email"] {
                 #expect(control is EmailAddressesEditor)
                 continue
@@ -559,7 +552,8 @@ struct SettingsControllerTests {
                 $0.identifier?.rawValue == entry.path.joined(separator: ".")
             }) as? NSTextField else { continue }
             application.navigate(SettingsPage.destination(for: entry.path))
-            #expect(field.window === application.panel)
+            if entry.path == ["mcp", "port"] { #expect(field.window == nil) }
+            else { #expect(field.window === application.panel) }
             if case .multilineText = entry.kind {
                 #expect(field.stringValue == SettingsSchema.describeDefault(entry),
                         "\(entry.path) doesn't start with its editable default")

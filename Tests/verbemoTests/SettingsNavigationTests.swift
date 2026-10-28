@@ -4,6 +4,17 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct SettingsNavigationTests {
+    @Test(.freshHome) func mcpSchemaRoutesOutsideGeneral() {
+        for path in [["mcp", "enabled"], ["mcp", "port"]] {
+            #expect(SettingsPage.destination(for: path).rawValue == "mcp")
+        }
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination() }
+        #expect(!app.settings.content(for: .general).allDescendants.contains {
+            $0.identifier?.rawValue.hasPrefix("mcp.") == true
+        })
+    }
+
     @Test(.freshHome(config: #"{"user_email":["test@example.invalid"]}"#), .speaking(.russian))
     func settingsPagesPreserveWindowWidth() throws {
         let store = CalendarFixtureStore()
@@ -152,7 +163,7 @@ struct SettingsNavigationTests {
         #expect(!tabs.isHiddenOrHasHiddenAncestor)
         #expect(compact.isHiddenOrHasHiddenAncestor)
         let tabButtons = tabs.arrangedSubviews.compactMap { $0 as? NSButton }
-        #expect(tabButtons.count == 6)
+        #expect(tabButtons.count == 7)
         #expect(tabButtons.allSatisfy { $0.image != nil && !$0.isBordered })
         #expect(tabButtons[0].state == .on)
         let transcription = tabButtons[2]

@@ -663,15 +663,70 @@ import enum MCP.Version
             #expect(throws: MCPFailure.self) { try MCPByteRange.parse(invalid, size: 10) }
         }
     }
+    @Test func connectionBlocksCoverAllClientsAndPreserveShellArgumentsInBothLanguages() throws {
+        let executable = "/Applications/Verbemo's \"Test\" $(echo unsafe).app/Contents/MacOS/verbemo"
+        let expectedArguments: [[String]] = [
+            ["codex", "mcp", "add", "verbemo", "--", executable, "mcp"],
+            [executable, "mcp"],
+            ["claude", "mcp", "add", "--transport", "stdio", "verbemo", "--", executable, "mcp"],
+            ["opencode", "mcp", "add", "verbemo", "--", executable, "mcp"],
+            [executable, "mcp"]
+        ]
+        for language in [InterfaceLanguage.english, .russian] {
+            try InterfaceLanguage.$scoped.withValue(language) {
+                for (index, client) in MCPConnectionInstructions.Client.allCases.enumerated() {
+                    let content = try #require(MCPConnectionInstructions.content(client: client, port: 55441, executable: executable))
+                    #expect(content.endpoint == "http://127.0.0.1:55441/mcp")
+                    #expect(!content.command.contains("--port"))
+                    let shell = Process(); shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+                    shell.arguments = ["-c", "set -- " + content.command + "; printf '%s\\n' \"$@\""]
+                    let output = Pipe(); shell.standardOutput = output
+                    try shell.run()
+                    let data = output.fileHandleForReading.readDataToEndOfFile(); shell.waitUntilExit()
+                    #expect(shell.terminationStatus == 0)
+                    #expect(String(decoding: data, as: UTF8.self).split(separator: "\n").map(String.init) == expectedArguments[index])
+                    #expect(content.agentPrompt.contains(executable))
+                    #expect(content.agentPrompt.contains(content.endpoint))
+                    #expect(content.agentPrompt.contains("tools/list"))
+                    #expect(content.agentPrompt.contains("get_meeting_audio"))
+                    #expect(content.agentPrompt.contains(language == .russian ? "Сохрани" : "Preserve"))
+                    #expect(content.manualSteps.contains(language == .russian ? "настройках MCP" : "MCP settings"))
+                    if [.desktop, .openchamber].contains(client) {
+                        #expect(content.commandTitle.contains(language == .russian ? "только запуск" : "launch only"))
+                        #expect(content.manualSteps.contains(language == .russian ? "не регистрирует" : "does not register"))
+                    }
+                    let next = try #require(MCPConnectionInstructions.content(client: client, port: 55442, executable: executable))
+                    #expect(!next.agentPrompt.contains("55441")); #expect(next.agentPrompt.contains("55442"))
+                }
+                for invalid in [-1, 1023, 65536] {
+                    #expect(MCPConnectionInstructions.content(client: .codex, port: invalid, executable: executable) == nil)
+                }
+                #expect(MCPConnectionInstructions.content(client: .codex, port: 55441, executable: "") == nil)
+            }
+        }
+    }
+    @Test func openChamberAgentPromptIncludesUsableSingleCommandFieldInBothLanguages() throws {
+        for language in [InterfaceLanguage.english, .russian] {
+            try InterfaceLanguage.$scoped.withValue(language) {
+                let content = try #require(MCPConnectionInstructions.content(client: .openchamber, port: 55442, executable: "/fixture/Verbemo App/verbemo"))
+                #expect(content.agentPrompt.contains("'/fixture/Verbemo App/verbemo' mcp"))
+            }
+        }
+    }
+    @Test(.speaking(.russian)) func connectionInstructionsUseCurrentLanguageAndDestination() {
+        let text = MCPConnectionInstructions.content(client: .codex, port: 55111, executable: "/fixture/verbemo")?.manualSteps ?? ""
+        #expect(text.contains("настройках MCP"))
+        #expect(!text.contains("General settings"))
+    }
     @Test func instructionsUseSelectedPortAndEscapedExecutable() throws {
         let executable = "/Applications/Verbemo's Test.app/Contents/MacOS/verbemo"
         for client in MCPConnectionInstructions.Client.allCases {
-            let first = MCPConnectionInstructions.text(client: client, port: 55111, executable: executable)
-            let next = MCPConnectionInstructions.text(client: client, port: 55112, executable: executable)
-            #expect(first.contains("127.0.0.1:55111"))
-            #expect(!next.contains("55111"))
-            #expect(next.contains("127.0.0.1:55112"))
-            #expect(!next.contains("--port"))
+            let first = try #require(MCPConnectionInstructions.content(client: client, port: 55111, executable: executable))
+            let next = try #require(MCPConnectionInstructions.content(client: client, port: 55112, executable: executable))
+            #expect(first.endpoint.contains("127.0.0.1:55111"))
+            #expect(!next.agentPrompt.contains("55111"))
+            #expect(next.endpoint.contains("127.0.0.1:55112"))
+            #expect(!next.command.contains("--port"))
         }
     }
 }

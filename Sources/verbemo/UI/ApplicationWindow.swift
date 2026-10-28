@@ -401,10 +401,10 @@ private final class WorkspaceSurface: JournalSurface {
 
 @MainActor
 private final class JournalSettingsNavigation: NSStackView {
-    private let destinations: [ApplicationNavigationState.Destination] = [.general, .recording, .transcription, .summary, .calendar, .storage]
+    private let destinations: [ApplicationNavigationState.Destination] = [.general, .recording, .transcription, .summary, .calendar, .storage, .mcp]
     private let tabs = NSStackView()
     private var buttons: [JournalTabButton] = []
-    private var tabsWidth: CGFloat = 48 + 5 * 16
+    private var tabsWidth: CGFloat = 48 + 6 * 16
     private let compact = NSPopUpButton()
     var onSelect: ((ApplicationNavigationState.Destination) -> Void)?
 
@@ -418,7 +418,7 @@ private final class JournalSettingsNavigation: NSStackView {
         tabs.setAccessibilityRole(.tabGroup)
         tabs.setAccessibilityLabel(localised("Settings sections", "Разделы настроек"))
         compact.identifier = .init("settings.sections")
-        let symbols = ["slider.horizontal.3", "mic", "text.bubble", "checklist", "calendar", "folder"]
+        let symbols = ["slider.horizontal.3", "mic", "text.bubble", "checklist", "calendar", "folder", "network"]
         for (index, destination) in destinations.enumerated() {
             let title = switch destination {
             case .summary: localised("Summary", "Сводка")

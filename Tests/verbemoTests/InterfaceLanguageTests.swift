@@ -593,7 +593,7 @@ struct InterfaceLanguageTests {
         // Names of things, and the shape of a key nobody translates.
         let names = [
             "AssemblyAI", "OpenAI", "OpenAI-compatible", "ElevenLabs", "Anthropic", "Claude Code", "Codex", "Ollama",
-            "sk-ant-…", "sk-…", "verbemo", "Verbemo",
+            "sk-ant-…", "sk-…", "verbemo", "Verbemo", "MCP",
             // The models, named the way their release notes name them.
             "parakeet v3", "parakeet v2", "v3", "v2", "NVIDIA nemotron", "Nemotron 3.5 ASR", NemotronModelStore.title,
             "Parakeet", "Parakeet v3", "Whisper large-v3-turbo", "GigaAM v3",
