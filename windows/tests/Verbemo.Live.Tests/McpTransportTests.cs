@@ -128,6 +128,56 @@ public sealed class McpTransportTests
         finally { release.TrySetResult(new JsonObject()); try { await Task.WhenAll(calls); } catch(OperationCanceledException) { } }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Deadline_or_revoke_ends_client_wait_but_retains_noncooperative_query_slots(bool revoke)
+    {
+        var release=new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); int count=0;
+        var limits=new McpLimits(); var port=Port();
+        await using var server=new McpServer(port,Token,()=>true,(_,_,_)=> { if(Interlocked.Increment(ref count)==8) entered.TrySetResult(); return release.Task; },(_,_,_)=>throw new McpFailure("artifact_missing"),limits);
+        await server.StartAsync(); using var client=Client(port); client.Timeout=Timeout.InfiniteTimeSpan;
+        var calls=Enumerable.Range(0,8).Select(_=>Post(client,"""{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_meeting","arguments":{}}}""")).ToArray();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10)); var elapsed=System.Diagnostics.Stopwatch.StartNew();
+            if(revoke) server.StopAdmission();
+            var ended=Task.WhenAll(calls.Select(async call=> { try { using var response=await call; return false; } catch(HttpRequestException) { return true; } }));
+            Assert.Same(ended,await Task.WhenAny(ended,Task.Delay(TimeSpan.FromSeconds(revoke ? 5 : 35))));
+            Assert.All(await ended,value=>Assert.True(value));
+            if(!revoke) Assert.True(elapsed.Elapsed>=TimeSpan.FromSeconds(27),"Production JSON deadline must remain 30 seconds.");
+            Assert.False(release.Task.IsCompleted); Assert.Equal(0,limits.Json.CurrentCount);
+            release.TrySetResult(new JsonObject());
+            for(var attempt=0;attempt<100 && limits.Json.CurrentCount!=8;attempt++) await Task.Delay(20);
+            Assert.Equal(8,limits.Json.CurrentCount);
+        }
+        finally { release.TrySetResult(new JsonObject()); client.CancelPendingRequests(); try { await Task.WhenAll(calls); } catch(Exception error) when(error is HttpRequestException or OperationCanceledException) { } }
+    }
+
+    [Fact]
+    public async Task Overlapping_generations_share_physical_capacity_before_http_headers_complete()
+    {
+        var limits=new McpLimits(); var firstPort=Port(); var secondPort=Port();
+        McpServer New(int port)=>new(port,Token,()=>true,(_,_,_)=>Task.FromResult(new JsonObject()),(_,_,_)=>throw new McpFailure("artifact_missing"),limits);
+        await using var first=New(firstPort); await using var second=New(secondPort); await first.StartAsync(); await second.StartAsync();
+        var held=new List<TcpClient>();
+        try
+        {
+            for(var i=0;i<16;i++)
+            {
+                var port=i<8 ? firstPort : secondPort; var socket=new TcpClient(); held.Add(socket); await socket.ConnectAsync(IPAddress.Loopback,port);
+                await socket.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"));
+            }
+            await Task.Delay(200); Assert.All(held,socket=>Assert.False(socket.Client.Poll(0,SelectMode.SelectRead),"Header-incomplete connections must still be alive."));
+            using var excess=new TcpClient(); await excess.ConnectAsync(IPAddress.Loopback,secondPort);
+            var read=excess.GetStream().ReadAsync(new byte[1]).AsTask(); var finished=await Task.WhenAny(read,Task.Delay(TimeSpan.FromSeconds(2)));
+            Assert.Same(read,finished);
+            try { Assert.Equal(0,await read); } catch(System.IO.IOException) { }
+        }
+        finally { foreach(var socket in held) socket.Dispose(); }
+    }
+
     [Fact]
     public async Task Host_origin_and_untrusted_error_content_are_checked_before_sdk_disclosure()
     {

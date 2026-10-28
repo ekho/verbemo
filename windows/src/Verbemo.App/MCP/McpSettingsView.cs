@@ -27,24 +27,25 @@ internal sealed class McpSettingsView
     private readonly UIElement toggleRow;
     private int lastSavedPort;
     private bool refreshing;
+    private string? operationError;
     public FrameworkElement View { get; }
-    public McpSettingsView(Func<McpUiState> state,Action<bool> setEnabled,Action<int> savePort,Func<string?> readToken,Func<Task> rotate,string executable)
+    public McpSettingsView(Func<McpUiState> state,Action<bool> setEnabled,Action<int> savePort,Func<string?> readToken,Func<Task> rotate,string executable,Action<string>? showError=null)
     {
         this.state=state; this.savePort=savePort; this.executable=executable;
         enabled=Ui.Switch(T("Enable MCP","Включить MCP"));
         toggleRow=Ui.Row(enabled,Ui.Title("MCP")); card.Children.Add(toggleRow);
         var box=Ui.Box(card); View=box;
         AutomationProperties.SetName(port,T("MCP port","Порт MCP")); AutomationProperties.SetName(clients,T("MCP client","Клиент MCP"));
-        enabled.Click+=(_,_)=> { if(refreshing) return; try { setEnabled(enabled.IsChecked==true); } catch { problem.Text=T("MCP could not be changed. Check configuration and protected storage.","Не удалось изменить MCP. Проверьте конфигурацию и защищённое хранилище."); } Refresh(); };
+        showError ??= message=>Ui.ShowError(Ui.OwnerOf(View),"Verbemo",message);
+        enabled.Click+=(_,_)=> { if(refreshing) return; try { setEnabled(enabled.IsChecked==true); SetOperationError(null); } catch { showError(T("MCP could not be changed. Check configuration and protected storage.","Не удалось изменить MCP. Проверьте конфигурацию и защищённое хранилище.")); } Refresh(); };
         var server=Ui.Group(8,status,Ui.Detail(T("Port","Порт")),port,Ui.Button(T("Apply port","Применить порт"),ApplyPort),selected,active,
             Ui.Detail(T("Changing the port disconnects active clients.","Смена порта отключает активных клиентов.")));
         var connection=Ui.Group(12,clients,Block(Ui.Heading("MCP URL"),endpoint,()=>Content().Endpoint),Block(commandLabel,command,()=>Content().ConsoleCommand),
-            Block(Ui.Heading(T("Agent prompt","Промпт для агента")),prompt,()=>Content().AgentPrompt),problem,manual);
-        var token=new McpTokenField(readToken);
-        var access=Ui.Group(8,Ui.Detail(T("Token for direct HTTP","Токен для прямого HTTP")),token,Ui.Button(T("Copy token","Копировать токен"),()=>
-        { try { token.CopyCurrent(); } catch { problem.Text=T("The protected token could not be read.","Не удалось прочитать защищённый токен."); } }),
+            Block(Ui.Heading(T("Agent prompt","Промпт для агента")),prompt,()=>Content().AgentPrompt),manual);
+        var token=new McpTokenField(readToken,SetOperationError);
+        var access=Ui.Group(8,Ui.Detail(T("Token for direct HTTP","Токен для прямого HTTP")),token,Ui.Button(T("Copy token","Копировать токен"),token.CopyCurrent),
             Ui.Detail(T("Copying inserts the full token","При копировании будет подставлен полный токен")),
-            Ui.Button(T("Rotate token","Заменить токен"),async ()=> { try { await rotate(); } catch { problem.Text=T("Token rotation failed; MCP is closed.","Не удалось заменить токен; MCP закрыт."); } Refresh(); }),
+            Ui.Button(T("Rotate token","Заменить токен"),async ()=> { try { await rotate(); SetOperationError(null); } catch { SetOperationError(T("Token rotation failed; MCP is closed.","Не удалось заменить токен; MCP закрыт.")); } Refresh(); }),
             Ui.Detail(T("The native bridge reads the token itself. Rotation disconnects active clients.","Нативный мост сам читает токен. Замена токена отключает активных клиентов.")));
         serverSection=Section(T("Server","Сервер"),server,false);
         connectionSection=Section(T("Connection","Подключение"),connection,true);
@@ -75,8 +76,8 @@ internal sealed class McpSettingsView
     private void ApplyPort()
     {
         if(Content().Error is not null) { UpdateContent(); return; }
-        try { savePort(int.Parse(port.Text,CultureInfo.InvariantCulture)); Refresh(); }
-        catch { problem.Text=T("The port could not be saved.","Не удалось сохранить порт."); }
+        try { savePort(int.Parse(port.Text,CultureInfo.InvariantCulture)); SetOperationError(null); Refresh(); }
+        catch { SetOperationError(T("The port could not be saved.","Не удалось сохранить порт.")); }
     }
     public void Refresh()
     {
@@ -86,7 +87,7 @@ internal sealed class McpSettingsView
             var current=state(); enabled.IsChecked=current.Enabled; enabled.IsEnabled=current.Readable;
             if(current.Port!=lastSavedPort) { lastSavedPort=current.Port; port.Text=lastSavedPort.ToString(CultureInfo.InvariantCulture); }
             if(!current.Enabled) { while(card.Children.Count>1) card.Children.RemoveAt(1); return; }
-            if(card.Children.Count==1) { card.Children.Add(serverSection); card.Children.Add(connectionSection); card.Children.Add(accessSection); }
+            if(card.Children.Count==1) { problem.Margin=new Thickness(16,8,16,0); card.Children.Add(problem); card.Children.Add(serverSection); card.Children.Add(connectionSection); card.Children.Add(accessSection); }
             var label=current.Status switch { "running"=>T("Listening","Работает"),"starting"=>T("Starting","Запускается"),"reconfiguring"=>T("Reconfiguring","Применяются настройки"),"token_missing"=>T("No local token: use Rotate token in Access","Нет локального токена: нажмите «Заменить токен» в разделе «Доступ»"),"disabled"=>T("Disabled","Выключен"),"stopped" or "stopping"=>T("Stopped","Остановлен"),"configuration_unreadable" or "configuration_changed"=>T("Configuration unavailable or changed","Конфигурация недоступна или изменилась"),_=>T("Could not start: check port and protected storage","Не удалось запустить: проверьте порт и защищённое хранилище") };
             status.Text=T("Actual server state: ","Фактическое состояние сервера: ")+label;
             active.Text=T("Active endpoint: ","Активный адрес: ")+(current.ActiveEndpoint ?? T("not listening","не работает"));
@@ -95,11 +96,12 @@ internal sealed class McpSettingsView
         }
         finally { refreshing=false; }
     }
+    private void SetOperationError(string? message) { operationError=message; UpdateContent(); }
     private void UpdateContent()
     {
         var content=Content(); endpoint.Text=content.Endpoint; command.Text=content.ConsoleCommand; prompt.Text=content.AgentPrompt; manual.Text=content.ManualSteps;
         selected.Text=content.Error ?? T("Selected endpoint: ","Выбранный адрес: ")+content.Endpoint;
-        problem.Text=content.Error ?? ""; problem.Visibility=content.Error is null ? Visibility.Collapsed : Visibility.Visible;
+        problem.Text=operationError ?? content.Error ?? ""; problem.Visibility=problem.Text.Length==0 ? Visibility.Collapsed : Visibility.Visible;
         commandLabel.Text=clients.SelectedItem is "Claude Desktop" or "OpenChamber" ? T("Console command — launch bridge only","Консольная команда — только запуск моста") : T("Console registration command","Консольная команда регистрации");
         foreach(var copy in copyButtons) copy.IsEnabled=content.Error is null;
     }
@@ -108,9 +110,10 @@ internal sealed class McpSettingsView
 internal sealed class McpTokenField : TextBox
 {
     private readonly Func<string?> readToken;
-    public McpTokenField(Func<string?> readToken)
+    private readonly Action<string?> reportCopy;
+    public McpTokenField(Func<string?> readToken,Action<string?>? reportCopy=null)
     {
-        this.readToken=readToken; Text="***"; IsReadOnly=true; Width=140; HorizontalAlignment=HorizontalAlignment.Left;
+        this.readToken=readToken; this.reportCopy=reportCopy ?? (message=> { if(message is not null) Ui.ShowError(Ui.OwnerOf(this),"Verbemo",message); }); Text="***"; IsReadOnly=true; Width=140; HorizontalAlignment=HorizontalAlignment.Left;
         AutomationProperties.SetName(this,T("MCP token, masked","Токен MCP, скрыт"));
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Copy,(_,e)=> { if(SelectionLength>0) CopyCurrent(); e.Handled=true; },(_,e)=> { e.CanExecute=SelectionLength>0; e.Handled=true; }));
         ContextMenu=new ContextMenu(); ContextMenu.Items.Add(new MenuItem { Header=T("Copy","Копировать"),Command=ApplicationCommands.Copy,CommandTarget=this });
@@ -118,7 +121,9 @@ internal sealed class McpTokenField : TextBox
     internal void CopyCurrent()
     {
         // Resolve only during the user's copy action; the visual/automation value stays masked.
-        var token=readToken(); if(!McpController.ValidToken(token)) throw new McpFailure("credentials_unavailable");
-        Clipboard.SetText(token!);
+        string? failure=null;
+        try { var token=readToken(); if(!McpController.ValidToken(token)) throw new McpFailure("credentials_unavailable"); Clipboard.SetText(token!); }
+        catch { failure=T("The protected token could not be read or copied.","Не удалось прочитать защищённый токен или скопировать его."); }
+        reportCopy(failure);
     }
 }

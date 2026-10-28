@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -24,7 +25,7 @@ internal sealed class McpServer(int port, string token, Func<bool> current,
     Func<string,string,CancellationToken,Task<McpFiles.AudioHandle>> openAudio, McpLimits? limits = null) : IAsyncDisposable
 {
     private readonly CancellationTokenSource lifetime = new();
-    private readonly SemaphoreSlim jsonSlots = limits?.Json ?? new(8,8), audioSlots = limits?.Audio ?? new(2,2);
+    private readonly SemaphoreSlim jsonSlots = limits?.Json ?? new(8,8), audioSlots = limits?.Audio ?? new(2,2), connectionSlots = limits?.Connections ?? new(16,16);
     private readonly ConcurrentDictionary<Guid,Task> work = new();
     private WebApplication? app;
     private Task? disposal;
@@ -41,7 +42,17 @@ internal sealed class McpServer(int port, string token, Func<bool> current,
         builder.WebHost.UseKestrel(options =>
         {
             options.AddServerHeader = false;
-            options.Listen(IPAddress.Loopback,port,listen => listen.Protocols = HttpProtocols.Http1);
+            options.Listen(IPAddress.Loopback,port,listen =>
+            {
+                listen.Protocols = HttpProtocols.Http1;
+                listen.Use(next => async connection =>
+                {
+                    // Count accepted transports before headers; generations share this capacity.
+                    if (!connectionSlots.Wait(0)) { connection.Abort(new ConnectionAbortedException("MCP connection capacity reached.")); return; }
+                    try { await next(connection).ConfigureAwait(false); }
+                    finally { connectionSlots.Release(); }
+                });
+            });
             options.Limits.MaxConcurrentConnections = 16;
             options.Limits.MaxRequestHeadersTotalSize = 16384;
             options.Limits.MaxRequestBodySize = McpContract.HardResponseBytes;
@@ -125,6 +136,8 @@ internal sealed class McpServer(int port, string token, Func<bool> current,
         var denied = Authorize(context);
         if (denied != 0) { context.Response.StatusCode = denied; return; }
         using var scope = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,context.RequestAborted);
+        // End client I/O promptly even when the reader ignores cancellation; finally still owns its quota.
+        using var abort = scope.Token.Register(static state => ((HttpContext)state!).Abort(),context);
         var lease = new Lease(scope.Token); context.Items[typeof(Lease)] = lease;
         var audio = context.Request.Path.StartsWithSegments("/audio");
         var slots = audio ? audioSlots : jsonSlots;
@@ -255,5 +268,5 @@ internal sealed class McpServer(int port, string token, Func<bool> current,
 
 internal sealed class McpLimits
 {
-    internal readonly SemaphoreSlim Json = new(8,8), Audio = new(2,2);
+    internal readonly SemaphoreSlim Json = new(8,8), Audio = new(2,2), Connections = new(16,16);
 }

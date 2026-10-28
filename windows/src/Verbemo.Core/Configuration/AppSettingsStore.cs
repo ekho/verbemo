@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using static Verbemo.Core.Localization.Localized;
@@ -88,7 +89,9 @@ public sealed class AppSettingsStore(string configPath, string homeDirectory)
         try
         {
             File.WriteAllText(temporary, changes.ToJsonString(AppSettings.JsonOptions) + Environment.NewLine);
-            File.Move(temporary, configPath, overwrite: true);
+            // Replace preserves readers of the old snapshot; missing paths are created without overwrite.
+            try { File.Replace(temporary,configPath,null); }
+            catch (FileNotFoundException) { File.Move(temporary,configPath); }
         }
         finally
         {
@@ -96,11 +99,15 @@ public sealed class AppSettingsStore(string configPath, string homeDirectory)
         }
     }
 
+    // A current-config read pins its snapshot without blocking atomic replacement of the path.
+    internal StreamReader OpenReader() => new(new FileStream(configPath,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete),Encoding.UTF8,detectEncodingFromByteOrderMarks:true);
+
     public JsonObject ReadDocument()
     {
         try
         {
-            var document = JsonNode.Parse(File.ReadAllText(configPath), documentOptions: new JsonDocumentOptions
+            string text; using(var reader=OpenReader()) text=reader.ReadToEnd();
+            var document = JsonNode.Parse(text, documentOptions: new JsonDocumentOptions
             { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) as JsonObject
                 ?? throw new ConfigUnreadableException(ConfigProblem.UnreadableFile(T("the top level is not an object", "верхний уровень — не объект")));
             var sections = document.Where(pair => pair.Key.Equals("mcp", StringComparison.OrdinalIgnoreCase)).ToArray();

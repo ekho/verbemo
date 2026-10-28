@@ -22,6 +22,50 @@ public sealed class McpConfigurationTests
     }
 
     [Fact]
+    public void Held_config_reader_allows_atomic_save_and_keeps_original_snapshot()
+    {
+        using var dir=new TemporaryDirectory(); var store=new AppSettingsStore(Path.Combine(dir.Path,"config.json"),dir.Path);
+        var original="{\"mcp\":{\"enabled\":true,\"port\":54321},\"padding\":\""+new string('x',8192)+"\"}";
+        File.WriteAllText(store.ConfigPath,original);
+        var opener=typeof(AppSettingsStore).GetMethod("OpenReader",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)!;
+        using var reader=Assert.IsType<StreamReader>(opener.Invoke(store,null)); Assert.Equal('{',reader.Read());
+        var replacement=store.Load().Settings; replacement.Mcp.Port=54322; store.Save(replacement);
+        Assert.Equal(original,"{"+reader.ReadToEnd()); Assert.Equal(54322,store.Load().Settings.Mcp.Port);
+    }
+
+    [Fact]
+    public void Refused_atomic_replacement_preserves_original_and_cleans_temporary_file()
+    {
+        using var dir=new TemporaryDirectory(); var store=new AppSettingsStore(Path.Combine(dir.Path,"config.json"),dir.Path);
+        const string original="{\"mcp\":{\"port\":54321}}"; File.WriteAllText(store.ConfigPath,original);
+        using var reader=File.Open(store.ConfigPath,FileMode.Open,FileAccess.Read,FileShare.Read);
+        var replacement=store.Load().Settings; replacement.Mcp.Port=54322;
+        var error=Record.Exception(()=>store.Save(replacement));
+        Assert.True(error is IOException or UnauthorizedAccessException,"A non-delete-shared reader must cause a safe save failure.");
+        Assert.Equal(original,File.ReadAllText(store.ConfigPath)); Assert.Empty(Directory.EnumerateFiles(dir.Path,"config.json.tmp-*"));
+    }
+
+    [Theory]
+    [InlineData("utf8")]
+    [InlineData("utf16")]
+    [InlineData("utf32")]
+    public void Config_reader_preserves_bom_detection(string name)
+    {
+        using var dir=new TemporaryDirectory(); var store=new AppSettingsStore(Path.Combine(dir.Path,"config.json"),dir.Path);
+        System.Text.Encoding encoding=name switch { "utf16"=>new System.Text.UnicodeEncoding(false,true),"utf32"=>new System.Text.UTF32Encoding(false,true),_=>new System.Text.UTF8Encoding(true) };
+        File.WriteAllText(store.ConfigPath,"""{"mcp":{"port":54321},"note":"Пример"}""",encoding);
+        var load=store.Load(); Assert.False(load.IsUnreadable); Assert.Equal(54321,load.Settings.Mcp.Port); Assert.Equal("Пример",load.Raw!["note"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Config_reader_preserves_utf8_replacement_fallback()
+    {
+        using var dir=new TemporaryDirectory(); var store=new AppSettingsStore(Path.Combine(dir.Path,"config.json"),dir.Path);
+        File.WriteAllBytes(store.ConfigPath,[..System.Text.Encoding.UTF8.GetBytes("{\"note\":\""),255,..System.Text.Encoding.UTF8.GetBytes("\"}")]);
+        Assert.Equal("\uFFFD",store.ReadDocument()["note"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void Denied_config_path_is_not_missing()
     {
         using var dir = new TemporaryDirectory(); var store = new AppSettingsStore(dir.Path, dir.Path);
