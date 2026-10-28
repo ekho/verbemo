@@ -405,5 +405,15 @@
       "platform"
     ]
   },
-  "match_offset_unit": "utf8_bytes"
+  "match_offset_unit": "utf8_bytes",
+  "native_processing_failures": [
+    {
+      "metadata": {
+        "title": "Native failed meeting",
+        "transcription_failed": "native failure: synthetic credential=DO_NOT_EXPORT_REASON"
+      },
+      "expected_state": "failed",
+      "must_not_expose": "DO_NOT_EXPORT_REASON"
+    }
+  ]
 }

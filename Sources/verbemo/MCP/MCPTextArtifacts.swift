@@ -97,8 +97,8 @@ enum MCPTextArtifacts {
             let utf8 = buffer.utf8
             var index = utf8.index(utf8.startIndex, offsetBy: drop)
             while drop > 0, index < utf8.endIndex, utf8[index] & 0xc0 == 0x80 { drop -= 1; index = utf8.index(before: index) }
-            if let boundary = String.Index(index, within: buffer), drop > 0 {
-                buffer = String(buffer[boundary...]); base += drop
+            if drop > 0 {
+                buffer = String(decoding: utf8[index...], as: UTF8.self); base += drop
             }
             return true
         }
@@ -221,7 +221,8 @@ enum MCPTextArtifacts {
             var matcher = Matcher(query: query), utf8 = UTF8Decoder(), more = true
             let reader = Reader(file: file, check: check, offset: location.textStart)
             _ = try reader.string { data in
-                if more { more = try matcher.append(utf8.append(data), final: false, emit: emit) }
+                let text = try utf8.append(data)
+                if more { more = try matcher.append(text, final: false, emit: emit) }
             }
             try utf8.finish()
             if more { more = try matcher.append("", final: true, emit: emit) }

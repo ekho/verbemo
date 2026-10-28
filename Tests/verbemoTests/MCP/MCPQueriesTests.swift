@@ -590,6 +590,58 @@ import Darwin
         #expect(json.contains("\"end_ms\":9007199254740995"))
     }
 
+    @Test func reviewRoundOneNativeFailureReasonStaysPrivate() throws {
+        let root = try fixture(), meeting = try id(root), dir = root.appendingPathComponent("meeting")
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("transcript.json"))
+        for sample in try contract()["native_processing_failures"]!.array! {
+            try sample["metadata"]!.encoded().write(to: dir.appendingPathComponent("meta.json"))
+            let before = try tree(root)
+            let card = try call("get_meeting", root, ["meeting_id": .string(meeting)])
+            #expect(card["processing"]?["transcription"] == sample["expected_state"])
+            #expect(card["has_transcript"] == .bool(false))
+            let listing = try call("list_meetings", root, ["processing_stage": .string("transcription"), "processing_state": .string("failed")])
+            #expect(listing["items"]?.array?.count == 1)
+            #expect(listing["partial"] == .bool(false))
+            for result in [card, listing] {
+                #expect(!String(decoding: try result.encoded(), as: UTF8.self).contains(sample["must_not_expose"]!.string!))
+            }
+            #expect(try tree(root) == before)
+        }
+    }
+    @Test func reviewRoundOneLongGraphemeSearchRetainsOnlyBoundedContext() throws {
+        let root = try fixture(), dir = root.appendingPathComponent("meeting")
+        try put(dir, "summary.md", "a" + String(repeating: "\u{0301}", count: 131_072) + "needle")
+        let before = try tree(root)
+        let result = try call("search_meetings", root, ["query": .string("needle"), "scope": .string("summary")])
+        let item = try #require(result["items"]?.array?.first)
+        let snippet = try #require(item["snippet"]?.string)
+        #expect(item["match_offset"] == .int(262_145))
+        #expect(snippet.hasSuffix("needle"))
+        // Four full chunks have passed: only the overlap/lookbehind can precede this match.
+        #expect(snippet.utf8.count <= 8192)
+        #expect(try tree(root) == before)
+    }
+    @Test func reviewRoundOneLimitBeforeSplitEmojiReturnsPageAndContinuation() throws {
+        let root = try fixture(), dir = root.appendingPathComponent("meeting")
+        let begin = "needle needle "
+        let text = begin + String(repeating: "x", count: 65534 - begin.utf8.count) + "💡 tail"
+        let json = #"{"engine":"test","model":"test","created_at":"2026-10-28T00:00:00Z","segments":[{"speaker":"me","start_ms":0,"end_ms":1,"text":""# + text + #""}]}"#
+        try put(dir, "transcript.json", json)
+        try put(dir, "summary.md", text)
+        let before = try tree(root)
+        for scope in ["transcript", "summary"] {
+            let first = try call("search_meetings", root, ["query": .string("needle"), "scope": .string(scope), "limit": .int(1)])
+            #expect(first["items"]?.array?.count == 1)
+            #expect(first["items"]?.array?.first?["match_offset"] == .int(0))
+            let cursor = try #require(first["next_cursor"]?.string)
+            let next = try call("search_meetings", root, ["query": .string("needle"), "scope": .string(scope), "limit": .int(1), "cursor": .string(cursor)])
+            #expect(next["items"]?.array?.count == 1)
+            #expect(next["items"]?.array?.first?["match_offset"] == .int(7))
+            #expect(next["next_cursor"] == .null)
+        }
+        #expect(try tree(root) == before)
+    }
+
 }
 
 

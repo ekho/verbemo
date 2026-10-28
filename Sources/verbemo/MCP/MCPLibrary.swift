@@ -247,7 +247,7 @@ enum MCPLibrary {
             if value == "failed" || value.hasPrefix("failed:") { return "failed" }
             return ["pending", "deferred", "off", "done", "cancelled"].contains(value) ? value : nil
         }
-        result["transcription"] = meta["transcription_failed"]?.bool == true ? "failed" : meta["transcription_deferred"]?.bool == true ? "deferred" : current.transcript != nil ? "done" : "unknown"
+        result["transcription"] = (meta["transcription_failed"]?.string != nil || meta["transcription_failed"]?.bool == true) ? "failed" : meta["transcription_deferred"]?.bool == true ? "deferred" : current.transcript != nil ? "done" : "unknown"
         result["summary"] = status(meta["summary_status"]?.string)
             ?? (current.summary != nil && !current.stale ? "done" : "unknown")
         result["speaker_naming"] = status(meta["speakers_status"]?.string) ?? (current.names != nil ? "done" : "unknown")
@@ -292,9 +292,10 @@ enum MCPLibrary {
             for key in ["title", "trigger", "started", "ended", "summary_status", "speakers_status"] {
                 if let value = meta[key], value != .null, value.string == nil { throw MCPFailure(.dataUnreadable) }
             }
-            for key in ["summary_stale", "transcription_failed", "transcription_deferred"] {
+            for key in ["summary_stale", "transcription_deferred"] {
                 if let value = meta[key], value.bool == nil { throw MCPFailure(.dataUnreadable) }
             }
+            if let failure = meta["transcription_failed"], failure.string == nil && failure.bool == nil { throw MCPFailure(.dataUnreadable) }
             if let duration = meta["duration_seconds"], duration != .null {
                 guard let number = duration.number, number >= 0 else { throw MCPFailure(.dataUnreadable) }
             }
