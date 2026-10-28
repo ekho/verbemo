@@ -251,6 +251,40 @@ struct MCPSettingsViewTests {
         card.refresh()
         #expect(error.stringValue == "Не удалось сохранить порт MCP")
         #expect(!error.isHiddenOrHasHiddenAncestor)
+        try click(card, "mcp.section.access"); try click(card, "mcp.rotate-token")
+        try click(card, "mcp.section.access"); card.refresh()
+        #expect(error.stringValue == "Не удалось заменить локальный токен")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":true}}"#))
+    func repeatedRotationFailureReplacesNewerPortErrorButRefreshAndClientChangeDoNot() throws {
+        let home = Home.current
+        try FileManager.default.createDirectory(at: home.keysDirectory, withIntermediateDirectories: true)
+        #expect(chmod(home.keysDirectory.path, 0o755) == 0)
+        let controller = MCPController(snapshot: { .init(root: home.url) })
+        let card = MCPSettingsView(controller: controller)
+        try click(card, "mcp.section.access")
+        try click(card, "mcp.rotate-token")
+        let error: NSTextField = try control(card, "mcp.operation-error")
+        #expect(error.stringValue == "Could not replace local token")
+        let firstFailureStatus = controller.status
+        try click(card, "mcp.section.server")
+        let port: NSTextField = try control(card, "mcp.port")
+        port.stringValue = "invalid"
+        card.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
+        let portFailure = "Enter an integer port from 1024 to 65535."
+        #expect(error.stringValue == portFailure)
+        card.refresh()
+        let client: NSPopUpButton = try control(card, "mcp.client")
+        client.selectItem(at: 1); _ = client.sendAction(client.action, to: client.target)
+        #expect(error.stringValue == portFailure)
+        try click(card, "mcp.rotate-token")
+        #expect(controller.status == firstFailureStatus)
+        try click(card, "mcp.section.access")
+        card.refresh()
+        #expect(error.stringValue == "Could not replace local token")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
     }
     @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55438}}"#))
     func longInstructionsWrapInsideNarrowSettingsInBothLanguages() throws {

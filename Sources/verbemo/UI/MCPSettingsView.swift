@@ -228,6 +228,8 @@ import AppKit
     }
     @objc private func rotateToken() {
         guard let controller else { report(localised("Could not replace local token", "Не удалось заменить локальный токен")); return }
+        // An explicit retry owns feedback even when the controller repeats its status.
+        lastControllerStatus = nil
         controller.rotateToken(); refresh()
     }
     private func writeClipboard(_ value: String) {
