@@ -1,0 +1,409 @@
+{
+  "format_version": 1,
+  "parameter_errors": [
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "limit": true
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "limit": 0
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "limit": 101
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "participants": [
+          ""
+        ]
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "started_from": "2026-10-28T08:00:00"
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "processing_stage": "summary"
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "has_audio": null
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "sort": "invalid"
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "get_meeting_transcript",
+      "arguments": {
+        "meeting_id": "x",
+        "start_ms": -1
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "get_meeting_transcript",
+      "arguments": {
+        "meeting_id": "x",
+        "start_ms": 2,
+        "end_ms": 2
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "search_meetings",
+      "arguments": {
+        "query": " "
+      },
+      "code": "invalid_params"
+    },
+    {
+      "tool": "get_meeting",
+      "arguments": {
+        "meeting_id": "../x"
+      },
+      "code": "meeting_not_found"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "cursor": "broken"
+      },
+      "code": "invalid_cursor"
+    },
+    {
+      "tool": "list_meetings",
+      "arguments": {
+        "unknown": true
+      },
+      "code": "invalid_params"
+    }
+  ],
+  "assignment_cases": [
+    {
+      "transcript": {
+        "engine": "test",
+        "model": "test",
+        "created_at": "2026-10-28T00:00:00Z",
+        "segments": []
+      },
+      "expected": "unknown"
+    },
+    {
+      "transcript": {
+        "engine": "test",
+        "model": "test",
+        "created_at": "2026-10-28T00:00:00Z",
+        "segments": [
+          {
+            "speaker": "them",
+            "start_ms": 0,
+            "end_ms": 1,
+            "text": "mixed"
+          }
+        ]
+      },
+      "expected": "unknown"
+    },
+    {
+      "transcript": {
+        "engine": "test",
+        "model": "test",
+        "created_at": "2026-10-28T00:00:00Z",
+        "segments": [
+          {
+            "speaker": "them ?",
+            "start_ms": 0,
+            "end_ms": 1,
+            "text": "unknown"
+          }
+        ]
+      },
+      "expected": "incomplete"
+    },
+    {
+      "transcript": {
+        "engine": "test",
+        "model": "test",
+        "created_at": "2026-10-28T00:00:00Z",
+        "segments": [
+          {
+            "speaker": "them A",
+            "start_ms": 0,
+            "end_ms": 1,
+            "text": "linked"
+          }
+        ]
+      },
+      "expected": "complete"
+    },
+    {
+      "transcript": {
+        "engine": "test",
+        "model": "test",
+        "created_at": "2026-10-28T00:00:00Z",
+        "segments": [
+          {
+            "speaker": "them C",
+            "start_ms": 0,
+            "end_ms": 1,
+            "text": "unlinked"
+          }
+        ]
+      },
+      "expected": "incomplete"
+    }
+  ],
+  "semantic_ids": [
+    {
+      "transcript": {
+        "engine": "local",
+        "model": "test",
+        "created_at": "2026-10-28T08:01:00Z",
+        "segments": [
+          {
+            "speaker": "them A",
+            "start_ms": 0,
+            "end_ms": 1000,
+            "text": "  Hello world!\n"
+          },
+          {
+            "speaker": "them B",
+            "start_ms": 1000,
+            "end_ms": 2000,
+            "text": "Another hello."
+          }
+        ]
+      },
+      "generation": "",
+      "expected": "v_460bfbf7b81249878043b8464af4c79c0cf269ff2680589a678130d0dc4bb461"
+    },
+    {
+      "transcript": {
+        "engine": "local",
+        "model": "test",
+        "created_at": "2026-10-28T08:01:00Z",
+        "segments": [
+          {
+            "speaker": "them A",
+            "start_ms": 0,
+            "end_ms": 1000,
+            "text": "  Hello world!\n"
+          },
+          {
+            "speaker": "them B",
+            "start_ms": 1000,
+            "end_ms": 2000,
+            "text": "Another hello."
+          }
+        ]
+      },
+      "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "v_25c71a9941a171b68cc9ea5f139fbce829835de83c5ef2112799e6f8787ddbac"
+    },
+    {
+      "transcript": {
+        "engine": "local",
+        "model": "test",
+        "created_at": "2026-10-28T08:01:00Z",
+        "segments": [
+          {
+            "speaker": "them A",
+            "start_ms": 0,
+            "end_ms": 1000,
+            "text": "  Hello world!\n"
+          },
+          {
+            "speaker": "them B",
+            "start_ms": 1000,
+            "end_ms": 2000,
+            "text": "Another hello."
+          }
+        ]
+      },
+      "generation": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "expected": "v_cec728d7dee6cbd9a2d77bb3bea1815dc40a512d088858b2bbfb7a2ffa442f56"
+    },
+    {
+      "transcript": {
+        "engine": "local",
+        "model": "test",
+        "created_at": "2026-10-28T11:01:00.0009+03:00",
+        "segments": [
+          {
+            "speaker": null,
+            "start_ms": 0,
+            "end_ms": 1000,
+            "text": "  Hello world!\n"
+          },
+          {
+            "speaker": "them B",
+            "start_ms": 1000,
+            "end_ms": 2000,
+            "text": "Another hello."
+          }
+        ]
+      },
+      "generation": "",
+      "expected": "v_cdb2223b4db6a6e09911ac62c3e551cdb658790860d522b9dd70d01e86812514"
+    }
+  ],
+  "observable": {
+    "get_meeting": {
+      "has_transcript": true,
+      "has_summary": true,
+      "summary_stale": true,
+      "participant_assignment": "complete",
+      "linked_speakers": 2,
+      "unlinked_speakers": 0,
+      "unknown_segments": 0,
+      "version_count": 1
+    },
+    "get_meeting_summary": {
+      "markdown": "# Hello summary\n",
+      "source_version_id": null,
+      "stale": true
+    },
+    "get_meeting_transcript": {
+      "language": null,
+      "engine": "local",
+      "model": "test",
+      "segments": [
+        {
+          "segment_index": 0,
+          "start_ms": 0,
+          "end_ms": 1000,
+          "speaker_id": "them A",
+          "speaker_name": "Alex",
+          "participant_id": "p1",
+          "text": "  Hello world!\n"
+        },
+        {
+          "segment_index": 1,
+          "start_ms": 1000,
+          "end_ms": 2000,
+          "speaker_id": "them B",
+          "speaker_name": "Alex",
+          "participant_id": "p2",
+          "text": "Another hello."
+        }
+      ]
+    }
+  },
+  "sort_values": [
+    "started_desc",
+    "started_asc"
+  ],
+  "search_material_order": [
+    "transcript",
+    "summary"
+  ],
+  "availability_values": [
+    true,
+    false,
+    null
+  ],
+  "response_keys": {
+    "list_meetings": [
+      "items",
+      "next_cursor",
+      "partial",
+      "revision",
+      "warnings"
+    ],
+    "get_meeting": [
+      "calendar",
+      "current_version_id",
+      "duration_seconds",
+      "has_audio",
+      "has_summary",
+      "has_transcript",
+      "linked_speakers",
+      "meeting_id",
+      "participant_assignment",
+      "participants",
+      "partial",
+      "processing",
+      "recording_state",
+      "source",
+      "speakers",
+      "started_at",
+      "summary_stale",
+      "title",
+      "unknown_segments",
+      "unlinked_speakers",
+      "version_count",
+      "warnings"
+    ],
+    "list_transcript_versions": [
+      "items",
+      "next_cursor",
+      "partial",
+      "revision",
+      "warnings"
+    ],
+    "get_meeting_transcript": [
+      "engine",
+      "language",
+      "meeting_id",
+      "model",
+      "next_cursor",
+      "revision",
+      "segments",
+      "version_id"
+    ],
+    "get_meeting_summary": [
+      "markdown",
+      "meeting_id",
+      "next_cursor",
+      "revision",
+      "source_version_id",
+      "stale",
+      "version_id"
+    ],
+    "search_meetings": [
+      "items",
+      "next_cursor",
+      "partial",
+      "revision",
+      "warnings"
+    ],
+    "get_meeting_audio": [
+      "items",
+      "meeting_id",
+      "resources"
+    ],
+    "get_settings": [
+      "configuration_status",
+      "items",
+      "platform"
+    ]
+  },
+  "match_offset_unit": "utf8_bytes"
+}

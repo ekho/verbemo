@@ -51,4 +51,17 @@ enum SessionLock {
         inner.insert(key)
         return try $held.withValue(inner) { try body() }
     }
+    /// MCP pins the directory first and must never silently continue unlocked.
+    static func withReadLock<T>(descriptor: Int32, deadline: Date, check: () throws -> Void, _ body: () throws -> T) throws -> T {
+        while true {
+            try check()
+            if flock(descriptor, LOCK_SH | LOCK_NB) == 0 { break }
+            guard errno == EWOULDBLOCK || errno == EINTR else { throw MCPFailure(.dataUnreadable) }
+            guard Date() < deadline else { throw MCPFailure(.artifactNotReady) }
+            Thread.sleep(forTimeInterval: 0.005)
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        return try body()
+    }
+
 }
