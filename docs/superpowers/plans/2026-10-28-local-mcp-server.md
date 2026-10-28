@@ -1,0 +1,97 @@
+# Local MCP Server Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Implement #63's eight read-only tools in the running macOS/Windows app, with authenticated full audio delivery into local agents, and deliver a reviewable PR.
+**Architecture:** Native strict snapshot readers use existing persisted models and runtime state. An app-owned loopback HTTP service exposes MCP and streamed audio; a native `mcp` stdio client bridge downloads audio into a client-owned directory, without reading the library or launching the app. The two implementations share fixtures and observable contract, not a new data store.
+**Tech Stack:** Swift 6, official MCP Swift SDK 0.11.0, SwiftNIO HTTP/1 host; .NET 10, ModelContextProtocol.AspNetCore 2.3.0 and Kestrel; existing Swift Testing/xUnit tooling.
+**Spec:** `docs/superpowers/specs/2026-10-28-local-mcp-server-design.md` (approved in issue #63; its historical “proposal” status predates the execution authorization).
+**Base:** `4161d87853eb69b587a778bb39c87a219d2f84c1`.
+
+## Global Constraints
+
+- Only ekho/verbemo. No merges, releases, changes to preview/stable policy, migrations, processing triggers, or user-library mutations.
+- Server off by default; only `127.0.0.1`, default port **52763**, configurable integer **1024–65535**. Close window preserves service; accepted exit stops admission immediately and cancels reads/downloads, bounded cleanup **2 seconds**. Cancelled quit leaves service alive.
+- Exactly eight tools named in the spec. Annotations: readOnlyHint=true, destructiveHint=false, idempotentHint=true, openWorldHint=false.
+- MCP protocol 2025-11-25 with SDK negotiation; stateless JSON Streamable HTTP, no unsolicited events. On Swift, isolate SDK server/transport per request so concurrent clients using the same JSON-RPC id cannot cross responses. GET/DELETE /mcp may return 405. HTTP GET/HEAD `/audio/<meeting_id>/<audio_id>` handles a single byte Range.
+- Token 32 cryptographically random bytes (64 lower-case hex), Authorization Bearer only, constant-time comparison, separate protected secret store. Generate only explicit local enable/rotate; synced enabled config without a local token stays closed. Revoke admission and all active transfers on token/root/config changes before restarting.
+- Exact Host `127.0.0.1:<port>`; absent Origin allowed; present Origin must equal `http://127.0.0.1:<port>` (reject null). No CORS, redirects, token URLs/logging/model-visible credentials. Config read failure denies every request including settings/audio; preserve saved enabled setting without rewriting bad config.
+- Limits: 16 live HTTP connections, 8 JSON operations, 2 audio transfers, 16 KiB headers, 1 MiB request body, 30-second JSON deadline, 10-second request-header/body idle deadline, 30-second audio idle deadline; no unbounded queues. Audio uses bounded chunks. Requests abort with disconnect/lifecycle cancellation.
+- List default/max 20/100; transcript segment default/max 100/500; soft text page 64 KiB; hard serialized complete MCP response 1 MiB; single oversized segment remains intact or yields response_too_large. No truncation.
+- Opaque meeting ID `m_` + SHA256 of UTF-8 `verbemo-meeting-v1\0` + normalized absolute root + `\0` + relative meeting directory. IDs are resolved by enumeration, never decoded into paths.
+- Version ID `v_` + SHA256 of a length-prefixed UTF-8 sequence: engine, model, UTC created_at epoch-milliseconds decimal, then each ordered segment speaker (null => empty), start_ms decimal, end_ms decimal, text, then validated diarization generation fingerprint or empty. Prefix every value by its UTF-8 byte count decimal + `:`. Use the same derivation current/archive; archive folder hashes are locations, not external IDs. Names edits/JSON whitespace cannot create an ASR version. Preserve valid native timeline-generation identity without altering persisted archive formats.
+- Audio ID `a_` + SHA256 of meeting ID, permitted role/filename and opened-file identity/revision. Old metadata must never resolve to replacement bytes. Cursor is base64url JSON with format version, operation/filter digest, content revision, resolved version ID when applicable, and offset; validate types/size and bind to every relevant input. No secrets or paths in cursors.
+- Reject traversal, nonregular files, symlinks/reparse points from trusted root through file; descriptor/handle anchored reads prevent validation/open races. Keep audio handles pinned without holding meeting locks during streaming. Pending deletion, hidden staging, incomplete commits and unfinished audio are unavailable.
+- All text is untrusted data. No provider/network processing. Warnings are safe structured codes/IDs, never raw exceptions or persisted failure strings. Unknown/error availability is null and matches neither true nor false.
+- Use existing defaults/schema, with explicit export policy. Secret fields expose configured/redacted only, on_stop entirely redacted, URL userinfo/query/fragment removed, unknown keys excluded. Retain applied/saved distinction for restart settings.
+- Tests use synthetic profiles and files only. Windows DEBUG data isolation does not isolate Credential Manager: use an injected store/test-specific credential slot. Conventional Commits with `Co-Authored-By: Codex <noreply@openai.com>`.
+
+## Review Focus
+
+- Read helpers that silently recover/write or erase access errors: immutable-library hash assertions and missing-vs-corrupt tests in Tasks 1/3.
+- Names-only rewrite of legacy JSON and archived diarization generations: semantic ID and revision tests in Tasks 1/3.
+- Config valid→broken, root/token rotation during transfers and duplicate JSON-RPC IDs across clients: admission/revocation tests in Tasks 2/4.
+- External rename/replacement of a directory or audio while opening/streaming: descriptor/handle race tests in Tasks 1–4.
+- Native GUI lifecycle and agent filesystem access differing from CLI/CI: actual isolated client and GUI evidence in Task 5, explicitly report unavailable checks.
+
+## Initial evidence and chosen audio route
+
+On 2026-10-28 installed clients: Codex CLI 0.154.0, Claude Code 2.1.308, OpenCode 2.1.2, ChatGPT/Codex desktop 26.1023.50603 (22391), Claude Desktop 4.29.0, OpenChamber 2.5.2. A temporary Python stdio→authenticated HTTP probe supplied 64,044-byte (2 s) and 38,400,044-byte (1200 s) WAVs to Codex. Its next actual shell operation opened each received file, calculated matching SHA256 and WAV duration. This establishes the adapter mechanism only; repeat against native implementation. Direct resource links cannot establish authenticated file ingestion, so ship the bridge in the existing native executable (no Python/Node runtime requirement).
+
+Claude Code returned Not logged in; Desktop displayed usage limit; OpenCode connection succeeded but actual run did not discover the probe, investigation remains in Task 5. These are unverified client rows, not compatibility claims. Windows 11 Parallels is available with SDK 10.0.402; copy exact source into an isolated guest task directory. Baseline Swift suite passed 1223 tests in 176 suites (149.654 seconds); opt-in tests were skipped.
+
+### Task 1: Swift strict library queries and shared contract fixtures
+
+**Files:** Create `Sources/verbemo/MCP/MCPContract.swift`, `MCPFiles.swift`, `MCPLibrary.swift`, `MCPQueries.swift`, `MCPSettings.swift`; create `Tests/Fixtures/MCP/` JSON fixtures and `Tests/verbemoTests/MCP/` tests. Narrowly modify `Sessions/SessionLock.swift` only for a strict bounded read-lock API if needed; no changes to normal writer semantics.
+**Interfaces:** Produce `MCPLibrary`/`MCPQueries` read-only operations accepting an immutable runtime snapshot (root, recording/processing states, pending-deletion predicate), argument object and cancellation. Return JSON-compatible structured result + resource descriptions or typed safe error. `MCPFiles` supplies pinned, bounded readers/audio handles; no arbitrary-path public API. `MCPSettings` accepts a known-good raw document, effective/applied values and secret configured flags; never loads credentials itself. Record exact implemented signatures in the report for Task 2. Shared fixtures define exact observable keys/types, semantic ID vectors, parameter errors, and material semantics; no OS paths in expected results.
+
+- [ ] Write failing tests for eight operation responses using real temp files: date offsets/exclusive end, null dates, same participant names with distinct IDs, listed/speaking and any/all, stale summary, all availability states, running/cancelled evidence, empty/unknown/mixed/missing binding completeness, current/archive versions, exact original text/times/speaker IDs, substring search snippets and continuation, secret/url/hook redaction.
+- [ ] Add shared JSON cases with expected scalar/array outputs and errors, loaded by Swift tests. Include semantic ID equivalence after whitespace/reordered JSON and changed speaker names, plus distinct bound diarization generations. Test 64 KiB page boundaries, intact oversized segment, hard 1 MiB response error, invalid/stale/filter-changed cursors.
+- [ ] Run `swift test --no-parallel --filter MCP` and record expected missing implementation/failing behavior.
+- [ ] Implement strict root/meeting/version enumeration, nonmutating snapshot model decoding and query projection. Snapshot read locks are bounded; reject unfinished journal, retry noncooperating changes at most twice then content_changed. Use raw saved SpeakerNames, never inferred current user associations. Summary provenance stays null when unproven. Safe processing states derive only from persisted or supplied runtime evidence.
+- [ ] Test file-tree hashes before/after all eight tools and failures; unreadable root is whole-call error, broken meeting produces partial+warning, symlink/file/directory replacement and malformed inputs fail closed. Long audio opening does not hold the meeting lock.
+- [ ] Run focused MCP and affected existing suites, then `swift test --no-parallel`; require final report. Commit `feat(mcp): add strict read-only library queries` with coauthor.
+
+### Task 2: macOS HTTP service, native adapter, settings and lifecycle
+
+**Files:** Create `Sources/verbemo/MCP/MCPServer.swift`, `MCPHTTP.swift`, `MCPCredentials.swift`, `MCPBridge.swift`, `MCPController.swift`; modify `Package.swift`/resolved dependencies, `Verbemo.swift`, `Config.swift`, settings key/schema/problem files, `UI/SettingsController.swift`, `UI/ApplicationWindow.swift`, `UI/MeetingLibraryController.swift` only for necessary read-only state projection/wiring. Extend MCP tests, appropriate settings/shutdown tests, README config table.
+**Interfaces:** Consume Task 1 reader/result/signatures. Produce app-owned MCPController: refresh immutable config/runtime state; explicit enable/rotate/copy/status operations; synchronous stopAdmission + bounded async stop. CLI `verbemo mcp --output-dir <client-owned-directory>` runs only a stdio→HTTP bridge, loads fixed local token/settings, never starts AppController or reads meetings. The optional output directory defaults to a private per-process OS temp directory and is controlled by client configuration, not tool arguments.
+
+- [ ] Tests first: off default; explicit enable creates secure token; automatic startup without token stays closed; invalid config after valid config denies all calls; failed secret write/read keeps closed; port conflict doesn't fall back; Origin/Host/auth including duplicate headers; exact eight tools; concurrent clients with identical IDs; every response within cap.
+- [ ] Implement pinned official Swift MCP SDK 0.11.0 over SwiftNIO HTTP host; use per-request stateless server/transport to isolate IDs. Bound body/header/time/connection/concurrency resources and disable logging of request bodies/headers. Authenticate/validate before data lookup. Translate safe tool errors and JSON-RPC invalid params/method correctly.
+- [ ] Implement GET/HEAD/one byte Range, Content-Length/Content-Range/Accept-Ranges and revision-bound audio URLs. Tests verify suffix/open/closed ranges, 416, hash/size of 38.4 MB stream, disconnect, rotation/root/config/stop cancellation and replaced files. Stream bounded chunks; no base64 audio.
+- [ ] Implement native bridge forwarding MCP without secrets, no redirects/nonloopback downloads; audio call downloads permitted same-origin resources to exclusive private files, verifies size, returns local_path plus metadata, removes partial downloads on any error/cancellation. It is a client transport adapter, never a library service. Test app absent, short/truncated transfer, several tracks, temp-directory safety and no token in output.
+- [ ] Integrate initial refresh, config watcher/fail-closed admission, effective-root changes, actual job/recording/deletion projection, accepted quit vs close/cancel. Add accessible General settings controls for enabled, port, status/address, copy/rotate token and brief library-access disclosure. Token generation is explicit local action only.
+- [ ] Run focused and full Swift suites, `swift build`; commit `feat(mcp): integrate authenticated macOS server and client bridge`. Actual packaged GUI and clients are Task 5.
+
+### Task 3: Windows strict library queries and fixture parity
+
+**Files:** Create `windows/src/Verbemo.Core/MCP/McpContract.cs`, `McpFiles.cs`, `McpLibrary.cs`, `McpQueries.cs`, `McpSettings.cs`; add `windows/tests/Verbemo.Core.Tests/Mcp*Tests.cs`, link shared fixtures in test csproj. Narrowly modify `App/ProcessingCoordinator.cs` for a read-only snapshot reservation used by Task 4 without fake Preparing status.
+**Interfaces:** Match Task 1 JSON contract/fixtures and semantic IDs exactly. Queries receive runtime state and a strict file-open/read boundary. Safe Windows opens use held ancestor handles without delete sharing, FILE_FLAG_OPEN_REPARSE_POINT + attribute verification and regular-file handles; prevent directory/file replacement between validation/open, do not rely on File.Exists.
+
+- [ ] Write xUnit tests from shared fixtures, watch expected failures on the Windows host. Test both Windows speaker-file schema and relevant legacy forms; no current-user inferred associations.
+- [ ] Implement bounded strict read snapshots with existing models and writer exclusion. Never call LoadAudioAsync/ShowTranscriptAsync/RefreshSelfParticipantAsync/processing/recovery. Preserve raw archived formats, derive semantic IDs, separate revision, reject pending pseudo-versions, retain stale summary existence with null unknown provenance.
+- [ ] Add Windows-specific tests for access-denied vs missing, reparse points and ancestor replacement, write reservations/pending deletion, file-tree immutability, metadata/audio finalization races and malformed documents. Cover the same filter/pagination/text/limits/settings cases as Swift.
+- [ ] Transfer exact source snapshot to isolated Windows task directory; run Core tests using SDK 10.0.402, then relevant Live tests for writer exclusion. Record source hash and command/output. Commit `feat(mcp): add Windows read-only library queries`.
+
+### Task 4: Windows HTTP service, native adapter, settings and lifecycle
+
+**Files:** Create `windows/src/Verbemo.App/MCP/McpServer.cs`, `McpBridge.cs`, `McpController.cs`; modify `VerbemoRuntime.cs`, `App.xaml.cs`, `SecretStore.cs`, `SettingsContentView.cs`, configuration schema/model/store, App csproj/central package versions, Windows README; add Core/Live MCP config/security/lifecycle tests.
+**Interfaces:** Consume Task 3 and common protocol. Official ModelContextProtocol.AspNetCore 2.3.0 stateless HTTP/Kestrel; framework reference ships through existing self-contained packaging. Early `Verbemo.exe mcp --output-dir ...` dispatch before Velopack/single-instance/WPF; no Runtime construction. Preserve --live-worker mode. Same public flags/default port/output schema as macOS.
+
+- [ ] Test defaults, strict config read errors including UnauthorizedAccessException/null root, configured/default/applied source; missing vs failed secret reads; secure token rotation. Use isolated/injected credential target so DEBUG tests never modify production Verbemo credentials.
+- [ ] Implement native service and bridge with same auth, limits, GET/HEAD/Range/cancellation, safe error/response rules as Task 2. Verify real redirected stdin/stdout in WinExe; if necessary use narrowly packaged console bridge with identical lifecycle scope, documenting the measured reason.
+- [ ] Wire early admission shutdown into StopForExitAsync/session ending, bounded disposal, Apply/Reload root/config changes, correct runtime states and deletion exclusion. Window hide keeps server active. Dedicated accessible General controls avoid duplicate schema editors.
+- [ ] On Windows run build and Core/Live tests, including two concurrent clients with same RPC IDs, long audio, token/root/config revocation, stream shutdown, bridge absent-app behavior and no leaked tokens. Update fixtures only with deliberate common contract consistency and run affected Swift checks.
+- [ ] Commit `feat(mcp): integrate Windows server and client bridge` with exact evidence. No installation/release publication.
+
+### Task 5: Real client/GUI acceptance, documentation and delivery
+
+**Files:** Create `docs/mcp.md`, `docs/testing/2026-10-28-local-mcp.md`; update README/Windows README links and any failing affected tests. Record synthetic-only sanitized evidence and exact revisions/client versions. Do not check in recordings/tokens/raw client logs.
+**Interfaces:** Native product server and bridge on both platforms. Common fixture contract is stable from prior tasks.
+
+- [ ] Build isolated macOS app (`make app SIGN_ID=- RELEASE_SIGNING=0`), launch with synthetic home/providers disabled. GUI verify enable, port/status, rotate/copy, disable, window close/reopen, quit and cancelled quit where present. Verify socket and active-download lifecycle against the launched revision.
+- [ ] Copy exact source/build to Windows test profile; real GUI checks with Computer Use when input works. Report an unavailable GUI honestly and retain source/automated evidence separately.
+- [ ] Configure temporary client-specific integrations (restore any modified user config), repeat eight tools/filter/text continuation/small+38.4 MB audio hash and next-agent-operation against native server for each available client. Test multiple tracks, cancellation, missing file, app restart and disabled app. Claude/OpenCode/OpenChamber rows stay unverified until actual client operation succeeds; do not replace with curl or transport docs.
+- [ ] Document config samples, native executable adapter packaging/paths and ownership/cleanup of downloaded copies, direct HTTP security, supported versions and exact limitations. Desktop cloud modes and remote backends remain outside scope.
+- [ ] Run required affected suites, whole-branch independent review and fix material issues. Recheck final git diff/status, commit docs, push `codex/63-local-mcp`, create PR linked to #63 with precise evidence and remaining acceptance blockers, attach_artifact. Keep draft if material runtime acceptance remains unavailable. Do not merge/release.
