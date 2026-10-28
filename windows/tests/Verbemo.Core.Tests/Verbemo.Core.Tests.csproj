@@ -13,6 +13,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="../../../Tests/Fixtures/MCP/*.json" Link="Fixtures/MCP/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../src/Verbemo.Core/Verbemo.Core.csproj" />
     <Compile Include="../../src/Verbemo.App/ModelManager.cs" Link="ModelManager.cs" />
     <Compile Include="../../src/Verbemo.App/CommandLineToolLocator.cs" Link="CommandLineToolLocator.cs" />
