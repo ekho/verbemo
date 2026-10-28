@@ -95,6 +95,30 @@ enum MCPServer {
         if method == "initialize", params?["protocolVersion"]?.string == nil || params?["capabilities"]?.object == nil || params?["clientInfo"]?["name"]?.string == nil || params?["clientInfo"]?["version"]?.string == nil {
             return (200, error(id: id ?? .null, code: -32602, message: "Invalid params"))
         }
+        var sdkBody = body, sdkHeaders = headers
+        if method == "initialize", var projected = original.object, var projectedParams = params,
+           var capabilities = projectedParams["capabilities"]?.object {
+            if let experimental = capabilities["experimental"] {
+                guard let extensions = experimental.object, extensions.values.allSatisfy({ $0.object != nil }) else {
+                    return (200, error(id: id ?? .null, code: -32602, message: "Invalid params"))
+                }
+                // SDK 0.12.1 expects string values here, but MCP defines object-valued extensions.
+                // We negotiate none: omit only this offer from SDK input after validating its shape.
+                capabilities.removeValue(forKey: "experimental")
+            }
+            projectedParams["capabilities"] = .object(capabilities)
+            do {
+                // Keep the required-field guard above: the SDK decoder defaults absent fields.
+                // Preflight other typed fields so malformed input never echoes SDK decoding details.
+                _ = try JSONDecoder().decode(Initialize.Parameters.self, from: MCPJSON.object(projectedParams).encoded())
+                projected["params"] = .object(projectedParams)
+                sdkBody = try MCPJSON.object(projected).encoded()
+                sdkHeaders = headers.filter { $0.key.lowercased() != "content-length" }
+                sdkHeaders["content-length"] = String(sdkBody.count)
+            } catch {
+                return (200, self.error(id: id ?? .null, code: -32602, message: "Invalid params"))
+            }
+        }
         if method == "tools/list", params?["cursor"] != nil { return (200, error(id: id ?? .null, code: -32602, message: "Invalid cursor")) }
         // Notifications must not execute data queries without an answer consumer.
         if id == nil { return (202, Data()) }
@@ -126,7 +150,7 @@ enum MCPServer {
                 await transport.disconnect(); await server.stop(); await queries.finish()
                 return (503, error(code: -32603, message: "Server stopping"))
             }
-            let response = await transport.handleRequest(HTTPRequest(method: "POST", headers: headers, body: body))
+            let response = await transport.handleRequest(HTTPRequest(method: "POST", headers: sdkHeaders, body: sdkBody))
             await server.stop()
             await queries.finish()
             var data = response.bodyData ?? Data()

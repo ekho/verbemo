@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import Darwin
 import CryptoKit
+import enum MCP.Version
 @testable import verbemo
 
 @Suite(.freshHome) struct MCPTransportTests {
@@ -151,6 +152,54 @@ import CryptoKit
         #expect(try huge.encoded().count < MCPContract.hardResponseBytes)
         await host.stop()
     }
+    @Test func initializeAcceptsCodexExtensionsAndRejectsMalformedParametersSafely() async throws {
+        let root = try fixture(), token = String(repeating: "c", count: 64), calls = Counter()
+        let host = MCPHTTP(port: 55309, token: token, gate: { scope in
+            .init(runtime: .init(root: root, cancelled: { scope.isCancelled }), settings: nil)
+        }, query: { _, _, _, _ in _ = calls.increment(); throw MCPFailure(.invalidParams) })
+        try await host.start()
+        // Actual nonsecret initialize captured from Codex 0.154.0; no QA profile/file dependency.
+        let captured = try MCPJSON.parse(Data(#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"experimental":{"codex/auth-change":{}},"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"codex-mcp-client","title":"Codex","version":"0.154.0"}}}"#.utf8))
+        let base = try #require(captured["params"]?.object)
+        let capabilities = try #require(base["capabilities"]?.object)
+        func replacing(_ key: String, with value: MCPJSON?) -> MCPJSON {
+            var params = base; params[key] = value; return .object(params)
+        }
+        var valid: [(MCPJSON, MCPJSON, String)] = [(.object(base), .int(0), "2025-06-18")]
+        for experimental: MCPJSON? in [nil, .object([:]), .object(["example": .object(["nested": .array([.string("data:text/plain,exact"), .int(9007199254740993)])])])] {
+            var values = capabilities; values["experimental"] = experimental
+            valid.append((replacing("capabilities", with: .object(values)), .int(9007199254740993), "2025-06-18"))
+        }
+        valid.append((replacing("protocolVersion", with: .string("2025-11-25")), .string("initialize-string-id"), "2025-11-25"))
+        valid.append((replacing("protocolVersion", with: .string("2099-01-01")), .int(4), Version.latest))
+        for (params, id, version) in valid {
+            let reply = try await wire(port: 55309, token: token, method: "initialize", params: params, id: id)
+            #expect(reply["id"] == id)
+            #expect(reply["error"] == nil)
+            #expect(reply["result"]?["protocolVersion"] == .string(version))
+            #expect(reply["result"]?["capabilities"] == .object(["tools": .object(["listChanged": .bool(false)])]))
+        }
+        let marker = "private-diagnostic-marker"
+        var invalid: [MCPJSON?] = [nil, .null, .array([]), replacing("protocolVersion", with: nil), replacing("protocolVersion", with: .int(1)), replacing("capabilities", with: nil), replacing("capabilities", with: .array([])), replacing("clientInfo", with: nil), replacing("clientInfo", with: .object(["name": .string("test")])), replacing("clientInfo", with: .object(["name": .int(1), "version": .string("1")]))]
+        for experimental in [MCPJSON.null, .array([]), .string(marker), .object(["example": .string(marker)]), .object(["example": .null]), .object(["example": .array([])])] {
+            var values = capabilities; values["experimental"] = experimental
+            invalid.append(replacing("capabilities", with: .object(values)))
+        }
+        // Keep validation of known fields: ignoring the whole capabilities/clientInfo object would fail these.
+        var malformed = capabilities; malformed["roots"] = .object(["listChanged": .string(marker)])
+        invalid.append(replacing("capabilities", with: .object(malformed)))
+        invalid.append(replacing("clientInfo", with: .object(["name": .string("test"), "version": .string("1"), "title": .array([.string(marker)])])))
+        for params in invalid {
+            let reply = try await wire(port: 55309, token: token, method: "initialize", params: params, id: .int(9007199254740993))
+            #expect(reply["id"] == .int(9007199254740993))
+            #expect(reply["error"] == .object(["code": .int(-32602), "message": .string("Invalid params")]))
+            #expect(reply["result"] == nil)
+            #expect(!String(decoding: try reply.encoded(), as: UTF8.self).contains(marker))
+        }
+        #expect(calls.count == 0)
+        await host.stop()
+    }
+
     @Test func audioRangesLargeStreamAndBridgeAcquireExactBytes() async throws {
         let root = try fixture(bytes: 38_400_044), home = Home.current
         try FileManager.default.createDirectory(at: home.configDirectory, withIntermediateDirectories: true)
