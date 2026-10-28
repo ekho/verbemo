@@ -31,7 +31,9 @@ public static class McpFiles
     }
     private static SafeFileHandle? Open(string path, bool directory, bool missing)
     {
-        var handle = CreateFileW(path, 0x80000000u, directory ? 3u : 7u, IntPtr.Zero, 3, 0x00200000u | (directory ? 0x02000000u : 0), IntPtr.Zero);
+        // Held files exclude in-place writers, keeping hashes and later reads consistent.
+        // Delete sharing still permits rename/deletion while the original file stays pinned.
+        var handle = CreateFileW(path, 0x80000000u, directory ? 3u : 5u, IntPtr.Zero, 3, 0x00200000u | (directory ? 0x02000000u : 0), IntPtr.Zero);
         if (handle.IsInvalid) { var error = Marshal.GetLastWin32Error(); handle.Dispose(); if (missing && error is 2 or 3) return null; throw Failure(error); }
         try { if (Stat(handle).IsDirectory != directory) throw new McpFailure("data_unreadable"); return handle; }
         catch { handle.Dispose(); throw; }

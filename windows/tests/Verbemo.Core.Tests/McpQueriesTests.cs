@@ -84,7 +84,7 @@ public sealed class McpQueriesTests
     public void Download_is_pinned_and_old_audio_id_never_resolves_replacement()
     {
         using var f = new Fixture(); var audio = f.Call("get_meeting_audio"); var id = audio["items"]![0]!["audio_id"]!.GetValue<string>(); using var handle = McpLibrary.OpenAudio(f.Id, id, f.Runtime);
-        File.Move(f.PathFor("mic.wav"), f.PathFor("old.wav")); f.Write("mic.wav", "replacement"); Assert.Equal("audio-fixture", Encoding.UTF8.GetString(handle.Read(0, 64))); Assert.Equal("artifact_not_found", Assert.Throws<McpFailure>(() => McpLibrary.OpenAudio(f.Id, id, f.Runtime)).Code);
+        File.Move(f.PathFor("mic.wav"), f.PathFor("old.wav")); File.Delete(f.PathFor("old.wav")); f.Write("mic.wav", "replacement"); Assert.Equal("audio-fixture", Encoding.UTF8.GetString(handle.Read(0, 64))); Assert.Equal("artifact_not_found", Assert.Throws<McpFailure>(() => McpLibrary.OpenAudio(f.Id, id, f.Runtime)).Code);
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class McpQueriesTests
     public void Cancellation_and_mutation_during_snapshot_are_detected()
     {
         using var f = new Fixture(); using var cts = new CancellationTokenSource(); cts.Cancel(); Assert.Equal("server_stopping", Assert.Throws<McpFailure>(() => McpQueries.Call("get_meeting", f.Args(), new(f.Root, cancellation: cts.Token))).Code);
-        using var root = McpFiles.DirectoryHandle.Root(f.Root); using var dir = root.Directory("meeting")!; using var file = dir.File("mic.wav")!; f.Write("mic.wav", "longer-new-content"); Assert.Equal("content_changed", Assert.Throws<McpFailure>(file.Validate).Code);
+        using var root = McpFiles.DirectoryHandle.Root(f.Root); using var dir = root.Directory("meeting")!; using var file = dir.File("mic.wav")!; Assert.Throws<IOException>(() => f.Write("mic.wav", "longer-new-content")); file.Validate(); Assert.Equal("audio-fixture", Encoding.UTF8.GetString(file.Read(0, 64)));
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public sealed class McpQueriesTests
     public void Metadata_change_at_final_validation_never_returns_a_mixed_snapshot(bool keepsChanging)
     {
         using var f = new Fixture(); var checks = 0;
-        var runtime = new McpLibrary.Runtime(f.Root, pendingDeletion: _ => { checks++; if (checks == 2 || keepsChanging && checks % 2 == 0) f.Write("meta.json", new JsonObject { ["title"] = "Changed " + checks }.ToJsonString()); return false; });
+        var runtime = new McpLibrary.Runtime(f.Root, pendingDeletion: _ => { checks++; if (checks == 2 || keepsChanging && checks % 2 == 0) { f.Write(".replacement-meta.json", new JsonObject { ["title"] = "Changed " + checks }.ToJsonString()); File.Move(f.PathFor("meta.json"), f.PathFor(".previous-meta-" + checks + ".json")); File.Move(f.PathFor(".replacement-meta.json"), f.PathFor("meta.json")); } return false; });
         if (keepsChanging) Assert.Equal("content_changed", Assert.Throws<McpFailure>(() => McpQueries.Call("get_meeting", f.Args(), runtime)).Code);
         else { var result = McpQueries.Call("get_meeting", f.Args(), runtime); Assert.Equal("Changed 2", result["title"]!.GetValue<string>()); Assert.Empty(result["participants"]!.AsArray()); }
     }
@@ -214,6 +214,56 @@ public sealed class McpQueriesTests
         using var f = new Fixture(); var before = McpQueries.Call("list_meetings", new(), f.Runtime)["revision"]!.GetValue<string>();
         var path = f.PathFor("meta.json"); var stamp = File.GetLastWriteTimeUtc(path); f.Write("meta.json", File.ReadAllText(path).Replace("Meeting", "Changed")); File.SetLastWriteTimeUtc(path, stamp);
         var after = McpQueries.Call("list_meetings", new(), f.Runtime)["revision"]!.GetValue<string>(); Assert.NotEqual(before, after);
+    }
+
+    [Fact]
+    public void Held_snapshot_rejects_same_size_restored_mtime_transcript_rewrite()
+    {
+        using var f = new Fixture(); var path = f.PathFor("transcript.json"); var original = File.ReadAllText(path); var stamp = File.GetLastWriteTimeUtc(path); var checks = 0; IOException? rejected = null;
+        var runtime = new McpLibrary.Runtime(f.Root, pendingDeletion: _ =>
+        {
+            if (++checks == 2)
+            {
+                try { f.Write("transcript.json", original.Replace("Hello", "Jello")); File.SetLastWriteTimeUtc(path, stamp); }
+                catch (IOException error) { rejected = error; }
+            }
+            return false;
+        });
+        var result = McpQueries.Call("get_meeting_transcript", f.Args(), runtime);
+        Assert.Equal("  Hello world!\n", result["segments"]![0]!["text"]!.GetValue<string>());
+        Assert.Equal(McpContractTests.Fixture["semantic_ids"]![0]!["expected"]!.GetValue<string>(), result["version_id"]!.GetValue<string>());
+        Assert.NotNull(rejected); Assert.Equal(32, rejected.HResult & 0xffff); Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Theory]
+    [InlineData("\"bad\"")]
+    [InlineData("42")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    public void Malformed_selected_legacy_speaker_is_safe_error_and_partial_listing(string entry)
+    {
+        using var f = new Fixture(); f.Write("speakers.json", "{\"speakers\":{\"them A\":" + entry + "}}");
+        Assert.Equal("data_unreadable", Assert.Throws<McpFailure>(() => f.Call("get_meeting_transcript")).Code);
+        var list = McpQueries.Call("list_meetings", new(), f.Runtime); Assert.True(list["partial"]!.GetValue<bool>());
+        Assert.Equal("unknown", Assert.Single(list["items"]!.AsArray())!["participant_assignment"]!.GetValue<string>());
+        Assert.Contains(list["warnings"]!.AsArray(), warning => warning!["code"]!.GetValue<string>() == "data_unreadable" && warning["artifact"]!.GetValue<string>() == "speakers");
+    }
+
+    [Fact]
+    public void Preexisting_writer_conflict_is_not_ready_and_audio_disposal_releases_write_exclusion()
+    {
+        using var f = new Fixture();
+        using (var writer = new FileStream(f.PathFor("transcript.json"), FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+            Assert.Equal("artifact_not_ready", Assert.Throws<McpFailure>(() => f.Call("get_meeting_transcript")).Code);
+        var audioId = f.Call("get_meeting_audio")["items"]![0]!["audio_id"]!.GetValue<string>();
+        using var cancellation = new CancellationTokenSource(); var runtime = new McpLibrary.Runtime(f.Root, cancellation: cancellation.Token);
+        using (var audio = McpLibrary.OpenAudio(f.Id, audioId, runtime))
+        {
+            Assert.Throws<IOException>(() => f.Write("mic.wav", "changed-audio"));
+            cancellation.Cancel(); Assert.Equal("server_stopping", Assert.Throws<McpFailure>(() => McpLibrary.OpenAudio(f.Id, audioId, runtime)).Code);
+            Assert.Equal("audio-fixture", Encoding.UTF8.GetString(audio.Read(0, 64)));
+        }
+        f.Write("mic.wav", "after-disposal"); Assert.Equal("after-disposal", File.ReadAllText(f.PathFor("mic.wav")));
     }
 
     internal sealed class Fixture : IDisposable

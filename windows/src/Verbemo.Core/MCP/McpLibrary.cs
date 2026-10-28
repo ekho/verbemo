@@ -232,7 +232,10 @@ public static class McpLibrary
         foreach (var key in new[] { "names", "sources", "participantIds", "manualNames", "speakers" }) if (data.ContainsKey(key) && data[key] is not JsonObject) throw new McpFailure("data_unreadable");
         var result = new Dictionary<string,Name>(); foreach (var label in labels.Where(x => !Unknown(x)))
         {
-            var display = data["names"]?[label] ?? data["speakers"]?[label]?["name"]; var participant = data["participantIds"]?[label] ?? (data["speakers"]?[label]?["participantID"] ?? data["speakers"]?[label]?["participant_id"]);
+            JsonObject? legacy = null;
+            if (data["speakers"] is JsonObject speakers && speakers.TryGetPropertyValue(label, out var entry))
+                legacy = entry as JsonObject ?? throw new McpFailure("data_unreadable");
+            var display = data["names"]?[label] ?? legacy?["name"]; var participant = data["participantIds"]?[label] ?? (legacy?["participantID"] ?? legacy?["participant_id"]);
             if (display is not null && Text(display) is null || participant is not null && Text(participant) is null) throw new McpFailure("data_unreadable");
             result[label] = new(Text(display), Text(participant));
         }
