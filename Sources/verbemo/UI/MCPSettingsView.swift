@@ -13,6 +13,7 @@ import AppKit
     var controller: MCPController? {
         didSet { observeController(); refresh() }
     }
+    // The host notice is needed while the card is off; an empty message clears it.
     var onError: ((String) -> Void)?
     var pasteboard = NSPasteboard.general
     private let executable: String
@@ -32,6 +33,8 @@ import AppKit
     private var lastEnabled = false
     private var configurationReadable = true
     private var lastControllerStatus: String?
+    private enum ErrorSource { case port, setupCopy, tokenCopy, rotation, enable, server }
+    private var operationErrorSource: ErrorSource?
     var schemaControls: [NSControl] { [toggle, port] }
 
     init(controller: MCPController? = nil, executable: String = Bundle.main.executableURL?.path ?? CommandLine.arguments[0]) {
@@ -144,7 +147,14 @@ import AppKit
         let statusChanged = lastControllerStatus != rawStatus
         lastControllerStatus = rawStatus
         if statusChanged && (rawStatus.hasPrefix("MCP closed") || rawStatus == "Cannot listen on selected port") {
-            report(localizedStatus(rawStatus))
+            let source: ErrorSource = switch rawStatus {
+            case "MCP closed — could not save token": .rotation
+            case "MCP closed — could not save local credentials/settings": .enable
+            default: .server
+            }
+            report(localizedStatus(rawStatus), source: source)
+        } else if statusChanged && rawStatus == "Listening" {
+            clearError(from: .server)
         }
         updateContent()
     }
@@ -183,8 +193,15 @@ import AppKit
         if !expanded, content.superview != nil { section.removeArrangedSubview(content); content.removeFromSuperview() }
     }
     @objc private func enableChanged() {
-        guard let controller else { report(localised("MCP controller unavailable", "Контроллер MCP недоступен")); refresh(); return }
-        controller.setEnabled(toggle.state == .on); refresh()
+        guard let controller else { report(localised("MCP controller unavailable", "Контроллер MCP недоступен"), source: .enable); refresh(); return }
+        let enabled = toggle.state == .on
+        lastControllerStatus = nil
+        controller.setEnabled(enabled)
+        if controller.status != "MCP closed — could not save local credentials/settings",
+           (try? MCPConfiguration.read(home: .current))?.enabled == enabled {
+            clearError(from: .enable)
+        }
+        refresh()
     }
     func controlTextDidChange(_ notification: Notification) {
         portIsDirty = true; updateContent()
@@ -196,49 +213,59 @@ import AppKit
         updateContent()
         guard selectedPort != nil,
               let entry = SettingsSchema.sections.flatMap(\.entries).first(where: { $0.path == ["mcp", "port"] })
-        else { report(validationMessage); return }
+        else { report(validationMessage, source: .port); return }
         let resolution = SettingsSchema.resolve(.text(port.stringValue), for: entry)
         let stored = (Config.raw()["mcp"] as? [String: Any])?["port"]
         guard SettingsSchema.changes(resolution, from: stored) else {
-            portIsDirty = false; refresh(); return
+            portIsDirty = false; clearError(from: .port); refresh(); return
         }
         let value: Any?
         switch resolution {
         case .set(let port): value = port
         case .clear: value = nil
-        case .invalid: report(validationMessage); return
+        case .invalid: report(validationMessage, source: .port); return
         }
         guard Config.update(path: entry.path, value: value) else {
-            report(localised("Could not save MCP port", "Не удалось сохранить порт MCP")); return
+            report(localised("Could not save MCP port", "Не удалось сохранить порт MCP"), source: .port); return
         }
-        portIsDirty = false; controller?.refresh(); refresh()
+        portIsDirty = false; clearError(from: .port); controller?.refresh(); refresh()
     }
     @objc private func clientChanged() { updateContent() }
     @objc private func copyBlock(_ sender: NSButton) {
         updateContent()
-        guard sender.isEnabled else { report(validationMessage); return }
-        writeClipboard(blocks[sender.tag].0.stringValue)
+        guard sender.isEnabled else { report(validationMessage, source: .setupCopy); return }
+        writeClipboard(blocks[sender.tag].0.stringValue, source: .setupCopy)
     }
     @objc private func copyToken() { copyCurrentToken() }
     private func copyCurrentToken() {
         do {
             guard let value = try controller?.tokenForLocalClipboard() else { throw MCPFailure(.dataUnreadable) }
-            writeClipboard(value)
-        } catch { report(localised("Local token unavailable", "Локальный токен недоступен")) }
+            writeClipboard(value, source: .tokenCopy)
+        } catch { report(localised("Local token unavailable", "Локальный токен недоступен"), source: .tokenCopy) }
     }
     @objc private func rotateToken() {
-        guard let controller else { report(localised("Could not replace local token", "Не удалось заменить локальный токен")); return }
+        guard let controller else { report(localised("Could not replace local token", "Не удалось заменить локальный токен"), source: .rotation); return }
         // An explicit retry owns feedback even when the controller repeats its status.
         lastControllerStatus = nil
-        controller.rotateToken(); refresh()
+        controller.rotateToken()
+        if controller.status != "MCP closed — could not save token" { clearError(from: .rotation) }
+        refresh()
     }
-    private func writeClipboard(_ value: String) {
+    private func writeClipboard(_ value: String, source: ErrorSource) {
         pasteboard.clearContents()
-        if !pasteboard.setString(value, forType: .string) { report(localised("Could not copy to clipboard", "Не удалось скопировать в буфер обмена")) }
+        if pasteboard.setString(value, forType: .string) { clearError(from: source) }
+        else { report(localised("Could not copy to clipboard", "Не удалось скопировать в буфер обмена"), source: source) }
     }
-    private func report(_ message: String) {
+    private func report(_ message: String, source: ErrorSource) {
+        operationErrorSource = source
         operationError.stringValue = message; operationError.isHidden = false
-        if !lastEnabled { onError?(message) }
+        onError?(lastEnabled ? "" : message)
+    }
+    private func clearError(from source: ErrorSource) {
+        guard operationErrorSource == source else { return }
+        operationErrorSource = nil
+        operationError.stringValue = ""; operationError.isHidden = true
+        onError?("")
     }
     private func localizedStatus(_ status: String) -> String {
         switch status {

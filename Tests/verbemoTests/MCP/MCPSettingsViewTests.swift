@@ -184,6 +184,189 @@ struct MCPSettingsViewTests {
         #expect((Config.raw()["mcp"] as? [String: Any])?["port"] == nil)
         #expect((try control(card, "mcp.url.text", as: NSTextField.self)).stringValue == "http://127.0.0.1:52763/mcp")
     }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55432}}"#), arguments: [55432, 55433])
+    func successfulPortApplicationClearsValidationFailureOnlyAfterCommit(correctedPort: Int) throws {
+        let card = MCPSettingsView()
+        try click(card, "mcp.section.server")
+        let port: NSTextField = try control(card, "mcp.port")
+        let error: NSTextField = try control(card, "mcp.operation-error")
+        port.stringValue = "999"
+        card.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        port.stringValue = String(correctedPort)
+        card.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        card.refresh()
+        let client: NSPopUpButton = try control(card, "mcp.client")
+        client.selectItem(at: 2); _ = client.sendAction(client.action, to: client.target)
+        Config.update(path: ["mcp", "enabled"], value: false); card.refresh()
+        Config.update(path: ["mcp", "enabled"], value: true); card.refresh()
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        #expect(error.stringValue == "Enter an integer port from 1024 to 65535.")
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
+        #expect(try MCPConfiguration.read(home: .current).port == correctedPort)
+        card.refresh()
+        #expect(error.isHidden && error.stringValue.isEmpty)
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55432}}"#), .speaking(.russian))
+    func successfulPortApplicationClearsPriorSaveFailure() throws {
+        let home = Home.current
+        let card = MCPSettingsView()
+        try click(card, "mcp.section.server")
+        let port: NSTextField = try control(card, "mcp.port")
+        let error: NSTextField = try control(card, "mcp.operation-error")
+        port.stringValue = "55433"
+        card.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        #expect(chmod(home.configDirectory.path, 0o500) == 0)
+        defer { _ = chmod(home.configDirectory.path, 0o700) }
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
+        #expect(error.stringValue == "Не удалось сохранить порт MCP")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        #expect(chmod(home.configDirectory.path, 0o700) == 0)
+        card.refresh()
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
+        #expect(try MCPConfiguration.read(home: home).port == 55433)
+        #expect(error.isHidden && error.stringValue.isEmpty)
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55450}}"#))
+    func successfulTokenCopyClearsOnlyItsPriorFailure() throws {
+        let controller = MCPController(snapshot: { .init(root: Home.current.url) })
+        let card = MCPSettingsView(controller: controller)
+        let board = NSPasteboard(name: .init("verbemo-fix2-token-" + UUID().uuidString))
+        defer { board.releaseGlobally() }
+        card.pasteboard = board
+        try click(card, "mcp.section.access"); try click(card, "mcp.copy-token")
+        let error: NSTextField = try control(card, "mcp.operation-error")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        let token = try MCPCredentials(home: .current).rotate()
+        card.refresh()
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        try click(card, "mcp.copy-token")
+        let copied = board.string(forType: .string) == token
+        #expect(copied, "Successful copy writes the synthetic current credential")
+        #expect(error.isHidden && error.stringValue.isEmpty)
+        try click(card, "mcp.section.server")
+        let port: NSTextField = try control(card, "mcp.port")
+        port.stringValue = "999"
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
+        try click(card, "mcp.copy-token")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        #expect(error.stringValue.contains("1024"))
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55450}}"#))
+    func successfulSetupCopyClearsOnlyItsPriorFailure() throws {
+        let card = MCPSettingsView(executable: "/fixture/verbemo")
+        let board = NSPasteboard(name: .init("verbemo-fix2-setup-" + UUID().uuidString))
+        defer { board.releaseGlobally() }
+        card.pasteboard = board
+        try Home.current.writeConfig(text: "broken")
+        try click(card, "mcp.command.copy")
+        let error: NSTextField = try control(card, "mcp.operation-error")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        try Home.current.writeConfig(text: #"{"mcp":{"enabled":true,"port":55450}}"#)
+        card.refresh()
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        try click(card, "mcp.command.copy")
+        let copied = board.string(forType: .string) == "codex mcp add verbemo -- '/fixture/verbemo' mcp"
+        #expect(copied, "Successful setup copy writes the whole command")
+        #expect(error.isHidden && error.stringValue.isEmpty)
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55450}}"#))
+    func successfulRotationClearsOnlyItsPriorFailure() async throws {
+        let home = Home.current
+        try FileManager.default.createDirectory(at: home.keysDirectory, withIntermediateDirectories: true)
+        #expect(chmod(home.keysDirectory.path, 0o755) == 0)
+        let controller = MCPController(snapshot: { .init(root: home.url) })
+        defer { controller.stopAdmission() }
+        let card = MCPSettingsView(controller: controller)
+        try click(card, "mcp.section.access"); try click(card, "mcp.rotate-token")
+        let error: NSTextField = try control(card, "mcp.operation-error")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        #expect(chmod(home.keysDirectory.path, 0o700) == 0)
+        card.refresh()
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        try click(card, "mcp.rotate-token")
+        for _ in 0..<200 where controller.status == "Starting" { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(controller.status == "Listening")
+        #expect(error.isHidden && error.stringValue.isEmpty)
+        await controller.stop()
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":false,"port":55451}}"#))
+    func successfulEnableClearsItsCardErrorAndExistingSettingsNotice() async throws {
+        let home = Home.current
+        try FileManager.default.createDirectory(at: home.keysDirectory, withIntermediateDirectories: true)
+        #expect(chmod(home.keysDirectory.path, 0o755) == 0)
+        let app = ApplicationWindow()
+        let controller = MCPController(snapshot: { .init(root: home.url) })
+        defer { controller.stopAdmission(); _ = app.stopForTermination() }
+        app.mcp = controller; app.navigate(.mcp)
+        let page = app.settings.content(for: .mcp)
+        let toggle: NSSwitch = try control(page, "mcp.enabled")
+        toggle.state = .on; _ = toggle.sendAction(toggle.action, to: toggle.target)
+        let notice: NSTextField = try control(page, "settings.notice")
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(chmod(home.keysDirectory.path, 0o700) == 0)
+        toggle.state = .on; _ = toggle.sendAction(toggle.action, to: toggle.target)
+        for _ in 0..<200 where controller.status == "Starting" { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(controller.status == "Listening")
+        let error: NSTextField = try control(page, "mcp.operation-error")
+        #expect(error.isHidden && error.stringValue.isEmpty)
+        #expect(notice.isHidden && notice.stringValue.isEmpty)
+        await controller.stop()
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":false,"port":55452}}"#))
+    func enableRecoveryShowsNewBindFailureUntilActualListeningRecovers() async throws {
+        let home = Home.current
+        let host = MCPHTTP(port: 55452, token: String(repeating: "a", count: 64), gate: { _ in throw MCPFailure(.dataUnreadable) })
+        try await host.start()
+        defer { host.stopAdmission() }
+        try FileManager.default.createDirectory(at: home.keysDirectory, withIntermediateDirectories: true)
+        #expect(chmod(home.keysDirectory.path, 0o755) == 0)
+        let app = ApplicationWindow()
+        let controller = MCPController(snapshot: { .init(root: home.url) })
+        defer { controller.stopAdmission(); _ = app.stopForTermination() }
+        app.mcp = controller; app.navigate(.mcp)
+        let page = app.settings.content(for: .mcp)
+        let toggle: NSSwitch = try control(page, "mcp.enabled")
+        toggle.state = .on; _ = toggle.sendAction(toggle.action, to: toggle.target)
+        #expect(chmod(home.keysDirectory.path, 0o700) == 0)
+        toggle.state = .on; _ = toggle.sendAction(toggle.action, to: toggle.target)
+        for _ in 0..<200 where controller.status == "Starting" { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(try MCPConfiguration.read(home: home).enabled)
+        #expect(controller.status == "Cannot listen on selected port")
+        let error: NSTextField = try control(page, "mcp.operation-error")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        #expect(error.stringValue == "Cannot listen on selected port")
+        let notice: NSTextField = try control(page, "settings.notice")
+        #expect(notice.isHidden && notice.stringValue.isEmpty)
+        await host.stop()
+        controller.refresh()
+        for _ in 0..<200 where controller.status == "Starting" { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(controller.status == "Listening")
+        #expect(error.isHidden && error.stringValue.isEmpty)
+        await controller.stop()
+    }
+    @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55454}}"#))
+    func successfulOffOnAndListeningKeepUnrelatedPortFailure() async throws {
+        let controller = MCPController(snapshot: { .init(root: Home.current.url) })
+        defer { controller.stopAdmission() }
+        let card = MCPSettingsView(controller: controller)
+        try click(card, "mcp.section.server")
+        let port: NSTextField = try control(card, "mcp.port")
+        port.stringValue = "999"
+        card.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
+        let error: NSTextField = try control(card, "mcp.operation-error")
+        let toggle: NSSwitch = try control(card, "mcp.enabled")
+        toggle.state = .off; _ = toggle.sendAction(toggle.action, to: toggle.target)
+        toggle.state = .on; _ = toggle.sendAction(toggle.action, to: toggle.target)
+        for _ in 0..<200 where controller.status == "Starting" { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(controller.status == "Listening")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        #expect(error.stringValue == "Enter an integer port from 1024 to 65535.")
+        await controller.stop()
+    }
     @Test(.freshHome) func ordinaryTextSelectionKeepsNativeCopySemantics() {
         let board = NSPasteboard.general
         let previous = (board.pasteboardItems ?? []).map { item in
@@ -283,6 +466,11 @@ struct MCPSettingsViewTests {
         #expect(controller.status == firstFailureStatus)
         try click(card, "mcp.section.access")
         card.refresh()
+        #expect(error.stringValue == "Could not replace local token")
+        #expect(!error.isHiddenOrHasHiddenAncestor)
+        port.stringValue = "52763"
+        card.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        card.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: port))
         #expect(error.stringValue == "Could not replace local token")
         #expect(!error.isHiddenOrHasHiddenAncestor)
     }
