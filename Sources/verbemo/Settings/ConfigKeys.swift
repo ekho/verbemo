@@ -18,6 +18,8 @@ extension Config {
     /// the value verbemo uses, by construction.
     enum Key: String, CaseIterable, Sendable {
         case recordingsDir = "recordings_dir"
+        case mcpEnabled = "mcp.enabled"
+        case mcpPort = "mcp.port"
         case onStop = "on_stop"
         case transcriptionEnabled = "transcription.enabled"
         case transcriptionEngine = "transcription.engine"

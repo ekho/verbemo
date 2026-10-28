@@ -492,6 +492,30 @@ struct SettingsSchemaTests {
 @Suite(.serialized)
 @MainActor
 struct SettingsControllerTests {
+    @Test("MCP connection instructions follow edits and distinguish selected from listening", .freshHome)
+    func mcpInstructionsFollowSelectedPort() throws {
+        let application = ApplicationWindow()
+        application.navigate(.general)
+        let settings = application.settings
+        defer { _ = settings.stopForTermination(); withExtendedLifetime(application) {} }
+        let controls = settings.content(for: .general).allDescendants
+        let open = try #require(controls.first { $0.identifier?.rawValue == "mcp.instructions" } as? NSButton)
+        open.performClick(nil)
+        let sheet = try #require(application.panel.attachedSheet)
+        let views = try #require(sheet.contentView).allDescendants
+        let text = try #require(views.first { $0.identifier?.rawValue == "mcp.instructions.text" } as? NSTextView)
+        let copy = try #require(views.first { $0.identifier?.rawValue == "mcp.instructions.copy" } as? NSButton)
+        let clients = try #require(views.first { $0.identifier?.rawValue == "mcp.instructions.client" } as? NSPopUpButton)
+        #expect(clients.numberOfItems == 5)
+        #expect(text.string.contains("52763")); #expect(text.string.contains("Off"))
+        let port = try #require(settings.renderedControls.first { $0.identifier?.rawValue == "mcp.port" } as? NSTextField)
+        port.stringValue = "55432"
+        settings.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        #expect(text.string.contains("55432")); #expect(!text.string.contains("52763")); #expect(copy.isEnabled)
+        port.stringValue = "wrong"
+        settings.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: port))
+        #expect(!copy.isEnabled); #expect(!text.string.contains("55432"))
+    }
     @Test("Every schema setting not covered by the form gets a control", .freshHome)
     func rendersEverySetting() throws {
         let application = ApplicationWindow()

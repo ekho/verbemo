@@ -29,8 +29,11 @@ struct ProcessingOperationsTests {
     func waitingCancellation() async throws {
         let operations = ProcessingOperations(), ran = Flag()
         let ticket = try operations.register(session: nil, kind: .transcription)
+        let retained = try #require(operations.snapshot().first)
+        #expect(retained.completion == nil)
         #expect(operations.snapshot().first?.state == .waiting)
         await operations.cancelAndWait(ticket.id)
+        #expect(retained.completion == .cancelled)
         await operations.cancelAndWait(ticket.id)
         do { try await ticket.run { ran.raise() }; Issue.record("cancelled ticket ran") }
         catch is CancellationError {} catch { Issue.record("unexpected: \(error)") }

@@ -30,10 +30,12 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
     var onRenameRecording: ((String) throws -> Void)?
     private var settingsBuilt = false
+    var mcp: MCPController? { didSet { if settingsBuilt { settings.mcp = mcp } } }
     private var stopping = false
     lazy var settings: SettingsController = {
         settingsBuilt = true
         let settings = SettingsController(hostWindow: panel, calendar: calendar)
+        settings.mcp = mcp
         settings.isProcessing = { [weak self] in self?.isProcessing?() == true }
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
         return settings

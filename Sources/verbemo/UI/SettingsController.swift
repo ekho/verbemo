@@ -7,6 +7,14 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         didSet { setup.isRecording = isRecording }
     }
     var isProcessing: (() -> Bool)?
+    var mcp: MCPController? {
+        didSet { mcp?.onChange = { [weak self] in self?.refreshMCP() }; refreshMCP() }
+    }
+    private let mcpStatus = NSTextField(wrappingLabelWithString: "")
+    private var mcpInstructionPanel: NSPanel?
+    private let mcpClient = NSPopUpButton()
+    private let mcpInstructionText = NSTextView()
+    private let mcpInstructionCopy = NSButton(title: localised("Copy instructions", "Копировать инструкцию"), target: nil, action: nil)
     private let panel: NSWindow
     private let calendar: CalendarWatcher
     private let calendarSelection: CalendarSettingsView
@@ -67,6 +75,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     }
 
     func stopForTermination() -> [Task<Void, Never>] {
+        closeMCPInstructions()
         configWatch = nil
         deletionTask?.cancel()
         emailLookupTask?.cancel()
@@ -113,7 +122,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                     && $0.path != Config.Key.calendarIDs.path
                     && !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
             }
-            let common: Set<String> = ["interface_theme", "interface_language", "window", "calendar", "system_audio", "transcription.language", "transcription.model", "summary.language", "summary.template", "user_name", "user_email", "speaker_names.enabled"]
+            let common: Set<String> = ["mcp.enabled", "mcp.port", "interface_theme", "interface_language", "window", "calendar", "system_audio", "transcription.language", "transcription.model", "summary.language", "summary.template", "user_name", "user_email", "speaker_names.enabled"]
             let rare = NSStackView()
             rare.orientation = .vertical
             rare.alignment = .leading
@@ -155,6 +164,25 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 form.addArrangedSubview(box)
                 box.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
                 // Include the row's gap before its trailing spacer.
+                content.widthAnchor.constraint(equalTo: box.widthAnchor, constant: -38).isActive = true
+            }
+            if destination == .general {
+                mcpStatus.identifier = .init("mcp.status")
+                mcpStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+                mcpStatus.setAccessibilityLabel(localised("MCP server status", "Состояние MCP-сервера"))
+                let copy = NSButton(title: localised("Copy token", "Копировать токен"), target: self, action: #selector(copyMCPToken))
+                copy.identifier = .init("mcp.copy-token")
+                let rotate = NSButton(title: localised("Rotate token", "Заменить токен"), target: self, action: #selector(rotateMCPToken))
+                rotate.identifier = .init("mcp.rotate-token")
+                let instructions = NSButton(title: localised("Connect a client…", "Подключить клиента…"), target: self, action: #selector(showMCPInstructions))
+                instructions.identifier = .init("mcp.instructions")
+                let buttons = NSStackView(views: [copy, rotate, instructions])
+                buttons.orientation = .vertical
+                buttons.alignment = .leading
+                let content = SetupLayout.group([mcpStatus, buttons], spacing: 10)
+                let box = SetupLayout.box([SetupLayout.row(title: content)])
+                form.addArrangedSubview(box)
+                box.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
                 content.widthAnchor.constraint(equalTo: box.widthAnchor, constant: -38).isActive = true
             }
             if destination == .storage && Platform.supportsLocalModels {
@@ -643,6 +671,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             notice.isHidden = notices.isEmpty
         }
         for (entry, view) in providerRows { view.isHidden = !providerIsSelected(entry.path) }
+        refreshMCP()
     }
 
     private func providerIsSelected(_ path: [String]) -> Bool {
@@ -722,6 +751,11 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             resolution, from: value(at: entry.path, in: Config.raw()))
         else { return }
 
+        if entry.path == ["mcp", "enabled"], let mcp {
+            mcp.setEnabled((row.control as? NSSwitch)?.state == .on)
+            refresh(); return
+        }
+
         switch resolution {
         case .set(let value): Config.update(path: entry.path, value: value)
         case .clear: Config.update(path: entry.path, value: nil)
@@ -740,6 +774,82 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         // an invalid entry never reaches it, which is why the guard clause
         // redraws by hand.
         refresh()
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSControl, rows.indices.contains(field.tag), rows[field.tag].entry.path == ["mcp", "port"] else { return }
+        refreshMCP()
+    }
+    private var selectedMCPPort: Int? {
+        guard (try? MCPConfiguration.read(home: .current)) != nil else { return nil }
+        guard let field = rows.first(where: { $0.entry.path == ["mcp", "port"] })?.control else { return mcp?.selectedPort }
+        let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.isEmpty { return 52763 }
+        guard let port = Int(value), (1024...65535).contains(port) else { return nil }
+        return port
+    }
+    private func refreshMCP() {
+        let selected = selectedMCPPort.map { "http://127.0.0.1:\($0)/mcp" } ?? localised("Invalid selection", "Некорректный порт")
+        mcpStatus.stringValue = localised("Selected: ", "Выбрано: ") + selected + "\n"
+            + localised("Server: ", "Сервер: ") + (mcp?.status ?? "Off")
+            + (mcp?.listeningAddress.map { " — " + $0 } ?? "")
+        guard mcpInstructionPanel != nil else { return }
+        let client = MCPConnectionInstructions.Client.allCases[max(0, mcpClient.indexOfSelectedItem)]
+        let executable = Bundle.main.executableURL?.path ?? CommandLine.arguments[0]
+        mcpInstructionText.string = mcpStatus.stringValue + "\n\n" + MCPConnectionInstructions.text(client: client, port: selectedMCPPort ?? 0, executable: executable)
+        mcpInstructionCopy.isEnabled = selectedMCPPort != nil
+    }
+    @objc private func copyMCPToken() {
+        do {
+            guard let token = try mcp?.tokenForLocalClipboard() else { return }
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(token, forType: .string)
+        } catch { mcpStatus.stringValue = localised("Local token unavailable", "Локальный токен недоступен") }
+    }
+    @objc private func rotateMCPToken() { mcp?.rotateToken(); refreshMCP() }
+    @objc private func showMCPInstructions() {
+        if mcpInstructionPanel != nil { refreshMCP(); return }
+        let sheet = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 720, height: 540), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        sheet.title = localised("Connect to Verbemo MCP", "Подключение к Verbemo MCP")
+        mcpInstructionPanel = sheet
+        mcpClient.removeAllItems(); mcpClient.addItems(withTitles: MCPConnectionInstructions.Client.allCases.map(\.rawValue))
+        mcpClient.target = self; mcpClient.action = #selector(mcpClientChanged)
+        mcpClient.identifier = .init("mcp.instructions.client")
+        mcpClient.setAccessibilityLabel(localised("MCP client", "MCP-клиент"))
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true; scroll.documentView = mcpInstructionText
+        mcpInstructionText.isEditable = false; mcpInstructionText.isSelectable = true
+        mcpInstructionText.isVerticallyResizable = true; mcpInstructionText.isHorizontallyResizable = false
+        mcpInstructionText.textContainer?.widthTracksTextView = true
+        mcpInstructionText.autoresizingMask = [.width]
+        mcpInstructionText.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        mcpInstructionText.identifier = .init("mcp.instructions.text")
+        mcpInstructionCopy.target = self; mcpInstructionCopy.action = #selector(copyMCPInstructions)
+        mcpInstructionCopy.identifier = .init("mcp.instructions.copy")
+        let close = NSButton(title: localised("Done", "Готово"), target: self, action: #selector(closeMCPInstructions))
+        close.keyEquivalent = "\u{1b}"
+        let actions = NSStackView(views: [mcpInstructionCopy, close]); actions.orientation = .horizontal
+        let stack = NSStackView(views: [mcpClient, scroll, actions])
+        stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        sheet.contentView!.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: sheet.contentView!.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: sheet.contentView!.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: sheet.contentView!.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: sheet.contentView!.bottomAnchor, constant: -20),
+            scroll.widthAnchor.constraint(equalTo: stack.widthAnchor), scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 340),
+        ])
+        refreshMCP(); panel.beginSheet(sheet)
+    }
+    @objc private func mcpClientChanged() { refreshMCP() }
+    @objc private func copyMCPInstructions() {
+        refreshMCP()
+        guard selectedMCPPort != nil else { return }
+        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(mcpInstructionText.string, forType: .string)
+    }
+    @objc private func closeMCPInstructions() {
+        if let sheet = mcpInstructionPanel { panel.endSheet(sheet) }
+        mcpInstructionPanel = nil
     }
 
 }

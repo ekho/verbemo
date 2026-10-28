@@ -219,6 +219,12 @@ enum SettingsSchema {
     // defaults for display, which a global constant can't be under strict
     // concurrency checking, and building the list is free.
     static var sections: [Section] { [
+        Section(title: localised("Local MCP access", "Локальный доступ MCP"), entries: [
+            Entry(["mcp", "enabled"], localised("Local MCP access", "Локальный доступ MCP"),
+                  localised("Allow authenticated local clients to read this meeting library and download audio.", "Разрешить локальным клиентам с токеном читать библиотеку встреч и скачивать аудио."), .toggle, default: false),
+            Entry(["mcp", "port"], localised("MCP port", "Порт MCP"),
+                  localised("Loopback only. Integer from 1024 to 65535; changing it disconnects clients.", "Только локальный компьютер. Целое число от 1024 до 65535; смена порта отключает клиентов."), .number(unit: ""), default: 52763),
+        ]),
         Section(title: localised("Recording by itself", "Запись сама по себе"), entries: [
             Entry(["auto_record", "enabled"],
                   localised("Record meetings automatically", "Записывать встречи автоматически"),
@@ -721,6 +727,10 @@ enum SettingsSchema {
         case (.text(let raw), .number):
             let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty { return .clear }
+            if entry.path == ["mcp", "port"] {
+                guard let port = Int(text), (1024...65535).contains(port) else { return .invalid }
+                return port == 52763 ? .clear : .set(port)
+            }
             if let defaultNumber = entry.defaultValue as? Double {
                 guard let number = Double(text), number.isFinite else { return .invalid }
                 let value = entry.path == ["transcription", "diarization_threshold"]
