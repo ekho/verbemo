@@ -816,7 +816,9 @@ final class AppController {
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision,
             blocked: autoRecord.notice != nil || access.automaticBlockReason != nil)
-        window.updateActivity(operations.snapshot(), access: access)
+        let activity = operations.snapshot()
+        menuBar.updateActivity(activity)
+        window.updateActivity(activity, access: access)
     }
 
     /// The main window's live-transcript switch. It only writes, as the
