@@ -32,7 +32,7 @@ public sealed class ConfigUnreadableException(ConfigProblem problem) : InvalidOp
     public ConfigProblem Problem { get; } = problem;
 }
 
-public sealed record SettingsLoad(AppSettings Settings, IReadOnlyList<ConfigProblem> Problems)
+public sealed record SettingsLoad(AppSettings Settings, IReadOnlyList<ConfigProblem> Problems, JsonObject? Raw = null)
 {
     public bool IsUnreadable => Problems.Any(problem => problem.Unreadable);
 }
@@ -55,25 +55,10 @@ public sealed class AppSettingsStore(string configPath, string homeDirectory)
     /// </param>
     public SettingsLoad Load(AppSettings? lastGood = null)
     {
-        if (!File.Exists(configPath)) return new(Defaults, []);
-
-        JsonNode? root;
-        try
-        {
-            root = JsonNode.Parse(File.ReadAllText(configPath),
-                documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-        }
-        catch (JsonException exception)
-        {
-            return Unreadable(Reason(exception), lastGood);
-        }
-        catch (IOException exception)
-        {
-            return Unreadable(exception.Message, lastGood);
-        }
-        if (root is null) return new(Defaults, []);
-        if (root is not JsonObject document)
-            return Unreadable(T("the top level is not an object", "верхний уровень — не объект"), lastGood);
+        JsonObject raw;
+        try { raw = ReadDocument(); }
+        catch (ConfigUnreadableException exception) { return new(lastGood?.Clone() ?? AppSettings.CreateConservative(homeDirectory), [exception.Problem]); }
+        var document = (JsonObject)raw.DeepClone();
 
         var problems = RemoveUnusableValues(document);
         AppSettings settings;
@@ -87,25 +72,14 @@ public sealed class AppSettingsStore(string configPath, string homeDirectory)
         }
         if (string.IsNullOrWhiteSpace(settings.RecordingsDirectory))
             settings.RecordingsDirectory = AppSettings.DefaultRecordingsDirectory(homeDirectory);
-        return new(settings, problems);
+        return new(settings, problems, raw);
     }
 
     /// <summary>Writes the settings, or refuses when the file on disk cannot be read.</summary>
     /// <exception cref="ConfigUnreadableException">The file is there and is not JSON.</exception>
     public void Save(AppSettings settings)
     {
-        if (File.Exists(configPath))
-        {
-            try
-            {
-                JsonNode.Parse(File.ReadAllText(configPath),
-                    documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-            }
-            catch (JsonException exception)
-            {
-                throw new ConfigUnreadableException(ConfigProblem.UnreadableFile(Reason(exception)));
-            }
-        }
+        _ = ReadDocument();
 
         var directory = Path.GetDirectoryName(configPath);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -120,6 +94,38 @@ public sealed class AppSettingsStore(string configPath, string homeDirectory)
         {
             if (File.Exists(temporary)) File.Delete(temporary);
         }
+    }
+
+    public JsonObject ReadDocument()
+    {
+        try
+        {
+            var document = JsonNode.Parse(File.ReadAllText(configPath), documentOptions: new JsonDocumentOptions
+            { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) as JsonObject
+                ?? throw new ConfigUnreadableException(ConfigProblem.UnreadableFile(T("the top level is not an object", "верхний уровень — не объект")));
+            var sections = document.Where(pair => pair.Key.Equals("mcp", StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (sections.Length > 1) throw new JsonException("MCP configuration is ambiguous.");
+            if (sections.Length == 1)
+            {
+                if (sections[0].Value is not JsonObject mcp) throw new JsonException("MCP configuration must be an object.");
+                foreach (var key in new[] { "enabled", "port" })
+                {
+                    var entries = mcp.Where(pair => pair.Key.Equals(key, StringComparison.OrdinalIgnoreCase)).ToArray();
+                    if (entries.Length > 1) throw new JsonException("MCP configuration is ambiguous.");
+                    if (entries.Length == 0) continue;
+                    if (entries[0].Value is not JsonValue value || (key == "enabled"
+                        ? !value.TryGetValue<bool>(out _)
+                        : !value.TryGetValue<int>(out var port) || port is <1024 or >65535))
+                        throw new JsonException("MCP enabled must be boolean and port must be an integer from 1024 to 65535.");
+                }
+            }
+            return document;
+        }
+        catch (FileNotFoundException) { return new(); }
+        catch (DirectoryNotFoundException) { return new(); }
+        catch (JsonException exception) { throw new ConfigUnreadableException(ConfigProblem.UnreadableFile(Reason(exception))); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        { throw new ConfigUnreadableException(ConfigProblem.UnreadableFile(T("file access failed", "ошибка доступа к файлу"))); }
     }
 
     private SettingsLoad Unreadable(string reason, AppSettings? lastGood) =>

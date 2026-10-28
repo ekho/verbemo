@@ -20,6 +20,9 @@ public sealed class AppSettings
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    [JsonPropertyName("mcp")]
+    public McpSettingsOptions Mcp { get; set; } = new();
+
     [JsonPropertyName("recordings_dir")]
     public string RecordingsDirectory { get; set; } = string.Empty;
 
@@ -302,4 +305,12 @@ public sealed class CommandHook
 
     [JsonPropertyName("arguments")]
     public List<string> Arguments { get; set; } = [];
+}
+
+public sealed class McpSettingsOptions
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 52763;
 }

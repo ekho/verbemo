@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using Verbemo.App.MCP;
+using Verbemo.Core.MCP;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
@@ -29,6 +32,8 @@ namespace Verbemo.App;
 /// </remarks>
 public sealed class VerbemoRuntime : IAsyncDisposable
 {
+    internal McpController Mcp { get; }
+    private readonly ConcurrentDictionary<string, ProcessingStatus> mcpProcessing = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppSettingsStore store;
     private readonly SessionStore sessions;
     private readonly RecordingCoordinator coordinator;
@@ -73,7 +78,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         activityMonitor = new CallActivityMonitor(Matcher(settings));
         httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
         httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"Verbemo-Windows/{AppVersion}");
-        secrets = new SecretStore();
+        secrets = new SecretStore(McpProfile.Current().CredentialPrefix);
         models = new ModelManager(dataDirectory, httpClient);
         analytics = new AnalyticsService(dataDirectory, () => Settings, () => !ConfigUnreadable, httpClient);
         processing = new ProcessingCoordinator(() => Settings, () => !ConfigUnreadable, secrets, models, httpClient, analytics);
@@ -83,6 +88,8 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         Deletions.Changed += (_, _) => SessionsChanged?.Invoke(this, EventArgs.Empty);
         Deletions.Failed += (_, error) => Notify("Verbemo", error.Message, NotificationKind.Error);
         liveTranscription = new LiveTranscriptionCoordinator(capture, models, () => Settings);
+        Mcp = new McpController(store, secrets, McpSnapshot,
+            new Dictionary<string, JsonNode?> { ["interface_language"] = JsonValue.Create(settings.InterfaceLanguage) });
 
         coordinator.StateChanged += (_, state) =>
         {
@@ -117,6 +124,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         };
         processing.StatusChanged += (_, status) =>
         {
+            if (status.SessionDirectory is { } directory) mcpProcessing[directory] = status;
             ProcessingStatusChanged?.Invoke(this, status);
             if (status.Stage == "complete" && status.SessionDirectory is not null)
                 Notify("Verbemo", status.Message, NotificationKind.Information);
@@ -225,15 +233,9 @@ public sealed class VerbemoRuntime : IAsyncDisposable
     /// </summary>
     public static VerbemoRuntime Create()
     {
-        var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        // Not %LOCALAPPDATA%\Verbemo: that is where Velopack installs the program,
-        // and uninstalling removes the folder with everything in it.
-        var dataDirectory = ProductIdentity.DataDirectory(localData);
-#if DEBUG
-        if (Environment.GetEnvironmentVariable(ProductIdentity.TestDataEnvironmentVariable) is { Length: > 0 } testDirectory)
-            dataDirectory = Path.GetFullPath(testDirectory);
-#endif
+        var profile = McpProfile.Current();
+        var dataDirectory = profile.DataDirectory;
+        var home = profile.HomeDirectory;
         Directory.CreateDirectory(dataDirectory);
         var store = new AppSettingsStore(Path.Combine(dataDirectory, "config.json"), home);
         Current = Choose(store.Load().Settings.InterfaceLanguage, CultureInfo.CurrentUICulture.Name);
@@ -245,6 +247,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public async Task StartAsync()
     {
+        await Mcp.ReconcileAsync();
         _ = liveTranscription.RefreshAsync();
         if (!ConfigUnreadable && !IsTestInstance)
         {
@@ -309,6 +312,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     private void ScheduleReload()
     {
+        Mcp.Revoke();
         var debounce = new CancellationTokenSource();
         Interlocked.Exchange(ref reloadDebounce, debounce)?.Cancel();
         _ = Task.Run(async () =>
@@ -339,7 +343,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
             var load = store.Load(settings);
             if (JsonNode.DeepEquals(SettingsDocument.ToNode(load.Settings), SettingsDocument.ToNode(settings))
                 && load.Problems.Select(problem => problem.Explanation).SequenceEqual(problems.Select(problem => problem.Explanation)))
-                return;
+            { _ = Mcp.ReconcileAsync(); return; }
             settings = load.Settings;
             problems = load.Problems;
         }
@@ -351,6 +355,8 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     private void Apply(AppSettings previous, AppSettings next)
     {
+        Mcp.Revoke();
+        _ = Mcp.ReconcileAsync();
         coordinator.Policy.Update(Options(next));
         if (!string.Equals(previous.RecordingsDirectory, next.RecordingsDirectory, StringComparison.OrdinalIgnoreCase))
         {
@@ -420,7 +426,37 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public async Task StopForExitAsync()
     {
+        await Mcp.DisposeAsync();
         if (State.IsRecording) await coordinator.StopAsync(DateTimeOffset.Now, "quit");
+    }
+
+    internal void SetMcpEnabled(bool enabled)
+    {
+        Mcp.Revoke();
+        if (enabled) Mcp.EnsureToken();
+        Update(value => value.Mcp.Enabled = enabled);
+    }
+
+    private McpLibrary.Runtime McpSnapshot(string root, int port, CancellationToken cancellation)
+    {
+        var recordings = new Dictionary<string,string>();
+        var state = State;
+        if (state.IsRecording && state.SessionDirectory is { } active
+            && string.Equals(Path.GetDirectoryName(active), Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase))
+            recordings[Path.GetFileName(active)] = state.IsPaused ? "paused" : "recording";
+        var jobs = new Dictionary<string,IReadOnlyDictionary<string,string>>();
+        foreach (var (directory,status) in mcpProcessing)
+        {
+            if (!string.Equals(Path.GetDirectoryName(directory),Path.TrimEndingDirectorySeparator(root),StringComparison.OrdinalIgnoreCase)) continue;
+            var stages = new Dictionary<string,string>();
+            var stage = status.Stage switch { "transcribing" => "transcription", "speakers" => "speaker_naming", "summary" => "summary", _ => null };
+            if (status.IsBusy) { stages["audio"] = "running"; if(stage is not null) stages[stage] = "running"; }
+            // Missing/idle status is not evidence of cancellation or successful processing.
+            if (stages.Count > 0) jobs[Path.GetFileName(directory)] = stages;
+        }
+        return new(root,port,recordings,jobs,
+            relative => Deletions.IsPending(Path.Combine(root,relative)),
+            relative => processing.TryReserveReadSession(Path.Combine(root,relative), () => Deletions.IsPending(Path.Combine(root,relative))), cancellation);
     }
 
     public void SetAutoRecord(bool enabled) => Update(settings => settings.AutoRecord.Enabled = enabled);
@@ -614,6 +650,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await Mcp.DisposeAsync();
         Deletions.Dispose();
         models.CancelAllDownloads();
         if (disposed) return;

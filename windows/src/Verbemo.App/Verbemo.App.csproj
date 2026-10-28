@@ -31,5 +31,7 @@
     <PackageReference Include="HtmlAgilityPack" />
     <PackageReference Include="NAudio" />
     <PackageReference Include="Velopack" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 </Project>

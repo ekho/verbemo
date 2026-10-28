@@ -61,6 +61,10 @@ public static class SettingsSchema
 {
     public static IReadOnlyList<SettingSection> Sections =>
     [
+        new("MCP", [
+            new("mcp.enabled", T("Enable local MCP", "Включить локальный MCP"), T("Allow authorized local clients to read saved meetings.", "Разрешить авторизованным локальным клиентам читать сохранённые встречи."), SettingKind.Toggle),
+            new("mcp.port", T("Local MCP port", "Порт локального MCP"), T("Loopback port, from 1024 to 65535.", "Локальный порт от 1024 до 65535."), SettingKind.Number),
+        ]),
         new(T("Recording by itself", "Запись сама по себе"),
         [
             new("auto_record.enabled",

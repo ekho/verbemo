@@ -100,7 +100,7 @@ internal sealed class SetupForm
         var sections = View.Children.Cast<UIElement>().ToArray();
         View.Children.Clear();
         settingsPages = new[] { ApplicationDestination.General, ApplicationDestination.Recording, ApplicationDestination.Transcription,
-            ApplicationDestination.Summary, ApplicationDestination.Storage }.ToDictionary(d => d, _ => new StackPanel { Margin = new Thickness(24,16,24,24) });
+            ApplicationDestination.Summary, ApplicationDestination.Mcp, ApplicationDestination.Storage }.ToDictionary(d => d, _ => new StackPanel { Margin = new Thickness(24,16,24,24) });
         settingsPages[ApplicationDestination.General].Children.Add(sections[1]);
         settingsPages[ApplicationDestination.General].Children.Add(sections[5]);
         settingsPages[ApplicationDestination.Recording].Children.Add(sections[6]);
