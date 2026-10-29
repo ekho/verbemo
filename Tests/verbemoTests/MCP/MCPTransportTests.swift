@@ -404,6 +404,17 @@ import enum MCP.Version
         }
         let body = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_meeting"}}"#
         let headers = "Host: 127.0.0.1:\(port)\r\nAuthorization: Bearer \(token)\r\n"
+        func status() async throws -> Int {
+            // The client must also suspend, so this regression can run on a one-thread pool.
+            var probe = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/mcp")!)
+            probe.httpMethod = "POST"
+            probe.httpBody = Data(#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#.utf8)
+            probe.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            probe.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            probe.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+            let (_, response) = try await URLSession.shared.data(for: probe)
+            return try #require(response as? HTTPURLResponse).statusCode
+        }
         let request = Data("POST /mcp HTTP/1.1\r\n\(headers)Content-Type: application/json\r\nAccept: application/json\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)".utf8)
         for _ in 0..<8 {
             let fd = try socket(port: port); sockets.append(fd)
@@ -417,13 +428,13 @@ import enum MCP.Version
         #expect(finished.count == 0)
         // Give the cancelled SDK response waiters time to unwind, while actual reads stay held.
         try await Task.sleep(for: .milliseconds(100))
-        for _ in 0..<3 { #expect(try raw(port: port, headers: headers).contains(" 503 ")) }
+        for _ in 0..<3 { #expect(try await status() == 503) }
         #expect(started.count == 8)
         _ = released.increment()
         for _ in 0..<200 where finished.count == 0 { try await Task.sleep(for: .milliseconds(5)) }
         try await Task.sleep(for: .milliseconds(50))
         #expect(finished.count == 1)
-        #expect(try raw(port: port, headers: headers).contains(" 200 "))
+        #expect(try await status() == 200)
         let stopping = Task { await host.stop(); _ = stopped.increment() }
         try await Task.sleep(for: .milliseconds(100))
         #expect(stopped.count == 0)

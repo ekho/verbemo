@@ -144,7 +144,7 @@ jobs:
         # A suite's .serialized trait does not serialize it against other suites.
         run: |
           set -o pipefail
-          python3 scripts/ci_swift_stall_diagnostics.py "$RUNNER_TEMP/swift-tests.log" swift test --no-parallel
+          swift test --no-parallel 2>&1 | tee "$RUNNER_TEMP/swift-tests.log"
           # A stopped AppKit run loop can make Swift exit 0 before the suite finishes.
           grep -Eq '^✔ Test run with [0-9]+ tests? (in [0-9]+ suites? )?passed after ' "$RUNNER_TEMP/swift-tests.log"
         env:

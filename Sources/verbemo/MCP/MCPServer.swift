@@ -44,13 +44,22 @@ enum MCPServer {
     /// The SDK can finish its response waiter without waiting for its handler. Seal admission
     /// and join the concrete read before the HTTP host releases this request's operation slot.
     private final class QueryWork: @unchecked Sendable {
+        // Synchronous filesystem reads may block. Keep them off Swift's cooperative pool;
+        // the host retains its eight operation slots until these continuations complete.
+        private static let blockingQueries = DispatchQueue(label: "verbemo.mcp.queries", qos: .userInitiated, attributes: .concurrent)
         private let lock = NSLock()
         private var sealed = false
         private var task: Task<MCPJSON, Error>?
         func start(_ operation: @escaping @Sendable () throws -> MCPJSON) -> Task<MCPJSON, Error>? {
             lock.withLock {
                 guard !sealed, task == nil else { return nil }
-                let next = Task.detached(operation: operation)
+                let next = Task<MCPJSON, Error>.detached {
+                    try await withCheckedThrowingContinuation { continuation in
+                        Self.blockingQueries.async {
+                            continuation.resume(with: Swift.Result(catching: operation))
+                        }
+                    }
+                }
                 task = next
                 return next
             }
