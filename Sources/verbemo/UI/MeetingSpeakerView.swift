@@ -1,11 +1,30 @@
 import AppKit
 
+@MainActor
+private final class SpeakerAssignmentChoice: NSComboBox {
+    private var dropdownWindows: [NSWindow] = []
+
+    override init(frame frameRect: NSRect) {
+        let existing = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
+        super.init(frame: frameRect)
+        dropdownWindows = NSApp.windows.filter {
+            !existing.contains(ObjectIdentifier($0)) && ($0.accessibilityParent() as? NSCell) === cell
+        }
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    isolated deinit {
+        // AppKit can keep hidden dropdown windows after releasing their unretained AX parent cell.
+        for window in dropdownWindows { window.setAccessibilityParent(nil) }
+    }
+}
+
 /// One native choice supports calendar identities and names entered by hand.
 @MainActor
 final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     let name = NSTextField(labelWithString: "")
     let link = SpeakerLinkButton()
-    let choice = NSComboBox()
+    let choice: NSComboBox = SpeakerAssignmentChoice()
     var onAssign: ((CalendarParticipant?, String?) throws -> Void)?
     private let participants: [CalendarParticipant]
     private let inline: Bool

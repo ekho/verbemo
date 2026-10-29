@@ -4,6 +4,23 @@ import Testing
 
 @Suite(.serialized, .freshHome) @MainActor
 struct SpeakerAssignmentTests {
+    @Test("Retiring a speaker editor clears its dropdown window's accessibility parent", arguments: [false, true])
+    func retiredDropdownHasNoAccessibilityParent(inline: Bool) throws {
+        let app = NSApplication.shared
+        let existing = Set(app.windows.map(ObjectIdentifier.init))
+        let (popup, cell) = try autoreleasepool {
+            let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1", entry: nil,
+                participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: inline)
+            let cell = try #require(editor.choice.cell)
+            let popup = try #require(app.windows.first {
+                !existing.contains(ObjectIdentifier($0)) && ($0.accessibilityParent() as? NSCell) === cell
+            })
+            return (popup, cell)
+        }
+        // Keep the old cell alive so a regression reports the dangling link instead of crashing the suite.
+        withExtendedLifetime(cell) { #expect(popup.accessibilityParent() == nil) }
+    }
+
     @Test("Participant selection keeps its editor alive until the dropdown is dismissed", arguments: ["participants", "transcript"])
     func assignmentWaitsForDropdownDismissal(tab: String) async throws {
         let root = Home.current.url.appendingPathComponent("meetings")
