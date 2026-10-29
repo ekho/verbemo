@@ -13,6 +13,8 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     private var participantID: String?
     private var saving = false
     private var reverting = false
+    private var choosing = false
+    private var selectionChanged = false
 
     init(speaker: String, title: String, entry: SpeakerNames.Entry?, participants: [CalendarParticipant], canEdit: Bool, inline: Bool) {
         self.participants = participants
@@ -80,8 +82,34 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         window?.makeFirstResponder(choice)
         choice.selectText(nil)
     }
+    func comboBoxWillPopUp(_ notification: Notification) {
+        choosing = true
+        selectionChanged = false
+    }
+    func comboBoxWillDismiss(_ notification: Notification) {
+        let event = NSApp?.currentEvent
+        let cancelled = event?.type == .keyDown && event?.keyCode == 53
+        // Assignment can rebuild this view; AppKit must finish dismissing its list first.
+        Task { @MainActor [self] in
+            choosing = false
+            if cancelled {
+                restoreChoice()
+                endEditing()
+            } else if selectionChanged {
+                commitSelection()
+            } else {
+                if choice.stringValue == original { restoreChoice() }
+                commitText()
+            }
+            selectionChanged = false
+        }
+    }
     func comboBoxSelectionDidChange(_ notification: Notification) {
-        guard !saving, !reverting else { return }
+        if choosing { selectionChanged = true; return }
+        commitSelection()
+    }
+    private func commitSelection() {
+        guard !choosing, !saving, !reverting else { return }
         let index = choice.indexOfSelectedItem
         guard index >= 0 else { return }
         if index > 0, participantID == participants[index - 1].id,
@@ -91,6 +119,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     func controlTextDidEndEditing(_ notification: Notification) { commitText() }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            selectionChanged = false
             choice.stringValue = original
             endEditing()
             return true
@@ -99,7 +128,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         return false
     }
     private func commitText() {
-        guard !saving, !reverting else { return }
+        guard !choosing, !saving, !reverting else { return }
         guard choice.stringValue != original else { endEditing(); return }
         save(participant: nil, manual: choice.stringValue)
     }
@@ -119,16 +148,20 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             // AppKit is still selecting; changing the selected index here can crash it.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let participantID, let index = participants.firstIndex(where: { $0.id == participantID }) {
-                    choice.selectItem(at: index + 1)
-                } else if choice.indexOfSelectedItem >= 0 {
-                    choice.deselectItem(at: choice.indexOfSelectedItem)
-                }
-                choice.stringValue = original
-                reverting = false
+                restoreChoice()
                 if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
             }
         }
+    }
+    private func restoreChoice() {
+        reverting = true
+        defer { reverting = false }
+        if let participantID, let index = participants.firstIndex(where: { $0.id == participantID }) {
+            choice.selectItem(at: index + 1)
+        } else if choice.indexOfSelectedItem >= 0 {
+            choice.deselectItem(at: choice.indexOfSelectedItem)
+        }
+        choice.stringValue = original
     }
     private func endEditing() {
         if inline { choice.isHidden = true; name.isHidden = false }

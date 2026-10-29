@@ -4,6 +4,67 @@ import Testing
 
 @Suite(.serialized, .freshHome) @MainActor
 struct SpeakerAssignmentTests {
+    @Test("Participant selection keeps its editor alive until the dropdown is dismissed", arguments: ["participants", "transcript"])
+    func assignmentWaitsForDropdownDismissal(tab: String) async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixture = try SessionFixture.make(meta: ["calendar": [
+            "event_id": "event", "association": "confirmed",
+            "participants": [["id": "anna", "name": "Anna"]],
+        ]])
+        let dir = root.appendingPathComponent("meeting")
+        try FileManager.default.moveItem(at: fixture, to: dir)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        await library.settled()
+        defer { _ = library.stopForTermination(); app.hide() }
+        let tabs = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTabView }.first)
+        tabs.selectTabViewItem(withIdentifier: tab)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let editor = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }
+            .first { tab == "transcript" || !$0.choice.isHiddenOrHasHiddenAncestor })
+        if tab == "transcript" { #expect(editor.link.sendAction(editor.link.action, to: editor.link.target)) }
+
+        let center = NotificationCenter.default
+        center.post(name: NSComboBox.willPopUpNotification, object: editor.choice)
+        editor.choice.selectItem(at: 1)
+        editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
+        editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(editor.window === app.panel, "an open combo box must keep its parent editor")
+        #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.participantID == nil)
+
+        center.post(name: NSComboBox.willDismissNotification, object: editor.choice)
+        #expect(editor.window === app.panel, "dismissal must finish before the editor is replaced")
+        for _ in 0..<100 where editor.window != nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(editor.window == nil)
+        #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.participantID == "anna")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        app.panel.displayIfNeeded()
+        let updated = library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }
+            .first { tab == "transcript" || !$0.choice.isHiddenOrHasHiddenAncestor }
+        #expect(updated?.choice.stringValue == "Anna · anna")
+    }
+
+    @Test("Escape discards a participant highlighted in the open dropdown")
+    func cancelledDropdownDoesNotAssign() async throws {
+        let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1", entry: nil,
+            participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: false)
+        var assignments = 0
+        editor.onAssign = { _, _ in assignments += 1 }
+        editor.comboBoxWillPopUp(Notification(name: NSComboBox.willPopUpNotification))
+        editor.choice.selectItem(at: 1)
+        editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
+        #expect(editor.control(editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        editor.comboBoxWillDismiss(Notification(name: NSComboBox.willDismissNotification))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(assignments == 0)
+        #expect(editor.choice.stringValue.isEmpty)
+        #expect(editor.choice.indexOfSelectedItem == -1)
+    }
+
     @Test func participantsHaveTheirOwnTabWithVisibleEditors() throws {
         let root = Home.current.url.appendingPathComponent("meetings")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
