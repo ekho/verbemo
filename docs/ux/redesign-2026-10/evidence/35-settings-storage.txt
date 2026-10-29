@@ -1,0 +1,91 @@
+Window: "Verbemo", App: Verbemo UX69.
+0 standard window Verbemo, Secondary Actions: Raise
+  1 image
+  2 text verbemo
+  3 button ●  New recording, ID: journal.new-recording
+  4 button Import, Description: end, ID: journal.import
+  5 search text field (settable) Find a meeting
+    6 button Find a meeting
+  7 text MEETINGS
+  8 pop up button Description: Filter meetings, Value: All
+  9 scroll area
+    10 table
+      11 row (selectable)
+        12 cell
+          13 text UX69 Назначения — ошибка и неизвестный 30.10.2026 12:04 · 3 min
+      14 row (selectable)
+        15 cell
+          16 text UX69 Импорт — отложенная обработка 29.10.2026 12:03 · 1 min
+      17 row (selectable)
+        18 cell
+          19 text UX69 Импорт — ошибка обработки 29.10.2026 12:02 · 1 min
+          20 image Synthetic UX69: model unavailable
+            21 image plain text document
+            22 image Error
+      23 row (selectable)
+        24 cell
+          25 text UX69 Атлас — длинная встреча 29.10.2026 12:01 · 30 min
+      26 row (selectable)
+        27 cell
+          28 text UX69 Атлас — планирование 29.10.2026 12:00 · 3 min
+  29 button Settings, Value: 1, ID: journal.settings
+  30 button Settings, ID: journal.breadcrumb
+  31 text /  Storage and models
+  32 button About
+  33 radio button General, Description: edit, Value: 0, ID: settings.tab.general
+  34 radio button Recording, Description: microphone, Value: 0, ID: settings.tab.recording
+  35 radio button Transcription, Description: comment lines, Value: 0, ID: settings.tab.transcription
+  36 radio button Summary, Value: 0, ID: settings.tab.summary
+  37 radio button Calendar, Description: calendar, Value: 0, ID: settings.tab.calendar
+  38 radio button Files & models, Value: 1, ID: settings.tab.storage
+  39 radio button MCP, Value: 0, ID: settings.tab.mcp
+  40 scroll area Secondary Actions: Scroll Up, Scroll Down
+    41 image move
+    42 text /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/run-20261030/recordings Outside Documents and Desktop, so macOS never has to ask.
+    43 button Open folder
+    44 button Choose…
+    45 image
+    46 text Keep the audio after transcribing
+    47 switch Description: Keep the audio after transcribing, Value: 1, ID: files.keep-audio
+    48 text Storage and models Model files No models installed. Download one from the list below. Transcription parakeet v3
+    49 button Download, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/home/Library/Application Support/verbemo/models/parakeet-tdt-0.6b-v3
+    50 text Transcribes on this Mac, after the meeting. • about 482 MB Whisper large-v3-turbo
+    51 button Download, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/home/Library/Application Support/verbemo/models/whisper
+    52 text Local multilingual transcription with whisper.cpp. • about 577 MB GigaAM v3
+    53 button Download, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/home/Library/Application Support/verbemo/models/gigaam
+    54 text Local Russian transcription with transcribe.cpp. • about 272 MB NVIDIA Nemotron 3.5 ASR Streaming Multilingual 0.6B
+    55 button Download, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/home/Library/Application Support/verbemo/models/FluidAudio/nemotron-multilingual
+    56 text Shared files for live and final transcription. Downloaded once. • about 629 MB Diarization Nemotron 3
+    57 button Download, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/home/.cache/verbemo/diarization-nemotron-3
+    58 text Meetings up to 8 speakers · OpenMDW 1.1 • about 107 MB LS-EEND AMI
+    59 button Download, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/home/.cache/verbemo/diarization-ls-eend-ami
+    60 text Meetings up to 4 speakers · MIT • about 45 MB Community-1
+    61 button Download, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux69/home/.cache/verbemo/diarization
+    62 text Compact alternative · CC BY 4.0 • about 22 MB
+    63 scroll bar (settable, float) 0
+      64 value indicator (settable, float) 0
+      65 increment arrow button
+      66 decrement arrow button
+      67 increment page button
+      68 decrement page button
+  69 button Auto-record, Description: Auto-record off, ID: activity.automatic
+  70 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+  71 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+  72 button (disabled) Not recording, ID: activity.recording
+  73 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+  74 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+  75 close button
+  76 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+  77 minimize button
+78 menu bar
+  79 Verbemo UX69
+  80 File
+  81 Edit
+  82 Window
+
+The focused UI element is 10 table

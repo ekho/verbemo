@@ -1,0 +1,15 @@
+Window: "Create a new summary", App: Verbemo UX69.
+0 sheet Secondary Actions: Raise
+  1 text Create a new summary Uses the selected transcript version. The previous summary is kept on failure or cancellation.
+  2 pop up button Description: Provider for this summary, Value: Ollama, ID: summary.provider
+  3 text ID: summary.destination, Value: Transcript destination: Ollama · 127.0.0.1:18969 (cloud models may forward text). Only for this summary; global settings stay unchanged.
+  4 button Cancel
+  5 button Check and create, ID: summary.create
+  6 button Summary settings…
+7 menu bar
+  8 Verbemo UX69
+  9 File
+  10 Edit
+  11 Window
+
+The focused UI element is 0 sheet Secondary Actions: Raise

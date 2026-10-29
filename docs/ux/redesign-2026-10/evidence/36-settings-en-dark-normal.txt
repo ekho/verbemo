@@ -1,0 +1,81 @@
+Window: "Verbemo", App: Verbemo UX69.
+0 standard window Verbemo, Secondary Actions: Raise
+  1 image
+  2 text verbemo
+  3 button ●  New recording, ID: journal.new-recording
+  4 button Import, Description: end, ID: journal.import
+  5 search text field (settable) Find a meeting
+    6 button Find a meeting
+  7 text MEETINGS
+  8 pop up button Description: Filter meetings, Value: All
+  9 scroll area
+    10 table
+      11 row (selectable)
+        12 cell
+          13 text UX69 Назначения — ошибка и неизвестный 30.10.2026 12:04 · 3 min
+      14 row (selectable)
+        15 cell
+          16 text UX69 Импорт — отложенная обработка 29.10.2026 12:03 · 1 min
+      17 row (selectable)
+        18 cell
+          19 text UX69 Импорт — ошибка обработки 29.10.2026 12:02 · 1 min
+          20 image Synthetic UX69: model unavailable
+            21 image plain text document
+            22 image Error
+      23 row (selectable)
+        24 cell
+          25 text UX69 Атлас — длинная встреча 29.10.2026 12:01 · 30 min
+      26 row (selectable)
+        27 cell
+          28 text UX69 Атлас — планирование 29.10.2026 12:00 · 3 min
+  29 button Settings, Value: 1, ID: journal.settings
+  30 button Settings, ID: journal.breadcrumb
+  31 text /  General
+  32 button About
+  33 radio button General, Value: 1, ID: settings.tab.general
+  34 radio button Recording, Description: microphone, Value: 0, ID: settings.tab.recording
+  35 radio button Transcription, Description: comment lines, Value: 0, ID: settings.tab.transcription
+  36 radio button Summary, Value: 0, ID: settings.tab.summary
+  37 radio button Calendar, Description: calendar, Value: 0, ID: settings.tab.calendar
+  38 radio button Files & models, Description: move, Value: 0, ID: settings.tab.storage
+  39 radio button MCP, Value: 0, ID: settings.tab.mcp
+  40 scroll area Secondary Actions: Scroll Up, Scroll Down
+    41 switch Description: Start at login, Help: Open verbemo automatically when you log in to your Mac., Value: 0, ID: access.login.toggle
+    42 text Start at login Open verbemo automatically when you log in to your Mac.
+    43 switch Description: In the menu bar, Help: The wave, with the clock beside it while a meeting records — and the menu with everything in it., Value: 1, ID: icons.menu-bar
+    44 text In the menu bar The wave, with the clock beside it while a meeting records — and the menu with everything in it.
+    45 switch Description: In the Dock, Value: 1, ID: icons.dock, Help: Keep the icon in the Dock and ⌘-Tab when the window is minimized or closed. The icon is always shown while the window is open.
+    46 text In the Dock Keep the icon in the Dock and ⌘-Tab when the window is minimized or closed. The icon is always shown while the window is open. General Theme
+    47 pop up button Description: Theme, Value: Dark, ID: interface_theme
+    48 text System follows this Mac’s appearance. Language of verbemo's own windows
+    49 pop up button Description: Language of verbemo's own windows, Value: English, ID: interface_language
+    50 text System follows macOS. Meeting and summary languages are configured separately. Takes effect at the next launch. Open the window at launch
+    51 switch Description: Open the window at launch, Value: 1, ID: window
+    52 text The Dock icon opens it either way. Takes effect at the next launch.
+    53 scroll bar (settable, float) 0
+      54 value indicator (settable, float) 0
+      55 increment arrow button
+      56 decrement arrow button
+      57 increment page button
+      58 decrement page button
+  59 button Auto-record, Description: Auto-record off, ID: activity.automatic
+  60 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+  61 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+  62 button (disabled) Not recording, ID: activity.recording
+  63 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+  64 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+  65 close button
+  66 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+  67 minimize button
+68 menu bar
+  69 Verbemo UX69
+  70 File
+  71 Edit
+  72 Window
+
+The focused UI element is 10 table
