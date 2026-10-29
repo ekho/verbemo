@@ -30,7 +30,7 @@ struct ApplicationWindowTests {
         defer { app.hide() }
         app.panel.setContentSize(NSSize(width: 760, height: 680))
         app.show()
-        for page in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage, .about] {
+        for page in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage, .mcp, .about] {
             app.navigate(page)
             app.panel.contentView?.layoutSubtreeIfNeeded()
             try? await Task.sleep(for: .milliseconds(30))

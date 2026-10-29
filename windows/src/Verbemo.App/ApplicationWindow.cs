@@ -127,7 +127,7 @@ internal sealed class ApplicationWindow : Window
         DockPanel.SetDock(toolbar, Dock.Top);
         work.Children.Add(toolbar);
         foreach (var destination in new[] { ApplicationDestination.General, ApplicationDestination.Recording,
-            ApplicationDestination.Transcription, ApplicationDestination.Summary, ApplicationDestination.Storage })
+            ApplicationDestination.Transcription, ApplicationDestination.Summary, ApplicationDestination.Mcp, ApplicationDestination.Storage })
         {
             var button = NavigationButton(destination);
             button.Margin = new Thickness(0, 0, 12, 0);
@@ -359,6 +359,7 @@ internal sealed class ApplicationWindow : Window
         ApplicationDestination.Recording => T("Recording", "Запись"),
         ApplicationDestination.Transcription => T("Transcription", "Расшифровка"),
         ApplicationDestination.Summary => T("Summary and participants", "Сводка и участники"),
+        ApplicationDestination.Mcp => "MCP",
         ApplicationDestination.Storage => T("Storage and models", "Хранение и модели"),
         ApplicationDestination.About => T("About Verbemo", "О Verbemo"),
         _ => T("Current meeting", "Текущая встреча"),

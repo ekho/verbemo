@@ -5,12 +5,22 @@ using Verbemo.Core.Configuration;
 
 namespace Verbemo.App;
 
-public sealed class SecretStore
+public sealed class SecretStore(string credentialPrefix = ProductIdentity.CredentialPrefix)
 {
 
     public string? Get(string name)
     {
-        if (!CredRead(ProductIdentity.CredentialPrefix + name, 1, 0, out var pointer)) return null;
+        try { return GetStrict(name); } catch (Win32Exception) { return null; }
+    }
+
+    public string? GetStrict(string name)
+    {
+        if (!CredRead(credentialPrefix + name, 1, 0, out var pointer))
+        {
+            var error = Marshal.GetLastWin32Error();
+            if (error == 1168) return null;
+            throw new Win32Exception(error);
+        }
         try
         {
             var credential = Marshal.PtrToStructure<NativeCredential>(pointer);
@@ -28,7 +38,8 @@ public sealed class SecretStore
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            CredDelete(ProductIdentity.CredentialPrefix + name, 1, 0);
+            if (!CredDelete(credentialPrefix + name, 1, 0) && Marshal.GetLastWin32Error() != 1168)
+                throw new Win32Exception(Marshal.GetLastWin32Error());
             return;
         }
 
@@ -40,7 +51,7 @@ public sealed class SecretStore
             var credential = new NativeCredential
             {
                 Type = 1,
-                TargetName = ProductIdentity.CredentialPrefix + name,
+                TargetName = credentialPrefix + name,
                 CredentialBlobSize = (uint)bytes.Length,
                 CredentialBlob = blob,
                 Persist = 2,

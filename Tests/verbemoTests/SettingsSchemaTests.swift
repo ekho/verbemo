@@ -492,6 +492,20 @@ struct SettingsSchemaTests {
 @Suite(.serialized)
 @MainActor
 struct SettingsControllerTests {
+    @Test("MCP schema fields have a dedicated inline editor", .freshHome(config: #"{"mcp":{"enabled":true}}"#))
+    func mcpUsesDedicatedInlineEditor() throws {
+        let application = ApplicationWindow()
+        defer { _ = application.stopForTermination() }
+        application.navigate(.mcp)
+        let controls = application.settings.content(for: .mcp).allDescendants
+        let disclosure = try #require(controls.first { $0.identifier?.rawValue == "mcp.section.server" } as? NSButton)
+        disclosure.state = .on
+        _ = disclosure.sendAction(disclosure.action, to: disclosure.target)
+        let port = try #require(application.settings.renderedControls.first { $0.identifier?.rawValue == "mcp.port" } as? NSTextField)
+        #expect(port.window === application.panel)
+        #expect(application.panel.attachedSheet == nil)
+        #expect(application.settings.content(for: .general).allDescendants.allSatisfy { $0.identifier?.rawValue.hasPrefix("mcp.") != true })
+    }
     @Test("Every schema setting not covered by the form gets a control", .freshHome)
     func rendersEverySetting() throws {
         let application = ApplicationWindow()
@@ -507,7 +521,10 @@ struct SettingsControllerTests {
         for entry in entries {
             application.navigate(SettingsPage.destination(for: entry.path))
             let control = try #require(settings.renderedControls.first { $0.identifier?.rawValue == entry.path.joined(separator: ".") })
-            #expect(control.window === application.panel)
+            if entry.path == ["mcp", "port"] {
+                #expect(control.window == nil)
+                #expect(!application.settings.content(for: .mcp).allDescendants.contains { $0 === control })
+            } else { #expect(control.window === application.panel) }
             if entry.path == ["user_email"] {
                 #expect(control is EmailAddressesEditor)
                 continue
@@ -535,7 +552,8 @@ struct SettingsControllerTests {
                 $0.identifier?.rawValue == entry.path.joined(separator: ".")
             }) as? NSTextField else { continue }
             application.navigate(SettingsPage.destination(for: entry.path))
-            #expect(field.window === application.panel)
+            if entry.path == ["mcp", "port"] { #expect(field.window == nil) }
+            else { #expect(field.window === application.panel) }
             if case .multilineText = entry.kind {
                 #expect(field.stringValue == SettingsSchema.describeDefault(entry),
                         "\(entry.path) doesn't start with its editable default")

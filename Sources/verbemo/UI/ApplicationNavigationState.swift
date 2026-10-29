@@ -2,7 +2,7 @@ import Foundation
 
 struct ApplicationNavigationState {
     enum Destination: String, CaseIterable {
-        case allMeetings, processing, attention, general, recording, transcription, summary, calendar, storage, about
+        case allMeetings, processing, attention, general, recording, transcription, summary, calendar, storage, mcp, about
         var isMeetings: Bool { [.allMeetings, .processing, .attention].contains(self) }
         var title: String {
             switch self {
@@ -15,6 +15,7 @@ struct ApplicationNavigationState {
             case .summary: localised("Summary and participants", "Сводка и участники")
             case .calendar: localised("Calendar", "Календарь")
             case .storage: localised("Storage and models", "Хранение и модели")
+            case .mcp: "MCP"
             case .about: localised("About Verbemo", "О Verbemo")
             }
         }
@@ -29,6 +30,7 @@ struct ApplicationNavigationState {
             case .summary: "person.2"
             case .calendar: "calendar"
             case .storage: "folder"
+            case .mcp: "network"
             case .about: "info.circle"
             }
         }

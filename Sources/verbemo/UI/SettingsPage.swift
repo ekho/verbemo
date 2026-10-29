@@ -5,6 +5,7 @@ enum SettingsPage {
     static func destination(for path: [String]) -> ApplicationNavigationState.Destination {
         if path == ["auto_record", "calendar"] || path == ["user_name"] || path == ["user_email"] { return .calendar }
         switch path.first {
+        case "mcp": return .mcp
         case "transcription", "live_transcription", "transcript_echo_filter": return .transcription
         case "summary", "speaker_names": return .summary
         case "recordings_dir", "keep_audio": return .storage

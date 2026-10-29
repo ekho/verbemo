@@ -137,6 +137,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// work twice.
     var onActivityChange: (() -> Void)?
     private let deletion = SessionDeletionController()
+    var mcpPendingDeletion: Set<String> { Set(allItems.filter { deletion.isPending($0.dir) }.map { $0.dir.lastPathComponent }) }
     private let deletionNotice = NSStackView()
     private let deletionLabel = NSTextField(labelWithString: "")
     private var undoDeletionID: UUID?

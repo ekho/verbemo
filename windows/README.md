@@ -44,7 +44,8 @@ Windows requires Windows 11 24H2 or later on x64. Download the selected final
 transcription model and the separate live model in Settings. Local summaries
 need a running local Ollama server. Cloud processing and subscription CLIs send
 meeting input to the selected provider; a desktop login may not sign in its CLI.
-Windows has no public Verbemo CLI and no calendar integration.
+Windows has no calendar integration. Its public `mcp` command is a local client
+bridge for the running app; it does not start recording or processing.
 
 Settings, models and logs live under `%LOCALAPPDATA%\Verbemo Data`.
 API keys are stored in Windows Credential Manager under the `Verbemo/` prefix;
@@ -74,3 +75,43 @@ Use the workflow for release signing rather than putting a password in a command
 artifacts. Historical manifests are retained in [docs/history](../docs/history/amanu-packaging/README.md),
 with their publisher and hashes unchanged. No Verbemo Scoop or WinGet installation
 command is advertised before actual catalog publication and install validation.
+
+## Local MCP
+
+**MCP on Windows may be unstable.** See [known limitations](../docs/mcp.md#windows-status): stalled audio-file reads can leave requests waiting, and repeated fast bridge completions can retain bookkeeping entries. Whole-app GUI and real model-client acceptance remain unverified.
+
+Open Settings → MCP. MCP is off by default; when off, only its toggle is shown.
+When enabled, the Server, Connection and Access sections expand inline. Server
+shows the selected address separately from the actual listening state. Connection
+provides localized URL, PowerShell command and agent-setup prompt blocks for
+Codex, Claude Desktop, Claude Code, OpenCode v2 and a local OpenChamber backend.
+Each block has its own Copy action. There is no cloud web-chat connector.
+
+The server listens only on `127.0.0.1`, by default port `52763`; `mcp.port` may be
+an integer from `1024` to `65535`. `mcp.enabled` defaults to `false`. Explicit
+local enable or token rotation creates a protected token in Windows Credential
+Manager. A synced enabled config without a local token stays closed. Access
+always displays `***`; Copy, Ctrl+C and context-menu Copy resolve the full current
+token only on the user's action. Native clients use the bridge without copying a
+token:
+
+```powershell
+& 'C:\path\to\Verbemo.exe' mcp
+# Optional client-owned private output directory:
+& 'C:\path\to\Verbemo.exe' mcp --output-dir 'C:\private\meeting-audio'
+```
+
+The bridge uses redirected stdin/stdout, never launches the GUI, and returns
+complete original audio files through `local_path`. Its default output directory
+is private and temporary, one per bridge process. Finished files remain for the
+client to use; remove them when finished. The eight tools only read saved data.
+Closing the window keeps MCP active. Quit cancels requests immediately; token,
+root and config changes revoke existing transfers. Unreadable config closes MCP
+without rewriting the saved enabled setting. See [MCP details](../docs/mcp.md).
+
+For isolated DEBUG native tests, create a synthetic profile directory before
+setting `VERBEMO_TEST_DATA`. Both GUI and early bridge derive a separate credential
+prefix and instance suffix from its canonical Windows path, and keep default
+recordings under that profile. Release builds ignore this override. Automated
+native-process tests require the exact Debug executable in
+`VERBEMO_MCP_TEST_EXE`; never point native QA at a production credential slot.

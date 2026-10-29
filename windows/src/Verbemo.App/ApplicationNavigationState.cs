@@ -1,6 +1,6 @@
 namespace Verbemo.App;
 
-internal enum ApplicationDestination { AllMeetings, Processing, Attention, General, Recording, Transcription, Summary, Storage, About, Live }
+internal enum ApplicationDestination { AllMeetings, Processing, Attention, General, Recording, Transcription, Summary, Mcp, Storage, About, Live }
 
 internal sealed class ApplicationNavigationState
 {

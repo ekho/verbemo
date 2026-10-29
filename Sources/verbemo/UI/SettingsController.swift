@@ -7,6 +7,11 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         didSet { setup.isRecording = isRecording }
     }
     var isProcessing: (() -> Bool)?
+    var mcp: MCPController? {
+        didSet { mcpSettings.controller = mcp }
+    }
+    private let mcpSettings = MCPSettingsView()
+    private var mcpNotice = ""
     private let panel: NSWindow
     private let calendar: CalendarWatcher
     private let calendarSelection: CalendarSettingsView
@@ -36,6 +41,11 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         setup = SetupForm(mode: .settings, calendar: calendar)
         calendarSelection = CalendarSettingsView(calendar: calendar)
         super.init()
+        mcpSettings.onError = { [weak self] message in
+            guard let self, mcpNotice != message else { return }
+            mcpNotice = message
+            refresh()
+        }
         buildPages()
         configWatch = ConfigWatch.observe { [weak self] in self?.refresh() }
         setup.onStateChange = { [weak self] in
@@ -47,10 +57,11 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
 
     var representedSettingsPaths: [String] {
         rows.map { $0.entry.path.joined(separator: ".") }
+            + ["mcp.enabled", "mcp.port"]
             + [Config.Key.calendarIDs.rawValue]
             + Array(SetupForm.settingsCoveredPaths.intersection(Set(SettingsSchema.sections.flatMap(\.entries).map { $0.path.joined(separator: ".") })))
     }
-    var renderedControls: [NSControl] { rows.map(\.control) }
+    var renderedControls: [NSControl] { rows.map(\.control) + mcpSettings.schemaControls }
 
     var modelLines: [String] {
         var found = [modelsTotal.stringValue]
@@ -95,6 +106,12 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     private func buildPages() {
         for destination in ApplicationNavigationState.Destination.allCases where !destination.isMeetings && destination != .about {
             let form = setup.settingsPages[destination] ?? FlippedStackView()
+            if setup.settingsPages[destination] == nil {
+                form.orientation = .vertical
+                form.alignment = .leading
+                form.spacing = SetupLayout.sectionGap
+                form.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 24, right: 24)
+            }
             let heading = NSTextField(labelWithString: destination.title)
             heading.font = JournalStyle.titleFont(30)
             heading.textColor = JournalStyle.ink
@@ -110,6 +127,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             notice.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             let entries = SettingsSchema.sections.flatMap(\.entries).filter {
                 SettingsPage.destination(for: $0.path) == destination
+                    && $0.path.first != "mcp"
                     && $0.path != Config.Key.calendarIDs.path
                     && !SetupForm.settingsCoveredPaths.contains($0.path.joined(separator: "."))
             }
@@ -156,6 +174,11 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 box.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
                 // Include the row's gap before its trailing spacer.
                 content.widthAnchor.constraint(equalTo: box.widthAnchor, constant: -38).isActive = true
+            }
+            if destination == .mcp {
+                let box = SetupLayout.box([mcpSettings])
+                form.addArrangedSubview(box)
+                box.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             }
             if destination == .storage && Platform.supportsLocalModels {
                 for view in modelsSection() {
@@ -635,7 +658,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         let stray = SettingsSchema.strayKeys(in: config)
         let strayNotice = stray.isEmpty ? ""
             : localised("Not read by this version: ", "Эта версия не читает: ") + stray.joined(separator: ", ")
-        let notices = (Config.problems().map(\.explanation) + [restartNotice, strayNotice])
+        let notices = (Config.problems().map(\.explanation) + [restartNotice, strayNotice, mcpNotice])
             .filter { !$0.isEmpty }.joined(separator: "\n")
         refreshModels()
         for notice in pageNotices {
@@ -643,6 +666,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             notice.isHidden = notices.isEmpty
         }
         for (entry, view) in providerRows { view.isHidden = !providerIsSelected(entry.path) }
+        mcpSettings.refresh()
     }
 
     private func providerIsSelected(_ path: [String]) -> Bool {
@@ -722,6 +746,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             resolution, from: value(at: entry.path, in: Config.raw()))
         else { return }
 
+
         switch resolution {
         case .set(let value): Config.update(path: entry.path, value: value)
         case .clear: Config.update(path: entry.path, value: nil)
@@ -741,5 +766,4 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         // redraws by hand.
         refresh()
     }
-
 }

@@ -14,6 +14,7 @@ final class ProcessingOperations: @unchecked Sendable {
         private let lock = NSLock()
         private var result: Completion?
         private var waiters: [CheckedContinuation<Completion, Never>] = []
+        var completed: Completion? { lock.withLock { result } }
 
         func wait() async -> Completion {
             await withCheckedContinuation { continuation in
@@ -55,6 +56,7 @@ final class ProcessingOperations: @unchecked Sendable {
         fileprivate let generation: Generation?
         fileprivate let generationToken: UUID?
         var isCurrentGeneration: Bool { generation?.current == generationToken }
+        var completion: Completion? { result.completed }
 
         fileprivate func capturingGeneration() -> Self {
             Self(id: id, session: session, kind: kind, state: state, result: result,

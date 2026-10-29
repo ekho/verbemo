@@ -10,7 +10,7 @@ struct Verbemo: ParsableCommand {
         subcommands: [
             Run.self, Setup.self, Doctor.self, Install.self, Sessions.self, FormatTranscripts.self,
             ProcessSession.self,
-            Record.self, AnalyticsCommand.self,
+            Record.self, AnalyticsCommand.self, MCPBridgeCommand.self,
         ],
         defaultSubcommand: Run.self
     )
@@ -233,6 +233,12 @@ final class AppController {
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
     private let window: ApplicationWindow
+    private lazy var mcp = MCPController { [weak self] in
+        guard let self else { return .init(root: Home.current.url, boundaryPending: true) }
+        return .init(root: root, boundaryPending: pendingRoot != nil,
+                     recording: session.map { [$0.dir.lastPathComponent: $0.isPaused ? "paused" : "recording"] } ?? [:],
+                     operations: operations.snapshot(), pendingDeletion: recordingsBuilt ? recordings.mcpPendingDeletion : [])
+    }
     private var setupBuilt = false
     private lazy var setupPage: SetupPage = {
         setupBuilt = true
@@ -500,8 +506,11 @@ final class AppController {
                 // the menu and the status window alike, and obeyed from here.
                 self?.autoRecord.reloadSettings()
                 self?.showAutoRecord()
+                self?.mcp.refresh()
             })
         configDiskWatch = ConfigWatch.DiskWatch()
+        window.mcp = mcp
+        mcp.refresh()
         showConfigProblems()
         setupRequestObserver = SetupRequest.observe { [weak self] in self?.showSetup() }
         activateObserver = SingleInstance.observe { [weak self] in self?.showWindow() }
@@ -720,6 +729,7 @@ final class AppController {
             await liveTransitions.wait()
             await liveTranscription.finishRecording()
         }, finishServices: { [self] in
+            await mcp.stop()
             await importStop?.value
             await mediaImportTask?.value
             for task in uiCleanup { await task.value }
@@ -731,6 +741,7 @@ final class AppController {
     }
 
     private func stopServices() {
+        mcp.stopAdmission()
         ticker?.invalidate(); ticker = nil
         autoRecord.stop()
         network?.stop(); network = nil
@@ -845,6 +856,7 @@ final class AppController {
         case .recordingsRoot(let folder):
             guard followsConfiguredRoot else { return }
             pendingRoot = folder
+            mcp.refresh()
             adoptPendingRoot()
         }
     }
@@ -860,6 +872,7 @@ final class AppController {
     /// it started — a session is one folder — and the move waits for it.
     private func adoptPendingRoot() {
         guard !isStopping, let folder = pendingRoot, session == nil, mediaImportTask == nil else { return }
+        defer { mcp.refresh() }
         pendingRoot = nil
         guard folder != root.standardizedFileURL else { return }
         root = folder

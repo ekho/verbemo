@@ -88,6 +88,13 @@ only values that differ from the defaults. A compact example:
 - `recordings_dir` selects the session folder; `keep_audio` retains the compact
   stereo archive after a successful transcript; `on_stop` is a shell command
   run after processing. The legacy `analytics` field is ignored; product statistics are disabled.
+- `mcp.enabled` defaults to `false`; explicit local enable creates a protected
+  token. Synced configuration alone never creates one. `mcp.port` defaults to
+  `52763` and accepts integers from `1024` to `65535`. The server binds only
+  `127.0.0.1` while Verbemo runs. Port changes, token rotation, library changes
+  and unreadable configuration revoke access and active transfers. The
+  `verbemo mcp [--output-dir <private-client-directory>]` stdio bridge reads
+  these settings; it does not start the app. See [MCP connections](mcp.md).
 - `on_stop` gets the session folder as its only argument and runs once per
   transcript, after naming and summarizing have had their pass — done,
   turned off, failed, or deferred for want of a model (a summary that arrives

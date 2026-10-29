@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Verbemo.Core.Configuration;
+using Verbemo.App.MCP;
 using Velopack;
 using static Verbemo.Core.Localization.Localized;
 
@@ -29,6 +30,11 @@ public partial class App : System.Windows.Application
             Environment.ExitCode = LiveSpeechWorker.Main(arguments);
             return;
         }
+        if (arguments.FirstOrDefault() == "mcp")
+        {
+            Environment.ExitCode = McpBridge.Main(arguments);
+            return;
+        }
         var scope = InstanceScope;
         startupAdmission = new UpdateStartupAdmission(ProductIdentity.InstanceName + scope, ProductIdentity.DoorbellName + scope);
         try
@@ -47,16 +53,7 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private static string InstanceScope
-    {
-        get
-        {
-#if DEBUG
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ProductIdentity.TestDataEnvironmentVariable))) return ".LiveTest";
-#endif
-            return "";
-        }
-    }
+    private static string InstanceScope => McpProfile.Current().InstanceSuffix;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -258,7 +255,11 @@ public partial class App : System.Windows.Application
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
     {
         // Signing out or shutting down: settle the recording while there is time.
-        if (runtime is { } current) Task.Run(current.StopForExitAsync).Wait(TimeSpan.FromSeconds(10));
+        if (runtime is { } current)
+        {
+            current.Mcp.Revoke();
+            Task.Run(current.StopForExitAsync).Wait(TimeSpan.FromSeconds(10));
+        }
         base.OnSessionEnding(e);
     }
 }

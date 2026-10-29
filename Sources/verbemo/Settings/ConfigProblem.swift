@@ -97,14 +97,20 @@ extension Config {
                 let isBoolean = (found as? NSNumber).map {
                     CFGetTypeID($0) == CFBooleanGetTypeID()
                 } == true
-                expected = (key == .localDiarization ? isBoolean : found as? Bool != nil)
+                expected = ([.localDiarization, .mcpEnabled].contains(key) ? isBoolean : found as? Bool != nil)
                     ? nil : localised("true or false", "true или false")
             case .number?:
                 let isFiniteNumber = (found as? NSNumber).map {
                     CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue.isFinite
                 } == true
-                expected = (key == .diarizationThreshold ? isFiniteNumber : found as? Double != nil)
-                    ? nil : localised("a number", "число")
+                if key == .mcpPort {
+                    let number = (found as? NSNumber)?.doubleValue ?? .nan
+                    expected = isFiniteNumber && number.rounded() == number && (1024...65535).contains(number)
+                        ? nil : localised("an integer from 1024 to 65535", "целое число от 1024 до 65535")
+                } else {
+                    expected = (key == .diarizationThreshold ? isFiniteNumber : found as? Double != nil)
+                        ? nil : localised("a number", "число")
+                }
             case .choice(let options)?:
                 expected = (found as? String).map(options.contains) == true
                     ? nil

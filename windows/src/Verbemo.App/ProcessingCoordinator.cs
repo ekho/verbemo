@@ -54,6 +54,8 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
     private readonly HashSet<string> queued = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock queueLock = new();
     private readonly HashSet<string> again = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> reading = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> afterRead = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> preparing = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ProcessingStatus> statuses = new(StringComparer.OrdinalIgnoreCase);
     private string? current;
@@ -129,10 +131,36 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
         lock (queueLock)
         {
-            if (queued.Contains(directory) || !preparing.Add(directory)) return null;
+            if (queued.Contains(directory) || reading.Contains(directory) || !preparing.Add(directory)) return null;
             statuses[directory] = PreparingStatus(directory);
         }
         return new Reservation(() => { lock(queueLock) preparing.Remove(directory); });
+    }
+
+    // Reads share writer exclusion, but must not appear as processing activity.
+    internal IDisposable? TryReserveReadSession(string directory, Func<bool> pendingDeletion)
+    {
+        directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
+        // Deletion acquires its own gate before the writer reservation; keep that lock order.
+        if (pendingDeletion()) return null;
+        lock (queueLock)
+        {
+            if (queued.Contains(directory) || preparing.Contains(directory) || !reading.Add(directory)) return null;
+        }
+        return new Reservation(() =>
+        {
+            bool enqueue;
+            lock (queueLock)
+            {
+                reading.Remove(directory);
+                enqueue = afterRead.Remove(directory) && !lifetime.IsCancellationRequested && queued.Add(directory);
+            }
+            if (enqueue)
+            {
+                Publish(directory, "queued", T("Queued for processing", "В очереди на обработку"), true);
+                queue.Writer.TryWrite(directory);
+            }
+        });
     }
 
     private sealed class Reservation(Action release) : IDisposable
@@ -200,6 +228,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         var directory = Path.GetFullPath(sessionDirectory).TrimEnd(Path.DirectorySeparatorChar);
         lock (queueLock)
         {
+            if (reading.Contains(directory)) { afterRead.Add(directory); return; }
             if (preparing.Contains(directory)) return;
             if (!queued.Add(directory))
             {
@@ -295,7 +324,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         directory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
         lock (queueLock)
         {
-            if (queued.Contains(directory) || !preparing.Add(directory))
+            if (queued.Contains(directory) || reading.Contains(directory) || !preparing.Add(directory))
                 throw new InvalidOperationException(T(
                     "This recording is being processed right now; try again when it finishes.",
                     "Эта запись сейчас обрабатывается — попробуйте, когда закончится."));
@@ -332,7 +361,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
         var root = TranscriptVersions.ValidatedSessionRoot(directory);
         lock (queueLock)
         {
-            if (queued.Contains(root) || !preparing.Add(root))
+            if (queued.Contains(root) || reading.Contains(root) || !preparing.Add(root))
                 throw new InvalidOperationException(T("Wait for processing to finish.", "Дождитесь завершения обработки."));
             statuses[root] = PreparingStatus(root);
         }
