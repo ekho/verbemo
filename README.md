@@ -55,7 +55,7 @@ Shared provider credentials are read only; Verbemo writes its own keys locally.
 The [CLI and configuration reference](docs/configuration.md) documents every
 setting and provider key-file path, with platform differences and examples.
 The optional [local MCP server](docs/mcp.md) exposes saved meetings and full audio
-to authenticated local clients. Enable it and open connection instructions in General settings.
+to authenticated local clients. Enable it and expand the connection instructions in Settings → MCP.
 
 Application and website usage statistics are disabled. There is no analytics
 backend, installation identifier or event upload. Old analytics fields cannot
