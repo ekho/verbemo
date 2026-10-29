@@ -11,7 +11,9 @@ The user chose a dedicated **MCP** destination in existing native settings,
 with one card and inline collapsible sections. The earlier General controls
 and instruction sheet are to be removed. A separate service/window, cloud
 connection, extra tools, or changes to authentication/storage/lifecycle are
-outside this revision. Deliver a reviewable PR and checks; stop before PR merge.
+outside this revision. The user authorized PR merge when ready on 2026-10-29,
+superseding the earlier stop-before-merge boundary, and stopped further Windows
+work with an explicit potentially-unstable status. Preserve known limitations.
 
 ## Disabled state
 

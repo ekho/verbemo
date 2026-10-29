@@ -78,6 +78,8 @@ command is advertised before actual catalog publication and install validation.
 
 ## Local MCP
 
+**MCP on Windows may be unstable.** See [known limitations](../docs/mcp.md#windows-status): stalled audio-file reads can leave requests waiting, and repeated fast bridge completions can retain bookkeeping entries. Whole-app GUI and real model-client acceptance remain unverified.
+
 Open Settings → MCP. MCP is off by default; when off, only its toggle is shown.
 When enabled, the Server, Connection and Access sections expand inline. Server
 shows the selected address separately from the actual listening state. Connection

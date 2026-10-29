@@ -4,6 +4,15 @@ Verbemo's local MCP service lets a local AI client find saved meetings, read tra
 
 This guide accompanies issue #63. Runtime acceptance and exact client versions are recorded in the [testing report](testing/2026-10-28-local-mcp.md); a configuration example alone does not establish compatibility.
 
+## Windows status
+
+**MCP on Windows may be unstable.** Windows builds and focused native tests have
+passed, but whole-app GUI and real model-client acceptance remain unverified.
+A known audio timeout gap can leave an HTTP request waiting if file opening or
+reading stalls. Repeated immediately completed bridge requests can also retain
+bookkeeping entries and gradually increase memory use. Further Windows work
+was stopped at the user's request; these issues are not reported as fixed.
+
 ## Connect a client
 
 Open Settings → MCP and enable the service. When it is off, only the MCP toggle is shown. When enabled, Server, Connection and Access expand within the same card. Choose a client under Connection: the MCP URL, console command and complete local-agent setup prompt each have their own Copy button, with manual steps below. The instructions use this copy of the executable and the selected valid port. Server distinguishes the selected endpoint from the endpoint actually listening; an enabled toggle alone does not establish a working connection. Invalid port input or an unreadable configuration disables dependent copy actions.

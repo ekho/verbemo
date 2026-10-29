@@ -56,6 +56,7 @@ The [CLI and configuration reference](docs/configuration.md) documents every
 setting and provider key-file path, with platform differences and examples.
 The optional [local MCP server](docs/mcp.md) exposes saved meetings and full audio
 to authenticated local clients. Enable it and expand the connection instructions in Settings → MCP.
+**MCP on Windows may be unstable.** See the [known limitations](docs/mcp.md#windows-status).
 
 Application and website usage statistics are disabled. There is no analytics
 backend, installation identifier or event upload. Old analytics fields cannot
