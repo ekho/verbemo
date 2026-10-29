@@ -476,44 +476,76 @@ struct MCPSettingsViewTests {
     }
     @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55438}}"#))
     func longInstructionsWrapInsideNarrowSettingsInBothLanguages() throws {
+        func trace(_ phase: String) { FileHandle.standardError.write(Data(("MCP-CI narrow " + phase + "\n").utf8)) }
+        trace("begin")
         for language in [InterfaceLanguage.english, .russian] {
+            trace(language.rawValue + " language-begin")
             try InterfaceLanguage.$scoped.withValue(language) {
+                trace(language.rawValue + " window-init")
                 let app = ApplicationWindow()
-                defer { _ = app.stopForTermination(); app.hide() }
+                trace(language.rawValue + " window-created")
+                defer {
+                    trace(language.rawValue + " cleanup-start")
+                    _ = app.stopForTermination()
+                    trace(language.rawValue + " stop-done")
+                    app.hide()
+                    trace(language.rawValue + " hide-done")
+                }
                 app.panel.setContentSize(NSSize(width: 760, height: 680))
-                app.navigate(.mcp); app.show()
+                trace(language.rawValue + " resized")
+                app.navigate(.mcp)
+                trace(language.rawValue + " navigated")
+                app.show()
+                trace(language.rawValue + " shown")
                 let page = app.settings.content(for: .mcp)
                 let client: NSPopUpButton = try control(page, "mcp.client")
                 for index in 0..<5 {
+                    trace(language.rawValue + " client-" + String(index) + " begin")
                     client.selectItem(at: index); _ = client.sendAction(client.action, to: client.target)
-                    app.panel.contentView?.layoutSubtreeIfNeeded(); app.panel.layoutIfNeeded()
+                    trace(language.rawValue + " client-" + String(index) + " changed")
+                    app.panel.contentView?.layoutSubtreeIfNeeded()
+                    trace(language.rawValue + " client-" + String(index) + " view-layout")
+                    app.panel.layoutIfNeeded()
+                    trace(language.rawValue + " client-" + String(index) + " window-layout")
                     #expect(app.panel.contentLayoutRect.width <= 762)
                     let prompt: NSTextField = try control(page, "mcp.prompt.text")
                     #expect(prompt.bounds.width > 100)
                     #expect(prompt.bounds.width <= 520)
                     #expect(prompt.bounds.height > 100)
                     #expect(app.panel.attachedSheet == nil)
+                    trace(language.rawValue + " client-" + String(index) + " assertions-done")
                 }
             }
+            trace(language.rawValue + " language-done")
         }
+        trace("body-done")
     }
 
     @Test(.freshHome(config: #"{"mcp":{"enabled":true,"port":55436}}"#))
     func failedStartShowsSelectedEndpointAndNoActiveEndpoint() async throws {
+        func trace(_ phase: String) { FileHandle.standardError.write(Data(("MCP-CI failed-start " + phase + "\n").utf8)) }
+        trace("begin")
         let host = MCPHTTP(port: 55436, token: String(repeating: "a", count: 64), gate: { _ in throw MCPFailure(.dataUnreadable) })
         try await host.start()
+        trace("fixture-listening")
         defer { host.stopAdmission() }
         _ = try MCPCredentials(home: .current).rotate()
         let controller = MCPController(snapshot: { .init(root: Home.current.url) })
         let card = MCPSettingsView(controller: controller)
         controller.refresh()
+        trace("controller-refreshed")
         for _ in 0..<200 where controller.status == "Starting" { try await Task.sleep(for: .milliseconds(5)) }
+        trace("status-settled")
         try click(card, "mcp.section.server")
         let status: NSTextField = try control(card, "mcp.status")
         #expect(status.stringValue.contains("Cannot listen"))
         #expect(status.stringValue.contains("Active endpoint: None"))
         #expect((try control(card, "mcp.url.text", as: NSTextField.self)).stringValue == "http://127.0.0.1:55436/mcp")
         #expect(!(try control(card, "mcp.operation-error", as: NSTextField.self)).isHiddenOrHasHiddenAncestor)
-        await controller.stop(); await host.stop()
+        trace("assertions-done")
+        await controller.stop()
+        trace("controller-stopped")
+        await host.stop()
+        trace("fixture-stopped")
     }
 }
