@@ -54,6 +54,11 @@ import AppKit
         operationError.identifier = .init("mcp.operation-error"); operationError.textColor = .systemRed
         body.addArrangedSubview(operationError)
         operationError.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -28).isActive = true
+        let accessNotice = label(localised(
+            "Connected clients can read the whole selected meeting library and download audio. They may send this data to their model provider.",
+            "Подключённые клиенты могут читать всю выбранную библиотеку встреч и скачивать аудио. Они могут передавать полученные данные провайдеру используемой модели."))
+        body.addArrangedSubview(accessNotice)
+        accessNotice.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -28).isActive = true
         status.identifier = .init("mcp.status")
         port.identifier = .init("mcp.port"); port.delegate = self
         if let entry = SettingsSchema.sections.flatMap(\.entries).first(where: { $0.path == ["mcp", "port"] }) {
