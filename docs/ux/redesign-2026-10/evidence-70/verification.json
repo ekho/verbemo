@@ -1,0 +1,18 @@
+{
+  "artifact_sha256": "806a3a465aa6bdef6957c5179289ee3d9a5b9c82bb26c2ec53bbdb8492e05cbd",
+  "model_checks": 9,
+  "browser": "Codex in-app browser on macOS",
+  "external_resources": false,
+  "native_app_changed": false,
+  "windows_native_gui_checked": false,
+  "human_acceptance": "pending",
+  "screenshots": {
+    "01-wide.jpg": "7532ea7607e361a61636c37f8386d297a180ee896e8bbb7576488e3d33c1969c",
+    "02-minimum.jpg": "1798414aa380da5e12202c83bcfce4a8f6afcc520f505be36871c0cc40a2b75c",
+    "03-assignment.jpg": "c50cd3fc6ce725a13b84c6005d58714e56f3a3738ebfc72701d1c5c2da754eda",
+    "04-settings-en-dark-recording.jpg": "7ec9952eb3440fe9982dd3399c85f45e0c27a1e1094148e7217ea3ecf8b932ed",
+    "05-summary-retry-en-dark.jpg": "a7f63ca4af0a9ce2c072b6a9e21f0f19b3b540391044255dac57443bb62356e2",
+    "06-long-transcript-return.jpg": "eefc6e2d41acf178d2b3667cf4eb03c4ab207beaf8352de68912a5a10ae1396c",
+    "07-windows-presentation-only.jpg": "55ef77d8bbd5bde387e87dfef8d8af19264bb0efb155301222f54f057958cf59"
+  }
+}
