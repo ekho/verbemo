@@ -1,8 +1,8 @@
 {
   "date": "2026-10-30",
-  "artifact_sha256": "341d91d0d50a7184778a78a259b3c4083dd268a056e12fd71cb0ed796ca9b082",
+  "artifact_sha256": "f711d11a46092172ebb0246f1d0423303f6033ff2a983cc3ef0529ed1ca894cf",
   "baseline_commit": "1bdd09f",
-  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation",
+  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import",
   "state_model_checks": 9,
   "text_contrast_pairs_checked": 42,
   "text_contrast_minimum": 4.5,
@@ -10,7 +10,7 @@
   "native_mac_gui_checked": false,
   "native_windows_gui_checked": false,
   "user_choice": "Studio: compactness and separate speaker column",
-  "review": "self-reviewed dismissal/regeneration iteration; focused checks and browser verification; no independent review of this iteration",
+  "review": "self-reviewed direct-import iteration; focused checks and browser verification; no independent review of this iteration",
   "screenshots": {
     "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
     "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
@@ -33,10 +33,11 @@
     "19-studio-action-icons.jpg": "a64b5a1bd4e1bdd33727d9a5531350abfb94bcf4404cf21eade9aea1dfd8d2cc",
     "20-studio-icons-dark-large.jpg": "cc0ee8be30e0ddae9a9b8cddccaa4ca394a784f33217410a21b152e618481de6",
     "21-notice-and-summary-refresh.png": "7c9a9ccbd0d7117193413b35f669f037f9c01dad97e564fd1d43039c0ad7e2aa",
-    "22-regenerate-icons-dark-en.png": "161d2ee3ab685146a517f024b794e48a1bf39d8eb9eafcc42ab1a5061f049dba"
+    "22-regenerate-icons-dark-en.png": "161d2ee3ab685146a517f024b794e48a1bf39d8eb9eafcc42ab1a5061f049dba",
+    "23-direct-file-import.png": "7fa7a9ae839c138c73c67bb3bfb91ec508303d2617f7f25ce100d33609702159"
   },
   "first_round_artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
-  "presentation_logic_checks": 4,
+  "presentation_logic_checks": 5,
   "screenshot_rounds": {
     "first_round": "01-15, before refinement",
     "studio_refinement": "16-18, layout refinement before action icons",
@@ -77,5 +78,16 @@
     "no_app_horizontal_overflow": true,
     "javascript_errors": 0,
     "native_checked": false
+  },
+  "notice_regeneration_sha256": "341d91d0d50a7184778a78a259b3c4083dd268a056e12fd71cb0ed796ca9b082",
+  "direct_import_verification": {
+    "filechooser_opened_directly": true,
+    "intermediate_html_dialog_open": false,
+    "multiple": true,
+    "synthetic_files_selected": 2,
+    "file_content_read_by_prototype": false,
+    "empty_selection_unit_checked": true,
+    "native_picker_cancel_verified": false,
+    "javascript_errors": 0
   }
 }
