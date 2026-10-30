@@ -164,6 +164,7 @@ body[data-text-large=true] .meeting-search{flex-basis:100%;margin-top:4px}
 .app .stamp .button-content{gap:4px}.app .stamp .ui-icon{width:12px;height:12px;min-width:12px;min-height:12px}
 .player #stop-play-button{margin-left:-6px}
 @container app (max-width:590px){.player{flex-wrap:wrap}.player #seek{order:1;flex-basis:100%}}
+.notice-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.notice-heading strong{padding-top:6px}.notice-heading button{flex:0 0 auto}.ui-icon.regenerate-icon{width:20px;height:20px}button:hover .icon-badge{fill:var(--hover)}
 </style>
 </head>
 <body data-visual="studio" data-platform="mac">
@@ -262,10 +263,10 @@ const UX70 = (() => {
 globalThis.UX70=UX70;
 if(typeof document!=='undefined') {
 const data=JSON.parse(document.getElementById('fixture-data').textContent);
-let s=UX70.createState(data),undoTimer,jobTimer,editorContext,focusReturn,findOrigin=null;
+let s=UX70.createState(data),undoTimer,jobTimer,editorContext,focusReturn,findOrigin=null,dismissedJobNotice=null;
 const $=id=>document.getElementById(id),T=(ru,en)=>s.language==='en'?en:ru;
 const E=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const actionIcons={'toggle-list':'sidebar','global':'search','clear-global':'close','find':'search','close-find':'close','next-hit':'next','edit':'pencil','cancel-dialog':'close','unlink':'unlink','details':'details','settings':'settings','back-settings':'back','categories':'back','play':'play','stop-play':'stop','seek':'play','open-current':'next','summary':'document','transcribe':'transcript','retry-job':'processing','job-view':'processing','job-success':'ready','job-error':'error','cancel-job':'close','record':'recording','recording-view':'recording','stop-record':'stop','import':'import','rename':'pencil','delete':'trash','undo':'undo','dismiss':'close'};
+const actionIcons={'toggle-list':'sidebar','global':'search','clear-global':'close','find':'search','close-find':'close','next-hit':'next','edit':'pencil','cancel-dialog':'close','unlink':'unlink','details':'details','settings':'settings','back-settings':'back','categories':'back','play':'play','stop-play':'stop','seek':'play','open-current':'next','summary':'summary-refresh','transcribe':'transcript-refresh','retry-job':'processing','job-view':'processing','job-success':'ready','job-error':'error','cancel-job':'close','record':'recording','recording-view':'recording','stop-record':'stop','import':'import','rename':'pencil','delete':'trash','undo':'undo','dismiss':'close'};
 const B=(action,label,extra='',glyph=actionIcons[action],iconOnly=false)=>{
  if(action==='pause-record')glyph=s.recording?.paused?'play':'pause';
  const a11y=iconOnly?' data-icon-only="true" aria-label="'+E(label)+'" title="'+E(label)+'"':'';
@@ -308,7 +309,9 @@ function icon(key){
   paused:'<circle cx="12" cy="12" r="9"/><path d="M9 8v8m6-8v8"/>',
   cancelled:'<circle cx="12" cy="12" r="9"/><path d="M7 12h10"/>'
  };
- return '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+paths[key]+'</svg>';
+ const base=key==='summary-refresh'?'document':key==='transcript-refresh'?'transcript':null;
+ const shape=base?'<g transform="scale(.85)">'+paths[base]+'</g><circle class="icon-badge" cx="17" cy="17" r="7" fill="var(--paper)" stroke="none"/><g transform="translate(10 10) scale(.55)" stroke-width="2.6">'+paths.processing+'</g>':paths[key];
+ return '<svg class="ui-icon'+(base?' regenerate-icon':'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+shape+'</svg>';
 }
 function meetingStatus(m){
  if(s.recording?.id===m.id)return s.recording.paused?['paused',T('Запись на паузе','Recording paused')]:['recording',T('Идёт запись','Recording')];
@@ -327,10 +330,12 @@ function library(){
  const rows=matches.filter(r=>{const m=s.meetings.find(m=>m.id===r.meeting);return s.filter==='all'||(s.filter==='attention'?m.status==='failed'||s.job?.meeting===m.id&&s.job.status==='error':m.status==='deferred'||UX70.active(s.job)&&s.job.meeting===m.id);});
  return '<aside class="library" aria-label="'+T('Библиотека','Library')+'"><div class="library-head"><label for="global-search">'+T('По всей библиотеке','Search entire library')+'</label><input id="global-search" type="search" value="'+E(s.query)+'" placeholder="'+T('Название, расшифровка, сводка','Title, transcript, summary')+'"><select id="filter" aria-label="'+T('Фильтр встреч','Meeting filter')+'">'+[['all',T('Все встречи','All meetings')],['processing',T('В обработке','Processing')],['attention',T('Требуют внимания','Need attention')]].map(([k,v])=>'<option value="'+k+'" '+(s.filter===k?'selected':'')+'>'+v+'</option>').join('')+'</select></div><div class="meeting-list" id="meeting-list">'+(rows.length?rows.map(r=>{const m=s.meetings.find(m=>m.id===r.meeting);return B('meeting','<strong>'+highlight(m.title,s.query)+'</strong><small class="meeting-meta"><span>'+E(m.date)+' · '+time(m.duration)+'</span>'+meetingStatusIcon(m)+'</small>'+(r.source?'<span class="snippet">'+({title:T('Название','Title'),transcript:T('Расшифровка','Transcript'),summary:T('Сводка','Summary')}[r.source])+' · '+highlight(r.text.slice(0,160),s.query)+'</span>':''),'class="meeting" aria-current="'+(s.selected===m.id)+'" data-id="'+m.id+'" data-source="'+(r.source||'')+'" data-index="'+(r.index||0)+'"');}).join(''):'<div class="empty"><h2>'+T('Нет совпадений','No matches')+'</h2><p>'+T('Измените запрос или фильтр. Встречи не удалены.','Change the search or filter. Your meetings are still here.')+'</p>'+B('clear-global',T('Сбросить поиск и фильтр','Clear search and filter'))+'</div>')+'</div><div class="list-note">'+T('Поиск по содержимому — демонстрация будущего поведения.','Content search demonstrates proposed behavior.')+'</div></aside>';
 }
+function jobNoticeVisible(job){return !!job&&!(dismissedJobNotice?.job===job&&dismissedJobNotice.status===job.status);}
+function dismissJobNotice(){dismissedJobNotice={job:s.job,status:s.job?.status};}
 function jobStatus(m){
- const j=s.job;if(!j||j.meeting!==m.id)return '';
+ const j=s.job;if(!jobNoticeVisible(j)||j.meeting!==m.id)return '';
  const label={queued:T('Ожидает запуска','Waiting to start'),running:T('Создаётся новый результат','Creating a new result'),cancelling:T('Отмена · завершаем очистку','Cancelling · cleaning up'),cancelled:T('Обработка отменена','Processing cancelled'),error:T('Не удалось обработать: демонстрационная ошибка','Processing failed: simulated error'),done:T('Новый результат готов','New result ready')}[j.status];
- return '<div class="notice" role="status"><strong>'+label+'</strong><p>'+(j.status==='done'?(j.kind==='summary'?T('Сводка текущей версии обновлена.','The current version’s summary has been updated.'):T('Прежняя версия сохранена в архиве.','The previous version is preserved in the archive.')):T('Прежний готовый результат сохранён.','The previous completed result is preserved.'))+'</p><div class="row">'+(['queued','running'].includes(j.status)?(s.platform==='mac'?B('cancel-job',T('Отменить обработку','Cancel processing')):'<small>'+T('Отмена в Windows требует отдельной проверки.','Cancellation on Windows needs separate validation.')+'</small>'):'')+(['error','cancelled'].includes(j.status)?B('retry-job',T('Повторить','Retry')):'')+(j.status==='done'&&UX70.view(s).version!=='current'?B('open-current',T('Открыть новый результат','Open new result')):'')+B('details',T('Подробности','Details'))+'</div></div>';
+ return '<div class="notice" role="status"><div class="notice-heading"><strong>'+label+'</strong>'+B('dismiss-job-notice',T('Скрыть уведомление об обработке','Dismiss processing notification'),'','close',true)+'</div><p>'+(j.status==='done'?(j.kind==='summary'?T('Сводка текущей версии обновлена.','The current version’s summary has been updated.'):T('Прежняя версия сохранена в архиве.','The previous version is preserved in the archive.')):T('Прежний готовый результат сохранён.','The previous completed result is preserved.'))+'</p><div class="row">'+(['queued','running'].includes(j.status)?(s.platform==='mac'?B('cancel-job',T('Отменить обработку','Cancel processing')):'<small>'+T('Отмена в Windows требует отдельной проверки.','Cancellation on Windows needs separate validation.')+'</small>'):'')+(['error','cancelled'].includes(j.status)?B('retry-job',T('Повторить','Retry')):'')+(j.status==='done'&&UX70.view(s).version!=='current'?B('open-current',T('Открыть новый результат','Open new result')):'')+B('details',T('Подробности','Details'))+'</div></div>';
 }
 function content(m,v,w){
  if(s.recording?.id===m.id)return '<div class="empty"><h2>'+T('Текущая запись','Current recording')+'</h2><p>'+T('Учебная сессия. Микрофон и системный звук не захватываются.','Demo session. Microphone and system audio are not captured.')+'</p><div class="notice">'+T('Текст во время записи — отдельный результат. В макете модель не запускается.','Live text is a separate result. No model runs in this prototype.')+'</div><p>'+T('Откройте другую встречу или настройки: управление записью останется внизу.','Open another meeting or settings: recording controls remain below.')+'</p></div>';
@@ -501,6 +506,7 @@ document.addEventListener('click',e=>{
  case 'summary':start('summary');return;
  case 'transcribe':start('transcript');return;
  case 'retry-job':start(s.job.kind);return;
+ case 'dismiss-job-notice':dismissJobNotice();render('meeting-title');return;
  case 'job-view':UX70.select(s,s.job.meeting);s.list=false;s.details=true;render('close-details');return;
  case 'job-success':UX70.finishJob(s,'done');announce(T('Демонстрационное задание завершено.','Simulated job completed.'));render();return;
  case 'job-error':UX70.finishJob(s,'error');announce(T('Демонстрационная ошибка. Предыдущий результат сохранён.','Simulated error. Previous result preserved.'));render();return;

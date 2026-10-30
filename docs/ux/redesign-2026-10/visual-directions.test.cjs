@@ -72,3 +72,20 @@ ctx.togglePlayback();assert.equal(state.playing,false);assert.equal(state.time,2
 ctx.stopPlayback();assert.equal(state.playing,false);assert.equal(state.time,0,'stop resets position');
 state.time=180;ctx.togglePlayback();assert.equal(state.playing,true);assert.equal(state.time,0,'play restarts a completed recording');
 console.log('PASS playback supports resume, pause, stop and replay after completion.');
+
+ctx.dismissedJobNotice=null;
+vm.runInContext(html.slice(html.indexOf('function jobNoticeVisible('),html.indexOf('function jobStatus(')),ctx);
+state.job={meeting:'short',kind:'summary',status:'cancelled'};
+const preserved=JSON.stringify(state);
+assert.equal(ctx.jobNoticeVisible(state.job),true);
+ctx.dismissJobNotice();
+assert.equal(ctx.jobNoticeVisible(state.job),false);
+assert.equal(JSON.stringify(state),preserved,'dismissal must not change the processing or meeting model');
+assert.equal(ctx.meetingStatus(meeting)[0],'cancelled','status remains available outside the banner');
+state.job={meeting:'short',kind:'summary',status:'cancelled'};
+assert.equal(ctx.jobNoticeVisible(state.job),true,'a new job must not inherit dismissal');
+state.job.status='running';ctx.dismissJobNotice();
+assert.equal(ctx.jobNoticeVisible(state.job),false);
+state.job.status='error';assert.equal(ctx.jobNoticeVisible(state.job),true,'a changed status must reappear');
+assert.equal(ctx.jobNoticeVisible(null),false);
+console.log('PASS notice dismissal preserves results/status and does not hide a new job or outcome.');
