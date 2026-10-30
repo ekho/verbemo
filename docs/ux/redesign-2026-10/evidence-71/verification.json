@@ -1,16 +1,16 @@
 {
   "date": "2026-10-30",
-  "artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
+  "artifact_sha256": "7b7bfbeca090d5226c6887d6a0f9d4b42cc002b5d9bd9cbdd189672a1fa3ad7a",
   "baseline_commit": "1bdd09f",
-  "scope": "first visual direction round; no chosen direction or native implementation",
+  "scope": "Studio selected; five user-requested prototype refinements; no native implementation",
   "state_model_checks": 9,
   "text_contrast_pairs_checked": 42,
   "text_contrast_minimum": 4.5,
   "browser": "Codex in-app browser on macOS",
   "native_mac_gui_checked": false,
   "native_windows_gui_checked": false,
-  "user_choice": "pending",
-  "review": "ship for first selection round; reviewer saw screenshots 01–13; author checked 14",
+  "user_choice": "Studio: compactness and separate speaker column",
+  "review": "ship for five Studio refinements; reviewer inspected diff, helper tests and screenshots 16-18; did not run browser or tests",
   "screenshots": {
     "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
     "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
@@ -26,6 +26,26 @@
     "12-settings-win-en-text-150.jpg": "6552f0bf8c53bc7447d09ab9b6c587bdb1a4245588420657fce2d85c4ae79ab3",
     "13-focus-panel-691.jpg": "bbcd91e507125c13a0f3a523e6de21853ced0e024c26a13bb5048fd6527a8492",
     "14-focus-local-search.jpg": "a91963c76c06a7d12683e449db1bae4eae38ad9284bc8c211b6a67a4ccc20fda",
-    "15-open-comparison.jpg": "7cf46d16ba54445f0adc8e3ed0308895cd5ee8066a1406be3c28bf7b762532ae"
-  }
+    "15-open-comparison.jpg": "7cf46d16ba54445f0adc8e3ed0308895cd5ee8066a1406be3c28bf7b762532ae",
+    "16-studio-refined.jpg": "76f653db9f56ead78c51bedb0d0d1634bfe23aef85b5bdab26fe84898322b2da",
+    "17-studio-search.jpg": "89435f11b262f04bf6d486f69dc0fc8516aa3ca61f5d214f5beb836f23f4e347",
+    "18-studio-narrow-dark-en.jpg": "17c50bc9aa8c78259b277c560baf288b90fc7fd16c952bfdcee9162ffbab178a"
+  },
+  "first_round_artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
+  "presentation_logic_checks": 2,
+  "screenshot_rounds": {
+    "first_round": "01-15, before refinement",
+    "studio_refinement": "16-18, current presentation"
+  },
+  "refinement_checks": [
+    "duplicate library-search button removed; sidebar field retained",
+    "pencil next to speaker name with accessible name and title; assignment C to Vera returns focus to edit-turn-2",
+    "Studio turn padding 10px; first short turn 71px at viewport 1087x954",
+    "distinct status icons with title and accessible labels",
+    "meeting-search field always visible on meeting screen; transcript/summary/no-result/Enter/Escape/clear and Cmd-F checked",
+    "archive search restores previous version, transcript tab and scrollTop 184.5",
+    "760x600 frame dark EN Windows presentation on Mac: no horizontal app overflow",
+    "200% text: no horizontal app/workspace overflow; speaker header stacks above paragraph",
+    "browser error log empty at end of check"
+  ]
 }
