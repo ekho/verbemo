@@ -120,6 +120,127 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private func key(_ version: TranscriptVersions.Version) -> String {
         version.dir.path + (version.isRequest ? "#request" : "#result")
     }
+    struct MeetingSearchHit: Equatable { let tab: String; let segment: Int?; let range: NSRange }
+    private struct MeetingReadingPosition {
+        let tab: String
+        let summary: NSPoint
+        let plainTranscript: NSPoint
+        let transcript: MeetingTranscriptView.ReadingPosition?
+    }
+    private(set) var meetingSearchQuery = ""
+    private(set) var meetingSearchHits: [MeetingSearchHit] = []
+    private(set) var meetingSearchIndex: Int?
+    private var searchTranscript: Transcript?
+    private var displayedSearchContext: String?
+    private var searchOrigin: MeetingReadingPosition?
+    private var currentSearchContext: String? {
+        guard let selected, let dir = artifactDirectory, selectedVersion?.isRequest != true,
+              activeRecording?.dir != selected.dir else { return nil }
+        return selected.dir.path + "\n" + dir.path
+    }
+    private func captureMeetingReadingPosition() -> MeetingReadingPosition {
+        .init(tab: detailTabs.selectedTabViewItem?.identifier as? String ?? "summary",
+              summary: summaryText.enclosingScrollView?.contentView.bounds.origin ?? .zero,
+              plainTranscript: transcriptText.enclosingScrollView?.contentView.bounds.origin ?? .zero,
+              transcript: meetingTranscript.readingPosition())
+    }
+    private func selectResultTab(_ id: String) {
+        detailTabs.selectTabViewItem(withIdentifier: id)
+        for case let button as JournalTabButton in resultPicker.arrangedSubviews {
+            button.select(button.identifier?.rawValue == "meeting.result.\(id)")
+        }
+    }
+    private func restoreMeetingReadingPosition(_ position: MeetingReadingPosition) {
+        selectResultTab(position.tab)
+        for (text, point) in [(summaryText, position.summary), (transcriptText, position.plainTranscript)] {
+            if let scroll = text.enclosingScrollView {
+                scroll.contentView.scroll(to: point)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+        }
+        meetingTranscript.restoreReadingPosition(position.transcript)
+    }
+    func setMeetingSearchQuery(_ query: String) {
+        guard currentSearchContext != nil, currentSearchContext == displayedSearchContext else { return }
+        let wasEmpty = meetingSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let isEmpty = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if wasEmpty && !isEmpty { searchOrigin = captureMeetingReadingPosition() }
+        meetingSearchQuery = query
+        rebuildMeetingSearch()
+        if isEmpty {
+            if let origin = searchOrigin { restoreMeetingReadingPosition(origin) }
+            searchOrigin = nil
+        }
+    }
+    private func rebuildMeetingSearch() {
+        meetingSearchIndex = nil
+        meetingSearchHits = []
+        if let transcript = searchTranscript {
+            for (index, segment) in transcript.segments.enumerated() {
+                meetingSearchHits += MeetingTextSearch.matches(in: segment.text, query: meetingSearchQuery).map {
+                    .init(tab: "transcript", segment: index, range: $0)
+                }
+            }
+        } else if transcriptText.identifier != nil {
+            meetingSearchHits += MeetingTextSearch.matches(in: transcriptText.string, query: meetingSearchQuery).map {
+                .init(tab: "transcript", segment: nil, range: $0)
+            }
+        }
+        if summaryText.identifier != nil {
+            meetingSearchHits += MeetingTextSearch.matches(in: summaryText.string, query: meetingSearchQuery).map {
+                .init(tab: "summary", segment: nil, range: $0)
+            }
+        }
+        for text in [summaryText, transcriptText] {
+            let full = NSRange(location: 0, length: (text.string as NSString).length)
+            text.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
+            for hit in meetingSearchHits where hit.segment == nil && hit.tab == (text === summaryText ? "summary" : "transcript") {
+                text.layoutManager?.addTemporaryAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.25), forCharacterRange: hit.range)
+            }
+        }
+        meetingTranscript.setSearch(matches: transcriptSearchRanges())
+    }
+    private func transcriptSearchRanges() -> [Int: [NSRange]] {
+        var ranges: [Int: [NSRange]] = [:]
+        for hit in meetingSearchHits {
+            if let segment = hit.segment { ranges[segment, default: []].append(hit.range) }
+        }
+        return ranges
+    }
+    func moveMeetingSearch(forward: Bool) {
+        guard currentSearchContext == displayedSearchContext, !meetingSearchHits.isEmpty else { return }
+        let count = meetingSearchHits.count
+        let index = meetingSearchIndex.map { ($0 + (forward ? 1 : count - 1)) % count } ?? (forward ? 0 : count - 1)
+        meetingSearchIndex = index
+        let hit = meetingSearchHits[index]
+        selectResultTab(hit.tab)
+        meetingTranscript.setSearch(matches: transcriptSearchRanges(), focusedSegment: hit.segment, focusedRange: hit.range)
+        if let segment = hit.segment { meetingTranscript.revealSearchSegment(segment) }
+        else {
+            let text = hit.tab == "summary" ? summaryText : transcriptText
+            text.scrollRangeToVisible(hit.range)
+            text.showFindIndicator(for: hit.range)
+        }
+    }
+    private func finishSearchReload(previousPosition: MeetingReadingPosition) {
+        let sameContext = displayedSearchContext != nil && displayedSearchContext == currentSearchContext
+        if !sameContext {
+            meetingSearchQuery = ""
+            searchOrigin = nil
+            for text in [summaryText, transcriptText] { text.scrollToBeginningOfDocument(nil) }
+        }
+        displayedSearchContext = currentSearchContext
+        let previousHits = meetingSearchHits, previousIndex = meetingSearchIndex
+        rebuildMeetingSearch()
+        if sameContext {
+            if previousHits == meetingSearchHits, let index = previousIndex, meetingSearchHits.indices.contains(index) {
+                meetingSearchIndex = index
+                let hit = meetingSearchHits[index]
+                meetingTranscript.setSearch(matches: transcriptSearchRanges(), focusedSegment: hit.segment, focusedRange: hit.range)
+            }
+            restoreMeetingReadingPosition(previousPosition)
+        }
+    }
     private let summaryText = NSTextView()
     private let transcriptText = NSTextView()
     private let busyLabel = NSTextField(labelWithString: "")
@@ -776,6 +897,9 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     }
 
     private func showDetail() {
+        let previousPosition = captureMeetingReadingPosition()
+        searchTranscript = nil
+        defer { finishSearchReload(previousPosition: previousPosition) }
         let live = activeRecording.map { selected?.dir == $0.dir } ?? false
         meetingDocument?.isHidden = live && activeRecordingView != nil
         activeRecordingView?.isHidden = !live
@@ -869,13 +993,13 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         }
         summaryText.textStorage?.setAttributedString(MarkdownPreview.render(summaryPreview, fontSize: 15))
         let transcript = PostProcessor.readTranscript(dir)
+        searchTranscript = transcript
         let markdown = try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)
         let transcriptPreview = markdown ?? transcript?.rendered(
             title: item.title ?? item.name, names: SpeakerNames.read(from: dir))
             ?? localised("No transcript yet.", "Расшифровки пока нет.")
         transcriptText.textStorage?.setAttributedString(MarkdownPreview.render(transcriptPreview, fontSize: 15))
         transcriptText.identifier = markdown != nil || transcript != nil ? .init("meeting-words") : nil
-        for text in [summaryText, transcriptText] { text.scrollToBeginningOfDocument(nil) }
         guard let transcript else {
             updateButtons()
             return

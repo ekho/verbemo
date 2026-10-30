@@ -42,7 +42,7 @@
 
 ## Task 1 — Контекст чтения и локальный поиск Mac
 
-**Прогресс 30.10:** pure matcher и 3 новых теста готовы, вместе с 13 исходными тестами контроллера прошли 16 проверок. Интеграция в UI и оставшиеся проверки Task 1 ещё не выполнены. [Свидетельства](../../ux/redesign-2026-10/evidence-72/progress.md).
+**Прогресс 30.10:** matcher и методы контроллера/расшифровки готовы, прошли 35 focused tests. Видимое поле поиска ещё не подключено; scroll/resize и оставшиеся проверки Task 1 впереди. При 0% лимита работа остановлена. [Свидетельства](../../ux/redesign-2026-10/evidence-72/progress.md).
 
 **Files:** создать `MeetingTextSearch.swift` / `MeetingTextSearchTests.swift`; изменить `MeetingLibraryController.swift`, `MeetingTranscriptView.swift`, `MeetingLibraryControllerTests.swift`.
 

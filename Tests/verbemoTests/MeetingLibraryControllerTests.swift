@@ -104,6 +104,87 @@ struct MeetingLibraryControllerTests {
         }
     }
 
+    @Test("Meeting search follows the selected version and restores the result tab")
+    func searchSelectedVersion() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-search", in: root)
+        try Self.transcribe(dir)
+        try Data("# Archive\n\nOld **beacon**.".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        try TranscriptVersions.archiveCurrent(dir)
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-10-30T10:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Current compass")]).write(to: dir)
+        try Data("New summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        let before = try Data(contentsOf: dir.appendingPathComponent("transcript.json"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        let versions = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }
+            .first { $0.identifier?.rawValue == "transcript-versions" })
+        library.setMeetingSearchQuery("compass")
+        #expect(library.meetingSearchHits.count == 1)
+        versions.selectItem(at: 0)
+        _ = NSApp.sendAction(try #require(versions.action), to: versions.target, from: versions)
+        #expect(library.meetingSearchQuery.isEmpty)
+        library.setMeetingSearchQuery("compass")
+        #expect(library.meetingSearchHits.isEmpty)
+        library.setMeetingSearchQuery("")
+        let transcriptTab = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.result.transcript" })
+        _ = NSApp.sendAction(try #require(transcriptTab.action), to: transcriptTab.target, from: transcriptTab)
+        library.setMeetingSearchQuery("beacon")
+        #expect(library.meetingSearchHits.count == 1)
+        library.moveMeetingSearch(forward: true)
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "summary")
+        library.setMeetingSearchQuery("")
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript")
+        #expect(try Data(contentsOf: dir.appendingPathComponent("transcript.json")) == before)
+    }
+
+    @Test("Search wraps, ignores unreadable summaries and clears on meeting change")
+    func searchNavigationAndMeetingChange() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-search", in: root)
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-10-30T10:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Needle needle")]).write(to: dir)
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("summary.md"), withIntermediateDirectories: true)
+        try Self.session("2026-09-28-090000-empty", in: root)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        library.setMeetingSearchQuery("needle")
+        #expect(library.meetingSearchHits.count == 2)
+        library.moveMeetingSearch(forward: false)
+        #expect(library.meetingSearchIndex == 1)
+        library.moveMeetingSearch(forward: true)
+        #expect(library.meetingSearchIndex == 0)
+        library.moveMeetingSearch(forward: true)
+        #expect(library.meetingSearchIndex == 1)
+        library.refresh()
+        await library.settled()
+        #expect(library.meetingSearchQuery == "needle")
+        #expect(library.meetingSearchIndex == 1, "Unchanged background reload preserves the selected match")
+        library.setMeetingSearchQuery("need")
+        #expect(library.meetingSearchIndex == nil)
+        library.setMeetingSearchQuery("")
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "summary", "Editing query must retain the first origin")
+        library.setMeetingSearchQuery("needle")
+        library.moveMeetingSearch(forward: true)
+        let list = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? MeetingTableView)
+        list.selectRowIndexes([list.selectedRow == 0 ? 1 : 0], byExtendingSelection: false)
+        #expect(library.meetingSearchQuery.isEmpty)
+        #expect(library.meetingSearchHits.isEmpty)
+        library.setMeetingSearchQuery("")
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript", "Clear cannot restore another meeting's tab")
+        library.setMeetingSearchQuery("No summary")
+        #expect(library.meetingSearchHits.isEmpty, "Placeholders are not meeting content")
+    }
+
     @Test("Selecting another recording replaces both previews, including missing files")
     func previewsFollowSelection() throws {
         let root = try Self.folder()

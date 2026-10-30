@@ -5,6 +5,34 @@ import AppKit
 final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableViewDelegate {
     var onPlayFrom: ((TimeInterval) -> Void)?
     var onAssign: ((String, CalendarParticipant?, String?) throws -> Void)?
+    struct ReadingPosition { let segment: Int; let offset: CGFloat }
+    private var searchRanges: [Int: [NSRange]] = [:]
+    private var focusedSearch: (segment: Int, range: NSRange)?
+    func readingPosition() -> ReadingPosition? {
+        let rows = table.rows(in: documentVisibleRect)
+        guard rows.location != NSNotFound, rows.length > 0 else { return nil }
+        return .init(segment: rows.location, offset: documentVisibleRect.minY - table.rect(ofRow: rows.location).minY)
+    }
+    func restoreReadingPosition(_ position: ReadingPosition?) {
+        guard let position, segments.indices.contains(position.segment) else { return }
+        table.layoutSubtreeIfNeeded()
+        let y = table.rect(ofRow: position.segment).minY + position.offset
+        contentView.scroll(to: NSPoint(x: 0, y: max(0, min(y, table.bounds.height - contentView.bounds.height))))
+        reflectScrolledClipView(contentView)
+    }
+    func setSearch(matches: [Int: [NSRange]], focusedSegment: Int? = nil, focusedRange: NSRange? = nil) {
+        let nextFocus = focusedSegment.flatMap { segment in focusedRange.map { (segment: segment, range: $0) } }
+        guard searchRanges != matches || focusedSearch?.segment != nextFocus?.segment || focusedSearch?.range != nextFocus?.range else { return }
+        let position = readingPosition()
+        searchRanges = matches
+        focusedSearch = nextFocus
+        table.reloadData()
+        restoreReadingPosition(position)
+    }
+    func revealSearchSegment(_ index: Int) {
+        guard segments.indices.contains(index) else { return }
+        table.scrollRowToVisible(index)
+    }
     private let table = NSTableView()
     private var segments: [Transcript.Segment] = []
     private var names: SpeakerNames?
@@ -59,7 +87,12 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.time.isEnabled = canPlay
         cell.time.toolTip = localised("Play from \(cell.time.title)", "Воспроизвести с \(cell.time.title)")
         cell.time.setAccessibilityLabel(cell.time.toolTip)
-        cell.body.stringValue = segment.text
+        let text = NSMutableAttributedString(string: segment.text, attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: JournalStyle.ink])
+        for range in searchRanges[row] ?? [] where NSMaxRange(range) <= text.length {
+            let active = focusedSearch?.segment == row && focusedSearch?.range == range
+            text.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(active ? 0.65 : 0.25), range: range)
+        }
+        cell.body.attributedStringValue = text
         cell.body.preferredMaxLayoutWidth = max(160, tableView.tableColumns[0].width - 20)
         let editor = SpeakerAssignmentEditor(speaker: segment.speaker, title: Self.speakerTitle(segment.speaker, in: segments),
             entry: SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker],
