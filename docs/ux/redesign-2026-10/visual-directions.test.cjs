@@ -105,3 +105,21 @@ assert.deepEqual(Array.from(added,m=>m.title),['sample-a.wav','sample-b.mp4']);
 assert.ok(added.every(m=>m.status==='deferred'&&m.versions.current.segments.length===0));
 assert.equal(importCtx.s.page,'meeting');assert.equal(importCtx.s.selected,added[1].id);
 console.log('PASS file selection uses names only, supports a batch and leaves cancellation unchanged.');
+
+const filterHandlers={};let filterFocus,filterOpen=false,clearedFind=false;
+const filterState={filter:'all',query:'Атлас',localQuery:'решение',find:true,selected:'short',playing:true,time:42};
+const filterCtx=vm.createContext({s:filterState,document:{addEventListener:(type,handler)=>{filterHandlers[type]=handler;}},
+  $:id=>id==='editor'?{open:false}:{matches:()=>filterOpen},render:id=>{filterFocus=id;},
+  endFind:()=>{clearedFind=true;}});
+vm.runInContext(html.slice(html.indexOf("document.addEventListener('change'"),html.indexOf("document.addEventListener('beforetoggle'")),filterCtx);
+const preservedFilterContext=JSON.stringify({...filterState,filter:undefined});
+for(const value of ['attention','processing','all']){
+  filterHandlers.change({target:{name:'meeting-filter',value}});
+  assert.equal(filterState.filter,value);assert.equal(filterFocus,'filter-button');
+  assert.equal(JSON.stringify({...filterState,filter:undefined}),preservedFilterContext,'filtering must preserve search, selection and playback');
+}
+vm.runInContext(html.slice(html.indexOf("document.addEventListener('keydown'"),html.indexOf("$('editor').addEventListener('cancel'")),filterCtx);
+const escape={key:'Escape',target:{getAttribute:()=>null}};
+filterOpen=true;filterHandlers.keydown(escape);assert.equal(clearedFind,false,'Escape in the filter must not also clear meeting search');
+filterOpen=false;filterHandlers.keydown(escape);assert.equal(clearedFind,true,'existing search Escape works after the filter closes');
+console.log('PASS filtering preserves the meeting context; popover Escape does not clear meeting search.');

@@ -1,8 +1,8 @@
 {
   "date": "2026-10-30",
-  "artifact_sha256": "4258b718b314f9b9b7391e3c0384c113c7485a0c09b5a256bbb765874b373ea8",
+  "artifact_sha256": "1280e129d76b2a1e798e455bc6ad91e04e84c5071a73499fce9c0148ec463bf7",
   "baseline_commit": "1bdd09f",
-  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import; shared player directly below meeting title",
+  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import; shared player directly below meeting title; library filter popover next to search",
   "state_model_checks": 9,
   "text_contrast_pairs_checked": 42,
   "text_contrast_minimum": 4.5,
@@ -10,7 +10,7 @@
   "native_mac_gui_checked": false,
   "native_windows_gui_checked": false,
   "user_choice": "Studio: compactness and separate speaker column",
-  "review": "self-reviewed player-placement iteration; focused checks and browser verification; no independent review of this iteration",
+  "review": "self-reviewed filter-popover iteration; focused checks and browser verification; no independent review of this iteration",
   "screenshots": {
     "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
     "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
@@ -35,10 +35,11 @@
     "21-notice-and-summary-refresh.png": "7c9a9ccbd0d7117193413b35f669f037f9c01dad97e564fd1d43039c0ad7e2aa",
     "22-regenerate-icons-dark-en.png": "161d2ee3ab685146a517f024b794e48a1bf39d8eb9eafcc42ab1a5061f049dba",
     "23-direct-file-import.png": "7fa7a9ae839c138c73c67bb3bfb91ec508303d2617f7f25ce100d33609702159",
-    "24-player-below-title.png": "d5ef40ad23a4c5d95c5984913930cc7d61f53c8a4514fe70f61842f28cd9eb6c"
+    "24-player-below-title.png": "d5ef40ad23a4c5d95c5984913930cc7d61f53c8a4514fe70f61842f28cd9eb6c",
+    "25-library-filter-popover.png": "8a144f94c114e56b84ad1b121668bd6810213fb6f28c380e86a5a421452cadb3"
   },
   "first_round_artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
-  "presentation_logic_checks": 5,
+  "presentation_logic_checks": 6,
   "screenshot_rounds": {
     "first_round": "01-15, before refinement",
     "studio_refinement": "16-18, layout refinement before action icons",
@@ -114,6 +115,27 @@
     "no_app_horizontal_overflow": true,
     "javascript_errors": 0,
     "narrow_and_large_text_rechecked": false,
+    "native_checked": false
+  },
+  "player_placement_sha256": "4258b718b314f9b9b7391e3c0384c113c7485a0c09b5a256bbb765874b373ea8",
+  "filter_popover_verification": {
+    "viewport": [
+      1148,
+      954
+    ],
+    "light_ru": true,
+    "filter_result_counts": {
+      "all": 5,
+      "processing": 1,
+      "attention": 1
+    },
+    "selection_closes_and_returns_focus": true,
+    "active_filter_indicator": true,
+    "enter_and_escape": true,
+    "outside_click": true,
+    "no_app_horizontal_overflow": true,
+    "javascript_errors": 0,
+    "other_sizes_and_themes_rechecked": false,
     "native_checked": false
   }
 }
