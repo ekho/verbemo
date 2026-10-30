@@ -10,7 +10,7 @@
 
 **Spec:** [Компоненты](../../ux/redesign-2026-10/04-component-spec.md), [объём и P01–P09](../../ux/redesign-2026-10/05-native-pilots.md), [структура A](../../ux/redesign-2026-10/03-structure-and-flows.md).
 
-**Status:** Предложение от 30.10.2026; код не реализован. Переход к Task 1 после согласования объёма. Mac-приёмка предшествует Windows-реализации. Все новые имена типов/функций ниже — проектируемые интерфейсы.
+**Status:** Объём одобрен пользователем 30.10.2026; выполнение начато с Task 1. Исходная ревизия `6148bbc`; макет #71 принят. Mac-приёмка предшествует Windows-реализации. Все новые имена типов/функций ниже — проектируемые интерфейсы.
 
 ## Global Constraints
 
@@ -42,6 +42,8 @@
 
 ## Task 1 — Контекст чтения и локальный поиск Mac
 
+**Прогресс 30.10:** pure matcher и 3 новых теста готовы, вместе с 13 исходными тестами контроллера прошли 16 проверок. Интеграция в UI и оставшиеся проверки Task 1 ещё не выполнены. [Свидетельства](../../ux/redesign-2026-10/evidence-72/progress.md).
+
 **Files:** создать `MeetingTextSearch.swift` / `MeetingTextSearchTests.swift`; изменить `MeetingLibraryController.swift`, `MeetingTranscriptView.swift`, `MeetingLibraryControllerTests.swift`.
 
 **Interfaces**
@@ -67,6 +69,7 @@
 - [ ] Добавить focused проверки callback: одно действие — один вызов; программное обновление snapshot не выбирает версию повторно. Сохранить regression-проверку возвращения из настроек к той же встрече.
 - [ ] Порядок workspace: строка названия/деталей AppKit → существующий плеер → header (версия/поиск, затем вкладки) → содержимое. Встроить header, согласовать intrinsic height с Auto Layout. Добавить native tooltip/accessibility labels, команды ⌘F/Enter/Shift+Enter/Escape, не перехватывая ввод текста у чужих контролов. Фокус в поле переживает обновление count.
 - [ ] Применить StudioStyle локально: роль цвета/шрифта/интервалов из спецификации. Сохранить системный focus ring/contrast settings. Библиотечный фильтр подписать «Название встречи», убрать только дублирующее действие глобального поиска, если оно существует в native shell.
+- [ ] Сохранить/добавить нативный изменяемый разделитель библиотеки и возврат её ширины после скрытия; ограничения ширины и клавиатурное управление проверить в P07/P08.
 - [ ] Проверить узкое окно и крупный текст: header может прокручиваться, плеер/текст остаются достижимы. Не ставить фиксированную высоту, отсекающую переносы.
 - [ ] `swift test --no-parallel --filter 'StudioMeetingHeaderTests|JournalWorkspaceTests|MeetingLibraryControllerTests'` и `swift build`. GUI smoke: Tab туда/обратно через SwiftUI/AppKit, ⌘F, смена версии, resize. Commit: `feat(ux): host Studio meeting header in SwiftUI`.
 
@@ -80,6 +83,7 @@
 
 - [ ] Добавить failing tests: rename в архиве не затрагивает current; cancel ничего не пишет; busy/unknown не позволяет запрещённое назначение; обработка ошибки сохраняет ввод. Сохранять повторную проверку версии и canEdit перед записью.
 - [ ] Перестроить только представление NSTableView-строк: 190 + 16 + body, padding 10, перенос при нехватке места; row height вычислять из фактической ширины/шрифта/имени. Сохранить reuse и selectable text, не создавать hosting view на каждую строку.
+- [ ] Во вкладке «Участники» встроить имя и выбор участника прямо в строку, первые три реплики и icon-only playback. Имя сохраняется по blur/Enter, выбор сразу, Escape отменяет черновик; ошибка сохраняет ввод. Не дублировать сервис записи и проверку версии.
 - [ ] Карандаш открывает существующий editor в popover с Save/Cancel и областью действия. Ввод является черновиком до Save; закрытие popover ничего не записывает. Существующий cleanup dropdown accessibility в `SpeakerAssignmentChoice` сохранить. После read-back вернуть позицию и фокус по устойчивому speaker/segment identity.
 - [ ] Плеер: иконки Play/Pause/Stop и доступные имена отражают фактическое состояние, включая конец и ошибку. Смена вида/поиск/rename не пересоздаёт player. Проверить смещения sources и все существующие скорости/volume.
 - [ ] `swift test --no-parallel --filter 'SpeakerAssignmentTests|MeetingPlaybackTests|MeetingLibraryControllerTests|JournalWorkspaceTests'`. GUI проверить rapid scroll/resize и назначение на 180 репликах, копирование RU/emoji, stop/replay. Commit: `feat(ux): compact transcript and playback controls`.

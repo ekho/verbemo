@@ -1,0 +1,18 @@
+# #72 — начало нативного пилота macOS
+
+30.10.2026. Пользователь одобрил объём и реализацию; исходный commit `6148bbc`. #71 принята, нативная приёмка остаётся впереди.
+
+## Выполнено
+
+- Обновлены объём и план: прямое редактирование участников, три примера реплик, icon-only playback, регулируемая библиотека.
+- Добавлен чистый `MeetingTextSearch.matches(in:query:)`: неперекрывающиеся совпадения без учёта регистра, trim запроса, диапазоны UTF-16 исходного текста, без regex и удаления диакритики.
+- Исходный `swift test --no-parallel --filter MeetingLibraryControllerTests`: 13 tests / 1 suite passed.
+- RED: новые `MeetingTextSearchTests` не собирались с `cannot find MeetingTextSearch in scope` до реализации.
+- GREEN: `swift test --no-parallel --filter 'MeetingTextSearchTests|MeetingLibraryControllerTests'`: 16 tests / 2 suites passed. Проверены кириллица/латиница, emoji перед совпадением, повторения, буквальная точка, различие cafe/café, пустой и отсутствующий запрос.
+- Первый запуск SwiftPM в sandbox упёрся в недоступный compiler cache; проверка успешно повторена с разрешённым доступом к кэшу.
+
+## Продолжение
+
+Task 1 НЕ завершена. Следом подключить matcher к контроллеру выбранной встречи/версии, добавить SearchHit и сохранение/возврат позиции, подсветку/навигацию и интеграционные тесты. Сейчас helper ещё не вызывается интерфейсом. Затем Task 2: SwiftUI-шапка внутри AppKit и разделитель библиотеки; Task 3: реплики/участники/плеер; Task 4: отдельная QA-сборка и P01–P09. Windows только после Mac-приёмки.
+
+GUI bundle, реальный player, VoiceOver и Windows не проверялись; исходные данные/форматы и установленное приложение не менялись. Полный набор tests не запускался. Логи текущего хоста: `/tmp/verbemo-ux72-baseline.log`, `/tmp/verbemo-ux72-search-red.log`, `/tmp/verbemo-ux72-search-green.log`.
