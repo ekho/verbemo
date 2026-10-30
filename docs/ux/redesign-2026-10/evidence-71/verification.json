@@ -1,8 +1,8 @@
 {
   "date": "2026-10-30",
-  "artifact_sha256": "bc8723258d2902b64ba80b96a0b52b495f5a72adcf74e79a73a5d4be9de706dd",
+  "artifact_sha256": "941d44d762e9aee5604de94d239c2ebe1b738501163eb0f21e8a690c3fcfcdd7",
   "baseline_commit": "1bdd09f",
-  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import; shared player directly below meeting title; library filter popover next to search; full-width new-recording title and simulated calendar selection; silent-audio status icon",
+  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import; shared player directly below meeting title; library filter popover next to search; full-width new-recording title and simulated calendar selection; silent-audio status icon; inline participant editing with excerpts and resizable library",
   "state_model_checks": 9,
   "text_contrast_pairs_checked": 42,
   "text_contrast_minimum": 4.5,
@@ -10,7 +10,7 @@
   "native_mac_gui_checked": false,
   "native_windows_gui_checked": false,
   "user_choice": "Studio: compactness and separate speaker column",
-  "review": "self-reviewed silent-audio icon iteration; focused checks and browser verification; no independent review of this iteration",
+  "review": "self-reviewed inline participant/resizing iteration; focused tests and browser verification; no independent review",
   "screenshots": {
     "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
     "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
@@ -38,10 +38,11 @@
     "24-player-below-title.png": "d5ef40ad23a4c5d95c5984913930cc7d61f53c8a4514fe70f61842f28cd9eb6c",
     "25-library-filter-popover.png": "8a144f94c114e56b84ad1b121668bd6810213fb6f28c380e86a5a421452cadb3",
     "26-recording-calendar.png": "f026819268678007dd34093403da45f3bbd52f4570aaad6425ffa9b74db24ed1",
-    "27-player-silent-icon.png": "8f8fe24329ff73736b8541bf2442b93d22c0b5eccab3ea8012db8424de19da56"
+    "27-player-silent-icon.png": "8f8fe24329ff73736b8541bf2442b93d22c0b5eccab3ea8012db8424de19da56",
+    "28-inline-participants.png": "ec50a5c03763bdffd097a9df82df44f406a9c2a42f45b5a0dff82dc8feff66b0"
   },
   "first_round_artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
-  "presentation_logic_checks": 8,
+  "presentation_logic_checks": 10,
   "screenshot_rounds": {
     "first_round": "01-15, before refinement",
     "studio_refinement": "16-18, layout refinement before action icons",
@@ -169,6 +170,33 @@
     "ru_en_accessible_names_and_title": true,
     "static_status_not_button": true,
     "other_sizes_and_themes_rechecked": false,
+    "native_checked": false
+  },
+  "silent_icon_sha256": "bc8723258d2902b64ba80b96a0b52b495f5a72adcf74e79a73a5d4be9de706dd",
+  "participant_resize_verification": {
+    "wide_viewport": [
+      1280,
+      720
+    ],
+    "screenshot_viewport": [
+      864,
+      954
+    ],
+    "narrow_frame": [
+      760,
+      600
+    ],
+    "inline_match_and_manual_name": true,
+    "transcript_reflects_name": true,
+    "sample_seek": true,
+    "mouse_width_px": [
+      264,
+      332
+    ],
+    "keyboard_width_px": 348,
+    "width_retained_after_hide_show": true,
+    "dark_en_no_workspace_overflow": true,
+    "javascript_errors": 0,
     "native_checked": false
   }
 }

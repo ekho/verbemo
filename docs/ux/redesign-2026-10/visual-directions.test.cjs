@@ -114,12 +114,12 @@ const filterCtx=vm.createContext({s:filterState,document:{addEventListener:(type
 vm.runInContext(html.slice(html.indexOf("document.addEventListener('change'"),html.indexOf("document.addEventListener('beforetoggle'")),filterCtx);
 const preservedFilterContext=JSON.stringify({...filterState,filter:undefined});
 for(const value of ['attention','processing','all']){
-  filterHandlers.change({target:{name:'meeting-filter',value}});
+  filterHandlers.change({target:{name:'meeting-filter',value,matches:()=>false}});
   assert.equal(filterState.filter,value);assert.equal(filterFocus,'filter-button');
   assert.equal(JSON.stringify({...filterState,filter:undefined}),preservedFilterContext,'filtering must preserve search, selection and playback');
 }
 vm.runInContext(html.slice(html.indexOf("document.addEventListener('keydown'"),html.indexOf("$('editor').addEventListener('cancel'")),filterCtx);
-const escape={key:'Escape',target:{getAttribute:()=>null}};
+const escape={key:'Escape',target:{getAttribute:()=>null,matches:()=>false}};
 filterOpen=true;filterHandlers.keydown(escape);assert.equal(clearedFind,false,'Escape in the filter must not also clear meeting search');
 filterOpen=false;filterHandlers.keydown(escape);assert.equal(clearedFind,true,'existing search Escape works after the filter closes');
 console.log('PASS filtering preserves the meeting context; popover Escape does not clear meeting search.');
@@ -155,3 +155,28 @@ const linked=importCtx.UX70.current(importCtx.s);assert.equal(linked.title,'Мо
 recordingFields['record-event'].value='';recordingFields['record-event'].onchange();assert.equal(recordingFields['record-title'].value,'Моё название','unlink preserves the title');
 importCtx.startDemoRecording('Без события',null);assert.equal(importCtx.UX70.current(importCtx.s).calendarEvent,null);
 console.log('PASS recording drafts prefill and replace event titles, preserve later edits and retain the chosen event when started.');
+
+vm.runInContext(html.slice(html.indexOf('function clampedLibraryWidth('),html.indexOf('function resizeLibrary(')),ctx);
+assert.equal(ctx.clampedLibraryWidth(180,1100),220);
+assert.equal(ctx.clampedLibraryWidth(600,1100),480);
+assert.equal(ctx.clampedLibraryWidth(480,850),430);
+assert.equal(ctx.clampedLibraryWidth(320,1100),320);
+console.log('PASS library resize preserves minimum content width and clamps both bounds.');
+
+vm.runInContext(html.slice(html.indexOf('function applyInlinePerson('),html.indexOf('function clampedLibraryWidth(')),importCtx);
+importCtx.s.selected='short';const inlineMeeting=importCtx.UX70.current(importCtx.s),inlineVersion=importCtx.UX70.view(importCtx.s);
+const input={value:'Ручное имя'},choice={value:''},row={dataset:{meeting:'short',version:'current',speaker:'them C'},querySelector:selector=>selector==='[data-person-name]'?input:choice};
+const control=linked=>({closest:()=>row,hasAttribute:()=>linked});
+const archive=JSON.stringify(inlineMeeting.versions.previous);
+choice.value='ux69-2';importCtx.applyInlinePerson(control(true));
+assert.equal(inlineMeeting.versions.current.names['them C'].participantID,'ux69-2');
+assert.equal(input.value,'Вера Макетная');
+importCtx.applyInlinePerson(control(false));assert.equal(choice.value,'ux69-2','leaving an unchanged name must retain its link');
+input.value='Моё имя';importCtx.applyInlinePerson(control(false));
+assert.equal(inlineMeeting.versions.current.names['them C'].name,'Моё имя');assert.equal(choice.value,'');
+assert.equal(inlineMeeting.versions.current.names['them C'].participantID,null);
+assert.equal(JSON.stringify(inlineMeeting.versions.previous),archive);
+row.dataset.version='previous';input.value='Устаревший ввод';importCtx.applyInlinePerson(control(false));
+assert.equal(inlineMeeting.versions.current.names['them C'].name,'Моё имя');
+row.dataset.version='current';row.dataset.speaker='them ?';importCtx.applyInlinePerson(control(false));assert.equal(inlineMeeting.versions.current.names['them ?'],undefined);
+console.log('PASS inline matching and manual names preserve version scope and reject stale/unknown voices.');

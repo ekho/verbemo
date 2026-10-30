@@ -26,7 +26,7 @@ h2{font-size:18px;margin-bottom:12px}h3{font-size:15px}.row{display:flex;align-i
 .stage{overflow:auto;padding:12px}.app{container:app / inline-size;background:var(--paper);border:1px solid var(--line);width:100%;height:calc(100dvh - 90px);min-height:510px;margin:0 auto;display:flex;flex-direction:column;position:relative}
 .toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .brand{font-size:17px;font-weight:650;margin-right:auto}.toolbar button{font-size:13px}
-.layout{display:grid;grid-template-columns:264px minmax(0,1fr);min-height:0;flex:1}
+.layout{display:grid;grid-template-columns:var(--library-width,264px) minmax(0,1fr);min-height:0;flex:1}
 .layout.no-list{grid-template-columns:minmax(0,1fr)}.layout.no-list>.library{display:none}
 .library{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .library-head{padding:14px 12px 8px}.library-head label{font-size:12px;display:block;margin-bottom:5px}.library-head select{width:100%;margin-top:9px;font-size:12px}
@@ -93,7 +93,7 @@ body[data-platform=win]{font-family:"Segoe UI Variable","Segoe UI",system-ui,san
 .app,dialog{font-size:calc(14px * var(--text-scale))}button,input,select{border-radius:var(--corner)}.app button,.app input,.app select{font-size:calc(13px * var(--text-scale));min-height:32px}
 .app button{font-weight:500}.app button.primary,dialog button.primary{background:var(--accent);border-color:var(--accent);color:var(--paper)}.app button.primary:hover,dialog button.primary:hover{filter:brightness(.9);background:var(--accent)}
 .toolbar{padding:10px 16px;gap:8px;background:var(--paper)}.brand{font-size:19px;font-weight:700;letter-spacing:-.025em}.toolbar #toggle-list,.toolbar #back-settings{background:var(--surface);border-color:transparent}.toolbar #global-button{color:var(--accent)}
-.layout{grid-template-columns:264px minmax(0,1fr)}.layout.no-list{grid-template-columns:minmax(0,1fr)}.library-head{padding:20px 14px 10px}.library-head label{font-size:calc(12px * var(--text-scale));color:var(--muted)}
+.layout{grid-template-columns:var(--library-width,264px) minmax(0,1fr)}.layout.no-list{grid-template-columns:minmax(0,1fr)}.library-head{padding:20px 14px 10px}.library-head label{font-size:calc(12px * var(--text-scale));color:var(--muted)}
 .meeting-list{padding:0 8px 12px}.meeting{padding:14px 12px;margin:3px 0;border-radius:var(--corner)}.meeting strong{font-size:calc(13px * var(--text-scale));font-weight:650;line-height:1.45}.meeting small,.list-note,.snippet{font-size:calc(12px * var(--text-scale));line-height:1.5}.meeting[aria-current=true]{outline:none;background:var(--selected)}.meeting[aria-current=true] strong{color:var(--accent)}
 .heading{padding:22px 28px 0}.heading h1{font-size:calc(22px * var(--text-scale));letter-spacing:-.02em;line-height:1.3;font-weight:670}.heading .meta{margin-top:12px;font-size:calc(12px * var(--text-scale))}.heading .meta select{max-width:240px}.heading .meta #find-button{background:none;color:var(--accent);border-color:transparent}
 .tabs{gap:24px;margin-top:12px}.app .tabs button{padding:12px 0;font-weight:500;color:var(--muted);border-radius:0}.app .tabs button[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent);font-weight:650}
@@ -171,6 +171,17 @@ body[data-text-large=true] .meeting-search{flex-basis:100%;margin-top:4px}
 .filter-popover fieldset{border:0;margin:0;padding:0;min-width:0}.filter-popover legend{font-weight:600;margin-bottom:8px}.filter-popover label{display:flex;align-items:center;gap:8px;margin:0;padding:8px 4px;font-size:inherit;cursor:pointer}.filter-popover input{min-height:0;margin:0;accent-color:var(--accent)}
 .demo [hidden]{display:none}
 .heading.title-heading{padding-bottom:12px}.heading.controls-heading{padding-top:0}
+/* Direct participant editing and adjustable library width. */
+.library{position:relative;min-width:0}
+.library-resizer{position:absolute;right:-4px;top:0;bottom:0;width:8px;z-index:3;cursor:col-resize;touch-action:none}
+.library-resizer:hover,.library-resizer:focus-visible{background:var(--accent);opacity:.6}
+.person{padding:12px 0}.person-editor{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.person-editor label{flex:1 1 190px;margin:0;min-width:0}.person-editor input,.person-editor select{width:100%;min-width:0}
+.person-editor small{white-space:nowrap}.person-samples{margin:10px 0 0 34px;display:grid;gap:7px}
+.person-sample{display:grid;grid-template-columns:28px 44px minmax(0,1fr);align-items:start;gap:8px}
+.person-sample button{min-height:26px;width:26px;padding:4px;border:0;background:none}.person-sample time{font-size:12px;color:var(--muted);padding-top:4px}
+.person-sample p{margin:0;line-height:1.5;font-size:calc(13px * var(--text-scale));display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+@container app (max-width:900px){.library-resizer{display:none}.person-samples{margin-left:0}}
 </style>
 </head>
 <body data-visual="studio" data-platform="mac">
@@ -271,7 +282,7 @@ const UX70 = (() => {
 globalThis.UX70=UX70;
 if(typeof document!=='undefined') {
 const data=JSON.parse(document.getElementById('fixture-data').textContent);
-let s=UX70.createState(data),undoTimer,jobTimer,editorContext,focusReturn,findOrigin=null,dismissedJobNotice=null,demoCalendarState='granted';
+let s=UX70.createState(data),undoTimer,jobTimer,editorContext,focusReturn,findOrigin=null,dismissedJobNotice=null,demoCalendarState='granted',libraryWidth=264;
 const $=id=>document.getElementById(id),T=(ru,en)=>s.language==='en'?en:ru;
 const E=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const actionIcons={'toggle-list':'sidebar','global':'search','clear-global':'close','find':'search','close-find':'close','next-hit':'next','edit':'pencil','cancel-dialog':'close','unlink':'unlink','details':'details','settings':'settings','back-settings':'back','categories':'back','play':'play','stop-play':'stop','seek':'play','open-current':'next','summary':'summary-refresh','transcribe':'transcript-refresh','retry-job':'processing','job-view':'processing','job-success':'ready','job-error':'error','cancel-job':'close','record':'recording','recording-view':'recording','stop-record':'stop','import':'import','rename':'pencil','delete':'trash','undo':'undo','dismiss':'close'};
@@ -338,7 +349,7 @@ function meetingStatusIcon(m){const [key,label]=meetingStatus(m);return '<span c
 function library(){
  const results=UX70.search(s,s.query),seen=new Set(),matches=s.query.trim()?results.filter(r=>{if(seen.has(r.meeting))return false;seen.add(r.meeting);return true;}):s.meetings.filter(m=>!m.deleted).map(m=>({meeting:m.id}));
  const rows=matches.filter(r=>{const m=s.meetings.find(m=>m.id===r.meeting);return s.filter==='all'||(s.filter==='attention'?m.status==='failed'||s.job?.meeting===m.id&&s.job.status==='error':m.status==='deferred'||UX70.active(s.job)&&s.job.meeting===m.id);});
- return '<aside class="library" aria-label="'+T('Библиотека','Library')+'"><div class="library-head"><label for="global-search">'+T('По всей библиотеке','Search entire library')+'</label><div class="library-search-row"><input id="global-search" type="search" value="'+E(s.query)+'" placeholder="'+T('Название, расшифровка, сводка','Title, transcript, summary')+'">'+B('filter',T('Фильтр встреч: ','Meeting filter: ')+({all:T('Все встречи','All meetings'),processing:T('В обработке','Processing'),attention:T('Требуют внимания','Need attention')}[s.filter]),'id="filter-button" popovertarget="filter-popover" data-active="'+(s.filter!=='all')+'"','filter',true)+'</div><div id="filter-popover" class="filter-popover" popover><fieldset><legend>'+T('Фильтр встреч','Meeting filter')+'</legend>'+[['all',T('Все встречи','All meetings')],['processing',T('В обработке','Processing')],['attention',T('Требуют внимания','Need attention')]].map(([k,v])=>'<label><input type="radio" name="meeting-filter" value="'+k+'" '+(s.filter===k?'checked autofocus':'')+'>'+v+'</label>').join('')+'</fieldset></div></div><div class="meeting-list" id="meeting-list">'+(rows.length?rows.map(r=>{const m=s.meetings.find(m=>m.id===r.meeting);return B('meeting','<strong>'+highlight(m.title,s.query)+'</strong><small class="meeting-meta"><span>'+E(m.date)+' · '+time(m.duration)+'</span>'+meetingStatusIcon(m)+'</small>'+(r.source?'<span class="snippet">'+({title:T('Название','Title'),transcript:T('Расшифровка','Transcript'),summary:T('Сводка','Summary')}[r.source])+' · '+highlight(r.text.slice(0,160),s.query)+'</span>':''),'class="meeting" aria-current="'+(s.selected===m.id)+'" data-id="'+m.id+'" data-source="'+(r.source||'')+'" data-index="'+(r.index||0)+'"');}).join(''):'<div class="empty"><h2>'+T('Нет совпадений','No matches')+'</h2><p>'+T('Измените запрос или фильтр. Встречи не удалены.','Change the search or filter. Your meetings are still here.')+'</p>'+B('clear-global',T('Сбросить поиск и фильтр','Clear search and filter'))+'</div>')+'</div><div class="list-note">'+T('Поиск по содержимому — демонстрация будущего поведения.','Content search demonstrates proposed behavior.')+'</div></aside>';
+ return '<aside class="library" aria-label="'+T('Библиотека','Library')+'"><div id="library-resizer" class="library-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="'+T('Ширина списка встреч','Meeting list width')+'" aria-valuemin="220" aria-valuemax="480" aria-valuenow="'+libraryWidth+'" title="'+T('Потяните для изменения ширины · стрелки влево/вправо','Drag to resize · left/right arrow keys')+'"></div><div class="library-head"><label for="global-search">'+T('По всей библиотеке','Search entire library')+'</label><div class="library-search-row"><input id="global-search" type="search" value="'+E(s.query)+'" placeholder="'+T('Название, расшифровка, сводка','Title, transcript, summary')+'">'+B('filter',T('Фильтр встреч: ','Meeting filter: ')+({all:T('Все встречи','All meetings'),processing:T('В обработке','Processing'),attention:T('Требуют внимания','Need attention')}[s.filter]),'id="filter-button" popovertarget="filter-popover" data-active="'+(s.filter!=='all')+'"','filter',true)+'</div><div id="filter-popover" class="filter-popover" popover><fieldset><legend>'+T('Фильтр встреч','Meeting filter')+'</legend>'+[['all',T('Все встречи','All meetings')],['processing',T('В обработке','Processing')],['attention',T('Требуют внимания','Need attention')]].map(([k,v])=>'<label><input type="radio" name="meeting-filter" value="'+k+'" '+(s.filter===k?'checked autofocus':'')+'>'+v+'</label>').join('')+'</fieldset></div></div><div class="meeting-list" id="meeting-list">'+(rows.length?rows.map(r=>{const m=s.meetings.find(m=>m.id===r.meeting);return B('meeting','<strong>'+highlight(m.title,s.query)+'</strong><small class="meeting-meta"><span>'+E(m.date)+' · '+time(m.duration)+'</span>'+meetingStatusIcon(m)+'</small>'+(r.source?'<span class="snippet">'+({title:T('Название','Title'),transcript:T('Расшифровка','Transcript'),summary:T('Сводка','Summary')}[r.source])+' · '+highlight(r.text.slice(0,160),s.query)+'</span>':''),'class="meeting" aria-current="'+(s.selected===m.id)+'" data-id="'+m.id+'" data-source="'+(r.source||'')+'" data-index="'+(r.index||0)+'"');}).join(''):'<div class="empty"><h2>'+T('Нет совпадений','No matches')+'</h2><p>'+T('Измените запрос или фильтр. Встречи не удалены.','Change the search or filter. Your meetings are still here.')+'</p>'+B('clear-global',T('Сбросить поиск и фильтр','Clear search and filter'))+'</div>')+'</div><div class="list-note">'+T('Поиск по содержимому — демонстрация будущего поведения.','Content search demonstrates proposed behavior.')+'</div></aside>';
 }
 function jobNoticeVisible(job){return !!job&&!(dismissedJobNotice?.job===job&&dismissedJobNotice.status===job.status);}
 function dismissJobNotice(){dismissedJobNotice={job:s.job,status:s.job?.status};}
@@ -347,11 +358,33 @@ function jobStatus(m){
  const label={queued:T('Ожидает запуска','Waiting to start'),running:T('Создаётся новый результат','Creating a new result'),cancelling:T('Отмена · завершаем очистку','Cancelling · cleaning up'),cancelled:T('Обработка отменена','Processing cancelled'),error:T('Не удалось обработать: демонстрационная ошибка','Processing failed: simulated error'),done:T('Новый результат готов','New result ready')}[j.status];
  return '<div class="notice" role="status"><div class="notice-heading"><strong>'+label+'</strong>'+B('dismiss-job-notice',T('Скрыть уведомление об обработке','Dismiss processing notification'),'','close',true)+'</div><p>'+(j.status==='done'?(j.kind==='summary'?T('Сводка текущей версии обновлена.','The current version’s summary has been updated.'):T('Прежняя версия сохранена в архиве.','The previous version is preserved in the archive.')):T('Прежний готовый результат сохранён.','The previous completed result is preserved.'))+'</p><div class="row">'+(['queued','running'].includes(j.status)?(s.platform==='mac'?B('cancel-job',T('Отменить обработку','Cancel processing')):'<small>'+T('Отмена в Windows требует отдельной проверки.','Cancellation on Windows needs separate validation.')+'</small>'):'')+(['error','cancelled'].includes(j.status)?B('retry-job',T('Повторить','Retry')):'')+(j.status==='done'&&UX70.view(s).version!=='current'?B('open-current',T('Открыть новый результат','Open new result')):'')+B('details',T('Подробности','Details'))+'</div></div>';
 }
+function participantRows(m,v,w){
+ return '<div class="transcript"><h2>'+T('Говорящие в выбранной версии','Speakers in selected version')+'</h2><p class="muted">'+T('Имя сохраняется при выходе из поля. Сопоставление применяется сразу ко всем репликам говорящего в этой версии.','Names save when leaving the field. Matching applies immediately to all turns by this speaker in this version.')+'</p>'+[...new Set(v.segments.map(x=>x.speaker))].map(key=>{
+  const turns=v.segments.filter(x=>x.speaker===key),token=key.replace('them ',''),disabled=UX70.active(s.job)&&s.job.meeting===m.id?' disabled':'';
+  const fields=key==='them ?'?'<strong>'+T('Голос не определён · назначение недоступно','Unknown voice · assignment unavailable')+'</strong>':'<label><span class="sr">'+T('Имя говорящего ','Speaker name ')+E(token)+'</span><input id="inline-name-'+E(token)+'" data-person-name type="text" maxlength="120" value="'+E(v.names[key]?.name||'')+'" placeholder="'+E(name(v,key))+'"'+disabled+'></label><label><span class="sr">'+T('Сопоставить говорящего ','Match speaker ')+E(token)+'</span><select id="inline-match-'+E(token)+'" data-person-match'+disabled+'><option value="">'+T('Без связи · своё имя','Unlinked · custom name')+'</option>'+m.people.map(p=>'<option value="'+E(p.id)+'" '+(v.names[key]?.participantID===p.id?'selected':'')+'>'+E(p.name)+'</option>').join('')+'</select></label>';
+  return '<div class="person" data-meeting="'+E(m.id)+'" data-version="'+E(w.version)+'" data-speaker="'+E(key)+'"><div class="person-editor"><span class="voice">'+E(token)+'</span>'+fields+'<small>'+turns.length+' '+T('реплик','turns')+'</small></div><div class="person-samples">'+turns.slice(0,3).map(seg=>'<div class="person-sample">'+B('seek',T('Прослушать с ','Listen from ')+time(seg.start_ms/1000),'data-time="'+seg.start_ms/1000+'"','play',true)+'<time>'+time(seg.start_ms/1000)+'</time><p title="'+E(seg.text)+'">'+E(seg.text)+'</p></div>').join('')+'</div></div>';
+ }).join('')+'</div>';
+}
+function applyInlinePerson(el){
+ const row=el.closest('.person'),m=UX70.current(s),input=row.querySelector('[data-person-name]'),select=row.querySelector('[data-person-match]');
+ const linked=el.hasAttribute('data-person-match'),person=linked?m?.people.find(p=>p.id===select.value):null;
+ const newName=person?person.name:input.value;
+ if(!linked&&newName.trim()===(m?.versions[row.dataset.version]?.names[row.dataset.speaker]?.name||''))return;
+ const ok=UX70.assign(s,{meeting:row.dataset.meeting,version:row.dataset.version,speaker:row.dataset.speaker,name:newName,participantID:person?.id||null});
+ if(ok){input.value=newName.trim();select.value=person?.id||'';}
+ announce(ok?T('Сохранено для всех реплик говорящего в выбранной версии.','Saved for all turns by this speaker in the selected version.'):T('Контекст изменился. Назначение не применено.','Context changed. Assignment was not applied.'));
+}
+function clampedLibraryWidth(width,available){return Math.max(220,Math.min(width,480,available-420));}
+function resizeLibrary(width){
+ libraryWidth=clampedLibraryWidth(width,$('app').clientWidth);
+ $('app').style.setProperty('--library-width',libraryWidth+'px');
+ const handle=$('library-resizer');if(handle){handle.setAttribute('aria-valuenow',libraryWidth);handle.setAttribute('aria-valuemax',Math.min(480,$('app').clientWidth-420));}
+}
 function content(m,v,w){
  if(s.recording?.id===m.id)return '<div class="empty"><h2>'+T('Текущая запись','Current recording')+'</h2><p>'+T('Учебная сессия. Микрофон и системный звук не захватываются.','Demo session. Microphone and system audio are not captured.')+'</p><div class="notice">'+T('Текст во время записи — отдельный результат. В макете модель не запускается.','Live text is a separate result. No model runs in this prototype.')+'</div><p>'+T('Откройте другую встречу или настройки: управление записью останется внизу.','Open another meeting or settings: recording controls remain below.')+'</p></div>';
  if(!v.segments.length)return '<div class="empty"><h2>'+T('Расшифровка пока не готова','Transcript is not ready')+'</h2>'+jobStatus(m)+'<p>'+T('Синтетический импорт. Можно разыграть ожидание, ошибку и повтор без обращения к модели.','Synthetic import. Explore queued, failed and retried processing without a model.')+'</p>'+B('transcribe',T('Начать демонстрационную обработку','Start simulated processing'),UX70.active(s.job)?'disabled':'')+'</div>';
  if(w.tab==='summary')return '<div class="summary">'+jobStatus(m)+(v.summary?v.summary.split('\n').filter(Boolean).map(line=>line.startsWith('# ')?'<h2>'+highlight(line.slice(2),s.localQuery)+'</h2>':'<p>'+highlight(line,s.localQuery)+'</p>').join(''):'<div class="empty"><h2>'+T('У этой версии нет сводки','No summary for this version')+'</h2><p>'+T('Архив не подменяется сводкой текущей версии.','The archive does not show the current version’s summary.')+'</p></div>')+'<div class="row">'+B('summary',T('Создать новую сводку','Generate new summary'),(w.version!=='current'||UX70.active(s.job)?'disabled ':'')+'title="'+T('Для текущей готовой расшифровки','For the current completed transcript')+'"')+'</div></div>';
- if(w.tab==='participants')return '<div class="transcript"><h2>'+T('Говорящие в выбранной версии','Speakers in selected version')+'</h2><p class="muted">'+T('Назначение меняет все реплики этого говорящего. Приглашение не подтверждает присутствие.','An assignment changes all turns by this speaker. An invitation does not prove attendance.')+'</p>'+[...new Set(v.segments.map(x=>x.speaker))].map(key=>'<div class="person"><div class="row"><span class="voice">'+E(key.replace('them ',''))+'</span><strong>'+E(name(v,key))+'</strong><span class="actions">'+speakerButton(key,'person-'+key.replace('them ',''))+'</span></div><small>'+v.segments.filter(x=>x.speaker===key).length+' '+T('реплик','turns')+'</small> '+B('seek',T('Прослушать','Listen'),'data-time="'+(v.segments.find(x=>x.speaker===key).start_ms/1000)+'"')+'</div>').join('')+'</div>';
+ if(w.tab==='participants')return participantRows(m,v,w);
  return '<div class="transcript">'+jobStatus(m)+v.segments.map((seg,i)=>'<article class="turn" data-voice="'+E(seg.speaker.replace('them ',''))+'" id="turn-'+i+'" tabindex="-1"><div class="turn-header"><span class="speaker-identity"><span class="voice">'+E(seg.speaker.replace('them ',''))+'</span><span class="turn-name">'+E(name(v,seg.speaker))+'</span>'+speakerButton(seg.speaker,'turn-'+i)+'</span>'+B('seek',time(seg.start_ms/1000),'class="stamp" data-time="'+seg.start_ms/1000+'" aria-label="'+T('Прослушать с ','Listen from ')+time(seg.start_ms/1000)+'"')+'</div><p>'+highlight(seg.text,s.find?s.localQuery:s.query)+'</p></article>').join('')+'</div>';
 }
 function speakerButton(key,token){
@@ -456,6 +489,13 @@ function render(focusId){
  if($('meeting-list'))$('meeting-list').scrollTop=listScroll;
  const target=$(focusId||oldId);if(target){target.focus({preventScroll:true});if(caret!=null&&target.setSelectionRange)try{target.setSelectionRange(caret,caret);}catch{}}
 }
+document.addEventListener('pointerdown',e=>{
+ if(e.target.id!=='library-resizer'||e.button!==0)return;
+ e.preventDefault();const handle=e.target,start=e.clientX,width=handle.parentElement.getBoundingClientRect().width;handle.setPointerCapture(e.pointerId);
+ handle.onpointermove=event=>resizeLibrary(width+event.clientX-start);
+ handle.onlostpointercapture=()=>{handle.onpointermove=null;};
+});
+window.addEventListener('resize',()=>resizeLibrary(libraryWidth));
 function beginFind(){ $('local-search')?.focus(); }
 function setLocalQuery(query){
  saveScroll();
@@ -580,8 +620,10 @@ document.addEventListener('input',e=>{
  if(e.target.id==='seek'){s.time=Number(e.target.value);$('play-time').textContent=time(s.time)+' / '+time(UX70.current(s).duration);}
  if(e.target.id==='person-name')$('person-choice').value='';
 });
+document.addEventListener('focusout',e=>{if(e.target.matches('[data-person-name]'))applyInlinePerson(e.target);});
 document.addEventListener('change',e=>{
  const el=e.target;
+ if(el.matches('[data-person-match]')){applyInlinePerson(el);return;}
  if(el.id==='demo-calendar'){demoCalendarState=el.value;return;}
  if(el.id==='record-event')return;
  if(el.id==='import-files'){importFiles(Array.from(el.files||[]));el.value='';return;}
@@ -607,6 +649,12 @@ document.addEventListener('beforetoggle',e=>{
 },true);
 document.addEventListener('keydown',e=>{
  if($('editor').open||$('filter-popover')?.matches(':popover-open'))return;
+ if(e.target.id==='library-resizer'&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();resizeLibrary(e.key==='Home'?220:e.key==='End'?480:libraryWidth+(e.key==='ArrowRight'?16:-16));return;}
+ if(e.target.matches('[data-person-name]')){
+  if(e.key==='Enter'){e.preventDefault();e.target.blur();}
+  if(e.key==='Escape'){e.preventDefault();const row=e.target.closest('.person');e.target.value=UX70.current(s).versions[row.dataset.version].names[row.dataset.speaker]?.name||'';}
+  return;
+ }
  if(e.target.id==='local-search'&&e.key==='Enter'){e.preventDefault();const hits=UX70.search(s,s.localQuery,true);if(hits.length)jump(hits[s.hit++%hits.length],false);return;}
  if((e.metaKey||e.ctrlKey)&&e.code==='KeyF'){e.preventDefault();saveScroll();if(s.page==='settings'||s.list&&$('app').clientWidth<=900){s.page='meeting';s.list=true;render('global-search');}else{beginFind();}}
  if((e.metaKey||e.ctrlKey)&&e.code==='Comma'){e.preventDefault();saveScroll();s.page='settings';render('back-settings');}
@@ -614,7 +662,7 @@ document.addEventListener('keydown',e=>{
  if(e.target.getAttribute('role')==='tab'&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();saveScroll();const tabs=['transcript','summary','participants'];const i=tabs.indexOf(UX70.view(s).tab);UX70.view(s).tab=tabs[(i+(e.key==='ArrowRight'?1:2))%3];render('tab-'+UX70.view(s).tab);}
 });
 $('editor').addEventListener('cancel',()=>{editorContext=null;});
-$('demo-reset').onclick=()=>{clearTimeout(jobTimer);clearTimeout(undoTimer);if($('editor').open)closeDialog();s=UX70.createState(data);s.selected='short';s.settings.theme=$('visual-theme').value;if($('app').clientWidth<=900)s.list=false;render();};
+$('demo-reset').onclick=()=>{clearTimeout(jobTimer);clearTimeout(undoTimer);if($('editor').open)closeDialog();s=UX70.createState(data);resizeLibrary(264);s.selected='short';s.settings.theme=$('visual-theme').value;if($('app').clientWidth<=900)s.list=false;render();};
 setInterval(()=>{
  if(s.recording&&!s.recording.paused)s.recording.seconds++;
  if(s.playing&&UX70.current(s)){s.time=Math.min(UX70.current(s).duration,s.time+s.speed);if(s.time>=UX70.current(s).duration)s.playing=false;}
