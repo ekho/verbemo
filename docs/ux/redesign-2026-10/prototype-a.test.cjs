@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const file = path.join(__dirname, 'prototype-a.html');
+const file = path.resolve(__dirname, process.argv[2] || 'prototype-a.html');
 assert.ok(fs.existsSync(file), 'offline prototype artifact must exist');
 const html = fs.readFileSync(file, 'utf8');
 const data = JSON.parse(html.match(/<script id="fixture-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);

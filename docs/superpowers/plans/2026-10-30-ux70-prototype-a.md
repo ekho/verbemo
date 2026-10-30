@@ -55,3 +55,7 @@ This is a disposable design prototype, not product implementation. Verification 
 ## Execution evidence
 
 Model checks: 9/9 PASS. Browser scenarios and seven inspected screenshots: `docs/ux/redesign-2026-10/prototype-a-review.md`. Fresh reviewer scored all six material findings resolved after the correction batch. Native suites were not run under the prototype scope ruling. User acceptance of #70 remains pending.
+
+## Acceptance update · 2026-10-30
+
+User accepted the structure prototype and instructed us to begin #71. #70 is complete at its prototype scope; native and timed human checks remain unverified.

@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-30",
+  "artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
+  "baseline_commit": "1bdd09f",
+  "scope": "first visual direction round; no chosen direction or native implementation",
+  "state_model_checks": 9,
+  "text_contrast_pairs_checked": 42,
+  "text_contrast_minimum": 4.5,
+  "browser": "Codex in-app browser on macOS",
+  "native_mac_gui_checked": false,
+  "native_windows_gui_checked": false,
+  "user_choice": "pending",
+  "review": "ship for first selection round; reviewer saw screenshots 01–13; author checked 14",
+  "screenshots": {
+    "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
+    "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
+    "03-studio-reading.jpg": "bf525ed8c3a7e389de3f1483fdb8cc91b9b021f9770601a98f9a89bf4173e7fe",
+    "04-focus-settings.jpg": "ce138d2ba25fc7c1ed045b55d39efe871f479e0f2a2aaafae3d5aea73feff344",
+    "05-editorial-settings.jpg": "6e42cfefa066c7e2dcf990bb4d10b3b2f79f32cafd10801ba46a0ef0dbfd6b37",
+    "06-studio-settings.jpg": "175528ab9c4dcbaf99d9c9115c2fec5dd7b57de18d3089666ad936a681d39174",
+    "07-focus-recording-win-dark.jpg": "9d1174e7e2a3a199d6f72f27bd685ac3085d1ecbc36af54a9aea42a4fc12a20a",
+    "08-editorial-processing-win-dark.jpg": "dc0ab14c121f50384556883cbcbe3864b5e4790b939b1a9adde0b892c329882a",
+    "09-studio-error-win-dark.jpg": "4e47e7ca8cac2d1621e952c2b223871e3f6b69bd986f8e5837447e96801cc2c8",
+    "10-studio-text-200.jpg": "d1efc8f8f2f5b80a2ac7b0ccbb2ac18ab2b73bc4b4bdfa6737db2c73385ad7e5",
+    "11-focus-assignment-minimum.jpg": "c7d07d038c11f6daf2ee1b3e640f88058911229606b78bfa1e3d1ad542eb8171",
+    "12-settings-win-en-text-150.jpg": "6552f0bf8c53bc7447d09ab9b6c587bdb1a4245588420657fce2d85c4ae79ab3",
+    "13-focus-panel-691.jpg": "bbcd91e507125c13a0f3a523e6de21853ced0e024c26a13bb5048fd6527a8492",
+    "14-focus-local-search.jpg": "a91963c76c06a7d12683e449db1bae4eae38ad9284bc8c211b6a67a4ccc20fda",
+    "15-open-comparison.jpg": "7cf46d16ba54445f0adc8e3ed0308895cd5ee8066a1406be3c28bf7b762532ae"
+  }
+}

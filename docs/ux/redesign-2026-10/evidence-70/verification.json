@@ -5,7 +5,7 @@
   "external_resources": false,
   "native_app_changed": false,
   "windows_native_gui_checked": false,
-  "human_acceptance": "pending",
+  "human_acceptance": "structure accepted by user on 2026-10-30; native behavior and timed human measurements not established",
   "screenshots": {
     "01-wide.jpg": "7532ea7607e361a61636c37f8386d297a180ee896e8bbb7576488e3d33c1969c",
     "02-minimum.jpg": "1798414aa380da5e12202c83bcfce4a8f6afcc520f505be36871c0cc40a2b75c",
