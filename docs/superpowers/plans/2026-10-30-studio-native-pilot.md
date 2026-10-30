@@ -4,7 +4,7 @@
 
 **Goal:** Проверить один настоящий сценарий «открыть → читать/слушать → назначить участника → найти фразу» сначала на macOS, затем на Windows.
 
-**Architecture:** Сохранить текущие сервисы, форматы, AppKit shell и WPF. На Mac встроить SwiftUI-шапку через NSHostingView; сохранить NSTableView для длинной расшифровки, существующие assignment editor и AVPlayer. Поиск — по загруженному тексту одной выбранной версии, без фонового индекса и новых зависимостей.
+**Architecture:** Сохранить текущие сервисы, форматы, AppKit shell и WPF. На Mac сохранить строку названия/деталей в AppKit, под ней разместить общий плеер, затем встроить SwiftUI-блок версий/поиска/вкладок через один NSHostingView; сохранить NSTableView для длинной расшифровки, существующие assignment editor и AVPlayer. Поиск — по загруженному тексту одной выбранной версии, без фонового индекса и новых зависимостей.
 
 **Tech Stack:** Swift 6 / macOS 14.2+, SwiftUI + AppKit, Swift Testing; существующий .NET 10 / WPF и Windows test projects.
 
@@ -61,11 +61,11 @@
 **Files:** новые `StudioMeetingHeader.swift`, `StudioStyle.swift`, `StudioMeetingHeaderTests.swift`; `MeetingLibraryController.swift`; при нужной привязке — `ApplicationWindow.swift`/`MeetingListView.swift`, `JournalWorkspaceTests.swift`.
 
 **Interfaces**
-- Consumes: состояние контроллера — название, список версий/выбранный ключ, вкладка, query, текущий hit/count, доступность; callbacks selectVersion/selectTab/queryChanged/next/previous/clear/showDetails.
+- Consumes: состояние контроллера — список версий/выбранный ключ, вкладка, query, текущий hit/count, доступность; callbacks selectVersion/selectTab/queryChanged/next/previous/clear. Название и showDetails остаются в строке AppKit над плеером.
 - Produces: один NSHostingView с `StudioMeetingHeader: View`. Контроллер владеет стабильной observable presentation model; `.onAppear`/`.onChange` не запускают повторное чтение/запись. Тексты берутся из существующего RU/EN-механизма, не новой localization-системы.
 
 - [ ] Добавить focused проверки callback: одно действие — один вызов; программное обновление snapshot не выбирает версию повторно. Сохранить regression-проверку возвращения из настроек к той же встрече.
-- [ ] Встроить header, согласовать intrinsic height с Auto Layout. Добавить native tooltip/accessibility labels, команды ⌘F/Enter/Shift+Enter/Escape, не перехватывая ввод текста у чужих контролов. Фокус в поле переживает обновление count.
+- [ ] Порядок workspace: строка названия/деталей AppKit → существующий плеер → header (версия/поиск, затем вкладки) → содержимое. Встроить header, согласовать intrinsic height с Auto Layout. Добавить native tooltip/accessibility labels, команды ⌘F/Enter/Shift+Enter/Escape, не перехватывая ввод текста у чужих контролов. Фокус в поле переживает обновление count.
 - [ ] Применить StudioStyle локально: роль цвета/шрифта/интервалов из спецификации. Сохранить системный focus ring/contrast settings. Библиотечный фильтр подписать «Название встречи», убрать только дублирующее действие глобального поиска, если оно существует в native shell.
 - [ ] Проверить узкое окно и крупный текст: header может прокручиваться, плеер/текст остаются достижимы. Не ставить фиксированную высоту, отсекающую переносы.
 - [ ] `swift test --no-parallel --filter 'StudioMeetingHeaderTests|JournalWorkspaceTests|MeetingLibraryControllerTests'` и `swift build`. GUI smoke: Tab туда/обратно через SwiftUI/AppKit, ⌘F, смена версии, resize. Commit: `feat(ux): host Studio meeting header in SwiftUI`.
@@ -104,7 +104,7 @@
 - `RecordingsWindow` сохраняет существующий `transcriptShown` guard и дополнительно связывает search/origin/editor с session + version. Header не запускает storage operations самостоятельно.
 
 - [ ] Подтвердить Windows host online, repo/ветку/revision/dirty state; не переключать чужую dirty-работу. До изменения получить baseline Core/Live tests на этом host.
-- [ ] Добавить failing Core search cases и Live случаи stale-version, clear/origin, rename/error/cancel. Реализовать такой же header/иконки/состояния WPF без нового UI framework.
+- [ ] Добавить failing Core search cases и Live случаи stale-version, clear/origin, rename/error/cancel. Реализовать такой же header/иконки/состояния WPF без нового UI framework; общий плеер располагается под названием, выше версии/поиска/вкладок.
 - [ ] Переделать JSON-реплики `ShowTranscriptParticipantsAsync`: метаданные слева, выделяемый native текст справа. Переиспользовать существующий read-only RichTextBox/MarkdownPreview-подход без markdown-интерпретации обычной реплики. Оставить `SpeakerIdentityEditor` за карандашом; draft до Apply, save/cancel/error как на Mac.
 - [ ] Сводку искать по фактически отображаемому plain text и сопоставлять hits с TextPointer, сохраняя formatting. Полная Windows row virtualization не отдельная цель пилота: сначала проверить 180 сегментов; при неприемлемом scroll/layout вернуть конкретную проблему в объём.
 - [ ] Плеер/stop/ошибки/скорость/громкость и source offsets сохранить; не создавать второй таймер/player из header. Команды Ctrl+F, Enter/Shift+Enter/Escape, UI Automation Name/HelpText локализовать.
