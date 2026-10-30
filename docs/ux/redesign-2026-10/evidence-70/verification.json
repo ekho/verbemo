@@ -1,5 +1,5 @@
 {
-  "artifact_sha256": "806a3a465aa6bdef6957c5179289ee3d9a5b9c82bb26c2ec53bbdb8492e05cbd",
+  "artifact_sha256": "c6ec79b7fce3f6c91f09902bac230feaa62fd8133d2890b296b234d21cd323d1",
   "model_checks": 9,
   "browser": "Codex in-app browser on macOS",
   "external_resources": false,
@@ -13,6 +13,9 @@
     "04-settings-en-dark-recording.jpg": "7ec9952eb3440fe9982dd3399c85f45e0c27a1e1094148e7217ea3ecf8b932ed",
     "05-summary-retry-en-dark.jpg": "a7f63ca4af0a9ce2c072b6a9e21f0f19b3b540391044255dac57443bb62356e2",
     "06-long-transcript-return.jpg": "eefc6e2d41acf178d2b3667cf4eb03c4ab207beaf8352de68912a5a10ae1396c",
-    "07-windows-presentation-only.jpg": "55ef77d8bbd5bde387e87dfef8d8af19264bb0efb155301222f54f057958cf59"
-  }
+    "07-windows-presentation-only.jpg": "55ef77d8bbd5bde387e87dfef8d8af19264bb0efb155301222f54f057958cf59",
+    "08-library-search-label.jpg": "928c7c095a85677eb63b8343965470ee9d0eed97a7674873a05b247f9fa0524d"
+  },
+  "baseline_artifact_sha256": "806a3a465aa6bdef6957c5179289ee3d9a5b9c82bb26c2ec53bbdb8492e05cbd",
+  "copy_update": "Library action renamed to Найти в библиотеке / Find in library; RU label verified in browser. Model checks and screenshots 01–07 describe the unchanged behavior before this copy edit; model tests were not rerun."
 }
