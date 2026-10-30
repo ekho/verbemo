@@ -63,3 +63,12 @@ state.recording=null;state.job=null;
 assert.equal(ctx.meetingStatus({...meeting,status:'failed'})[0],'error');
 assert.equal(ctx.meetingStatus({...meeting,status:'deferred'})[0],'waiting');
 console.log('PASS meeting icons distinguish recording, pause, queue, processing, error and cancellation.');
+
+ctx.UX70.current=()=>({duration:180});
+vm.runInContext(html.slice(html.indexOf('function togglePlayback('),html.indexOf('function syncPlaybackButtons(')),ctx);
+state.playing=false;state.time=20;ctx.togglePlayback();
+assert.equal(state.playing,true);assert.equal(state.time,20);
+ctx.togglePlayback();assert.equal(state.playing,false);assert.equal(state.time,20,'pause keeps position');
+ctx.stopPlayback();assert.equal(state.playing,false);assert.equal(state.time,0,'stop resets position');
+state.time=180;ctx.togglePlayback();assert.equal(state.playing,true);assert.equal(state.time,0,'play restarts a completed recording');
+console.log('PASS playback supports resume, pause, stop and replay after completion.');

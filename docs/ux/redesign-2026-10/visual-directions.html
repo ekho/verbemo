@@ -155,6 +155,15 @@ body[data-visual=studio] .turn-header .edit{margin:0}
 @container app (max-width:900px){body[data-visual=studio] .turn{grid-template-columns:190px minmax(0,1fr)}}
 @container app (max-width:590px){.heading .meta .meeting-search{flex-basis:100%;margin-top:4px}body[data-visual=studio] .turn-header{display:block}body[data-visual=studio] .turn-header .stamp{padding-left:30px}body[data-visual=studio] .speaker-identity{justify-content:flex-start}}
 body[data-text-large=true] .meeting-search{flex-basis:100%;margin-top:4px}
+.button-content{display:inline-flex;align-items:center;justify-content:center;gap:7px;max-width:100%;vertical-align:middle}
+.button-content>.ui-icon{width:1em;height:1em;min-width:16px;min-height:16px}
+.button-content>span{min-width:0;overflow-wrap:anywhere}
+.app button[data-icon-only=true]{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:34px;min-width:34px;height:34px;min-height:34px;padding:7px}
+.app button[data-icon-only=true] .ui-icon{width:16px;height:16px;min-width:16px;min-height:16px}
+.app .speaker-identity button[data-icon-only=true]{width:26px;min-width:26px;height:26px;min-height:26px;padding:4px}
+.app .stamp .button-content{gap:4px}.app .stamp .ui-icon{width:12px;height:12px;min-width:12px;min-height:12px}
+.player #stop-play-button{margin-left:-6px}
+@container app (max-width:590px){.player{flex-wrap:wrap}.player #seek{order:1;flex-basis:100%}}
 </style>
 </head>
 <body data-visual="studio" data-platform="mac">
@@ -256,7 +265,12 @@ const data=JSON.parse(document.getElementById('fixture-data').textContent);
 let s=UX70.createState(data),undoTimer,jobTimer,editorContext,focusReturn,findOrigin=null;
 const $=id=>document.getElementById(id),T=(ru,en)=>s.language==='en'?en:ru;
 const E=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const B=(action,label,extra='')=>'<button type="button" data-action="'+action+'" '+extra+'>'+label+'</button>';
+const actionIcons={'toggle-list':'sidebar','global':'search','clear-global':'close','find':'search','close-find':'close','next-hit':'next','edit':'pencil','cancel-dialog':'close','unlink':'unlink','details':'details','settings':'settings','back-settings':'back','categories':'back','play':'play','stop-play':'stop','seek':'play','open-current':'next','summary':'document','transcribe':'transcript','retry-job':'processing','job-view':'processing','job-success':'ready','job-error':'error','cancel-job':'close','record':'recording','recording-view':'recording','stop-record':'stop','import':'import','rename':'pencil','delete':'trash','undo':'undo','dismiss':'close'};
+const B=(action,label,extra='',glyph=actionIcons[action],iconOnly=false)=>{
+ if(action==='pause-record')glyph=s.recording?.paused?'play':'pause';
+ const a11y=iconOnly?' data-icon-only="true" aria-label="'+E(label)+'" title="'+E(label)+'"':'';
+ return '<button type="button" data-action="'+action+'" '+extra+a11y+'>'+(glyph?'<span class="button-content">'+icon(glyph)+(iconOnly?'':'<span>'+label+'</span>')+'</span>':label)+'</button>';
+};
 const time=value=>Math.floor(value/60).toString().padStart(2,'0')+':'+Math.floor(value%60).toString().padStart(2,'0');
 const name=(v,key)=>v.names[key]?.name||T('Говорящий ','Speaker ')+key.replace('them ','');
 const cats=()=>[['app',T('Приложение','Application')],['recording',T('Запись и доступ','Recording & access')],['transcription',T('Расшифровка','Transcription')],['summary',T('Сводки','Summaries')],['storage',T('Хранилище и модели','Storage & models')],...(s.platform==='mac'?[['calendar',T('Календарь','Calendar')]]:[]),['mcp',T('Подключения · MCP','Connections · MCP')],['about',T('О приложении','About')]];
@@ -269,6 +283,21 @@ function footer(){
 }
 function icon(key){
  const paths={
+  play:'<path d="m8 4 12 8-12 8z"/>',
+  pause:'<path d="M8 5v14M16 5v14" stroke-width="3"/>',
+  stop:'<rect x="5" y="5" width="14" height="14" rx="1"/>',
+  close:'<path d="m6 6 12 12M6 18 18 6"/>',
+  sidebar:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M5.5 8h1M5.5 12h1"/>',
+  details:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M18 8h.1M18 12h.1M18 16h.1"/>',
+  settings:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="var(--paper)"/><circle cx="16" cy="12" r="2" fill="var(--paper)"/><circle cx="10" cy="18" r="2" fill="var(--paper)"/>',
+  back:'<path d="m10 5-7 7 7 7M3 12h18"/>',
+  next:'<path d="m9 5 7 7-7 7"/>',
+  document:'<path d="M5 3h10l4 4v14H5zM14 3v5h5M8 12h8M8 16h6"/>',
+  transcript:'<path d="M9 5h12M9 12h12M9 19h12"/><circle cx="4" cy="5" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="19" r="1"/>',
+  import:'<path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/>',
+  trash:'<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
+  undo:'<path d="M8 4 3 9l5 5M3 9h11a6 6 0 0 1 0 12h-3"/>',
+  unlink:'<path d="m3 3 18 18M9 15l-2 2a3 3 0 0 1-4-4l3-3M15 9l2-2a3 3 0 0 0-4-4l-3 3M8 16l8-8"/>',
   pencil:'<path d="m14 5 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14z"/>',
   search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
   ready:'<circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/>',
@@ -313,11 +342,12 @@ function content(m,v,w){
 function speakerButton(key,token){
  if(key==='them ?')return '<small>'+T('Голос не определён · назначение недоступно','Unknown voice · assignment unavailable')+'</small>';
  const label=T('Изменить имя говорящего ','Change name of speaker ')+key.replace('them ','');
- return B('edit',token.startsWith('turn-')?icon('pencil'):T('Изменить имя','Change name'),'id="edit-'+E(token)+'" class="edit" data-speaker="'+E(key)+'" '+(UX70.active(s.job)&&s.job.meeting===s.selected?'disabled':'')+' aria-label="'+E(label)+'" title="'+E(label)+'"');
+ const inline=token.startsWith('turn-');
+ return B('edit',inline?label:T('Изменить имя','Change name'),'id="edit-'+E(token)+'" class="edit" data-speaker="'+E(key)+'" '+(UX70.active(s.job)&&s.job.meeting===s.selected?'disabled':'')+(inline?'':' aria-label="'+E(label)+'" title="'+E(label)+'"'),'pencil',inline);
 }
 function details(m){
  const j=s.job&&s.job.meeting===m.id?s.job:null;
- return '<aside class="details" aria-label="'+T('Детали встречи','Meeting details')+'"><div class="row spread"><h2>'+T('Детали встречи','Meeting details')+'</h2>'+B('details',T('Закрыть','Close'),'id="close-details"')+'</div><h3>'+T('Обработка','Processing')+'</h3><p>'+T('Все операции ниже имитируются. Предыдущий готовый результат сохраняется при отмене и ошибке.','All operations below are simulated. Previous results survive cancellation and errors.')+'</p>'+jobStatusWithoutButton(j)+'<div class="row">'+B('summary',T('Новая сводка','New summary'),UX70.active(s.job)||UX70.view(s).version!=='current'||!m.versions.current.segments.length?'disabled':'')+B('transcribe',T('Новая версия расшифровки','New transcript version'),UX70.active(s.job)||s.recording?.id===m.id?'disabled':'')+'</div>'+
+ return '<aside class="details" aria-label="'+T('Детали встречи','Meeting details')+'"><div class="row spread"><h2>'+T('Детали встречи','Meeting details')+'</h2>'+B('details',T('Закрыть детали','Close details'),'id="close-details"','close',true)+'</div><h3>'+T('Обработка','Processing')+'</h3><p>'+T('Все операции ниже имитируются. Предыдущий готовый результат сохраняется при отмене и ошибке.','All operations below are simulated. Previous results survive cancellation and errors.')+'</p>'+jobStatusWithoutButton(j)+'<div class="row">'+B('summary',T('Новая сводка','New summary'),UX70.active(s.job)||UX70.view(s).version!=='current'||!m.versions.current.segments.length?'disabled':'')+B('transcribe',T('Новая версия расшифровки','New transcript version'),UX70.active(s.job)||s.recording?.id===m.id?'disabled':'')+'</div>'+
  (j&&['queued','running'].includes(j.status)?'<h3>'+T('Управление демонстрацией','Simulation controls')+'</h3><p>'+T('Выберите исход для этого задания. Это управление макетом, не интерфейс продукта.','Choose the job outcome. These are prototype controls, not product UI.')+'</p><div class="row">'+B('job-success',T('Успех','Success'))+B('job-error',T('Ошибка','Error'))+(s.platform==='mac'?B('cancel-job',T('Отменить','Cancel')):'')+'</div>':'')+
  '<h3>'+T('Календарный контекст','Calendar context')+'</h3><p>'+E(m.title)+'</p><p>'+T('Приглашённые: ','Invited: ')+E(m.people.map(p=>p.name).join(', ')||T('не указаны','none'))+'</p><small>'+T('Вымышленный снимок; живого календаря нет.','Fictional snapshot; no live calendar connection.')+'</small>'+
  '<h3>'+T('Действия со встречей','Meeting actions')+'</h3><div class="row">'+B('rename',T('Переименовать','Rename'))+B('delete',T('Удалить…','Delete…'),(UX70.active(s.job)&&s.job.meeting===m.id||s.recording?.id===m.id?'disabled':''))+'</div><p class="muted">'+T('Папка, внешний редактор, экспорт и системные диалоги остаются в карте функций; здесь они не запускаются.','Folder, external editor, export and system dialogs remain in the function map; they do not run here.')+'</p></aside>';
@@ -326,10 +356,23 @@ function jobStatusWithoutButton(j){return j?'<p><strong>'+E(j.kind)+' · '+E(j.s
 function meetingView(){
  const m=UX70.current(s);if(!m)return '<div class="empty"><h2>'+T('В библиотеке пока нет встреч','No meetings yet')+'</h2>'+B('import',T('Добавить учебную встречу','Add a sample meeting'))+'</div>';
  const w=UX70.view(s),v=m.versions[w.version],hits=UX70.search(s,s.localQuery,true);
- return '<section class="workspace" aria-label="'+T('Встреча','Meeting')+'"><div class="heading"><div class="row spread"><h1 id="meeting-title" tabindex="-1">'+E(m.title)+'</h1>'+B('details',T('Детали','Details'),'id="details-button" aria-expanded="'+s.details+'"')+'</div><div class="row meta"><label for="version">'+T('Версия','Version')+'</label><select id="version">'+Object.keys(m.versions).map(k=>'<option value="'+k+'" '+(w.version===k?'selected':'')+'>'+ (k==='current'?T('Текущая','Current'):k==='previous'?T('Архив · 28 октября','Archive · 28 October'):T('Архив · до повтора ','Archive · before rerun ')+k.replace('saved-',''))+'</option>').join('')+'</select><span class="grow"></span>'+'<label class="meeting-search" for="local-search"><span class="sr">'+T('Поиск в этой встрече · выбранная версия','Search this meeting · selected version')+'</span>'+icon('search')+'<input type="search" id="local-search" value="'+E(s.localQuery)+'" placeholder="'+T('Найти в этой встрече','Find in this meeting')+'"></label>'+'</div><div class="tabs" role="tablist" aria-label="'+T('Содержимое встречи','Meeting content')+'">'+[['transcript',T('Расшифровка','Transcript')],['summary',T('Сводка','Summary')],['participants',T('Участники','Participants')]].map(([k,v])=>B('tab',v,'role="tab" data-tab="'+k+'" id="tab-'+k+'" aria-selected="'+(w.tab===k)+'"')).join('')+'</div></div>'+
+ return '<section class="workspace" aria-label="'+T('Встреча','Meeting')+'"><div class="heading"><div class="row spread"><h1 id="meeting-title" tabindex="-1">'+E(m.title)+'</h1>'+B('details',T('Детали встречи','Meeting details'),'id="details-button" aria-expanded="'+s.details+'"','details',true)+'</div><div class="row meta"><label for="version">'+T('Версия','Version')+'</label><select id="version">'+Object.keys(m.versions).map(k=>'<option value="'+k+'" '+(w.version===k?'selected':'')+'>'+ (k==='current'?T('Текущая','Current'):k==='previous'?T('Архив · 28 октября','Archive · 28 October'):T('Архив · до повтора ','Archive · before rerun ')+k.replace('saved-',''))+'</option>').join('')+'</select><span class="grow"></span>'+'<label class="meeting-search" for="local-search"><span class="sr">'+T('Поиск в этой встрече · выбранная версия','Search this meeting · selected version')+'</span>'+icon('search')+'<input type="search" id="local-search" value="'+E(s.localQuery)+'" placeholder="'+T('Найти в этой встрече','Find in this meeting')+'"></label>'+'</div><div class="tabs" role="tablist" aria-label="'+T('Содержимое встречи','Meeting content')+'">'+[['transcript',T('Расшифровка','Transcript')],['summary',T('Сводка','Summary')],['participants',T('Участники','Participants')]].map(([k,v])=>B('tab',v,'role="tab" data-tab="'+k+'" id="tab-'+k+'" aria-selected="'+(w.tab===k)+'"')).join('')+'</div></div>'+
  (s.find?'<div class="findbar"><div class="row"><span role="status">'+(hits.length?hits.length+' '+T('совп.','matches'):T('Нет совпадений','No matches'))+'</span>'+B('next-hit',T('Следующее','Next'),hits.length?'':'disabled')+B('close-find',T('Очистить поиск','Clear search'))+'</div></div>':'')+
- '<div class="player"><button type="button" data-action="play" id="play-button">'+(s.playing?T('Пауза','Pause'):T('Слушать','Play'))+'</button><span class="time" id="play-time">'+time(s.time)+' / '+time(m.duration)+'</span><input id="seek" type="range" min="0" max="'+m.duration+'" value="'+s.time+'" aria-label="'+T('Позиция аудио · имитация','Audio position · simulation')+'"><label class="speed-label" for="speed">'+T('Скорость','Speed')+'</label><select id="speed" aria-label="'+T('Скорость','Speed')+'">'+[1,1.5,2].map(x=>'<option '+(s.speed===x?'selected':'')+'>'+x+'</option>').join('')+'</select><small>'+T('без звука','silent')+'</small></div>'+
+ '<div class="player">'+B('play',s.playing?T('Пауза','Pause'):T('Воспроизвести','Play'),'id="play-button"',s.playing?'pause':'play',true)+B('stop-play',T('Остановить и вернуться к началу','Stop and return to start'),'id="stop-play-button" '+(!s.playing&&s.time===0?'disabled':''),'stop',true)+'<span class="time" id="play-time">'+time(s.time)+' / '+time(m.duration)+'</span><input id="seek" type="range" min="0" max="'+m.duration+'" value="'+s.time+'" aria-label="'+T('Позиция аудио · имитация','Audio position · simulation')+'"><label class="speed-label" for="speed">'+T('Скорость','Speed')+'</label><select id="speed" aria-label="'+T('Скорость','Speed')+'">'+[1,1.5,2].map(x=>'<option '+(s.speed===x?'selected':'')+'>'+x+'</option>').join('')+'</select><small>'+T('без звука','silent')+'</small></div>'+
  '<div class="content" id="content" tabindex="0" role="tabpanel" aria-labelledby="tab-'+w.tab+'">'+content(m,v,w)+'</div>'+(s.details?details(m):'')+'</section>';
+}
+function togglePlayback(){
+ if(!s.playing&&s.time>=UX70.current(s).duration)s.time=0;
+ s.playing=!s.playing;
+}
+function stopPlayback(){s.playing=false;s.time=0;}
+function syncPlaybackButtons(){
+ const button=$('play-button');
+ if(button){
+  const label=s.playing?T('Пауза','Pause'):T('Воспроизвести','Play');
+  button.innerHTML='<span class="button-content">'+icon(s.playing?'pause':'play')+'</span>';button.setAttribute('aria-label',label);button.title=label;
+ }
+ if($('stop-play-button'))$('stop-play-button').disabled=!s.playing&&s.time===0;
 }
 function selectSetting(key,label,options,help=''){
  return '<div class="setting"><label for="setting-'+key+'">'+label+'</label><select id="setting-'+key+'" data-setting="'+key+'">'+options.map(([k,label])=>'<option value="'+k+'" '+(String(s.settings[key])===String(k)?'selected':'')+'>'+label+'</option>').join('')+'</select>'+(help?'<small>'+help+'</small>':'')+'</div>';
@@ -425,7 +468,7 @@ function start(kind){
 }
 function editSpeaker(key){
  const m=UX70.current(s),v=m.versions[UX70.view(s).version];editorContext={meeting:m.id,version:UX70.view(s).version,speaker:key};
- dialog('<h2 id="editor-title">'+T('Назначить участника','Assign a participant')+'</h2><p>'+T('Все реплики говорящего ','All turns by speaker ')+E(key.replace('them ',''))+T(' в выбранной версии. Архивы и событие календаря не меняются.',' in the selected version. Archives and the calendar event remain unchanged.')+'</p><label for="person-choice">'+T('Приглашённый участник','Invited participant')+'</label><select id="person-choice"><option value="">'+T('Ручное имя / без связи','Manual name / unlinked')+'</option>'+m.people.map(p=>'<option value="'+p.id+'" '+(v.names[key]?.participantID===p.id?'selected':'')+'>'+E(p.name)+'</option>').join('')+'</select><label for="person-name">'+T('Имя в расшифровке','Transcript name')+'</label><input id="person-name" type="text" maxlength="120" value="'+E(v.names[key]?.name||'')+'"><div class="row actions">'+B('unlink',T('Снять связь','Unlink'))+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit" class="primary">'+T('Применить','Apply')+'</button></div>',()=>{
+ dialog('<h2 id="editor-title">'+T('Назначить участника','Assign a participant')+'</h2><p>'+T('Все реплики говорящего ','All turns by speaker ')+E(key.replace('them ',''))+T(' в выбранной версии. Архивы и событие календаря не меняются.',' in the selected version. Archives and the calendar event remain unchanged.')+'</p><label for="person-choice">'+T('Приглашённый участник','Invited participant')+'</label><select id="person-choice"><option value="">'+T('Ручное имя / без связи','Manual name / unlinked')+'</option>'+m.people.map(p=>'<option value="'+p.id+'" '+(v.names[key]?.participantID===p.id?'selected':'')+'>'+E(p.name)+'</option>').join('')+'</select><label for="person-name">'+T('Имя в расшифровке','Transcript name')+'</label><input id="person-name" type="text" maxlength="120" value="'+E(v.names[key]?.name||'')+'"><div class="row actions">'+B('unlink',T('Снять связь','Unlink'))+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit" class="primary"><span class="button-content">'+icon('ready')+'<span>'+T('Применить','Apply')+'</span></span></button></div>',()=>{
   const ok=UX70.assign(s,{...editorContext,name:$('person-name').value,participantID:$('person-choice').value});closeDialog();announce(ok?T('Имя изменено у всех реплик этого говорящего в выбранной версии.','Name updated for every turn by this speaker in the selected version.'):T('Контекст изменился. Назначение не применено.','Context changed. Assignment was not applied.'));render();});
 }
 function addMeeting(title,recording=false){
@@ -451,7 +494,8 @@ document.addEventListener('click',e=>{
  case 'back-settings':s.page='meeting';render('settings-button');return;
  case 'category':s.category=el.dataset.category;s.categoryOpen=true;render('settings-title');return;
  case 'categories':s.categoryOpen=false;render();return;
- case 'play':s.playing=!s.playing;render('play-button');return;
+ case 'play':togglePlayback();render('play-button');return;
+ case 'stop-play':stopPlayback();render('play-button');return;
  case 'seek':s.time=Number(el.dataset.time);s.playing=true;render();return;
  case 'open-current':UX70.select(s,s.selected,'current');render('meeting-title');return;
  case 'summary':start('summary');return;
@@ -461,13 +505,13 @@ document.addEventListener('click',e=>{
  case 'job-success':UX70.finishJob(s,'done');announce(T('Демонстрационное задание завершено.','Simulated job completed.'));render();return;
  case 'job-error':UX70.finishJob(s,'error');announce(T('Демонстрационная ошибка. Предыдущий результат сохранён.','Simulated error. Previous result preserved.'));render();return;
  case 'cancel-job':if(UX70.active(s.job)){s.job.status='cancelling';render();clearTimeout(jobTimer);jobTimer=setTimeout(()=>{UX70.finishJob(s,'cancelled');announce(T('Обработка отменена. Готовые результаты сохранены.','Processing cancelled. Completed results preserved.'));render();},700);}return;
- case 'record':dialog('<h2 id="editor-title">'+T('Новая учебная запись','New demo recording')+'</h2><p>'+T('Микрофон не включится. Проверяем навигацию во время записи.','The microphone stays off. This tests navigation during recording.')+'</p><label for="record-title">'+T('Название','Title')+'</label><input id="record-title" value="'+T('Учебная запись','Demo recording')+'"><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button class="primary" type="submit">'+T('Начать демонстрацию','Start simulation')+'</button></div>',()=>{const title=$('record-title').value.trim()||T('Учебная запись','Demo recording');closeDialog();const id=addMeeting(title,true);s.recording={id,paused:false,seconds:0};render();});return;
+ case 'record':dialog('<h2 id="editor-title">'+T('Новая учебная запись','New demo recording')+'</h2><p>'+T('Микрофон не включится. Проверяем навигацию во время записи.','The microphone stays off. This tests navigation during recording.')+'</p><label for="record-title">'+T('Название','Title')+'</label><input id="record-title" value="'+T('Учебная запись','Demo recording')+'"><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button class="primary" type="submit"><span class="button-content">'+icon('recording')+'<span>'+T('Начать демонстрацию','Start simulation')+'</span></span></button></div>',()=>{const title=$('record-title').value.trim()||T('Учебная запись','Demo recording');closeDialog();const id=addMeeting(title,true);s.recording={id,paused:false,seconds:0};render();});return;
  case 'pause-record':s.recording.paused=!s.recording.paused;render();return;
  case 'recording-view':UX70.select(s,s.recording.id);s.list=false;render();return;
  case 'stop-record':{const id=s.recording.id;s.recording=null;const m=s.meetings.find(m=>m.id===id);m.status='deferred';announce(T('Учебная запись завершена и ожидает обработки.','Demo recording stopped and waiting for processing.'));render();return;}
- case 'import':dialog('<h2 id="editor-title">'+T('Демонстрация импорта','Import simulation')+'</h2><p>'+T('Добавим вымышленную встречу. Файлы компьютера не читаются.','Adds a fictional meeting. No computer files are read.')+'</p><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit">'+T('Добавить учебный файл','Add sample file')+'</button></div>',()=>{closeDialog();addMeeting(T('Импорт — учебный файл','Import — sample file'));render();});return;
- case 'rename':dialog('<h2 id="editor-title">'+T('Переименовать встречу','Rename meeting')+'</h2><label for="new-title">'+T('Название','Title')+'</label><input id="new-title" maxlength="160" required value="'+E(UX70.current(s).title)+'"><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit">'+T('Сохранить','Save')+'</button></div>',()=>{const title=$('new-title').value.trim();if(!title)return;UX70.current(s).title=title;closeDialog();render();});return;
- case 'delete':dialog('<h2 id="editor-title">'+T('Удалить учебную встречу?','Delete sample meeting?')+'</h2><p>'+T('Встреча и все её версии исчезнут только из макета. В течение 10 секунд доступно восстановление. Сброс макета возвращает весь набор.','The meeting and all its versions disappear from this prototype only. Undo is available for 10 seconds. Reset restores all samples.')+'</p><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit">'+T('Удалить','Delete')+'</button></div>',()=>{closeDialog();if(UX70.remove(s)){announce(T('Учебная встреча удалена. Можно восстановить в течение 10 секунд.','Sample meeting deleted. Undo within 10 seconds.'));clearTimeout(undoTimer);undoTimer=setTimeout(()=>{s.deleted=null;render();},10000);}render();});return;
+ case 'import':dialog('<h2 id="editor-title">'+T('Демонстрация импорта','Import simulation')+'</h2><p>'+T('Добавим вымышленную встречу. Файлы компьютера не читаются.','Adds a fictional meeting. No computer files are read.')+'</p><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit"><span class="button-content">'+icon('import')+'<span>'+T('Добавить учебный файл','Add sample file')+'</span></span></button></div>',()=>{closeDialog();addMeeting(T('Импорт — учебный файл','Import — sample file'));render();});return;
+ case 'rename':dialog('<h2 id="editor-title">'+T('Переименовать встречу','Rename meeting')+'</h2><label for="new-title">'+T('Название','Title')+'</label><input id="new-title" maxlength="160" required value="'+E(UX70.current(s).title)+'"><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit"><span class="button-content">'+icon('ready')+'<span>'+T('Сохранить','Save')+'</span></span></button></div>',()=>{const title=$('new-title').value.trim();if(!title)return;UX70.current(s).title=title;closeDialog();render();});return;
+ case 'delete':dialog('<h2 id="editor-title">'+T('Удалить учебную встречу?','Delete sample meeting?')+'</h2><p>'+T('Встреча и все её версии исчезнут только из макета. В течение 10 секунд доступно восстановление. Сброс макета возвращает весь набор.','The meeting and all its versions disappear from this prototype only. Undo is available for 10 seconds. Reset restores all samples.')+'</p><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button type="submit"><span class="button-content">'+icon('trash')+'<span>'+T('Удалить','Delete')+'</span></span></button></div>',()=>{closeDialog();if(UX70.remove(s)){announce(T('Учебная встреча удалена. Можно восстановить в течение 10 секунд.','Sample meeting deleted. Undo within 10 seconds.'));clearTimeout(undoTimer);undoTimer=setTimeout(()=>{s.deleted=null;render();},10000);}render();});return;
  case 'undo':UX70.undo(s);clearTimeout(undoTimer);announce(T('Учебная встреча восстановлена.','Sample meeting restored.'));render();return;
  case 'dismiss':s.message='';render();return;
  }
@@ -509,7 +553,7 @@ setInterval(()=>{
  if($('record-time')&&s.recording)$('record-time').textContent=(s.recording.paused?T('Пауза','Paused'):T('Запись','Recording'))+' · '+time(s.recording.seconds);
  if($('play-time')&&UX70.current(s))$('play-time').textContent=time(s.time)+' / '+time(UX70.current(s).duration);
  if($('seek'))$('seek').value=s.time;
- if($('play-button'))$('play-button').textContent=s.playing?T('Пауза','Pause'):T('Слушать','Play');
+ syncPlaybackButtons();
 },1000);
 s.selected='short';render();if($('app').clientWidth<=900){s.list=false;render();}
 }

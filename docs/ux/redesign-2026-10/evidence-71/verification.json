@@ -1,8 +1,8 @@
 {
   "date": "2026-10-30",
-  "artifact_sha256": "7b7bfbeca090d5226c6887d6a0f9d4b42cc002b5d9bd9cbdd189672a1fa3ad7a",
+  "artifact_sha256": "bae464ad111126ca0fefea251ba243a3d4e74bdc7ca7766daff5c8858322cf24",
   "baseline_commit": "1bdd09f",
-  "scope": "Studio selected; five user-requested prototype refinements; no native implementation",
+  "scope": "Studio selected; layout refinements and action icons; no native implementation",
   "state_model_checks": 9,
   "text_contrast_pairs_checked": 42,
   "text_contrast_minimum": 4.5,
@@ -10,7 +10,7 @@
   "native_mac_gui_checked": false,
   "native_windows_gui_checked": false,
   "user_choice": "Studio: compactness and separate speaker column",
-  "review": "ship for five Studio refinements; reviewer inspected diff, helper tests and screenshots 16-18; did not run browser or tests",
+  "review": "ship for action-icon iteration; reviewer inspected current diff and screenshots 19-20 and reran 9 model checks, 42 contrast pairs and 3 presentation checks; did not control browser",
   "screenshots": {
     "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
     "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
@@ -29,13 +29,16 @@
     "15-open-comparison.jpg": "7cf46d16ba54445f0adc8e3ed0308895cd5ee8066a1406be3c28bf7b762532ae",
     "16-studio-refined.jpg": "76f653db9f56ead78c51bedb0d0d1634bfe23aef85b5bdab26fe84898322b2da",
     "17-studio-search.jpg": "89435f11b262f04bf6d486f69dc0fc8516aa3ca61f5d214f5beb836f23f4e347",
-    "18-studio-narrow-dark-en.jpg": "17c50bc9aa8c78259b277c560baf288b90fc7fd16c952bfdcee9162ffbab178a"
+    "18-studio-narrow-dark-en.jpg": "17c50bc9aa8c78259b277c560baf288b90fc7fd16c952bfdcee9162ffbab178a",
+    "19-studio-action-icons.jpg": "a64b5a1bd4e1bdd33727d9a5531350abfb94bcf4404cf21eade9aea1dfd8d2cc",
+    "20-studio-icons-dark-large.jpg": "cc0ee8be30e0ddae9a9b8cddccaa4ca394a784f33217410a21b152e618481de6"
   },
   "first_round_artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
-  "presentation_logic_checks": 2,
+  "presentation_logic_checks": 3,
   "screenshot_rounds": {
     "first_round": "01-15, before refinement",
-    "studio_refinement": "16-18, current presentation"
+    "studio_refinement": "16-18, layout refinement before action icons",
+    "action_icons": "19-20, current presentation"
   },
   "refinement_checks": [
     "duplicate library-search button removed; sidebar field retained",
@@ -47,5 +50,14 @@
     "760x600 frame dark EN Windows presentation on Mac: no horizontal app overflow",
     "200% text: no horizontal app/workspace overflow; speaker header stacks above paragraph",
     "browser error log empty at end of check"
+  ],
+  "studio_layout_artifact_sha256": "7b7bfbeca090d5226c6887d6a0f9d4b42cc002b5d9bd9cbdd189672a1fa3ad7a",
+  "action_icon_checks": [
+    "play/pause retain position; stop resets to zero; replay after completion",
+    "timer preserves SVG and updates title/aria-label at completion",
+    "Details opens/closes via Enter and returns focus",
+    "action icons present in assignment dialog, settings back navigation, recording/pause/resume/stop footer",
+    "viewport 1087x954 light RU; frame 760x600 dark EN Windows presentation on Mac at text200; no horizontal app/workspace overflow",
+    "no browser console errors"
   ]
 }
