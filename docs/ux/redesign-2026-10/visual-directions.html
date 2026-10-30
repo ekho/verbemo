@@ -169,6 +169,7 @@ body[data-text-large=true] .meeting-search{flex-basis:100%;margin-top:4px}
 #filter-button[data-active=true]{background:var(--selected);color:var(--accent);border-color:var(--accent)}#filter-button[data-active=true]::after{content:"";position:absolute;right:3px;top:3px;width:5px;height:5px;border-radius:50%;background:currentColor}
 .filter-popover{position:fixed;inset:auto;margin:0;width:min(280px,calc(100vw - 16px));max-height:calc(100dvh - var(--filter-top) - 8px);overflow:auto;padding:14px;border:1px solid var(--line);border-radius:var(--corner);background:var(--paper);color:var(--ink);box-shadow:0 6px 20px #0003}
 .filter-popover fieldset{border:0;margin:0;padding:0;min-width:0}.filter-popover legend{font-weight:600;margin-bottom:8px}.filter-popover label{display:flex;align-items:center;gap:8px;margin:0;padding:8px 4px;font-size:inherit;cursor:pointer}.filter-popover input{min-height:0;margin:0;accent-color:var(--accent)}
+.demo [hidden]{display:none}
 .heading.title-heading{padding-bottom:12px}.heading.controls-heading{padding-top:0}
 </style>
 </head>
@@ -193,6 +194,7 @@ body[data-text-large=true] .meeting-search{flex-basis:100%;margin-top:4px}
   <label><span id="frame-label">Окно</span><select id="frame-size"><option value="auto">По ширине панели</option><option value="1340,848">1340 × 848</option><option value="760,600">760 × 600 · Mac</option><option value="820,520">820 × 520 · Windows</option></select></label>
   <label>UI <select id="demo-language"><option value="ru">RU</option><option value="en">EN</option></select></label>
   <label>OS <select id="demo-platform"><option value="mac">macOS</option><option value="win">Windows</option></select></label>
+  <label id="demo-calendar-label"><span id="calendar-demo-label">Календарь · демо</span><select id="demo-calendar"><option value="granted">Доступ выдан</option><option value="denied">Нет доступа</option><option value="empty">Нет событий</option></select></label>
   <button id="demo-reset">Сбросить макет</button>
  </div>
 </div>
@@ -269,7 +271,7 @@ const UX70 = (() => {
 globalThis.UX70=UX70;
 if(typeof document!=='undefined') {
 const data=JSON.parse(document.getElementById('fixture-data').textContent);
-let s=UX70.createState(data),undoTimer,jobTimer,editorContext,focusReturn,findOrigin=null,dismissedJobNotice=null;
+let s=UX70.createState(data),undoTimer,jobTimer,editorContext,focusReturn,findOrigin=null,dismissedJobNotice=null,demoCalendarState='granted';
 const $=id=>document.getElementById(id),T=(ru,en)=>s.language==='en'?en:ru;
 const E=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const actionIcons={'toggle-list':'sidebar','global':'search','clear-global':'close','find':'search','close-find':'close','next-hit':'next','edit':'pencil','cancel-dialog':'close','unlink':'unlink','details':'details','settings':'settings','back-settings':'back','categories':'back','play':'play','stop-play':'stop','seek':'play','open-current':'next','summary':'summary-refresh','transcribe':'transcript-refresh','retry-job':'processing','job-view':'processing','job-success':'ready','job-error':'error','cancel-job':'close','record':'recording','recording-view':'recording','stop-record':'stop','import':'import','rename':'pencil','delete':'trash','undo':'undo','dismiss':'close'};
@@ -361,7 +363,7 @@ function details(m){
  const j=s.job&&s.job.meeting===m.id?s.job:null;
  return '<aside class="details" aria-label="'+T('Детали встречи','Meeting details')+'"><div class="row spread"><h2>'+T('Детали встречи','Meeting details')+'</h2>'+B('details',T('Закрыть детали','Close details'),'id="close-details"','close',true)+'</div><h3>'+T('Обработка','Processing')+'</h3><p>'+T('Все операции ниже имитируются. Предыдущий готовый результат сохраняется при отмене и ошибке.','All operations below are simulated. Previous results survive cancellation and errors.')+'</p>'+jobStatusWithoutButton(j)+'<div class="row">'+B('summary',T('Новая сводка','New summary'),UX70.active(s.job)||UX70.view(s).version!=='current'||!m.versions.current.segments.length?'disabled':'')+B('transcribe',T('Новая версия расшифровки','New transcript version'),UX70.active(s.job)||s.recording?.id===m.id?'disabled':'')+'</div>'+
  (j&&['queued','running'].includes(j.status)?'<h3>'+T('Управление демонстрацией','Simulation controls')+'</h3><p>'+T('Выберите исход для этого задания. Это управление макетом, не интерфейс продукта.','Choose the job outcome. These are prototype controls, not product UI.')+'</p><div class="row">'+B('job-success',T('Успех','Success'))+B('job-error',T('Ошибка','Error'))+(s.platform==='mac'?B('cancel-job',T('Отменить','Cancel')):'')+'</div>':'')+
- '<h3>'+T('Календарный контекст','Calendar context')+'</h3><p>'+E(m.title)+'</p><p>'+T('Приглашённые: ','Invited: ')+E(m.people.map(p=>p.name).join(', ')||T('не указаны','none'))+'</p><small>'+T('Вымышленный снимок; живого календаря нет.','Fictional snapshot; no live calendar connection.')+'</small>'+
+ '<h3>'+T('Календарный контекст','Calendar context')+'</h3><p>'+E(m.calendarEvent===null?T('Без связи с событием','No linked event'):m.calendarEvent?.title||m.title)+'</p><p>'+T('Приглашённые: ','Invited: ')+E(m.people.map(p=>p.name).join(', ')||T('не указаны','none'))+'</p><small>'+T('Вымышленный снимок; живого календаря нет.','Fictional snapshot; no live calendar connection.')+'</small>'+
  '<h3>'+T('Действия со встречей','Meeting actions')+'</h3><div class="row">'+B('rename',T('Переименовать','Rename'))+B('delete',T('Удалить…','Delete…'),(UX70.active(s.job)&&s.job.meeting===m.id||s.recording?.id===m.id?'disabled':''))+'</div><p class="muted">'+T('Папка, внешний редактор, экспорт и системные диалоги остаются в карте функций; здесь они не запускаются.','Folder, external editor, export and system dialogs remain in the function map; they do not run here.')+'</p></aside>';
 }
 function jobStatusWithoutButton(j){return j?'<p><strong>'+E(j.kind)+' · '+E(j.status)+'</strong></p>':'<p>'+T('Нет активного задания','No active job')+'</p>';}
@@ -421,6 +423,8 @@ function syncVisualControls(){
  [...$('visual-theme').options].forEach((o,i)=>o.textContent=(english?['Light','Dark']:['Светлое','Тёмное'])[i]);
  $('visual-theme').value=s.settings.theme;
  $('frame-size').options[0].textContent=T('По ширине панели','Fit panel width');
+ $('demo-calendar-label').hidden=s.platform!=='mac';$('calendar-demo-label').textContent=T('Календарь · демо','Calendar · demo');
+ [...$('demo-calendar').options].forEach((o,i)=>o.textContent=(english?['Access granted','No access','No events']:['Доступ выдан','Нет доступа','Нет событий'])[i]);
 }
 function showVisualScene(scene){
  const language=s.language,platform=s.platform,theme=s.settings.theme;
@@ -495,6 +499,38 @@ function importFiles(files){
  announce(T('Демонстрация импорта: используются только имена файлов. Содержимое не читается.','Import simulation: only file names are used. File contents are not read.'));
  render('meeting-title');
 }
+function recordingCalendar(events,now,enabled){
+ const available=enabled?events.filter(e=>e.calendarSelected&&!e.cancelled):[];
+ // Mirrors CalendarWatcher.bestMatch: calls first, then nearest start; ended/all-day events do not auto-match.
+ const candidates=available.filter(e=>!e.allDay&&e.end>now&&e.start-now<=8*60*1000);
+ candidates.sort((a,b)=>Number(b.looksLikeCall)-Number(a.looksLikeCall)||Math.abs(a.start-now)-Math.abs(b.start-now)||b.start-a.start);
+ return {events:available,suggested:candidates[0]||null};
+}
+function demoRecordingEvents(now){
+ return [
+  {id:'demo-calendar-current',title:T('Атлас — планирование пилота','Atlas — pilot planning'),start:now-5*60000,end:now+25*60000,looksLikeCall:true},
+  {id:'demo-calendar-next',title:T('Атлас — обзор материалов','Atlas — materials review'),start:now+45*60000,end:now+75*60000,looksLikeCall:true},
+  {id:'demo-calendar-solo',title:T('Подготовка заметок','Prepare notes'),start:now-60000,end:now+15*60000,looksLikeCall:false}
+ ].map(e=>({...e,calendarSelected:true,cancelled:false,allDay:false,people:[]}));
+}
+function startDemoRecording(title,event){
+ const id=addMeeting(title,true),m=s.meetings.find(m=>m.id===id);
+ m.calendarEvent=event?structuredClone(event):null;m.people=structuredClone(event?.people||[]);
+ s.recording={id,paused:false,seconds:0};render();
+}
+function openRecordingDialog(){
+ const now=Date.now(),enabled=s.platform==='mac'&&demoCalendarState!=='denied';
+ const calendar=recordingCalendar(demoCalendarState==='empty'?[]:demoRecordingEvents(now),now,enabled);
+ const fallback=T('Учебная запись','Demo recording');
+ const eventLabel=e=>E(e.title)+' · '+new Date(e.start).toLocaleTimeString(s.language==='en'?'en-GB':'ru-RU',{hour:'2-digit',minute:'2-digit'});
+ const calendarField=enabled?'<label for="record-event">'+T('Событие календаря','Calendar event')+'</label><select id="record-event"><option value="">'+T('Без события','No event')+'</option>'+calendar.events.map(e=>'<option value="'+e.id+'" '+(e.id===calendar.suggested?.id?'selected':'')+'>'+eventLabel(e)+'</option>').join('')+'</select><small>'+T('Учебный календарь. ','Demo calendar. ')+(calendar.suggested?T('Подставлено подходящее событие; можно выбрать другое.','A matching event is selected; you can choose another.'):calendar.events.length?T('Выберите событие или начните без него.','Choose an event or start without one.'):T('Событий нет. Можно начать без события.','No events. You can start without an event.'))+'</small>':s.platform==='mac'?'<p class="muted">'+T('Нет доступа к календарю. Можно начать без события; доступ включается в настройках календаря.','No calendar access. Start without an event, or enable access in Calendar settings.')+'</p>':'';
+ dialog('<h2 id="editor-title">'+T('Новая учебная запись','New demo recording')+'</h2><p>'+T('Микрофон и настоящий календарь не используются.','The microphone and real calendar are not used.')+'</p><label for="record-title">'+T('Название','Title')+'</label><input id="record-title" type="text" maxlength="160" value="'+E(calendar.suggested?.title||fallback)+'">'+calendarField+'<div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button class="primary" type="submit"><span class="button-content">'+icon('recording')+'<span>'+T('Начать демонстрацию','Start simulation')+'</span></span></button></div>',()=>{
+  const event=calendar.events.find(e=>e.id===$('record-event')?.value)||null;
+  const title=$('record-title').value.trim()||event?.title||fallback;
+  closeDialog();startDemoRecording(title,event);
+ });
+ if($('record-event'))$('record-event').onchange=()=>{const event=calendar.events.find(e=>e.id===$('record-event').value);if(event)$('record-title').value=event.title;};
+}
 document.addEventListener('click',e=>{
  const el=e.target.closest('[data-action]');if(!el||el.disabled)return;const a=el.dataset.action;saveScroll();
  switch(a){
@@ -526,7 +562,7 @@ document.addEventListener('click',e=>{
  case 'job-success':UX70.finishJob(s,'done');announce(T('Демонстрационное задание завершено.','Simulated job completed.'));render();return;
  case 'job-error':UX70.finishJob(s,'error');announce(T('Демонстрационная ошибка. Предыдущий результат сохранён.','Simulated error. Previous result preserved.'));render();return;
  case 'cancel-job':if(UX70.active(s.job)){s.job.status='cancelling';render();clearTimeout(jobTimer);jobTimer=setTimeout(()=>{UX70.finishJob(s,'cancelled');announce(T('Обработка отменена. Готовые результаты сохранены.','Processing cancelled. Completed results preserved.'));render();},700);}return;
- case 'record':dialog('<h2 id="editor-title">'+T('Новая учебная запись','New demo recording')+'</h2><p>'+T('Микрофон не включится. Проверяем навигацию во время записи.','The microphone stays off. This tests navigation during recording.')+'</p><label for="record-title">'+T('Название','Title')+'</label><input id="record-title" value="'+T('Учебная запись','Demo recording')+'"><div class="row actions">'+B('cancel-dialog',T('Отмена','Cancel'))+'<button class="primary" type="submit"><span class="button-content">'+icon('recording')+'<span>'+T('Начать демонстрацию','Start simulation')+'</span></span></button></div>',()=>{const title=$('record-title').value.trim()||T('Учебная запись','Demo recording');closeDialog();const id=addMeeting(title,true);s.recording={id,paused:false,seconds:0};render();});return;
+ case 'record':openRecordingDialog();return;
  case 'pause-record':s.recording.paused=!s.recording.paused;render();return;
  case 'recording-view':UX70.select(s,s.recording.id);s.list=false;render();return;
  case 'stop-record':{const id=s.recording.id;s.recording=null;const m=s.meetings.find(m=>m.id===id);m.status='deferred';announce(T('Учебная запись завершена и ожидает обработки.','Demo recording stopped and waiting for processing.'));render();return;}
@@ -545,6 +581,8 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
  const el=e.target;
+ if(el.id==='demo-calendar'){demoCalendarState=el.value;return;}
+ if(el.id==='record-event')return;
  if(el.id==='import-files'){importFiles(Array.from(el.files||[]));el.value='';return;}
  if(el.id==='visual-scene'){showVisualScene(el.value);return;}
  if(el.id==='visual-theme'){saveScroll();s.settings.theme=el.value;render(el.id);return;}

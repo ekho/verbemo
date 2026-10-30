@@ -1,8 +1,8 @@
 {
   "date": "2026-10-30",
-  "artifact_sha256": "1280e129d76b2a1e798e455bc6ad91e04e84c5071a73499fce9c0148ec463bf7",
+  "artifact_sha256": "97aae595c6ce7c8b97cb8beced871c5e8ee9e5f38a1391cb27c80637d05a95d7",
   "baseline_commit": "1bdd09f",
-  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import; shared player directly below meeting title; library filter popover next to search",
+  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import; shared player directly below meeting title; library filter popover next to search; full-width new-recording title and simulated calendar selection",
   "state_model_checks": 9,
   "text_contrast_pairs_checked": 42,
   "text_contrast_minimum": 4.5,
@@ -10,7 +10,7 @@
   "native_mac_gui_checked": false,
   "native_windows_gui_checked": false,
   "user_choice": "Studio: compactness and separate speaker column",
-  "review": "self-reviewed filter-popover iteration; focused checks and browser verification; no independent review of this iteration",
+  "review": "self-reviewed recording-calendar iteration; focused checks and browser verification; no independent review of this iteration",
   "screenshots": {
     "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
     "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
@@ -36,10 +36,11 @@
     "22-regenerate-icons-dark-en.png": "161d2ee3ab685146a517f024b794e48a1bf39d8eb9eafcc42ab1a5061f049dba",
     "23-direct-file-import.png": "7fa7a9ae839c138c73c67bb3bfb91ec508303d2617f7f25ce100d33609702159",
     "24-player-below-title.png": "d5ef40ad23a4c5d95c5984913930cc7d61f53c8a4514fe70f61842f28cd9eb6c",
-    "25-library-filter-popover.png": "8a144f94c114e56b84ad1b121668bd6810213fb6f28c380e86a5a421452cadb3"
+    "25-library-filter-popover.png": "8a144f94c114e56b84ad1b121668bd6810213fb6f28c380e86a5a421452cadb3",
+    "26-recording-calendar.png": "f026819268678007dd34093403da45f3bbd52f4570aaad6425ffa9b74db24ed1"
   },
   "first_round_artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
-  "presentation_logic_checks": 6,
+  "presentation_logic_checks": 8,
   "screenshot_rounds": {
     "first_round": "01-15, before refinement",
     "studio_refinement": "16-18, layout refinement before action icons",
@@ -136,6 +137,24 @@
     "no_app_horizontal_overflow": true,
     "javascript_errors": 0,
     "other_sizes_and_themes_rechecked": false,
+    "native_checked": false
+  },
+  "filter_popover_sha256": "1280e129d76b2a1e798e455bc6ad91e04e84c5071a73499fce9c0148ec463bf7",
+  "recording_calendar_verification": {
+    "viewport": [
+      1148,
+      954
+    ],
+    "light_ru": true,
+    "title_and_form_width_px": 428,
+    "auto_selected_current_event": true,
+    "manual_event_replaces_title": true,
+    "custom_title_after_selection_preserved_at_start": true,
+    "selected_event_visible_in_recording_details": true,
+    "access_denied_and_empty_calendar": true,
+    "cancel_checked": true,
+    "javascript_errors": 0,
+    "real_calendar_or_microphone_accessed": false,
     "native_checked": false
   }
 }
