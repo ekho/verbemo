@@ -29,7 +29,7 @@ final class WorkspaceSplitView: NSSplitView, NSSplitViewDelegate {
         needsDisplay = true
         guard subviews.count == 2 else { return super.resizeSubviews(withOldSize: oldSize) }
         let sidebar = subviews[0], content = subviews[1]
-        if sidebar.isHidden { content.frame = bounds; return }
+        if sidebar.isHidden { sidebar.frame = .zero; content.frame = bounds; return }
         let previousWidth = sidebar.frame.width > 0 ? sidebar.frame.width : JournalStyle.sidebarWidth
         let width = max(220, min(maximumWidth, previousWidth))
         sidebar.frame = NSRect(x: 0, y: 0, width: width, height: bounds.height)
