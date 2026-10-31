@@ -696,13 +696,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         }
     }
     private func textPane(content: NSView) -> NSView {
-        let pane = NSStackView(views: [content])
-        pane.orientation = .vertical
-        pane.alignment = .leading
-        pane.spacing = 10
-        pane.edgeInsets = NSEdgeInsets(top: 16, left: 10, bottom: 10, right: 10)
-        for view in pane.arrangedSubviews { view.widthAnchor.constraint(equalTo: pane.widthAnchor, constant: -20).isActive = true }
-        return Self.frameOwnedPane(pane)
+        Self.frameOwnedPane(content)
     }
     private static func summaryMethodName(_ backend: String) -> String {
         switch backend {
@@ -1162,7 +1156,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let count = NSTextField(labelWithString: localised("\(sample.turns) turns", "Реплик: \(sample.turns)"))
         count.font = .systemFont(ofSize: 11)
         count.textColor = StudioStyle.muted
-        let head = NSStackView(views: [StudioStyle.voiceBadge(StudioStyle.voiceLabel(sample.label)), editor, NSView(), count])
+        let colorIndex = MeetingTranscriptView.speakerLabels(in: transcript.segments).firstIndex(of: sample.label)
+        let badge = StudioStyle.voiceBadge(StudioStyle.voiceLabel(sample.label), colorIndex: colorIndex)
+        let head = NSStackView(views: [badge, editor, NSView(), count])
         head.spacing = 8
         let contents = NSStackView(views: [head])
         contents.orientation = .vertical
@@ -1742,14 +1738,15 @@ private extension MeetingLibraryController {
         inspectorButton.action = #selector(toggleInspector)
         toolbarContent.setViews([copy, moreButton, inspectorButton], in: .center)
         toolbarContent.spacing = 20
-        detail.edgeInsets = NSEdgeInsets(top: 36, left: 40, bottom: 18, right: 40)
+        detail.edgeInsets = NSEdgeInsets(top: 16, left: 24, bottom: 12, right: 24)
         // The document's arranged views fill its readable column, without setting a window minimum.
         for constraint in detail.constraints where constraint.firstAttribute == .width { constraint.isActive = false }
-        for view in detail.arrangedSubviews { view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -80).isActive = true }
+        for view in detail.arrangedSubviews { view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -48).isActive = true }
         detailTitle.maximumNumberOfLines = 2
         detailMeta.textColor = StudioStyle.muted
-        detail.setCustomSpacing(12, after: detailMeta)
-        detail.setCustomSpacing(24, after: detail.arrangedSubviews[1])
+        detail.setCustomSpacing(4, after: detailMeta)
+        detail.setCustomSpacing(12, after: detail.arrangedSubviews[1])
+        if let meetingHeader { detail.setCustomSpacing(4, after: meetingHeader) }
         detailTabs.setContentHuggingPriority(.init(1), for: .vertical)
         versionSelector.font = .systemFont(ofSize: 11)
         versionSelector.isBordered = false

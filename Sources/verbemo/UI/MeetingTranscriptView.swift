@@ -44,6 +44,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     }
     private let table = NSTableView()
     private var segments: [Transcript.Segment] = []
+    private var speakerLabels: [String] = []
     private var names: SpeakerNames?
     private var participants: [CalendarParticipant] = []
     private var canEdit = false
@@ -56,6 +57,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         drawsBackground = false
         table.addTableColumn(NSTableColumn(identifier: .init("utterance")))
         table.headerView = nil
+        table.style = .plain
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
@@ -77,6 +79,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let changed = segments != transcript.segments || self.names?.speakers != names?.speakers
             || self.participants != participants || self.canEdit != canEdit
             || self.canPlay != canPlay || self.canMatchParticipants != canMatchParticipants
+        if segments != transcript.segments { speakerLabels = Self.speakerLabels(in: transcript.segments) }
         segments = transcript.segments
         self.names = names
         self.participants = participants
@@ -90,7 +93,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
     }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        let available = tableView.tableColumns[0].width - 16
+        let available = tableView.tableColumns[0].width
         let width = SegmentCell.textWidth(available)
         let rect = (segments[row].text as NSString).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 15)])
         return (available >= 590 ? max(52, ceil(rect.height)) : ceil(rect.height) + 60) + 20
@@ -117,8 +120,8 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let entry = SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker]
         cell.name.stringValue = entry?.name ?? title
         cell.name.toolTip = cell.name.stringValue
-        cell.voice.stringValue = StudioStyle.voiceLabel(segment.speaker)
-        cell.voice.setAccessibilityLabel(localised("Voice ", "Голос ") + cell.voice.stringValue)
+        StudioStyle.configureVoiceBadge(cell.voice, text: StudioStyle.voiceLabel(segment.speaker),
+                                        colorIndex: speakerLabels.firstIndex(of: segment.speaker))
         cell.edit.isEnabled = canEdit && !SpeakerNames.isUnknown(segment.speaker)
         cell.edit.toolTip = localised("Change speaker: ", "Изменить говорящего: ") + cell.name.stringValue
         cell.edit.setAccessibilityLabel(cell.edit.toolTip)
@@ -140,7 +143,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
             editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
             return editor
         }
-        cell.updateWidth(tableView.tableColumns[0].width - 16)
+        cell.updateWidth(tableView.tableColumns[0].width)
         return cell
     }
     @objc private func playFrom(_ sender: NSButton) {
@@ -150,11 +153,17 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     static func speakerTitle(_ speaker: String, in segments: [Transcript.Segment]) -> String {
         if SpeakerNames.isUnknown(speaker) { return SpeakerNames.described(label: speaker) }
         if speaker == "me" { return SpeakerNames.described(label: speaker) }
-        var labels: [String] = []
-        for segment in segments where !SpeakerNames.isUnknown(segment.speaker) && !labels.contains(segment.speaker) { labels.append(segment.speaker) }
-        let number = (labels.firstIndex(of: speaker) ?? 0) + 1
+        let number = (speakerLabels(in: segments).firstIndex(of: speaker) ?? 0) + 1
         return localised("Speaker \(number)", "Говорящий \(number)")
     }
+    static func speakerLabels(in segments: [Transcript.Segment]) -> [String] {
+        var labels: [String] = []
+        for segment in segments where !SpeakerNames.isUnknown(segment.speaker) && !labels.contains(segment.speaker) {
+            labels.append(segment.speaker)
+        }
+        return labels
+    }
+
 }
 
 @MainActor
@@ -201,8 +210,8 @@ private final class SegmentCell: NSTableCellView {
         bodyWidth.isActive = true
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
     }
     func updateWidth(_ available: CGFloat) {
@@ -215,6 +224,6 @@ private final class SegmentCell: NSTableCellView {
         let width = Self.textWidth(available)
         if abs(body.preferredMaxLayoutWidth - width) > 0.5 { body.preferredMaxLayoutWidth = width }
     }
-    override func layout() { updateWidth(bounds.width - 16); super.layout() }
+    override func layout() { updateWidth(bounds.width); super.layout() }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
