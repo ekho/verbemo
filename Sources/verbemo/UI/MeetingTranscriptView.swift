@@ -43,6 +43,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         window?.makeFirstResponder(cell.edit)
     }
     private let table = NSTableView()
+    private let measuringText = NSTextField(wrappingLabelWithString: "")
     private var segments: [Transcript.Segment] = []
     private var speakerLabels: [String] = []
     private var names: SpeakerNames?
@@ -55,6 +56,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         hasVerticalScroller = true
         autohidesScrollers = true
         drawsBackground = false
+        measuringText.font = .systemFont(ofSize: 15)
         table.addTableColumn(NSTableColumn(identifier: .init("utterance")))
         table.headerView = nil
         table.style = .plain
@@ -95,8 +97,11 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         let available = tableView.tableColumns[0].width
         let width = SegmentCell.textWidth(available)
-        let rect = (segments[row].text as NSString).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 15)])
-        return (available >= 590 ? max(52, ceil(rect.height)) : ceil(rect.height) + 60) + 20
+        // Use the same native line metrics as the visible wrapping label.
+        measuringText.stringValue = segments[row].text
+        measuringText.preferredMaxLayoutWidth = width
+        let height = ceil(measuringText.fittingSize.height)
+        return (available >= 590 ? max(52, height) : height + 60) + 20
     }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("utterance")
@@ -195,8 +200,8 @@ private final class SegmentCell: NSTableCellView {
         body.identifier = .init("transcript.words")
         let identity = NSStackView(views: [voice, name, edit])
         identity.spacing = 6
-        metadata.setViews([identity, time], in: .center)
         metadata.orientation = .vertical
+        metadata.setViews([identity, time], in: .top)
         metadata.alignment = .leading
         metadata.spacing = 4
         identity.widthAnchor.constraint(equalTo: metadata.widthAnchor).isActive = true

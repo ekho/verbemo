@@ -26,7 +26,7 @@ enum StudioStyle {
         (0xe6e1f3, 0x59467b), (0xdcece6, 0x2d6553), (0xe7e9db, 0x606737),
     ]
     static func voiceBadge(_ text: String, colorIndex: Int? = nil) -> NSTextField {
-        let badge = NSTextField(labelWithString: text)
+        let badge = CenteredVoiceBadge(labelWithString: text)
         badge.cell = CenteredVoiceCell(textCell: text)
         badge.isEditable = false
         badge.isSelectable = false
@@ -60,6 +60,16 @@ enum StudioStyle {
                            green: CGFloat((rgb >> 8) & 255) / 255,
                            blue: CGFloat(rgb & 255) / 255, alpha: 1)
         }
+    }
+}
+
+@MainActor
+private final class CenteredVoiceBadge: NSTextField {
+    override func draw(_ dirtyRect: NSRect) {
+        // Centering the cell's text must not shrink the badge background.
+        backgroundColor?.setFill()
+        bounds.fill()
+        super.draw(dirtyRect)
     }
 }
 

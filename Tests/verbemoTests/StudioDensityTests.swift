@@ -40,6 +40,8 @@ struct StudioDensityTests {
         badge.frame = .init(x: 0, y: 0, width: 26, height: 24)
         let bitmap = try #require(badge.bitmapImageRepForCachingDisplay(in: badge.bounds))
         badge.cacheDisplay(in: badge.bounds, to: bitmap)
+        let corner = try #require(bitmap.colorAt(x: 1, y: 1))
+        #expect(corner.alphaComponent > 0.99, "The badge fills its whole fixed box, not only the text drawing rect")
         var foreground: NSColor?
         badge.effectiveAppearance.performAsCurrentDrawingAppearance { foreground = badge.textColor?.usingColorSpace(bitmap.colorSpace) }
         let ink = try #require(foreground)
@@ -53,6 +55,30 @@ struct StudioDensityTests {
         }
         let top = try #require(ys.min()), bottom = try #require(ys.max())
         #expect(abs(Double(top + bottom + 1) / 2 - Double(bitmap.pixelsHigh) / 2) <= 2)
+    }
+
+    @Test func longUtteranceKeepsIdentityAtTheTopAndFitsItsRow() throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.orderOut(nil) }
+        view.update(transcript: .init(engine: "test", model: "test", created_at: "test", segments: [
+            .init(speaker: "them A", start_ms: 0, end_ms: 1000,
+                  text: String(repeating: "Нужно согласовать сроки, проверить материалы и записать решение. ", count: 8)),
+        ]), names: nil, participants: [], canEdit: false)
+        view.layoutSubtreeIfNeeded()
+        let table = try #require(view.documentView as? NSTableView)
+        let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        cell.layoutSubtreeIfNeeded()
+        let fields = cell.allDescendants.compactMap { $0 as? NSTextField }
+        let badge = try #require(fields.first { $0.frame.width == 26 })
+        let body = try #require(fields.first { $0.identifier?.rawValue == "transcript.words" })
+        let badgeRect = badge.convert(badge.bounds, to: cell), bodyRect = body.convert(body.bounds, to: cell)
+        let needed = try #require(body.cell).cellSize(forBounds: .init(x: 0, y: 0, width: body.bounds.width, height: 10000)).height
+        #expect(abs(badgeRect.maxY - bodyRect.maxY) <= 2)
+        #expect(body.bounds.height >= needed - 1)
+        #expect(bodyRect.minY >= 9)
     }
 
     @Test func differentVoicesHaveDistinctBadgesAndReuseKeepsTheirColor() throws {
