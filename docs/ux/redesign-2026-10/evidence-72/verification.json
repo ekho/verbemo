@@ -1,15 +1,15 @@
 {
   "date": "2026-11-01",
-  "status": "Mac density fixes verified in Review646; human Mac acceptance and Windows pending",
+  "status": "Mac shared-header and density fixes verified in Review648; human Mac acceptance and Windows pending",
   "build": {
-    "source_commit": "95b82d13225c2b177c9123696abd8e5b637b2c5e",
+    "source_commit": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
     "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/Verbemo Studio Review.app",
     "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/home",
     "fixtures": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/recordings",
-    "executable_sha256": "c0ccf92224bb313288974304f23f8f4e10313b11a7fdc35034ece2eeaaacacd9",
+    "executable_sha256": "b1c8c62f746cdc81597da473287323db036e8c9171037c938024253ab6006633",
     "version": "0.17.2",
     "bundle_id": "name.ekho.verbemo.ux72.density",
-    "build_number": "646",
+    "build_number": "648",
     "architectures": "x86_64 arm64",
     "minimum_macos": "14.2",
     "config_sha256": "accbf77eb65edc75d7523b9447298cd6a6f392197864efe23527f478f2129c5a"
@@ -244,9 +244,58 @@
         "➜ Test \"Meeting summary, transcript and speaker processing states inside Journal\" skipped.",
         "➜ Test \"Transcript versions at Journal's minimum width, in both appearances\" skipped."
       ]
+    },
+    {
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "command": "swift test --no-parallel --filter 'ApplicationWindowTests|JournalWorkspaceTests|MediaImportUITests|StudioMeetingHeaderTests|StudioDensityTests|NewRecordingSheetTests|RecordingWorkspaceTests|MCPSettingsViewTests'",
+      "result": "✔ Test run with 79 tests in 8 suites passed after 25.082 seconds.",
+      "log_path": "/tmp/verbemo-ux72-toolbar-green.log",
+      "log_sha256": "ade27e588d8da8a1ff62917cdf0d4a310929dc20c48edb1930ccc6c67d0ad61e",
+      "skipped_tests": [],
+      "skipped_suites": []
+    },
+    {
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "command": "swift test --no-parallel",
+      "result": "✔ Test run with 1350 tests in 183 suites passed after 263.779 seconds.",
+      "log_path": "/tmp/verbemo-ux72-toolbar-full.log",
+      "log_sha256": "6f8269fe10c4022ba9aeae36dd0168ef1e4625a3d0d2dad4260243ab3e5fe2ca",
+      "skipped_tests": [
+        "➜ Test interactiveJournal() skipped.",
+        "➜ Test \"Annotated corpus: thresholds, repeats, alignment and private numeric report\" skipped.",
+        "➜ Test \"Explicit pinned model download verifies every asset\" skipped.",
+        "➜ Test \"Opt-in pinned native model produces valid speaker turns on public audio\" skipped.",
+        "➜ Test \"The published GigaAM GGUF transcribes real Russian audio\" skipped.",
+        "➜ Test \"The downloaded model runs both shared live streams end to end\" skipped.",
+        "➜ Test \"CI has the echo canceller the release ships\" skipped.",
+        "➜ Test \"Downloaded Nemotron recognizes a real audio fixture with native word times\" skipped.",
+        "➜ Test \"Private stereo input completes the production decoder, AEC and AAC path\" skipped.",
+        "➜ Test \"Pinned Whisper model emits real timed words on a permitted AMI clip\" skipped.",
+        "➜ Test \"Summary provider form in both appearances, without calling a provider\" skipped.",
+        "➜ Test \"New recording with and without a calendar event, in both appearances\" skipped.",
+        "➜ Test \"First-run permissions inside Journal, in both appearances and at minimum width\" skipped.",
+        "➜ Test \"Every settings page in Journal, in both appearances and at minimum width\" skipped.",
+        "➜ Test \"Calendar selection with synthetic calendars, at narrow and wide widths\" skipped.",
+        "➜ Test \"Cloud-only transcription explains unavailable local speaker separation\" skipped.",
+        "➜ Test \"A long speaker-model error on the narrow transcription page\" skipped.",
+        "➜ Test \"Local and speaker download progress on the narrow transcription page\" skipped.",
+        "➜ Test \"About inside Journal, in both appearances\" skipped.",
+        "➜ Test \"Every view on Journal's transcription page with its frame and control state\" skipped.",
+        "➜ Test \"Journal's empty library and live transcript, in both appearances\" skipped.",
+        "➜ Test \"Meeting summary, transcript and speaker processing states inside Journal\" skipped.",
+        "➜ Test \"Transcript versions at Journal's minimum width, in both appearances\" skipped."
+      ],
+      "skipped_suites": [
+        "➜ Suite CalendarAcceptanceTests skipped.",
+        "➜ Suite DiarizationEvaluationTests skipped.",
+        "➜ Suite DiarizationNativeSelectionTests skipped.",
+        "➜ Suite OfflineEchoEvaluation skipped.",
+        "➜ Suite WindowShots skipped.",
+        "➜ Suite WindowGallery skipped."
+      ]
     }
   ],
-  "post_test_changes": "No product changes after full1348/183 at95b82d1; packaged GUI646 checked; documentation and evidence only.",
+  "post_test_changes": "No product changes after full1350/183 at a1a0473; packaged GUI648 checked; documentation and evidence only.",
   "screenshots": [
     {
       "file": "01-transcript-light.jpg",
@@ -483,6 +532,72 @@
         1696
       ],
       "role": "verified surface"
+    },
+    {
+      "file": "toolbar/01-wide-light.jpg",
+      "build": 648,
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "sha256": "8813322f1281612c0647f69b94a4ebe36e09823a2a9cae150945f07d927e5727",
+      "pixels": [
+        2680,
+        1256
+      ],
+      "role": "verified shared header and existing action"
+    },
+    {
+      "file": "toolbar/02-narrow-light.jpg",
+      "build": 648,
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "sha256": "d6eca4762d66f641b87da54dba753c60c3d7f12f2852d1172e406697f8efd9e6",
+      "pixels": [
+        1520,
+        1256
+      ],
+      "role": "verified shared header and existing action"
+    },
+    {
+      "file": "toolbar/03-hidden-list.jpg",
+      "build": 648,
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "sha256": "2dd451f3b1bd4dc47eb0745705819978d3eb1c8b7ae6b0f531217742a5fa55a1",
+      "pixels": [
+        1520,
+        1256
+      ],
+      "role": "verified shared header and existing action"
+    },
+    {
+      "file": "toolbar/04-settings.jpg",
+      "build": 648,
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "sha256": "6c5240e8d0305fad80503bc4feab15ee6eeaf58a8d62ee9729ad3f488919251f",
+      "pixels": [
+        1520,
+        1256
+      ],
+      "role": "verified shared header and existing action"
+    },
+    {
+      "file": "toolbar/05-new-recording.jpg",
+      "build": 648,
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "sha256": "aa1296c87f81d4c3797eec08d0bfa14058cfe0192c397758188c2be023813c0d",
+      "pixels": [
+        1120,
+        444
+      ],
+      "role": "verified shared header and existing action"
+    },
+    {
+      "file": "toolbar/06-dark-en.jpg",
+      "build": 648,
+      "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "sha256": "9c43101b2546b9804c5000ea0df45751ffcbcf533f37550a49e44227f7f9e31c",
+      "pixels": [
+        1520,
+        1256
+      ],
+      "role": "verified shared header and existing action"
     }
   ],
   "integrity": {
@@ -499,6 +614,13 @@
       "files": 30,
       "changed": 0,
       "profile_isolated": true
+    },
+    "toolbar": {
+      "before": "toolbar/qa-before.json",
+      "after": "toolbar/qa-after.json",
+      "files": 30,
+      "changed": 0,
+      "interactions": "toolbar/interactions.json"
     }
   },
   "known_open": [],
@@ -540,6 +662,16 @@
       "full": "1348 tests / 183 suites passed",
       "gui": "RU/light short and long, first paragraph with legacy scroller, narrow761×600 and segment174 retained; EN/dark search and hide in645; screenshots carry exact revisions",
       "report": "density/report.md"
+    },
+    {
+      "id": "MAC-PRIMARY-ACTIONS-IN-SHARED-HEADER",
+      "source_commit": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+      "build": 648,
+      "fix": "One persistent New recording / Import / Settings group above both panes; duplicate sidebar actions removed; existing callbacks/shortcuts/recording guards retained",
+      "focused": "79 tests / 8 suites passed",
+      "full": "1350 tests / 183 suites passed",
+      "gui": "RU/light wide1340 and narrow760; shown/hidden library, New recording and Cmd-N cancel, direct native file picker cancel, Settings and Cmd-comma, EN/dark; no capture or import created",
+      "report": "toolbar/report.md"
     }
   ],
   "build_history": [
@@ -555,13 +687,27 @@
       "build_number": "640",
       "architectures": "x86_64 arm64",
       "minimum_macos": "14.2"
+    },
+    {
+      "source_commit": "95b82d13225c2b177c9123696abd8e5b637b2c5e",
+      "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/Verbemo Studio Review.app",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/home",
+      "fixtures": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/recordings",
+      "executable_sha256": "c0ccf92224bb313288974304f23f8f4e10313b11a7fdc35034ece2eeaaacacd9",
+      "version": "0.17.2",
+      "bundle_id": "name.ekho.verbemo.ux72.density",
+      "build_number": "646",
+      "architectures": "x86_64 arm64",
+      "minimum_macos": "14.2",
+      "config_sha256": "accbf77eb65edc75d7523b9447298cd6a6f392197864efe23527f478f2129c5a",
+      "archived_bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/Review-build646.saved"
     }
   ],
   "packaged_build_check": {
-    "source": "95b82d13225c2b177c9123696abd8e5b637b2c5e",
-    "log_path": "/tmp/verbemo-ux72-density-scrollbar-build.log",
-    "log_sha256": "bb1b1dbaedbbfe603176ba46aa4fa06eebdd7e76594296c41dc8be16f0e9b739",
-    "result": "Universal build646; ad-hoc codesign and minimum macOS14.2 validation passed; Review copy re-signed and verified."
+    "source": "a1a047396e79e9973c0323f3ce2b50184fdf02f2",
+    "log_path": "/tmp/verbemo-ux72-toolbar-build.log",
+    "log_sha256": "266786163a0a5137a1bcaa3735b2e315e618c49c238a56e56f3906c086f6452e",
+    "result": "Universal build648; minimum14.2 validation, ad-hoc codesign and re-signed Review copy verification passed."
   },
   "red_checks": [
     {
@@ -579,6 +725,19 @@
     {
       "log_path": "/tmp/verbemo-ux72-density-scrollbar-red.log",
       "log_sha256": "283b4ad4d6c896346213b5c51767f14514a87b3ff589f0189674e8c91b8753db"
+    },
+    {
+      "source_before_fix": "d0140eeaf8c9fa7502fe904afd940cf270a13f45",
+      "log_path": "/tmp/verbemo-ux72-toolbar-red.log",
+      "log_sha256": "0013172464112b13cd2fdcc6f78e10679ef8e74a8f1240256c720fcdd32932c3"
+    }
+  ],
+  "packaged_build_history": [
+    {
+      "source": "95b82d13225c2b177c9123696abd8e5b637b2c5e",
+      "log_path": "/tmp/verbemo-ux72-density-scrollbar-build.log",
+      "log_sha256": "bb1b1dbaedbbfe603176ba46aa4fa06eebdd7e76594296c41dc8be16f0e9b739",
+      "result": "Universal build646; ad-hoc codesign and minimum macOS14.2 validation passed; Review copy re-signed and verified."
     }
   ]
 }

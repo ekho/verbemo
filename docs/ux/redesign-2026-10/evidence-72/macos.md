@@ -4,13 +4,13 @@
 
 ## Сборка и профиль
 
-Текущие исходники: `95b82d1`, Review **0.17.2 build 646**, x86_64 + arm64, ad-hoc. Полный прогон этой ревизии: **1348 tests / 183 suites passed**, 262.962 s, `/tmp/verbemo-ux72-density-scrollbar-full.log`; 23 opt-in теста и 6 suites пропущены. Целевые 68/6 прошли. `make app SIGN_ID=-`, codesign и minimum-target validation прошли. Хост macOS 26.7.1, Xcode 27.1 / SDK 27.0; runtime на минимуме 14.2 не проверен.
+Текущие исходники: `a1a0473`, Review **0.17.2 build 648**, x86_64 + arm64, ad-hoc. Полный прогон этой ревизии: **1350 tests / 183 suites passed**, 263.779 s, `/tmp/verbemo-ux72-toolbar-full.log`; 23 opt-in теста и 6 suites пропущены. Целевые 79/8 прошли. `make app SIGN_ID=-`, codesign и minimum-target validation прошли. Хост macOS 26.7.1, Xcode 27.1 / SDK 27.0; runtime на минимуме 14.2 не проверен.
 
-Исправлены замечания пользователя к плотности и бейджам, а также найденные при GUI-повторе обрезание текста и старая геометрия при resize. [Сравнение до/после, причины и повторный аудит соседних экранов](density/report.md). Ревизии прежних проверок и каждого снимка сохранены в [verification.json](verification.json).
+Исправлены замечания к плотности/бейджам и общей шапке. «Новая запись», «Импорт» и «Настройки» постоянно расположены над обеими колонками. [Проверка общей шапки648](toolbar/report.md). Найденные ранее обрезание текста и старая геометрия при resize также устранены. [Сравнение до/после, причины и повторный аудит соседних экранов](density/report.md). Ревизии прежних проверок и каждого снимка сохранены в [verification.json](verification.json).
 
-Текущая копия `.build/ux72-density/Verbemo Studio Review.app`, bundle ID `name.ekho.verbemo.ux72.density`, отдельный `.build/ux72-density/home` через CFFIXED_USER_HOME. Прежняя QA-копия/профиль и личная установленная Verbemo не заменялись. Копия 30 синтетических файлов в `.build/ux72-density/recordings` совпадает побайтно до/после: [before](density/qa-before.json), [after](density/qa-after.json). Calendar, ASR, live transcription, speaker naming, summary automation, auto-record и MCP выключены.
+Текущая копия `.build/ux72-density/Verbemo Studio Review.app`, bundle ID `name.ekho.verbemo.ux72.density`, отдельный `.build/ux72-density/home` через CFFIXED_USER_HOME. Прежняя QA-копия/профиль и личная установленная Verbemo не заменялись. Копия 30 синтетических файлов в `.build/ux72-density/recordings` совпадает побайтно до/после текущей проверки648: [before](toolbar/qa-before.json), [after](toolbar/qa-after.json). Calendar, ASR, live transcription, speaker naming, summary automation, auto-record и MCP выключены.
 
-Ниже сохранены проверки прежней QA631–640 с их ограничениями. Их исходный [manifest](qa-before.json) содержит 28 файлов; первые три секунды короткой встречи — синтетический 440 Hz тон, далее тишина. Проверка обработки через `127.0.0.1:18969`, `ux69-synthetic` и mock-summary.py была исторической проверкой UI lifecycle, не реальной модели; в текущем Review646 провайдер не запускался.
+Ниже сохранены проверки прежней QA631–640 с их ограничениями. Их исходный [manifest](qa-before.json) содержит 28 файлов; первые три секунды короткой встречи — синтетический 440 Hz тон, далее тишина. Проверка обработки через `127.0.0.1:18969`, `ux69-synthetic` и mock-summary.py была исторической проверкой UI lifecycle, не реальной модели; в текущем Review648 провайдер не запускался.
 
 ## Реализация
 
@@ -95,4 +95,10 @@ QA640 оставлена открытой: текущая короткая вс�
 
 GUI646: первая длинная реплика целиком с нижним отступом; 761×600, повторный широкий вид; достигнут конец180/29:50, при сужении первой остаётся реплика174. GUI645: RU/light Participants/Summary/Details/General settings и EN/dark search1/1/Escape/hide. Каждая ревизия отмечена в manifest. Это повтор выбранных поверхностей, не полный аудит всего приложения.
 
-Открыт Review646: короткая «Атлас — планирование», текущая Whisper-версия, Transcript, библиотека248pt, RU/light, поиск пуст, плеер0, Queue0. [Итоговый снимок](density/11-final-light.jpg), [AX-состояние](density/final-window.txt). Полный перенос остальных настроек/маршрутов остаётся в #73; приёмка #72 и Windows ещё впереди.
+На завершении проверки646 был открыт Review646: короткая «Атлас — планирование», текущая Whisper-версия, Transcript, библиотека248pt, RU/light, поиск пуст, плеер0, Queue0. [Итоговый снимок](density/11-final-light.jpg), [AX-состояние](density/final-window.txt). Полный перенос остальных настроек/маршрутов остаётся в #73; приёмка #72 и Windows ещё впереди.
+
+## Общая панель действий — Review648
+
+Условный второй набор после collapse заменён одной постоянной панелью над обеими колонками; прежние кнопки sidebar удалены. Действия/guards/shortcuts принадлежат ApplicationWindow, обработка и настройки используют прежние маршруты. Панель остаётся доступной при переходе в настройки/About/начальную настройку.
+
+GUI648: RU/light1340 и760pt, hide/show, New recording→Escape и Cmd-N→Escape без записи; Import→настоящий системный picker→Escape; Settings и Cmd-comma→General; EN/dark760pt. Все30 SHA прежние. [Фактические проверки](toolbar/report.md), [актуальный снимок](toolbar/01-wide-light.jpg), [AX](toolbar/final-window.txt). Текущий открытый Review648: короткая текущая расшифровка, RU/light, список248pt, пустой поиск, плеер0, Queue0. Пользовательская приёмка Mac и Windows остаются впереди.
