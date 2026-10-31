@@ -1128,14 +1128,17 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                 throw unavailable
             }
         }
+        let editedTab = detailTabs.selectedTabViewItem?.identifier as? String
         try PostProcessor.setSpeakerParticipant(speaker, participant: participant, name: name, in: version)
         Task { @MainActor [weak self] in
             guard let self, self.selected?.dir.standardizedFileURL.path == session.standardizedFileURL.path,
                   self.artifactDirectory?.standardizedFileURL.path == version.standardizedFileURL.path else { return }
             let focused = (self.panel.firstResponder as? NSTextView)?.delegate as? NSView ?? self.panel.firstResponder as? NSView
-            let restoreFocus = focused?.isDescendant(of: self.meetingTranscript) == true || focused?.isDescendant(of: self.speakersStack) == true
+            let restoreFocus = focused == nil || focused?.isDescendant(of: self.meetingTranscript) == true || focused?.isDescendant(of: self.speakersStack) == true
             self.showDetail()
-            if restoreFocus, self.detailTabs.selectedTabViewItem?.identifier as? String == "participants",
+            guard restoreFocus, self.detailTabs.selectedTabViewItem?.identifier as? String == editedTab else { return }
+            if editedTab == "transcript" { self.meetingTranscript.focusSpeaker(speaker) }
+            if editedTab == "participants",
                let row = self.speakersStack.arrangedSubviews.first(where: { $0.identifier?.rawValue == "speaker-row.\(speaker)" }),
                let contents = (row as? MeetingSpeakerView)?.editor as? NSStackView,
                let head = contents.arrangedSubviews.first as? NSStackView,

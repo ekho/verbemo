@@ -23,29 +23,22 @@ struct MeetingTranscriptReadingTests {
         view.layoutSubtreeIfNeeded()
         #expect(view.readingPosition()?.segment == 8)
     }
-    @Test func closingEditorAfterReloadRestoresItsPencilFocus() async throws {
+    @Test func transientCloseKeepsTheChosenSearchFocus() async throws {
         _ = NSApplication.shared
-        let view = MeetingTranscriptView()
+        let search = NSSearchField()
+        let pencil = SpeakerEditButton()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 300),
             styleMask: [.titled], backing: .buffered, defer: false)
-        window.contentView = view
+        window.contentView = NSStackView(views: [search, pencil])
         defer { window.orderOut(nil) }
-        let transcript = Transcript(engine: "test", model: "test", created_at: "test", segments: [
-            .init(speaker: "them A", start_ms: 0, end_ms: 1000, text: "Hello")])
-        view.update(transcript: transcript, names: nil, participants: [], canEdit: true)
-        view.layoutSubtreeIfNeeded()
-        let table = try #require(view.documentView as? NSTableView)
-        let oldRow = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
-        let oldPencil = try #require(oldRow.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
-        window.makeFirstResponder(oldPencil)
-        var names = SpeakerNames()
-        names.speakers["them A"] = .init(name: "New name", source: .manual)
-        view.update(transcript: transcript, names: names, participants: [], canEdit: true)
-        oldPencil.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
+        window.makeFirstResponder(search)
+        let chosen = window.firstResponder
+        var restores = 0
+        pencil.onRestoreFocus = { restores += 1; window.makeFirstResponder(pencil) }
+        pencil.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
         for _ in 0..<4 { await Task.yield() }
-        let newRow = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
-        let pencil = try #require(newRow.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
-        #expect(window.firstResponder === pencil)
+        #expect(window.firstResponder === chosen)
+        #expect(restores == 0)
     }
     @Test func searchAndResizeRetainTheReadingSegment() throws {
         _ = NSApplication.shared

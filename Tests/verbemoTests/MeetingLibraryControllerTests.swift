@@ -10,6 +10,28 @@ import Testing
 @Suite(.serialized, .freshHome)
 @MainActor
 struct MeetingLibraryControllerTests {
+    @Test("Assignment restores the new transcript pencil after asynchronous read-back")
+    func assignmentFocusFollowsReadBack() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        tabs.selectTabViewItem(withIdentifier: "transcript")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let old = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        app.panel.makeFirstResponder(old)
+        try library.assignSpeaker("me", participant: nil, name: "New name", session: dir, version: dir)
+        for _ in 0..<4 { await Task.yield() }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let pencil = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        #expect(app.panel.firstResponder === pencil)
+    }
     @Test("Starting summary work immediately disables speaker editors and cancellation restores them")
     func summaryWorkUpdatesSpeakerAvailability() async throws {
         let root = try Self.folder()

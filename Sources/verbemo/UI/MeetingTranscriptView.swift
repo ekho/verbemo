@@ -34,6 +34,14 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         guard segments.indices.contains(index) else { return }
         table.scrollRowToVisible(index)
     }
+    func focusSpeaker(_ speaker: String) {
+        table.layoutSubtreeIfNeeded()
+        let visible = table.rows(in: documentVisibleRect)
+        guard visible.location != NSNotFound,
+              let row = segments.indices.first(where: { NSLocationInRange($0, visible) && segments[$0].speaker == speaker }),
+              let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? SegmentCell else { return }
+        window?.makeFirstResponder(cell.edit)
+    }
     private let table = NSTableView()
     private var segments: [Transcript.Segment] = []
     private var names: SpeakerNames?

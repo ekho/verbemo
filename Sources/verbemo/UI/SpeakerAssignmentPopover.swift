@@ -80,6 +80,7 @@ final class SpeakerEditButton: NSButton, NSPopoverDelegate {
     var onRestoreFocus: (() -> Void)?
     private var popover: NSPopover?
     private var restoreFocusAfterClose: (() -> Void)?
+    private var restoreFocusRequested = false
     init() {
         super.init(frame: .zero)
         image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
@@ -99,13 +100,18 @@ final class SpeakerEditButton: NSButton, NSPopoverDelegate {
         popover.behavior = .transient
         popover.delegate = self
         popover.contentViewController = editor
-        editor.onDismiss = { [weak self] in self?.popover?.performClose(nil) }
+        editor.onDismiss = { [weak self] in
+            self?.restoreFocusRequested = true
+            self?.popover?.performClose(nil)
+        }
         popover.show(relativeTo: bounds, of: self, preferredEdge: .minY)
     }
     func popoverDidClose(_ notification: Notification) {
         popover = nil
         let restore = restoreFocusAfterClose ?? onRestoreFocus
         restoreFocusAfterClose = nil
+        guard restoreFocusRequested else { return }
+        restoreFocusRequested = false
         if let restore {
             Task { @MainActor in restore() }
         } else { window?.makeFirstResponder(self) }
