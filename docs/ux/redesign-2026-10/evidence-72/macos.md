@@ -4,13 +4,13 @@
 
 ## Сборка и профиль
 
-Текущие исходники: `a1a0473`, Review **0.17.2 build 648**, x86_64 + arm64, ad-hoc. Полный прогон этой ревизии: **1350 tests / 183 suites passed**, 263.779 s, `/tmp/verbemo-ux72-toolbar-full.log`; 23 opt-in теста и 6 suites пропущены. Целевые 79/8 прошли. `make app SIGN_ID=-`, codesign и minimum-target validation прошли. Хост macOS 26.7.1, Xcode 27.1 / SDK 27.0; runtime на минимуме 14.2 не проверен.
+Текущие исходники: `10335b6`, Review **0.17.2 build 651**, x86_64 + arm64, ad-hoc. Полный прогон этой ревизии: **1354 tests / 184 suites passed**, 259.493 s, `/tmp/verbemo-ux72-library-final-full.log`; 23 opt-in теста и 6 suites пропущены. Целевые 66/7 прошли. `make app SIGN_ID=-`, codesign и minimum-target validation прошли. Хост macOS 26.7.1, Xcode 27.1 / SDK 27.0; runtime на минимуме 14.2 не проверен.
 
-Исправлены замечания к плотности/бейджам и общей шапке. «Новая запись», «Импорт» и «Настройки» постоянно расположены над обеими колонками. [Проверка общей шапки648](toolbar/report.md). Найденные ранее обрезание текста и старая геометрия при resize также устранены. [Сравнение до/после, причины и повторный аудит соседних экранов](density/report.md). Ревизии прежних проверок и каждого снимка сохранены в [verification.json](verification.json).
+Исправлены замечания к плотности/бейджам, общей шапке и компоновке библиотеки. [Библиотека651: перенос названий, поиск/фильтр и статусы](library/report.md). «Новая запись», «Импорт» и «Настройки» постоянно расположены над обеими колонками. [Проверка общей шапки648](toolbar/report.md). Найденные ранее обрезание текста и старая геометрия при resize также устранены. [Сравнение до/после, причины и повторный аудит соседних экранов](density/report.md). Ревизии прежних проверок и каждого снимка сохранены в [verification.json](verification.json).
 
-Текущая копия `.build/ux72-density/Verbemo Studio Review.app`, bundle ID `name.ekho.verbemo.ux72.density`, отдельный `.build/ux72-density/home` через CFFIXED_USER_HOME. Прежняя QA-копия/профиль и личная установленная Verbemo не заменялись. Копия 30 синтетических файлов в `.build/ux72-density/recordings` совпадает побайтно до/после текущей проверки648: [before](toolbar/qa-before.json), [after](toolbar/qa-after.json). Calendar, ASR, live transcription, speaker naming, summary automation, auto-record и MCP выключены.
+Текущая копия `.build/ux72-density/Verbemo Studio Review.app`, bundle ID `name.ekho.verbemo.ux72.density`, отдельный `.build/ux72-density/home` через CFFIXED_USER_HOME. Прежняя QA-копия/профиль и личная установленная Verbemo не заменялись. Копия 30 синтетических файлов в `.build/ux72-density/recordings` совпадает побайтно до/после текущей проверки651: [before](library/qa-before.json), [after](library/qa-after.json). Calendar, ASR, live transcription, speaker naming, summary automation, auto-record и MCP выключены.
 
-Ниже сохранены проверки прежней QA631–640 с их ограничениями. Их исходный [manifest](qa-before.json) содержит 28 файлов; первые три секунды короткой встречи — синтетический 440 Hz тон, далее тишина. Проверка обработки через `127.0.0.1:18969`, `ux69-synthetic` и mock-summary.py была исторической проверкой UI lifecycle, не реальной модели; в текущем Review648 провайдер не запускался.
+Ниже сохранены проверки прежней QA631–640 с их ограничениями. Их исходный [manifest](qa-before.json) содержит 28 файлов; первые три секунды короткой встречи — синтетический 440 Hz тон, далее тишина. Проверка обработки через `127.0.0.1:18969`, `ux69-synthetic` и mock-summary.py была исторической проверкой UI lifecycle, не реальной модели; в текущем Review651 провайдер не запускался.
 
 ## Реализация
 
@@ -101,4 +101,12 @@ GUI646: первая длинная реплика целиком с нижни�
 
 Условный второй набор после collapse заменён одной постоянной панелью над обеими колонками; прежние кнопки sidebar удалены. Действия/guards/shortcuts принадлежат ApplicationWindow, обработка и настройки используют прежние маршруты. Панель остаётся доступной при переходе в настройки/About/начальную настройку.
 
-GUI648: RU/light1340 и760pt, hide/show, New recording→Escape и Cmd-N→Escape без записи; Import→настоящий системный picker→Escape; Settings и Cmd-comma→General; EN/dark760pt. Все30 SHA прежние. [Фактические проверки](toolbar/report.md), [актуальный снимок](toolbar/01-wide-light.jpg), [AX](toolbar/final-window.txt). Текущий открытый Review648: короткая текущая расшифровка, RU/light, список248pt, пустой поиск, плеер0, Queue0. Пользовательская приёмка Mac и Windows остаются впереди.
+GUI648: RU/light1340 и760pt, hide/show, New recording→Escape и Cmd-N→Escape без записи; Import→настоящий системный picker→Escape; Settings и Cmd-comma→General; EN/dark760pt. Все30 SHA прежние. [Фактические проверки](toolbar/report.md), [актуальный снимок](toolbar/01-wide-light.jpg), [AX](toolbar/final-window.txt). На завершении проверки648 был открыт Review648: короткая текущая расшифровка, RU/light, список248pt, пустой поиск, плеер0, Queue0. Пользовательская приёмка Mac и Windows остаются впереди.
+
+## Библиотека по макету — Review651
+
+Поле поиска и фильтр в одном ряду; нативная всплывающая панель, перенос названий и адаптивная высота, компактные дата/длительность/статус, Studio-палитра. Фильтр и поиск сохраняют прежние правила; полнотекстовый индекс остаётся #73. GUI651:760/1340, колонка220/248/399.5, Escape/клик снаружи/выбор, сохранение запроса, clear search, hide/show, EN/dark. [Проверки и снимки](library/report.md).
+
+Открыт Review651: RU/light1340×600, библиотека248pt, текущая короткая Whisper/Transcript, поиск пуст, фильтр All, player0, Queue0. [Итоговый снимок](library/01-wide-light.png). Все30 SHA прежние. Новых заданий/записи нет.
+
+Изолированное замечание для #73: прежняя правая область при нуле совпадений говорит «Записей пока нет», хотя библиотека сообщает о нуле совпадений корректно. Это не блокирует компоновку колонки, но не считается исправленным. Пользовательская приёмка Mac и Windows ещё впереди.

@@ -1,0 +1,10 @@
+{
+  "source_commit": "4c0d28d5d3ec3a59eae5055ccf3c759a14a312b4",
+  "build": "650",
+  "version": "0.17.2",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/Verbemo Studio Review.app",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/home",
+  "fixtures": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/recordings",
+  "executable_sha256": "63e43bab5efb8b8c0d453eb263bb541c9189bba29cbae69d2eb12df00add75a9",
+  "archived_bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/Review-build650.saved"
+}
