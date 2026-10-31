@@ -17,6 +17,9 @@ final class WorkspaceSplitView: NSSplitView, NSSplitViewDelegate {
         setAccessibilityHelp(localised("Drag the divider or use left/right arrows", "Перетащите разделитель или используйте стрелки влево/вправо"))
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func drawDivider(in rect: NSRect) {
+        if subviews.first?.isHidden != true { super.drawDivider(in: rect) }
+    }
     private var maximumWidth: CGFloat { max(220, min(480, bounds.width - 420 - dividerThickness)) }
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat { 220 }
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat { maximumWidth }
