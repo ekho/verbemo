@@ -16,7 +16,8 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     func restoreReadingPosition(_ position: ReadingPosition?) {
         guard let position, segments.indices.contains(position.segment) else { return }
         table.layoutSubtreeIfNeeded()
-        let y = table.rect(ofRow: position.segment).minY + position.offset
+        let row = table.rect(ofRow: position.segment)
+        let y = row.minY + max(0, min(position.offset, row.height - 1))
         contentView.scroll(to: NSPoint(x: 0, y: max(0, min(y, table.bounds.height - contentView.bounds.height))))
         reflectScrolledClipView(contentView)
     }

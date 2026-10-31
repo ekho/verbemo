@@ -4,6 +4,25 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct MeetingTranscriptReadingTests {
+    @Test func wideningALongUtteranceKeepsItsSegment() throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.orderOut(nil) }
+        let transcript = Transcript(engine: "test", model: "test", created_at: "test", segments: (0..<20).map {
+            .init(speaker: "them A", start_ms: $0 * 1000, end_ms: ($0 + 1) * 1000,
+                  text: String(repeating: "Длинная учебная реплика. ", count: 100)) })
+        view.update(transcript: transcript, names: nil, participants: [], canEdit: false)
+        view.layoutSubtreeIfNeeded()
+        let table = try #require(view.documentView as? NSTableView)
+        view.restoreReadingPosition(.init(segment: 8, offset: table.rect(ofRow: 8).height * 0.85))
+        #expect(view.readingPosition()?.segment == 8)
+        window.setContentSize(NSSize(width: 1000, height: 300))
+        view.layoutSubtreeIfNeeded()
+        #expect(view.readingPosition()?.segment == 8)
+    }
     @Test func closingEditorAfterReloadRestoresItsPencilFocus() throws {
         _ = NSApplication.shared
         let view = MeetingTranscriptView()
