@@ -1,16 +1,16 @@
 # #72 — нативный Studio-пилот macOS
 
-31.10.2026. Ветка `codex/67-cross-platform-ux-redesign`. Пользовательская приёмка Mac и Windows — отдельные последующие решения; #72 остаётся открытой.
+Актуализировано 01.11.2026. Ветка `codex/67-cross-platform-ux-redesign`. Пользовательская приёмка Mac и Windows — отдельные последующие решения; #72 остаётся открытой.
 
 ## Сборка и профиль
 
-Текущие исходники: `37566c5`, QA **0.17.2 build 640**, x86_64 + arm64, ad-hoc. Полный прогон на этих исходниках: **1342 tests / 182 suites passed**, 260.945 s, `/tmp/verbemo-ux72-collapse-full.log`; 23 opt-in теста и 6 suites пропущены и не засчитаны проверенными. `make app SIGN_ID=-`, codesign и minimum-target validation прошли. Хост macOS 26.7.1, Xcode 27.1 / SDK 27.0. Минимум 14.2 сохранён; запуск на 14.2 не проверен.
+Текущие исходники: `95b82d1`, Review **0.17.2 build 646**, x86_64 + arm64, ad-hoc. Полный прогон этой ревизии: **1348 tests / 183 suites passed**, 262.962 s, `/tmp/verbemo-ux72-density-scrollbar-full.log`; 23 opt-in теста и 6 suites пропущены. Целевые 68/6 прошли. `make app SIGN_ID=-`, codesign и minimum-target validation прошли. Хост macOS 26.7.1, Xcode 27.1 / SDK 27.0; runtime на минимуме 14.2 не проверен.
 
-Предыдущая контрольная точка: `eef804e`, build 638. Исторические полный прогон 1338/182 и целевые 66/7 сохранены в [verification.json](verification.json). После пересмотра сворачивания выполнены новый RED→GREEN, полный прогон и GUI-повтор в build 640.
+Исправлены замечания пользователя к плотности и бейджам, а также найденные при GUI-повторе обрезание текста и старая геометрия при resize. [Сравнение до/после, причины и повторный аудит соседних экранов](density/report.md). Ревизии прежних проверок и каждого снимка сохранены в [verification.json](verification.json).
 
-Тестовая копия `.build/ux72/Verbemo Studio QA.app`, bundle ID `name.ekho.verbemo.ux72`; отдельный `.build/ux72/home` через `CFFIXED_USER_HOME`, без изменения HOME. Личная установленная Verbemo не заменялась. Только заново созданный UX69-корпус из пяти вымышленных встреч. Исходный manifest: [qa-before.json](qa-before.json), 28 файлов. У короткой встречи первые три секунды — синтетический 440 Hz тон на малой амплитуде, далее тишина; частной речи нет.
+Текущая копия `.build/ux72-density/Verbemo Studio Review.app`, bundle ID `name.ekho.verbemo.ux72.density`, отдельный `.build/ux72-density/home` через CFFIXED_USER_HOME. Прежняя QA-копия/профиль и личная установленная Verbemo не заменялись. Копия 30 синтетических файлов в `.build/ux72-density/recordings` совпадает побайтно до/после: [before](density/qa-before.json), [after](density/qa-after.json). Calendar, ASR, live transcription, speaker naming, summary automation, auto-record и MCP выключены.
 
-Calendar, ASR, live transcription, speaker naming, summary automation, auto-record и MCP выключены. Для ручной проверки обработки в QA config использовался исключительно localhost `127.0.0.1:18969`, модель `ux69-synthetic`; сервер — существующий mock-summary.py. Это проверка UI lifecycle, не реальной модели.
+Ниже сохранены проверки прежней QA631–640 с их ограничениями. Их исходный [manifest](qa-before.json) содержит 28 файлов; первые три секунды короткой встречи — синтетический 440 Hz тон, далее тишина. Проверка обработки через `127.0.0.1:18969`, `ux69-synthetic` и mock-summary.py была исторической проверкой UI lifecycle, не реальной модели; в текущем Review646 провайдер не запускался.
 
 ## Реализация
 
@@ -88,3 +88,11 @@ QA640 оставлена открытой: текущая короткая вс�
 | [12](12-restored-library.jpg) | 640 | Основной вид после восстановления списка |
 
 ![Нативный Mac-пилот](12-restored-library.jpg)
+
+## Повтор по замечаниям к плотности — Review646
+
+Один gutter24pt, центр букв, девять цветов голосов, метаданные у начала абзаца, нативная высота текста и пересчёт после появления scroller. Регрессия wide→narrow→hide воспроизводила −19.5/48.5pt; восстановление позиции перенесено из setFrameSize в layout. После появления legacy scroller высоты повторно считаются по окончательной ширине колонки, чтобы последняя строка не задевала разделитель.
+
+GUI646: первая длинная реплика целиком с нижним отступом; 761×600, повторный широкий вид; достигнут конец180/29:50, при сужении первой остаётся реплика174. GUI645: RU/light Participants/Summary/Details/General settings и EN/dark search1/1/Escape/hide. Каждая ревизия отмечена в manifest. Это повтор выбранных поверхностей, не полный аудит всего приложения.
+
+Открыт Review646: короткая «Атлас — планирование», текущая Whisper-версия, Transcript, библиотека248pt, RU/light, поиск пуст, плеер0, Queue0. [Итоговый снимок](density/11-final-light.jpg), [AX-состояние](density/final-window.txt). Полный перенос остальных настроек/маршрутов остаётся в #73; приёмка #72 и Windows ещё впереди.
