@@ -28,3 +28,11 @@ Task 1 остаётся незавершённой: нужны отдельна�
 ## Возобновление 31.10.2026
 
 Task 1: 19 tests / 3 suites passed (`MeetingTranscriptReadingTests|MeetingTextSearchTests|MeetingLibraryControllerTests`). Нативный NSScrollView проверен на 180 репликах: поиск, смена ширины 700→420 и очистка сохраняют исходный сегмент/отступ. Снимок всех файлов выбранной встречи вместе с архивами побайтно одинаков до/после поиска. Новый QA-корпус записан в путь из `/tmp/verbemo-ux72-qa-path.txt`; `before.json` содержит исходные SHA. Начата Task 2.
+
+## SwiftUI-шапка и библиотека, 31.10
+
+Task 2 code checkpoint: SwiftUI адаптирует строку версии/поиска и вкладки, существующие AppKit-контролы встроены через маленький NSViewRepresentable. Controller остаётся владельцем версии, query, count и действий. Добавлены видимые поиск/count/previous/next/clear, Enter/Shift+Enter/Escape и маршрут ⌘F из окна; поле не пересоздаётся при обновлении count. Нативный NSSplitView изменяет ширину библиотеки мышью и стрелками; скрытие/возврат сохраняет ширину. При скрытой библиотеке запись/импорт/настройки доступны в toolbar. StudioStyle применяется к поверхности встречи, настройки сохраняют JournalStyle.
+
+48 tests / 6 suites passed (`StudioMeetingHeaderTests|JournalWorkspaceTests|MeetingLibraryControllerTests|MeetingTranscriptReadingTests|TranscriptVersionsTests|RecordingsCopySummaryTests`), включая смену настроек/возврат, версии/копирование и ⌘F/скрытие/ширину. Лог `/tmp/verbemo-ux72-header-style.log`. Проверки существующих AppKit-полей теперь выполняют layout перед интроспекцией, поскольку SwiftUI монтирует их при layout. RED для контракта шапки и отсутствующего split-view наблюдался до реализации.
+
+GUI smoke Task 2 выполняется вместе с интегрированным пилотом Task 4, чтобы не собирать/запускать отдельный bundle дважды. До него Task 2 не считается нативно принятой. Начинается Task 3.

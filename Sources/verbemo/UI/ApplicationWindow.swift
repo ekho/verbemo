@@ -6,6 +6,12 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     let panel: NSWindow
     private let calendar: CalendarWatcher
     private let sidebar = SidebarView()
+    private var workspaceSplit: WorkspaceSplitView!
+    private var rememberedLibraryWidth: CGFloat = JournalStyle.sidebarWidth
+    private let libraryToggle = NSButton()
+    private let compactPrimaryActions = NSStackView()
+    private let compactRecord = NSButton()
+
     private let recordingBar = RecordingBarView()
     private let activityBar = ActivityStatusBar()
     private let toolbar = NSStackView()
@@ -68,16 +74,20 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private var presentedSetup: SetupPage?
     private var keepsDockIcon = Config.dockIcon()
     var toolbarIsHidden: Bool { toolbar.isHidden }
-    var primaryActionsAreVisible: Bool { !sidebar.isHidden }
+    var primaryActionsAreVisible: Bool { !sidebar.isHidden || (!compactPrimaryActions.isHidden && !toolbar.isHidden) }
     var recordingBarIsVisible: Bool { !recordingBar.isHidden }
     var isVisible: Bool { panel.isVisible && !panel.isMiniaturized }
 
     init(calendar: CalendarWatcher = CalendarWatcher()) {
         self.calendar = calendar
-        panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 820),
+        panel = WorkspaceWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
         panel.delegate = self
+        (panel as? WorkspaceWindow)?.onFindMeeting = { [weak self] in
+            guard let self, self.navigation.destination.isMeetings, !self.showingLive else { return false }
+            return self.libraryProvider?()?.focusMeetingSearch() == true
+        }
         panel.title = "Verbemo"
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
@@ -114,7 +124,31 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         heading.textColor = JournalStyle.muted
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        toolbar.setViews([title, heading, spacer, actions], in: .center)
+        libraryToggle.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)
+        libraryToggle.isBordered = false
+        libraryToggle.target = self
+        libraryToggle.action = #selector(toggleLibrary)
+        libraryToggle.identifier = .init("workspace.toggle-library")
+        libraryToggle.toolTip = localised("Hide meeting list", "Скрыть список встреч")
+        libraryToggle.setAccessibilityLabel(libraryToggle.toolTip)
+        libraryToggle.setAccessibilityValue(sidebar.isHidden ? 0 : 1)
+        let compactImport = NSButton(), compactSettings = NSButton()
+        for (button, label, symbol, action) in [
+            (compactRecord, localised("New recording", "Новая запись"), "record.circle", #selector(compactRecordClicked)),
+            (compactImport, localised("Import", "Импорт"), "square.and.arrow.down", #selector(compactImportClicked)),
+            (compactSettings, localised("Settings", "Настройки"), "slider.horizontal.3", #selector(compactSettingsClicked)),
+        ] {
+            button.title = label
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            button.imagePosition = .imageLeading
+            button.bezelStyle = .rounded
+            button.target = self
+            button.action = action
+            compactPrimaryActions.addArrangedSubview(button)
+        }
+        compactPrimaryActions.spacing = 6
+        compactPrimaryActions.isHidden = true
+        toolbar.setViews([libraryToggle, title, heading, spacer, compactPrimaryActions, actions], in: .center)
         toolbar.spacing = 8
         toolbar.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)
         toolbar.heightAnchor.constraint(equalToConstant: 48).isActive = true
@@ -129,14 +163,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         right.detachesHiddenViews = true
         contentHost.setContentHuggingPriority(.init(1), for: .vertical)
         for view in right.arrangedSubviews { view.widthAnchor.constraint(equalTo: right.widthAnchor).isActive = true }
-        let root = NSStackView(views: [sidebar, right])
-        root.orientation = .horizontal
-        root.distribution = .fill
-        root.alignment = .top
-        root.spacing = 0
-        sidebar.widthAnchor.constraint(equalToConstant: JournalStyle.sidebarWidth).isActive = true
-        sidebar.heightAnchor.constraint(equalTo: root.heightAnchor).isActive = true
-        right.heightAnchor.constraint(equalTo: root.heightAnchor).isActive = true
+        let root = WorkspaceSplitView(sidebar: sidebar, content: right)
+        workspaceSplit = root
         let container = WorkspaceSurface(JournalStyle.paper)
         root.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(root)
@@ -155,12 +183,33 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             activityBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         panel.contentView = container
+        container.layoutSubtreeIfNeeded()
+        root.setPosition(JournalStyle.sidebarWidth, ofDividerAt: 0)
         panel.initialFirstResponder = container
         appearance = AppearanceController(window: panel)
         panel.contentMinSize = NSSize(width: 760, height: 600)
         panel.setFrameAutosaveName("name.ekho.verbemo.workspace")
         if panel.frame.origin == .zero { panel.center() }
         navigate(.allMeetings)
+    }
+    @objc private func compactRecordClicked() { newRecording() }
+    @objc private func compactImportClicked() { onChooseImport?() }
+    @objc private func compactSettingsClicked() { navigate(.general) }
+    @objc private func toggleLibrary() {
+        if sidebar.isHidden {
+            sidebar.isHidden = false
+            workspaceSplit.adjustSubviews()
+            workspaceSplit.setPosition(rememberedLibraryWidth, ofDividerAt: 0)
+        } else {
+            rememberedLibraryWidth = sidebar.frame.width
+            sidebar.isHidden = true
+            workspaceSplit.adjustSubviews()
+        }
+        compactPrimaryActions.isHidden = !sidebar.isHidden
+        libraryToggle.toolTip = sidebar.isHidden ? localised("Show meeting list", "Показать список встреч") : localised("Hide meeting list", "Скрыть список встреч")
+        libraryToggle.setAccessibilityLabel(libraryToggle.toolTip)
+        libraryToggle.setAccessibilityValue(sidebar.isHidden ? 0 : 1)
+        libraryProvider?()?.updateCompactLayout()
     }
     private func connectLibrary() {
         guard let library = libraryProvider?() else { return }
@@ -334,6 +383,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         liveView.refreshAudioLevels()
         if wasRecording && state == .idle && showingLive { navigate(.allMeetings) }
         sidebar.updateRecording(state != .idle)
+        compactRecord.isEnabled = state == .idle
         if state != .idle { recordingSheet?.cancel() }
     }
     func updateAutoRecord(enabled: Bool, decision: String?, blocked: Bool = false) {

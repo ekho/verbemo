@@ -17,6 +17,7 @@ struct RecordingsCopySummaryTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: Home.current.url, pasteboard: pasteboard, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let button = try #require(library.toolbarContent.allDescendants.compactMap { $0 as? NSButton }.first {
@@ -47,6 +48,7 @@ struct RecordingsCopySummaryTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, pasteboard: pasteboard, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let selector = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }.first {
@@ -110,6 +112,7 @@ struct RecordingsCopySummaryTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, pasteboard: pasteboard, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let copy = library.makeCopyMenu().items[1]
@@ -132,6 +135,7 @@ struct RecordingsCopySummaryTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, pasteboard: pasteboard, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let menu = library.makeCopyMenu()
@@ -150,6 +154,7 @@ struct RecordingsCopySummaryTests {
             let app = ApplicationWindow()
             let library = MeetingLibraryController(root: Home.current.url, pasteboard: pasteboard, hostWindow: app.panel)
             app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
             app.navigate(.allMeetings)
             defer { withExtendedLifetime(app) {} }
             let button = try #require(library.toolbarContent.allDescendants.compactMap { $0 as? NSButton }.first {

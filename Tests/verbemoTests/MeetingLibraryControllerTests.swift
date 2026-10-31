@@ -129,6 +129,7 @@ struct MeetingLibraryControllerTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         let versions = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }
             .first { $0.identifier?.rawValue == "transcript-versions" })
         library.setMeetingSearchQuery("compass")
@@ -165,6 +166,7 @@ struct MeetingLibraryControllerTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         library.setMeetingSearchQuery("needle")
         #expect(library.meetingSearchHits.count == 2)
         library.moveMeetingSearch(forward: false)
@@ -206,6 +208,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let views = window.contentView.allDescendants
@@ -271,6 +274,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let columns = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.columns" })
@@ -384,6 +388,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         app.show()
@@ -407,6 +412,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         defer { withExtendedLifetime(window) {} }
@@ -431,6 +437,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: first, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         defer { withExtendedLifetime(window) {} }

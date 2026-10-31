@@ -14,7 +14,7 @@ final class MeetingListView: NSTableCellView {
         meta.identifier = .init("meeting.list-date")
         meta.toolTip = meta.stringValue
         meta.font = .systemFont(ofSize: 11)
-        meta.textColor = JournalStyle.muted
+        meta.textColor = StudioStyle.muted
         meta.lineBreakMode = .byTruncatingTail
         let stages = MeetingPresentation.stages(item, active: active)
         let status = stages.first { $0.state == .failed } ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending }

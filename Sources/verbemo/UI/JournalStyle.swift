@@ -32,6 +32,9 @@ enum JournalStyle {
 
 @MainActor
 final class JournalTabButton: NSButton {
+    var selectedTint = JournalStyle.ink
+    var unselectedTint = JournalStyle.muted
+    var markerTint = JournalStyle.accent
     init(title: String, symbol: String, target: AnyObject?, action: Selector?) {
         super.init(frame: .zero)
         self.title = title
@@ -53,13 +56,13 @@ final class JournalTabButton: NSButton {
     func select(_ selected: Bool) {
         state = selected ? .on : .off
         font = .systemFont(ofSize: 13, weight: selected ? .semibold : .regular)
-        contentTintColor = selected ? JournalStyle.ink : JournalStyle.muted
+        contentTintColor = selected ? selectedTint : unselectedTint
         needsDisplay = true
     }
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         if state == .on {
-            JournalStyle.accent.setFill()
+            markerTint.setFill()
             NSBezierPath(roundedRect: NSRect(x: 0, y: isFlipped ? bounds.height - 3 : 0,
                                             width: bounds.width, height: 3), xRadius: 1.5, yRadius: 1.5).fill()
         }

@@ -5,7 +5,7 @@ import Testing
 @Suite(.serialized) @MainActor
 struct JournalWorkspaceTests {
     @Test(.freshHome, arguments: ["light", "dark"])
-    func meetingSearchBackgroundUsesJournalPalette(theme: String) throws {
+    func meetingSearchBackgroundUsesStudioPalette(theme: String) throws {
         _ = NSApplication.shared
         let previousAppearance = NSApp.appearance
         Config.update(path: ["interface_theme"], value: theme)
@@ -14,6 +14,7 @@ struct JournalWorkspaceTests {
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.panel.contentView?.layoutSubtreeIfNeeded()
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         let search = try #require(library.listContentView.allDescendants.first { $0 is NSSearchField } as? NSSearchField)
         let bitmap = try #require(search.bitmapImageRepForCachingDisplay(in: search.bounds))
         search.cacheDisplay(in: search.bounds, to: bitmap)
@@ -21,7 +22,7 @@ struct JournalWorkspaceTests {
         let actual = try #require(bitmap.colorAt(x: bitmap.pixelsWide - Int(32 * scale), y: bitmap.pixelsHigh / 2))
         var expected: NSColor?
         search.effectiveAppearance.performAsCurrentDrawingAppearance {
-            expected = JournalStyle.inset.usingColorSpace(bitmap.colorSpace)
+            expected = StudioStyle.inset.usingColorSpace(bitmap.colorSpace)
         }
         let background = try #require(expected)
         #expect(abs(actual.redComponent - background.redComponent) < 0.01)
@@ -43,6 +44,7 @@ struct JournalWorkspaceTests {
         defer { app.settings.setup.stop(); app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? MeetingTableView)
         let search = try #require(library.listContentView.allDescendants.first { $0 is NSSearchField } as? NSSearchField)
         let settings = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
@@ -87,6 +89,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.panel.setContentSize(NSSize(width: width, height: 680))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let tabs = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.result-tabs" } as? NSStackView)
@@ -116,6 +119,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.show()
         let title = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTextField }
             .first { $0.identifier?.rawValue == "meeting.title" })
@@ -150,6 +154,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.panel.setContentSize(NSSize(width: 1340, height: 820))
         app.show()
         await library.settled()
@@ -225,6 +230,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         let table = try #require(library.listContentView.allDescendants.compactMap { $0 as? MeetingTableView }.first)
         #expect(table.numberOfRows == 3)
         let dates = ["2026-10-21T11:00:00Z", "2026-10-21T10:00:00Z", "2026-10-20T10:00:00Z"]
@@ -242,6 +248,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         if bringToFront { app.bringToFront() } else { app.show(); app.panel.makeKey() }
         await library.settled()
         let search = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSSearchField }.first)
@@ -279,6 +286,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.panel.setContentSize(NSSize(width: 1340, height: 820))
         app.show()
         await library.settled()
@@ -349,6 +357,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         let settings = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.processing-configuration" } as? NSTextField)
         for (engine, model, diarization) in [
             ("gigaam", "GigaAM v3", "LS-EEND AMI"),
@@ -414,6 +423,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.panel.setContentSize(NSSize(width: 1340, height: 820))
         app.show()
         app.panel.contentView?.layoutSubtreeIfNeeded()
@@ -441,6 +451,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.update(state: .recording, elapsed: "03:42")
         app.navigate(.general)
         let views = try #require(app.panel.contentView).allDescendants
@@ -459,6 +470,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         func crumb() throws -> NSButton {
             try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "journal.breadcrumb" })
         }
@@ -489,6 +501,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.show()
         app.panel.setContentSize(NSSize(width: 760, height: 680))
         app.panel.contentView?.layoutSubtreeIfNeeded()
@@ -522,6 +535,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         await library.settled()
         let participants = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
             .first { $0.identifier?.rawValue == "meeting.result.participants" })
@@ -546,6 +560,7 @@ struct JournalWorkspaceTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         await library.settled()
         let inspector = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
         let labels = inspector.allDescendants.compactMap { ($0 as? NSTextField)?.stringValue }
