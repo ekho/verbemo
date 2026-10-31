@@ -53,6 +53,7 @@ final class MeetingListView: NSTableCellView {
         image.toolTip = failed && status?.state != .failed ? localised("Speaker separation needs attention", "Диаризация требует внимания")
             : status?.title ?? localised("Ready", "Готово")
         image.setAccessibilityElement(true)
+        image.setAccessibilityRole(.image)
         image.setAccessibilityLabel(image.toolTip)
         image.widthAnchor.constraint(equalToConstant: 16).isActive = true
         image.heightAnchor.constraint(equalToConstant: 16).isActive = true

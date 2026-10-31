@@ -1729,6 +1729,7 @@ private extension MeetingLibraryController {
         for (index, filter) in [ApplicationNavigationState.Destination.allMeetings, .processing, .attention].enumerated() {
             let option = NSButton(radioButtonWithTitle: filter.title, target: self, action: #selector(filterSelected(_:)))
             option.identifier = .init("library.filter.\(filter.rawValue)")
+            option.alignment = .left
             option.tag = index
             option.state = filter == meetingFilter ? .on : .off
             filterOptions.append(option)
@@ -1738,8 +1739,11 @@ private extension MeetingLibraryController {
         filters.alignment = .leading
         filters.spacing = 10
         filters.edgeInsets = .init(top: 14, left: 14, bottom: 14, right: 14)
+        filters.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        for option in filterOptions { option.widthAnchor.constraint(equalTo: filters.widthAnchor, constant: -28).isActive = true }
         let controller = NSViewController()
         controller.view = filters
+        controller.preferredContentSize = filters.fittingSize
         filterPopover.contentViewController = controller
         filterPopover.behavior = .transient
         filterPopover.animates = false

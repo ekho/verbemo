@@ -41,6 +41,11 @@ struct StudioLibraryTests {
         let options = NSApp.windows.flatMap { $0.contentView?.allDescendants ?? [] }.compactMap { $0 as? NSButton }
             .filter { $0.identifier?.rawValue.hasPrefix("library.filter.") == true }
         #expect(options.count == 3)
+        let left = options.map { $0.frame.minX }
+        #expect((left.max() ?? 0) - (left.min() ?? 0) <= 1, "Filter choices keep their radio markers aligned")
+        for option in options {
+            #expect(option.frame.width >= option.fittingSize.width - 1, "A choice must fit inside the popover")
+        }
         let processing = try #require(options.first { $0.identifier?.rawValue == "library.filter.processing" })
         #expect(processing.sendAction(processing.action, to: processing.target))
         for _ in 0..<3 { await Task.yield() }
@@ -101,6 +106,7 @@ struct StudioLibraryTests {
             let row = MeetingListView(item: item)
             let status = try #require(row.allDescendants.first { $0.identifier?.rawValue == "meeting.list-status" })
             #expect(status.accessibilityLabel() == label)
+            #expect(status.accessibilityRole() == .image)
             let meta = try #require(row.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "meeting.list-date" })
             #expect(meta.stringValue.contains("03:03"), "The list retains seconds rather than rounding to minutes")
         }
@@ -116,6 +122,7 @@ struct StudioLibraryTests {
             let row = MeetingListView(item: item)
             let status = try #require(row.allDescendants.first { $0.identifier?.rawValue == "meeting.list-status" })
             #expect(status.accessibilityLabel() == label)
+            #expect(status.accessibilityRole() == .image)
             let meta = try #require(row.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "meeting.list-date" })
             #expect(meta.stringValue.contains("1:00:03"))
         }
