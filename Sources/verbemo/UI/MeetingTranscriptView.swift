@@ -52,6 +52,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     private var canPlay = false
     private var canMatchParticipants = true
     private var resizePosition: ReadingPosition?
+    private var measuredColumnWidth: CGFloat = 0
     init() {
         super.init(frame: .zero)
         hasVerticalScroller = true
@@ -78,6 +79,11 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     }
     override func layout() {
         super.layout()
+        let width = table.tableColumns[0].width
+        if abs(measuredColumnWidth - width) > 0.5 {
+            measuredColumnWidth = width
+            table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
+        }
         // Restoring inside setFrameSize re-enters Auto Layout with the previous page size.
         let position = resizePosition
         resizePosition = nil
@@ -101,7 +107,8 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     }
     func numberOfRows(in tableView: NSTableView) -> Int { segments.count }
     func tableViewColumnDidResize(_ notification: Notification) {
-        table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
+        // A legacy scroller can change the column again while AppKit is tiling.
+        needsLayout = true
     }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         let available = tableView.tableColumns[0].width

@@ -123,6 +123,31 @@ struct StudioDensityTests {
         view.layoutSubtreeIfNeeded()
         #expect(try (0..<3).map(color) == colors)
     }
+    @Test func legacyScrollbarDoesNotClipTheLastLine() async throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        view.scrollerStyle = .legacy
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1044, height: 514), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.orderOut(nil) }
+        let words = "Реплика 1. Обсуждаем подготовку учебного проекта. " + String(repeating: "Нужно согласовать сроки, проверить материалы и записать решение. ", count: 4)
+        view.update(transcript: .init(engine: "test", model: "test", created_at: "test", segments: (0..<18).map {
+            .init(speaker: "them A", start_ms: $0 * 1000, end_ms: ($0 + 1) * 1000, text: words)
+        }), names: nil, participants: [], canEdit: false)
+        for _ in 0..<8 {
+            view.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let table = try #require(view.documentView as? NSTableView)
+        let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        cell.layoutSubtreeIfNeeded()
+        let body = try #require(cell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "transcript.words" })
+        let bodyRect = body.convert(body.bounds, to: cell)
+        let needed = try #require(body.cell).cellSize(forBounds: .init(x: 0, y: 0, width: body.bounds.width, height: 10000)).height
+        #expect(body.bounds.height >= needed - 1)
+        #expect(bodyRect.minY >= 9)
+    }
     @Test(arguments: [NSAppearance.Name.aqua, .darkAqua]) func voicePaletteHasReadableContrast(appearance: NSAppearance.Name) throws {
         func luminance(_ c: NSColor) -> Double {
             func linear(_ v: CGFloat) -> Double { let n = Double(v); return n <= 0.04045 ? n / 12.92 : pow((n + 0.055) / 1.055, 2.4) }
