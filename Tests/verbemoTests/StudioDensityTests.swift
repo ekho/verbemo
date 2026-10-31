@@ -22,15 +22,29 @@ struct StudioDensityTests {
         let document = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.document" })
         let transcript = try #require(document.allDescendants.first { $0 is MeetingTranscriptView } as? MeetingTranscriptView)
         let table = try #require(transcript.documentView as? NSTableView)
-        let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
-        cell.layoutSubtreeIfNeeded()
-        let badge = try #require(cell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.frame.width == 26 })
-        let badgeRect = badge.convert(badge.bounds, to: document)
-        let tabsRect = tab.convert(tab.bounds, to: document)
         let title = try #require(document.allDescendants.first { $0.identifier?.rawValue == "meeting.title" })
-        #expect(badgeRect.minX <= 25, "One page gutter, without a second inset around the transcript")
-        #expect(abs(badgeRect.minX - title.convert(title.bounds, to: document).minX) <= 2)
-        #expect(tabsRect.minY - badgeRect.maxY <= 16, "Text starts directly below the tab strip")
+        let toggle = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "workspace.toggle-library" })
+        for (width, hideLibrary) in [(1340.0, false), (760, false), (760, true), (1340, false)] {
+            app.panel.setContentSize(.init(width: width, height: 600))
+            let split = try #require(app.panel.contentView?.allDescendants.first { $0 is WorkspaceSplitView } as? NSSplitView)
+            if split.arrangedSubviews[0].isHidden != hideLibrary {
+                #expect(NSApp.sendAction(try #require(toggle.action), to: toggle.target, from: toggle))
+            }
+            for _ in 0..<4 {
+                app.panel.contentView?.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(30))
+            }
+            let currentCell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+            currentCell.layoutSubtreeIfNeeded()
+            let currentBadge = try #require(currentCell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.frame.width == 26 })
+            let badgeRect = currentBadge.convert(currentBadge.bounds, to: document)
+            let tabsRect = tab.convert(tab.bounds, to: document)
+            #expect(badgeRect.minX <= 25, "One page gutter, without a second inset around the transcript")
+            #expect(abs(badgeRect.minX - title.convert(title.bounds, to: document).minX) <= 2)
+            #expect(abs(transcript.bounds.width - (document.bounds.width - 48)) <= 1)
+            #expect((0...16).contains(tabsRect.minY - badgeRect.maxY), "Text starts directly below the tab strip at width \(width), library hidden \(hideLibrary)")
+        }
     }
 
     @Test func voiceLetterIsVerticallyCentered() throws {

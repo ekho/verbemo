@@ -51,6 +51,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     private var canEdit = false
     private var canPlay = false
     private var canMatchParticipants = true
+    private var resizePosition: ReadingPosition?
     init() {
         super.init(frame: .zero)
         hasVerticalScroller = true
@@ -72,15 +73,24 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func setFrameSize(_ newSize: NSSize) {
-        let position = abs(newSize.width - frame.width) > 0.5 ? readingPosition() : nil
+        if abs(newSize.width - frame.width) > 0.5, resizePosition == nil { resizePosition = readingPosition() }
         super.setFrameSize(newSize)
+    }
+    override func layout() {
+        super.layout()
+        // Restoring inside setFrameSize re-enters Auto Layout with the previous page size.
+        let position = resizePosition
+        resizePosition = nil
         restoreReadingPosition(position)
     }
     func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false, canMatchParticipants: Bool = true) {
         let changed = segments != transcript.segments || self.names?.speakers != names?.speakers
             || self.participants != participants || self.canEdit != canEdit
             || self.canPlay != canPlay || self.canMatchParticipants != canMatchParticipants
-        if segments != transcript.segments { speakerLabels = Self.speakerLabels(in: transcript.segments) }
+        if segments != transcript.segments {
+            resizePosition = nil
+            speakerLabels = Self.speakerLabels(in: transcript.segments)
+        }
         segments = transcript.segments
         self.names = names
         self.participants = participants
