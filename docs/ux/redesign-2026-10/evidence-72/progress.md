@@ -36,3 +36,9 @@ Task 2 code checkpoint: SwiftUI адаптирует строку версии/�
 48 tests / 6 suites passed (`StudioMeetingHeaderTests|JournalWorkspaceTests|MeetingLibraryControllerTests|MeetingTranscriptReadingTests|TranscriptVersionsTests|RecordingsCopySummaryTests`), включая смену настроек/возврат, версии/копирование и ⌘F/скрытие/ширину. Лог `/tmp/verbemo-ux72-header-style.log`. Проверки существующих AppKit-полей теперь выполняют layout перед интроспекцией, поскольку SwiftUI монтирует их при layout. RED для контракта шапки и отсутствующего split-view наблюдался до реализации.
 
 GUI smoke Task 2 выполняется вместе с интегрированным пилотом Task 4, чтобы не собирать/запускать отдельный bundle дважды. До него Task 2 не считается нативно принятой. Начинается Task 3.
+
+## Компактная расшифровка и участники, 31.10
+
+51 tests / 5 suites passed (`SpeakerAssignmentTests|MeetingPlaybackTests|MeetingLibraryControllerTests|MeetingTranscriptReadingTests|JournalWorkspaceTests`), лог `/tmp/verbemo-ux72-compact-final.log`. В метаданных реплики — голос/имя/карандаш/время; основной текст выделяется и копируется. В узком виде метаданные располагаются над текстом. Карандаш открывает подтверждаемый черновик; Participants использует существующий editable native combo для имени/сопоставления и три образца с компактным прослушиванием. Stop сбрасывает позицию существующего player без замены item/volume.
+
+Перед сохранением проверяются текущие session/version, busy/unknown и исходные байты transcript.json — редактор прошлой генерации не назначает имя новой. Ошибка оставляет черновик. Добавлены RED→GREEN проверки поповера, Stop и контекста назначения; существующие tests обновлены под подтверждаемый карандаш. Полная сборка bundle и GUI-проверка впереди.

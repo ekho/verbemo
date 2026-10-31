@@ -9,6 +9,7 @@ final class MeetingPlaybackView: JournalSurface {
     }
     private(set) var player = AVPlayer()
     private let play = NSButton()
+    private let stop = NSButton()
     private let timeline = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let time = NSTextField(labelWithString: "00:00 / 00:00")
     private let volume = NSSlider(value: 1, minValue: 0, maxValue: 1, target: nil, action: nil)
@@ -21,16 +22,25 @@ final class MeetingPlaybackView: JournalSurface {
     private var ticking: Task<Void, Never>?
 
     init() {
-        super.init(JournalStyle.inset)
+        super.init(StudioStyle.inset)
         identifier = .init("meeting.playback")
         layer?.cornerRadius = 9
         play.isBordered = false
-        play.contentTintColor = JournalStyle.accent
+        play.contentTintColor = StudioStyle.accent
         play.target = self
         play.action = #selector(togglePlayback)
         play.identifier = .init("playback.play")
         play.widthAnchor.constraint(equalToConstant: 30).isActive = true
         play.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        stop.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: nil)
+        stop.bezelStyle = .rounded
+        stop.target = self
+        stop.action = #selector(stopPlayback)
+        stop.identifier = .init("playback.stop")
+        stop.toolTip = localised("Stop and return to the beginning", "Остановить и вернуться к началу")
+        stop.setAccessibilityLabel(stop.toolTip)
+        stop.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        stop.heightAnchor.constraint(equalToConstant: 30).isActive = true
         timeline.target = self
         timeline.action = #selector(seek)
         timeline.isContinuous = true
@@ -39,14 +49,14 @@ final class MeetingPlaybackView: JournalSurface {
         timeline.setContentHuggingPriority(.init(1), for: .horizontal)
         timeline.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        time.textColor = JournalStyle.muted
+        time.textColor = StudioStyle.muted
         volume.controlSize = .small
         volume.target = self
         volume.action = #selector(changeVolume)
         volume.setAccessibilityLabel(localised("Playback volume", "Громкость воспроизведения"))
         volume.widthAnchor.constraint(equalToConstant: 56).isActive = true
         let speaker = NSImageView(image: NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil)!)
-        speaker.contentTintColor = JournalStyle.muted
+        speaker.contentTintColor = StudioStyle.muted
         speed.addItems(withTitles: ["0.75×", "1×", "1.25×", "1.5×", "2×"])
         speed.selectItem(at: 1)
         speed.isBordered = false
@@ -54,10 +64,10 @@ final class MeetingPlaybackView: JournalSurface {
         speed.target = self
         speed.action = #selector(changeSpeed)
         speed.setAccessibilityLabel(localised("Playback speed", "Скорость воспроизведения"))
-        let row = NSStackView(views: [play, timeline, time, speaker, volume, speed])
+        let row = NSStackView(views: [play, stop, timeline, time, speaker, volume, speed])
         row.spacing = 8
         message.font = .systemFont(ofSize: 11)
-        message.textColor = JournalStyle.muted
+        message.textColor = StudioStyle.muted
         message.identifier = .init("playback.message")
         let stack = NSStackView(views: [row, message])
         stack.orientation = .vertical
@@ -186,6 +196,8 @@ final class MeetingPlaybackView: JournalSurface {
         play.setAccessibilityLabel(playing ? localised("Pause playback", "Приостановить воспроизведение") : localised("Play meeting", "Воспроизвести встречу"))
         let position = player.currentTime().seconds
         let seconds = position.isFinite ? max(0, position) : 0
+        stop.isEnabled = play.isEnabled && (playing || seconds > 0.01)
+        play.toolTip = play.accessibilityLabel()
         if timeline.cell?.isHighlighted != true { timeline.doubleValue = seconds }
         time.stringValue = Self.timestamp(seconds) + " / " + Self.timestamp(duration)
         timeline.setAccessibilityValueDescription(Self.timestamp(seconds))
@@ -194,6 +206,12 @@ final class MeetingPlaybackView: JournalSurface {
         let total = seconds.isFinite ? Int(max(0, seconds)) : 0
         return total >= 3600 ? String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
             : String(format: "%02d:%02d", total / 60, total % 60)
+    }
+    @objc func stopPlayback() {
+        player.pause()
+        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+        timeline.doubleValue = 0
+        refreshControls()
     }
     @objc private func togglePlayback() {
         if player.rate != 0 { player.pause() }

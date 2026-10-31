@@ -17,6 +17,21 @@ enum StudioStyle {
         field.textColor = muted
         return field
     }
+    static func voiceLabel(_ speaker: String) -> String {
+        speaker == "me" ? localised("Me", "Я") : speaker.replacingOccurrences(of: "them ", with: "")
+    }
+    static func voiceBadge(_ text: String) -> NSTextField {
+        let badge = NSTextField(labelWithString: text)
+        badge.font = .systemFont(ofSize: 11, weight: .bold)
+        badge.textColor = accent
+        badge.drawsBackground = true
+        badge.backgroundColor = selection
+        badge.alignment = .center
+        badge.widthAnchor.constraint(equalToConstant: 26).isActive = true
+        badge.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        badge.setAccessibilityLabel(localised("Voice ", "Голос ") + text)
+        return badge
+    }
     private static func color(_ name: String, light: UInt32, dark: UInt32) -> NSColor {
         NSColor(name: NSColor.Name("studio.\(name)")) { appearance in
             let rgb = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light

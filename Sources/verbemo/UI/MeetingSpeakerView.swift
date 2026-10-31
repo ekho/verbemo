@@ -34,6 +34,8 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     private var reverting = false
     private var choosing = false
     private var selectionChanged = false
+    private var failedDraft: (text: String, participant: CalendarParticipant?, manual: String?)?
+    var isChoosing: Bool { choosing }
 
     init(speaker: String, title: String, entry: SpeakerNames.Entry?, participants: [CalendarParticipant], canEdit: Bool, inline: Bool) {
         self.participants = participants
@@ -47,7 +49,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         name.stringValue = entry?.name ?? title
         name.toolTip = name.stringValue
         name.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        name.textColor = JournalStyle.muted
+        name.textColor = StudioStyle.muted
         name.identifier = .init("speaker.name")
         name.lineBreakMode = .byTruncatingTail
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -69,9 +71,9 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         choice.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
         let linked = entry?.participantID.map { id in participants.contains { $0.id == id } } ?? false
         link.title = ""
-        link.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        link.image = NSImage(systemSymbolName: inline ? "pencil" : "link", accessibilityDescription: nil)
         link.unlinked = !linked
-        link.contentTintColor = linked ? JournalStyle.accent : .systemRed
+        link.contentTintColor = linked ? StudioStyle.accent : .systemRed
         link.isBordered = false
         link.identifier = .init("speaker.link")
         link.toolTip = linked
@@ -88,6 +90,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         choice.isHidden = inline
         link.widthAnchor.constraint(equalToConstant: 22).isActive = true
         link.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        link.isHidden = !inline
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -103,6 +106,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     }
     func comboBoxWillPopUp(_ notification: Notification) {
         choosing = true
+        failedDraft = nil
         selectionChanged = false
     }
     func comboBoxWillDismiss(_ notification: Notification) {
@@ -128,7 +132,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         commitSelection()
     }
     private func commitSelection() {
-        guard !choosing, !saving, !reverting else { return }
+        guard !choosing, !saving, !reverting, failedDraft == nil else { return }
         let index = choice.indexOfSelectedItem
         guard index >= 0 else { return }
         if index > 0, participantID == participants[index - 1].id,
@@ -139,15 +143,23 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             selectionChanged = false
-            choice.stringValue = original
+            failedDraft = nil
+            restoreChoice()
             endEditing()
             return true
         }
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) { commitText(); return true }
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            if let failedDraft, failedDraft.text == choice.stringValue {
+                self.failedDraft = nil
+                save(participant: failedDraft.participant, manual: failedDraft.manual)
+            } else { commitText() }
+            return true
+        }
         return false
     }
+    func controlTextDidChange(_ notification: Notification) { failedDraft = nil }
     private func commitText() {
-        guard !choosing, !saving, !reverting else { return }
+        guard !choosing, !saving, !reverting, failedDraft == nil else { return }
         guard choice.stringValue != original else { endEditing(); return }
         save(participant: nil, manual: choice.stringValue)
     }
@@ -162,12 +174,14 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             choice.stringValue = original
             endEditing()
         } catch {
+            let draft = participant.map(Self.title) ?? manual ?? ""
+            failedDraft = (draft, participant, manual)
             reverting = true
-            choice.stringValue = original
-            // AppKit is still selecting; changing the selected index here can crash it.
+            // Let AppKit finish dismissing its dropdown before presenting an error.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                restoreChoice()
+                choice.stringValue = draft
+                reverting = false
                 if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
             }
         }
@@ -209,15 +223,22 @@ final class SpeakerLinkButton: NSButton {
 
 @MainActor
 final class MeetingSpeakerView: NSStackView {
-    init(title: String, editor: NSView) {
+    let editor: NSView
+    init(title: String? = nil, editor: NSView) {
+        self.editor = editor
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
         spacing = 8
         edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 12, right: 0)
-        let heading = NSTextField(labelWithString: title)
-        heading.font = .systemFont(ofSize: 13, weight: .medium)
-        setViews([heading, editor, SetupLayout.hairline()], in: .center)
+        if let title {
+            let heading = NSTextField(labelWithString: title)
+            heading.font = .systemFont(ofSize: 13, weight: .medium)
+            setViews([heading, editor, SetupLayout.hairline()], in: .center)
+        } else {
+            edgeInsets = .init()
+            setViews([editor], in: .center)
+        }
         for view in arrangedSubviews { view.widthAnchor.constraint(equalTo: widthAnchor).isActive = true }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

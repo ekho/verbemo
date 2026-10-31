@@ -1034,6 +1034,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         }
         summaryText.textStorage?.setAttributedString(MarkdownPreview.render(summaryPreview, fontSize: 15))
         let transcript = PostProcessor.readTranscript(dir)
+        let transcriptData = try? Data(contentsOf: dir.appendingPathComponent("transcript.json"))
         searchTranscript = transcript
         let markdown = try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)
         let transcriptPreview = markdown ?? transcript?.rendered(
@@ -1054,8 +1055,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let canEdit = !working && !SessionClaim.isHeld(item.dir) && !TranscriptVersions.isRequested(item.dir)
             && DiarizationState.persisted(in: dir).isFinal
         meetingTranscript.onAssign = { [weak self] speaker, participant, name in
-            try PostProcessor.setSpeakerParticipant(speaker, participant: participant, name: name, in: dir)
-            Task { @MainActor [weak self] in self?.showDetail() }
+            guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
+            try self.assignSpeaker(speaker, participant: participant, name: name, session: item.dir, version: dir, expectedTranscript: transcriptData)
         }
         meetingTranscript.update(transcript: transcript, names: names, participants: participantChoices,
                                  canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatchParticipants: diarized)
@@ -1069,7 +1070,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         speakersStack.addArrangedSubview(hint)
         hint.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
         for sample in SessionInventory.samples(transcript: transcript, names: names) {
-            let row = speakerRow(sample, in: dir, transcript: transcript, names: names,
+            let row = speakerRow(sample, in: dir, transcript: transcript, transcriptData: transcriptData, names: names,
                                  participants: diarized || sample.label == "me" ? participantChoices : [])
             speakersStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
@@ -1077,40 +1078,91 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         updateButtons()
     }
 
-    private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
+    func assignSpeaker(_ speaker: String, participant: CalendarParticipant?, name: String?, session: URL, version: URL, expectedTranscript: Data? = nil) throws {
+        let unavailable = CocoaError(.fileWriteNoPermission, userInfo: [NSLocalizedDescriptionKey: localised(
+            "The meeting or transcript has changed, or editing is temporarily unavailable. Reopen the speaker editor.",
+            "Встреча или расшифровка изменилась либо редактирование сейчас недоступно. Откройте редактор говорящего заново.")])
+        guard selected?.dir.standardizedFileURL.path == session.standardizedFileURL.path,
+              artifactDirectory?.standardizedFileURL.path == version.standardizedFileURL.path, selectedVersion?.isRequest != true,
+              !working, !SessionClaim.isHeld(session), !TranscriptVersions.isRequested(session),
+              DiarizationState.persisted(in: version).isFinal, !SpeakerNames.isUnknown(speaker) else {
+            throw unavailable
+        }
+        if let expectedTranscript {
+            guard try Data(contentsOf: version.appendingPathComponent("transcript.json")) == expectedTranscript else {
+                throw unavailable
+            }
+        }
+        try PostProcessor.setSpeakerParticipant(speaker, participant: participant, name: name, in: version)
+        Task { @MainActor [weak self] in
+            guard let self, self.selected?.dir.standardizedFileURL.path == session.standardizedFileURL.path,
+                  self.artifactDirectory?.standardizedFileURL.path == version.standardizedFileURL.path else { return }
+            let focused = (self.panel.firstResponder as? NSTextView)?.delegate as? NSView ?? self.panel.firstResponder as? NSView
+            let restoreFocus = focused?.isDescendant(of: self.meetingTranscript) == true || focused?.isDescendant(of: self.speakersStack) == true
+            self.showDetail()
+            if restoreFocus, self.detailTabs.selectedTabViewItem?.identifier as? String == "participants",
+               let row = self.speakersStack.arrangedSubviews.first(where: { $0.identifier?.rawValue == "speaker-row.\(speaker)" }),
+               let contents = (row as? MeetingSpeakerView)?.editor as? NSStackView,
+               let head = contents.arrangedSubviews.first as? NSStackView,
+               let editor = head.arrangedSubviews.compactMap({ $0 as? SpeakerAssignmentEditor }).first {
+                self.panel.makeFirstResponder(editor.choice)
+            }
+        }
+    }
+    private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, transcriptData: Data?, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
         let title = MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments)
-        let canEdit = !working && !SessionClaim.isHeld(selected?.dir ?? dir)
-            && !TranscriptVersions.isRequested(selected?.dir ?? dir) && DiarizationState.persisted(in: dir).isFinal
+        let session = selected?.dir ?? dir
+        let canEdit = !working && !SessionClaim.isHeld(session)
+            && !TranscriptVersions.isRequested(session) && DiarizationState.persisted(in: dir).isFinal
         let editor = SpeakerAssignmentEditor(speaker: sample.label, title: title,
             entry: SpeakerNames.isUnknown(sample.label) ? nil : names?.speakers[sample.label],
             participants: participants, canEdit: canEdit, inline: false)
         editor.onAssign = { [weak self] participant, name in
-            try PostProcessor.setSpeakerParticipant(sample.label, participant: participant, name: name, in: dir)
-            Task { @MainActor [weak self] in self?.showDetail() }
+            guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
+            try self.assignSpeaker(sample.label, participant: participant, name: name, session: session, version: dir, expectedTranscript: transcriptData)
         }
-        let play = NSButton(title: localised("Listen", "Прослушать"), target: self, action: #selector(playSpeaker(_:)))
-        play.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)
-        play.imagePosition = .imageLeading
-        play.bezelStyle = .rounded
-        play.identifier = .init("speaker.play")
-        play.tag = transcript.segments.first(where: { $0.speaker == sample.label })?.start_ms ?? 0
-        play.isEnabled = !audioPlayer.isHidden
-        play.setAccessibilityLabel(localised("Listen to ", "Прослушать: ") + title)
-        let head = NSStackView(views: [editor, play])
+        let count = NSTextField(labelWithString: localised("\(sample.turns) turns", "Реплик: \(sample.turns)"))
+        count.font = .systemFont(ofSize: 11)
+        count.textColor = StudioStyle.muted
+        let head = NSStackView(views: [StudioStyle.voiceBadge(StudioStyle.voiceLabel(sample.label)), editor, NSView(), count])
         head.spacing = 8
-        let quotes = NSTextField(wrappingLabelWithString: [sample.first,
-            sample.longest == sample.first ? nil : sample.longest].compactMap { $0 }.joined(separator: "\n"))
-        quotes.font = .systemFont(ofSize: 12)
-        quotes.textColor = .secondaryLabelColor
-        quotes.maximumNumberOfLines = 4
-        quotes.lineBreakMode = .byTruncatingTail
-        quotes.preferredMaxLayoutWidth = 400
-        let contents = NSStackView(views: [head, quotes])
+        let contents = NSStackView(views: [head])
         contents.orientation = .vertical
         contents.alignment = .leading
         contents.spacing = 8
-        for view in [head, quotes] { view.widthAnchor.constraint(equalTo: contents.widthAnchor).isActive = true }
-        return MeetingSpeakerView(title: title + localised(" · \(sample.turns) turns", " · реплик: \(sample.turns)"), editor: contents)
+        contents.edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 12, right: 0)
+        head.widthAnchor.constraint(equalTo: contents.widthAnchor).isActive = true
+        for segment in transcript.segments.filter({ $0.speaker == sample.label }).prefix(3) {
+            let play = NSButton(title: "", target: self, action: #selector(playSpeaker(_:)))
+            play.image = NSImage(systemSymbolName: "play", accessibilityDescription: nil)
+            play.isBordered = false
+            play.identifier = .init("speaker.play")
+            play.tag = segment.start_ms
+            play.isEnabled = !audioPlayer.isHidden
+            let stamp = String(format: "%02d:%02d", segment.start_ms / 60_000, (segment.start_ms / 1000) % 60)
+            play.toolTip = localised("Play \(title) from \(stamp)", "Прослушать \(title) с \(stamp)")
+            play.setAccessibilityLabel(play.toolTip)
+            play.widthAnchor.constraint(equalToConstant: 26).isActive = true
+            let time = NSTextField(labelWithString: stamp)
+            time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            time.textColor = StudioStyle.muted
+            let quote = NSTextField(wrappingLabelWithString: segment.text)
+            quote.font = .systemFont(ofSize: 13)
+            quote.textColor = StudioStyle.ink
+            quote.maximumNumberOfLines = 2
+            quote.lineBreakMode = .byTruncatingTail
+            quote.toolTip = segment.text
+            quote.isSelectable = true
+            let row = NSStackView(views: [play, time, quote])
+            row.alignment = .top
+            row.spacing = 8
+            contents.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: contents.widthAnchor).isActive = true
+        }
+        contents.addArrangedSubview(SetupLayout.hairline())
+        let row = MeetingSpeakerView(editor: contents)
+        row.identifier = .init("speaker-row.\(sample.label)")
+        return row
     }
     @objc private func playSpeaker(_ sender: NSButton) {
         guard sender.isEnabled else { return }

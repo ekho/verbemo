@@ -115,4 +115,26 @@ struct MeetingPlaybackTests {
         #expect(!message.isHiddenOrHasHiddenAncestor)
         #expect(message.stringValue == "Не удалось воспроизвести аудио встречи.")
     }
+    @Test(.freshHome) func stopResetsPositionWithoutReplacingThePlayerItemOrVolume() async throws {
+        let dir = Home.current.url.appendingPathComponent("meeting")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: dir.appendingPathComponent("meta.json"))
+        try TestAudio.write(to: dir.appendingPathComponent("mic.caf"), seconds: 4) { _, _ in 0 }
+        try SessionState.amend(dir, with: ["files": ["mic": "mic.caf"]])
+        let view = MeetingPlaybackView()
+        view.setMeeting(dir)
+        await view.settled()
+        let item = try #require(view.player.currentItem)
+        view.player.volume = 0.35
+        view.play(from: 1.5)
+        for _ in 0..<100 where view.player.currentTime().seconds < 1.49 { try await Task.sleep(for: .milliseconds(10)) }
+        view.stopPlayback()
+        for _ in 0..<100 where view.player.currentTime().seconds > 0.01 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(view.player.rate == 0)
+        #expect(view.player.currentTime().seconds < 0.01)
+        #expect(view.player.currentItem === item)
+        #expect(abs(view.player.volume - 0.35) < 0.001)
+        view.setMeeting(nil)
+    }
+
 }

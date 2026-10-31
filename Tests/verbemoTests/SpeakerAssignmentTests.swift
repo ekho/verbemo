@@ -21,7 +21,7 @@ struct SpeakerAssignmentTests {
         withExtendedLifetime(cell) { #expect(popup.accessibilityParent() == nil) }
     }
 
-    @Test("Participant selection keeps its editor alive until the dropdown is dismissed", arguments: ["participants", "transcript"])
+    @Test("Participant selection keeps its editor alive until the dropdown is dismissed", arguments: ["participants"])
     func assignmentWaitsForDropdownDismissal(tab: String) async throws {
         let root = Home.current.url.appendingPathComponent("meetings")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -34,6 +34,7 @@ struct SpeakerAssignmentTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.show()
         await library.settled()
         defer { _ = library.stopForTermination(); app.hide() }
@@ -92,6 +93,7 @@ struct SpeakerAssignmentTests {
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         let views = library.contentView.allDescendants
         let button = try #require(views.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.result.participants" })
@@ -113,25 +115,25 @@ struct SpeakerAssignmentTests {
         withExtendedLifetime(library) {}
     }
 
-    @Test func transcriptNamesAreTextUntilTheLinkButtonIsClicked() throws {
+    @Test func transcriptNamesUseAPencilAndConfirmedDraft() throws {
         let view = MeetingTranscriptView()
         let transcript = Transcript(engine: "whisper", model: "test", created_at: "", segments: [
             .init(speaker: "them A", start_ms: 1000, end_ms: 2000, text: "Hello"),
         ])
+        var assignments = 0
+        view.onAssign = { _, _, _ in assignments += 1 }
         view.update(transcript: transcript, names: nil, participants: [], canEdit: true)
         let table = try #require(view.documentView as? NSTableView)
         let row = try #require(view.tableView(table, viewFor: table.tableColumns[0], row: 0))
-        let link = try #require(row.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "speaker.link" })
-        #expect(link.contentTintColor == .systemRed)
-        #expect(link.toolTip?.isEmpty == false)
-        let name = try #require(row.allDescendants.first { $0.identifier?.rawValue == "speaker.name" })
-        let editor = try #require(row.allDescendants.compactMap { $0 as? NSComboBox }.first)
-        #expect(!name.isHidden)
-        #expect(editor.isHiddenOrHasHiddenAncestor)
-        #expect(link.sendAction(link.action, to: link.target))
-        #expect(name.isHidden)
-        #expect(!editor.isHiddenOrHasHiddenAncestor)
-        #expect(editor.isEditable)
+        let pencil = try #require(row.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        #expect(pencil.toolTip?.isEmpty == false)
+        #expect(!row.allDescendants.contains { $0 is NSComboBox })
+        let draft = try #require(pencil.makeEditor?())
+        draft.editor.choice.stringValue = "New name"
+        draft.editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
+        #expect(assignments == 0)
+        #expect(draft.apply())
+        #expect(assignments == 1)
     }
 
     @Test(.freshHome(config: #"{"user_email":"  OWNER@Example.test ","user_name":"My name"}"#))
@@ -224,7 +226,7 @@ struct SpeakerAssignmentTests {
         #expect(try Data(contentsOf: dir.appendingPathComponent("transcript.json")) == raw)
     }
 
-    @Test func failedSelectionDoesNotTurnIntoAManualNameOnFocusLoss() async {
+    @Test func failedSelectionKeepsItsDraftWithoutResavingOnFocusLoss() async {
         let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1",
             entry: .init(name: "Original", source: .manual),
             participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: false)
@@ -234,7 +236,31 @@ struct SpeakerAssignmentTests {
         editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
         editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
         await Task.yield()
-        #expect(editor.choice.stringValue == "Original")
+        #expect(editor.choice.stringValue == "Anna · anna")
         #expect(attempts == 1)
     }
+    @Test func popoverDraftRequiresApplyAndSurvivesErrors() {
+        let draft = SpeakerAssignmentPopover(speaker: "them A", title: "Speaker A", entry: nil,
+            participants: [.init(id: "anna", name: "Anna")], canEdit: true)
+        var saves = 0
+        draft.onAssign = { _, _ in saves += 1; throw CocoaError(.fileWriteUnknown) }
+        draft.editor.choice.selectItem(at: 1)
+        draft.editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
+        #expect(saves == 0)
+        #expect(!draft.apply())
+        #expect(saves == 1)
+        #expect(draft.editor.choice.stringValue == "Anna · anna")
+        draft.onAssign = { participant, _ in #expect(participant?.id == "anna"); saves += 1 }
+        #expect(draft.apply())
+        #expect(!draft.apply(), "Repeated Apply must not write twice")
+        #expect(saves == 2)
+        let cancelled = SpeakerAssignmentPopover(speaker: "them A", title: "Speaker A", entry: nil,
+            participants: [], canEdit: true)
+        cancelled.onAssign = { _, _ in saves += 1 }
+        cancelled.editor.choice.stringValue = "Discard"
+        cancelled.cancel()
+        #expect(!cancelled.apply())
+        #expect(saves == 2)
+    }
+
 }

@@ -113,6 +113,40 @@ struct MeetingLibraryControllerTests {
         return files
     }
 
+    @Test("Speaker assignment rejects a stale version and unknown voices")
+    func speakerAssignmentChecksCurrentVersion() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let archive = try #require(try TranscriptVersions.archiveCurrent(dir))
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-10-31T10:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "New version")]).write(to: dir)
+        let before = try Self.fileSnapshot(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(throws: (any Error).self) {
+            try library.assignSpeaker("me", participant: nil, name: "Stale", session: dir, version: archive)
+        }
+        #expect(throws: (any Error).self) {
+            try library.assignSpeaker("them ?", participant: nil, name: "Unknown", session: dir, version: dir)
+        }
+        #expect(try Self.fileSnapshot(dir) == before)
+        let selector = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }
+            .first { $0.identifier?.rawValue == "transcript-versions" })
+        selector.selectItem(at: 0)
+        _ = NSApp.sendAction(try #require(selector.action), to: selector.target, from: selector)
+        #expect(throws: (any Error).self) {
+            try library.assignSpeaker("me", participant: nil, name: "Old transcript", session: dir, version: archive, expectedTranscript: Data())
+        }
+        try library.assignSpeaker("me", participant: nil, name: "Archive name", session: dir, version: archive)
+        #expect(SpeakerNames.read(from: archive)?.speakers["me"]?.name == "Archive name")
+        #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.name != "Archive name")
+    }
+
     @Test("Meeting search follows the selected version and restores the result tab")
     func searchSelectedVersion() throws {
         let root = try Self.folder()

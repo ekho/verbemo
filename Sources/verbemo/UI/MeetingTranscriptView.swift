@@ -50,7 +50,9 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
-        table.intercellSpacing = NSSize(width: 0, height: 8)
+        table.intercellSpacing = .zero
+        table.gridStyleMask = .solidHorizontalGridLineMask
+        table.gridColor = StudioStyle.line
         table.dataSource = self
         table.delegate = self
         table.setAccessibilityLabel(localised("Transcript and speaker assignments", "Расшифровка и сопоставление участников"))
@@ -71,9 +73,10 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
     }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        let width = max(160, tableView.tableColumns[0].width - 20)
-        let rect = (segments[row].text as NSString).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 14)])
-        return max(54, ceil(rect.height) + 36)
+        let available = tableView.tableColumns[0].width - 16
+        let width = SegmentCell.textWidth(available)
+        let rect = (segments[row].text as NSString).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 15)])
+        return (available >= 590 ? max(52, ceil(rect.height)) : ceil(rect.height) + 60) + 20
     }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("utterance")
@@ -87,19 +90,30 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.time.isEnabled = canPlay
         cell.time.toolTip = localised("Play from \(cell.time.title)", "Воспроизвести с \(cell.time.title)")
         cell.time.setAccessibilityLabel(cell.time.toolTip)
-        let text = NSMutableAttributedString(string: segment.text, attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: JournalStyle.ink])
+        let text = NSMutableAttributedString(string: segment.text, attributes: [.font: NSFont.systemFont(ofSize: 15), .foregroundColor: StudioStyle.ink])
         for range in searchRanges[row] ?? [] where NSMaxRange(range) <= text.length {
             let active = focusedSearch?.segment == row && focusedSearch?.range == range
             text.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(active ? 0.65 : 0.25), range: range)
         }
         cell.body.attributedStringValue = text
-        cell.body.preferredMaxLayoutWidth = max(160, tableView.tableColumns[0].width - 20)
-        let editor = SpeakerAssignmentEditor(speaker: segment.speaker, title: Self.speakerTitle(segment.speaker, in: segments),
-            entry: SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker],
-            participants: canMatchParticipants || segment.speaker == "me" ? participants : [], canEdit: canEdit, inline: true)
-        let assign = onAssign
-        editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
-        cell.setEditor(editor)
+        let title = Self.speakerTitle(segment.speaker, in: segments)
+        let entry = SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker]
+        cell.name.stringValue = entry?.name ?? title
+        cell.name.toolTip = cell.name.stringValue
+        cell.voice.stringValue = StudioStyle.voiceLabel(segment.speaker)
+        cell.voice.setAccessibilityLabel(localised("Voice ", "Голос ") + cell.voice.stringValue)
+        cell.edit.isEnabled = canEdit && !SpeakerNames.isUnknown(segment.speaker)
+        cell.edit.toolTip = localised("Change speaker: ", "Изменить говорящего: ") + cell.name.stringValue
+        cell.edit.setAccessibilityLabel(cell.edit.toolTip)
+        let choices = canMatchParticipants || segment.speaker == "me" ? participants : []
+        let editable = cell.edit.isEnabled, assign = onAssign
+        cell.edit.makeEditor = {
+            let editor = SpeakerAssignmentPopover(speaker: segment.speaker, title: title, entry: entry,
+                                                  participants: choices, canEdit: editable)
+            editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
+            return editor
+        }
+        cell.updateWidth(tableView.tableColumns[0].width - 16)
         return cell
     }
     @objc private func playFrom(_ sender: NSButton) {
@@ -120,36 +134,60 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
 private final class SegmentCell: NSTableCellView {
     let time = NSButton(title: "", target: nil, action: nil)
     let body = NSTextField(wrappingLabelWithString: "")
-    private let head = NSStackView()
-    private var editor: NSView?
+    let name = NSTextField(labelWithString: "")
+    let voice = StudioStyle.voiceBadge("")
+    let edit = SpeakerEditButton()
+    private let metadata = NSStackView()
+    private let stack = NSStackView()
+    private var metadataWidth: NSLayoutConstraint!
+    private var bodyWidth: NSLayoutConstraint!
+    static func textWidth(_ available: CGFloat) -> CGFloat { max(160, available >= 590 ? available - 206 : available) }
     init() {
         super.init(frame: .zero)
         time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         time.isBordered = false
-        time.contentTintColor = JournalStyle.accent
+        time.image = NSImage(systemSymbolName: "play", accessibilityDescription: nil)
+        time.imagePosition = .imageLeading
+        time.contentTintColor = StudioStyle.muted
         time.identifier = .init("transcript.playFrom")
-        body.font = .systemFont(ofSize: 14)
+        name.font = .systemFont(ofSize: 13, weight: .semibold)
+        name.textColor = StudioStyle.ink
+        name.lineBreakMode = .byTruncatingTail
+        name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        body.font = .systemFont(ofSize: 15)
         body.isSelectable = true
-        head.addArrangedSubview(time)
-        head.spacing = 12
-        let stack = NSStackView(views: [head, body])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 4
+        body.identifier = .init("transcript.words")
+        let identity = NSStackView(views: [voice, name, edit])
+        identity.spacing = 6
+        metadata.setViews([identity, time], in: .center)
+        metadata.orientation = .vertical
+        metadata.alignment = .leading
+        metadata.spacing = 4
+        identity.widthAnchor.constraint(equalTo: metadata.widthAnchor).isActive = true
+        stack.setViews([metadata, body], in: .center)
+        stack.alignment = .top
+        stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+        metadataWidth = metadata.widthAnchor.constraint(equalToConstant: 190)
+        bodyWidth = body.widthAnchor.constraint(equalTo: stack.widthAnchor)
+        bodyWidth.isActive = true
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            body.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            head.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
         ])
     }
-    func setEditor(_ view: NSView) {
-        if let editor { head.removeArrangedSubview(editor); editor.removeFromSuperview() }
-        editor = view
-        head.addArrangedSubview(view)
+    func updateWidth(_ available: CGFloat) {
+        let wide = available >= 590
+        stack.orientation = wide ? .horizontal : .vertical
+        stack.alignment = wide ? .top : .leading
+        stack.spacing = wide ? 16 : 8
+        metadataWidth.isActive = wide
+        bodyWidth.constant = wide ? -206 : 0
+        let width = Self.textWidth(available)
+        if abs(body.preferredMaxLayoutWidth - width) > 0.5 { body.preferredMaxLayoutWidth = width }
     }
+    override func layout() { updateWidth(bounds.width - 16); super.layout() }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
