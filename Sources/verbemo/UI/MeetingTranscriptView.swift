@@ -64,8 +64,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
         table.intercellSpacing = .zero
-        table.gridStyleMask = .solidHorizontalGridLineMask
-        table.gridColor = StudioStyle.line
+        table.gridStyleMask = []
         table.dataSource = self
         table.delegate = self
         table.setAccessibilityLabel(localised("Transcript and speaker assignments", "Расшифровка и сопоставление участников"))
@@ -210,10 +209,16 @@ private final class SegmentCell: NSTableCellView {
         stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+        let separator = SetupLayout.hairline()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(separator)
         metadataWidth = metadata.widthAnchor.constraint(equalToConstant: 190)
         bodyWidth = body.widthAnchor.constraint(equalTo: stack.widthAnchor)
         bodyWidth.isActive = true
         NSLayoutConstraint.activate([
+            separator.leadingAnchor.constraint(equalTo: leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: trailingAnchor),
+            separator.bottomAnchor.constraint(equalTo: bottomAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
