@@ -104,6 +104,15 @@ struct MeetingLibraryControllerTests {
         }
     }
 
+    private static func fileSnapshot(_ directory: URL) throws -> [String: Data] {
+        var files: [String: Data] = [:]
+        let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey])!
+        for case let url as URL in enumerator where try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+            files[url.path] = try Data(contentsOf: url)
+        }
+        return files
+    }
+
     @Test("Meeting search follows the selected version and restores the result tab")
     func searchSelectedVersion() throws {
         let root = try Self.folder()
@@ -115,7 +124,7 @@ struct MeetingLibraryControllerTests {
         try Transcript(engine: "whisper", model: "test", created_at: "2026-10-30T10:00:00Z",
                        segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Current compass")]).write(to: dir)
         try Data("New summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
-        let before = try Data(contentsOf: dir.appendingPathComponent("transcript.json"))
+        let before = try Self.fileSnapshot(dir)
         let app = ApplicationWindow()
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
@@ -140,7 +149,7 @@ struct MeetingLibraryControllerTests {
         #expect(tabs.selectedTabViewItem?.identifier as? String == "summary")
         library.setMeetingSearchQuery("")
         #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript")
-        #expect(try Data(contentsOf: dir.appendingPathComponent("transcript.json")) == before)
+        #expect(try Self.fileSnapshot(dir) == before, "Search must leave all current and archived artifacts unchanged")
     }
 
     @Test("Search wraps, ignores unreadable summaries and clears on meeting change")
