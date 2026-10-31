@@ -5,7 +5,7 @@ import Testing
 @testable import verbemo
 
 struct MediaImportUITests {
-    @Test("The sidebar and status menu use the same Import command", .freshHome)
+    @Test("The header and status menu use the same Import command", .freshHome)
     @MainActor
     func importEntryPoints() throws {
         let app = ApplicationWindow()

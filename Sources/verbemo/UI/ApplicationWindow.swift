@@ -8,8 +8,9 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private let sidebar = SidebarView()
     private var workspaceSplit: WorkspaceSplitController!
     private let libraryToggle = NSButton()
-    private let compactPrimaryActions = NSStackView()
-    private let compactRecord = NSButton()
+    private let primaryActions = NSStackView()
+    private let primaryRecord = NSButton()
+    private let primarySettings = NSButton()
 
     private let recordingBar = RecordingBarView()
     private let activityBar = ActivityStatusBar()
@@ -73,7 +74,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private var presentedSetup: SetupPage?
     private var keepsDockIcon = Config.dockIcon()
     var toolbarIsHidden: Bool { toolbar.isHidden }
-    var primaryActionsAreVisible: Bool { !workspaceSplit.libraryItem.isCollapsed || (!compactPrimaryActions.isHidden && !toolbar.isHidden) }
+    var primaryActionsAreVisible: Bool { !primaryActions.isHiddenOrHasHiddenAncestor }
     var recordingBarIsVisible: Bool { !recordingBar.isHidden }
     var isVisible: Bool { panel.isVisible && !panel.isMiniaturized }
 
@@ -93,9 +94,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         panel.backgroundColor = JournalStyle.paper
         panel.isReleasedWhenClosed = false
         panel.autorecalculatesKeyViewLoop = true
-        sidebar.onNavigate = { [weak self] in self?.navigate($0) }
-        sidebar.onStart = { [weak self] in self?.newRecording() }
-        sidebar.onImport = { [weak self] in self?.onChooseImport?() }
         activityBar.onToggleAutomatic = { [weak self] in self?.onToggleAutoRecord?() }
         activityBar.onRecording = { [weak self] in self?.showActiveRecording() }
         activityBar.onQueue = { [weak self] in self?.navigate(.processing, clearSearch: true) }
@@ -121,6 +119,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         title.cell?.lineBreakMode = .byTruncatingTail
         heading.font = .systemFont(ofSize: 12)
         heading.textColor = JournalStyle.muted
+        heading.lineBreakMode = .byTruncatingTail
+        heading.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         libraryToggle.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)
@@ -131,30 +131,39 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         libraryToggle.toolTip = localised("Hide meeting list", "Скрыть список встреч")
         libraryToggle.setAccessibilityLabel(libraryToggle.toolTip)
         libraryToggle.setAccessibilityValue(1)
-        let compactImport = NSButton(), compactSettings = NSButton()
-        for (button, label, symbol, action) in [
-            (compactRecord, localised("New recording", "Новая запись"), "record.circle", #selector(compactRecordClicked)),
-            (compactImport, localised("Import", "Импорт"), "square.and.arrow.down", #selector(compactImportClicked)),
-            (compactSettings, localised("Settings", "Настройки"), "slider.horizontal.3", #selector(compactSettingsClicked)),
+        let importButton = NSButton()
+        for (button, label, symbol, identifier, action, key) in [
+            (primaryRecord, localised("New recording", "Новая запись"), "record.circle", "journal.new-recording", #selector(primaryRecordClicked), "n"),
+            (importButton, localised("Import", "Импорт"), "square.and.arrow.down", "journal.import", #selector(primaryImportClicked), ""),
+            (primarySettings, localised("Settings", "Настройки"), "slider.horizontal.3", "journal.settings", #selector(primarySettingsClicked), ","),
         ] {
             button.title = label
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
             button.imagePosition = .imageLeading
+            button.imageHugsTitle = true
             button.bezelStyle = .rounded
+            button.font = .systemFont(ofSize: 13, weight: .medium)
+            button.identifier = .init(identifier)
+            button.toolTip = label
+            button.setAccessibilityLabel(label)
+            button.keyEquivalent = key
+            button.keyEquivalentModifierMask = .command
             button.target = self
             button.action = action
-            compactPrimaryActions.addArrangedSubview(button)
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            primaryActions.addArrangedSubview(button)
         }
-        compactPrimaryActions.spacing = 6
-        compactPrimaryActions.isHidden = true
-        toolbar.setViews([libraryToggle, title, heading, spacer, compactPrimaryActions, actions], in: .center)
+        primaryRecord.bezelColor = StudioStyle.accent
+        primaryRecord.contentTintColor = StudioStyle.paper
+        primaryActions.spacing = 8
+        toolbar.setViews([libraryToggle, title, heading, spacer, actions, primaryActions], in: .center)
         toolbar.spacing = 8
-        toolbar.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)
+        toolbar.edgeInsets = NSEdgeInsets(top: 8, left: 24, bottom: 8, right: 24)
         toolbar.heightAnchor.constraint(equalToConstant: 48).isActive = true
         settingsNavigation.identifier = .init("settings.navigation")
         settingsNavigation.onSelect = { [weak self] in self?.navigate($0) }
         let divider = NSBox(); divider.boxType = .separator
-        let right = NSStackView(views: [toolbar, divider, recordingBar, settingsNavigation, contentHost])
+        let right = NSStackView(views: [recordingBar, settingsNavigation, contentHost])
         right.orientation = .vertical
         right.distribution = .fill
         right.spacing = 0
@@ -165,21 +174,21 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         workspaceSplit = WorkspaceSplitController(sidebar: sidebar, content: right)
         let root = workspaceSplit.view
         let container = WorkspaceSurface(JournalStyle.paper)
-        root.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(root)
+        root.setContentHuggingPriority(.init(1), for: .vertical)
         let statusDivider = NSBox()
         statusDivider.boxType = .separator
-        for view in [statusDivider, activityBar] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(view)
-        }
+        let stack = NSStackView(views: [toolbar, divider, root, statusDivider, activityBar])
+        stack.orientation = .vertical
+        stack.distribution = .fill
+        stack.alignment = .leading
+        stack.spacing = 0
+        stack.detachesHiddenViews = true
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        for view in stack.arrangedSubviews { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         NSLayoutConstraint.activate([
-            root.topAnchor.constraint(equalTo: container.topAnchor), root.bottomAnchor.constraint(equalTo: statusDivider.topAnchor),
-            root.leadingAnchor.constraint(equalTo: container.leadingAnchor), root.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            statusDivider.leadingAnchor.constraint(equalTo: container.leadingAnchor), statusDivider.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            statusDivider.bottomAnchor.constraint(equalTo: activityBar.topAnchor),
-            activityBar.leadingAnchor.constraint(equalTo: container.leadingAnchor), activityBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            activityBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            stack.topAnchor.constraint(equalTo: container.topAnchor), stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor), stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         ])
         panel.contentView = container
         container.layoutSubtreeIfNeeded()
@@ -191,13 +200,12 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         if panel.frame.origin == .zero { panel.center() }
         navigate(.allMeetings)
     }
-    @objc private func compactRecordClicked() { newRecording() }
-    @objc private func compactImportClicked() { onChooseImport?() }
-    @objc private func compactSettingsClicked() { navigate(.general) }
+    @objc private func primaryRecordClicked() { newRecording() }
+    @objc private func primaryImportClicked() { onChooseImport?() }
+    @objc private func primarySettingsClicked() { navigate(.general) }
     @objc private func toggleLibrary() {
         workspaceSplit.libraryItem.isCollapsed.toggle()
         let collapsed = workspaceSplit.libraryItem.isCollapsed
-        compactPrimaryActions.isHidden = !collapsed
         libraryToggle.toolTip = collapsed ? localised("Show meeting list", "Показать список встреч") : localised("Hide meeting list", "Скрыть список встреч")
         libraryToggle.setAccessibilityLabel(libraryToggle.toolTip)
         libraryToggle.setAccessibilityValue(collapsed ? 0 : 1)
@@ -213,7 +221,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             library.setMeetingSelectionActive(true)
             self.showingLive = false
             self.navigation.navigate(library.currentFilter)
-            self.sidebar.select(library.currentFilter)
             self.toolbar.isHidden = false
             self.settingsNavigation.isHidden = true
             self.updateHeading()
@@ -229,8 +236,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         showingLive = false
         navigation.navigate(destination)
         libraryProvider?()?.setMeetingSelectionActive(destination.isMeetings)
-        sidebar.select(destination)
-        toolbar.isHidden = destination == .about
+        toolbar.isHidden = false
         updateHeading()
         actions.isHidden = false
         settingsNavigation.isHidden = destination.isMeetings || destination == .about
@@ -242,6 +248,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             actions.setViews([library.toolbarContent], in: .center)
             content = library.contentView
         } else if destination == .about {
+            actions.setViews([], in: .center)
             content = SetupLayout.scroller(around: about.contentView)
         } else if !destination.isMeetings {
             if enteringSettings && isVisible { settings.reload() }
@@ -288,14 +295,17 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     }
     private func updateHeading() {
         let destination = navigation.destination
-        title.title = destination.isMeetings ? localised("Meetings", "Встречи") : localised("Settings", "Настройки")
+        title.title = destination.isMeetings ? "Verbemo" : localised("Settings", "Настройки")
+        title.font = .systemFont(ofSize: destination.isMeetings ? 17 : 12, weight: destination.isMeetings ? .semibold : .regular)
+        title.setAccessibilityLabel(destination.isMeetings ? localised("All meetings", "Все встречи") : title.title)
+        primarySettings.state = destination.isMeetings ? .off : .on
         heading.stringValue = "/  " + destination.title
         heading.isHidden = destination == .allMeetings
     }
     func presentSetup(_ setup: SetupPage) {
         guard !stopping else { return }
         showingLive = false
-        toolbar.isHidden = true
+        toolbar.isHidden = false
         settingsNavigation.isHidden = true
         actions.isHidden = true
         mount(setup.contentView)
@@ -314,7 +324,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         updateHeading()
         actions.isHidden = false
         settingsNavigation.isHidden = true
-        sidebar.select(.allMeetings)
         if let library = libraryProvider?(), library.selectActiveRecording() {
             actions.setViews([library.toolbarContent], in: .center)
             mount(library.contentView)
@@ -374,8 +383,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         activityBar.updateRecording(state, elapsed: elapsed)
         liveView.refreshAudioLevels()
         if wasRecording && state == .idle && showingLive { navigate(.allMeetings) }
-        sidebar.updateRecording(state != .idle)
-        compactRecord.isEnabled = state == .idle
+        primaryRecord.isEnabled = state == .idle
         if state != .idle { recordingSheet?.cancel() }
     }
     func updateAutoRecord(enabled: Bool, decision: String?, blocked: Bool = false) {

@@ -25,6 +25,68 @@ struct ApplicationNavigationTests {
 @Suite(.serialized)
 @MainActor
 struct ApplicationWindowTests {
+    @Test(.freshHome(config: #"{"calendar":false}"#), .speaking(.russian), arguments: [760, 1340])
+    func primaryActionsStayAboveBothPanesWithLibraryShownOrHidden(width: Int) async throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: Home.current.url.appendingPathComponent("meetings"), hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(.init(width: width, height: 600))
+        app.show()
+        let root = try #require(app.panel.contentView)
+        let split = try #require(root.allDescendants.first { $0.identifier?.rawValue == "workspace.library-split" } as? NSSplitView)
+        let toggle = try #require(root.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "workspace.toggle-library" })
+        for destination in [ApplicationNavigationState.Destination.allMeetings, .general, .mcp, .about] {
+            app.navigate(destination)
+            for collapsed in [false, true, false] {
+                if split.arrangedSubviews[0].isHidden != collapsed {
+                    #expect(NSApp.sendAction(try #require(toggle.action), to: toggle.target, from: toggle))
+                }
+                for _ in 0..<4 { root.layoutSubtreeIfNeeded(); await Task.yield() }
+                let splitRect = split.convert(split.bounds, to: root)
+                for id in ["journal.new-recording", "journal.import", "journal.settings"] {
+                    let buttons = root.allDescendants.compactMap { $0 as? NSButton }.filter { $0.identifier?.rawValue == id && !$0.isHiddenOrHasHiddenAncestor }
+                    #expect(buttons.count == 1, "One visible command: \(id), \(destination), collapsed \(collapsed)")
+                    let button = try #require(buttons.first)
+                    let rect = button.convert(button.bounds, to: root)
+                    #expect(rect.minY >= splitRect.maxY - 1, "\(id) belongs to the common header above both panes")
+                    #expect(rect.minX >= 0 && rect.maxX <= root.bounds.maxX + 1)
+                    #expect(button.bounds.width >= button.fittingSize.width - 1, "The action label must remain readable at width \(width)")
+                }
+            }
+        }
+    }
+
+    @Test(.freshHome(config: #"{"calendar":false}"#))
+    func headerCommandsKeepTheirActionsAndRecordingGuard() throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        func command(_ id: String) throws -> NSButton {
+            try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == id && !$0.isHiddenOrHasHiddenAncestor })
+        }
+        func act(_ button: NSButton) throws {
+            #expect(NSApp.sendAction(try #require(button.action), to: button.target, from: button))
+        }
+        var imports = 0, recordings = 0
+        app.onChooseImport = { imports += 1 }
+        app.onStartRecording = { _, _ in recordings += 1 }
+        try act(command("journal.import"))
+        #expect(imports == 1)
+        try act(command("journal.settings"))
+        #expect(app.navigation.destination == .general)
+        try act(command("journal.new-recording"))
+        let sheet = try #require(app.recordingSheet)
+        #expect(sheet.panel.sheetParent === app.panel)
+        sheet.cancel()
+        #expect(app.recordingSheet == nil && recordings == 0)
+        app.update(state: .recording, elapsed: "00:01")
+        #expect(try !command("journal.new-recording").isEnabled)
+        app.update(state: .paused, elapsed: "00:01")
+        #expect(try !command("journal.new-recording").isEnabled)
+        app.update(state: .idle, elapsed: nil)
+        #expect(try command("journal.new-recording").isEnabled)
+    }
+
     @Test(.freshHome, .speaking(.russian)) func changingPagesKeepsNarrowWindowSize() async {
         let app = ApplicationWindow()
         defer { app.hide() }
@@ -120,13 +182,13 @@ struct ApplicationWindowTests {
         }
     }
 
-    @Test(.freshHome) func destinationsShareOneWindowAndAboutHasNoToolbar() {
+    @Test(.freshHome) func destinationsShareOneWindowAndKeepGlobalActions() {
         let app = ApplicationWindow()
         let panel = app.panel
         for destination in ApplicationNavigationState.Destination.allCases {
             app.navigate(destination)
             #expect(app.panel === panel)
-            #expect(app.toolbarIsHidden == (destination == .about))
+            #expect(!app.toolbarIsHidden)
             #expect(app.primaryActionsAreVisible)
         }
         app.update(state: .recording, elapsed: "04:32")

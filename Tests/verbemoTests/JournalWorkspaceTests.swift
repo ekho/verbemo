@@ -322,10 +322,8 @@ struct JournalWorkspaceTests {
         #expect(titleRect.minY > playerRect.maxY)
         #expect(playerRect.minY > tabsRect.maxY)
         #expect(!views.compactMap { $0 as? NSPopUpButton }.contains { $0.itemTitles.contains("mic.caf") })
-        let sidebar = try #require(app.panel.contentView?.allDescendants.first { $0 is SidebarView })
-        let importButton = try #require(sidebar.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "journal.import" })
+        let importButton = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "journal.import" })
         #expect(importButton.isBordered)
-        #expect(importButton.frame.height >= 40)
 
         try SessionClaim.acquire(dir, stage: .transcribe)
         defer { SessionClaim.release(dir) }
@@ -475,7 +473,7 @@ struct JournalWorkspaceTests {
             try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "journal.breadcrumb" })
         }
         let meetings = try crumb()
-        #expect(meetings.title == "Встречи")
+        #expect(meetings.accessibilityLabel() == "Все встречи")
         #expect(!meetings.isHiddenOrHasHiddenAncestor)
         let search = try #require(library.listContentView.allDescendants.compactMap { $0 as? NSSearchField }.first)
         search.stringValue = "test"
