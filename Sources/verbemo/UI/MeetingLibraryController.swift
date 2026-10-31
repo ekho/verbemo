@@ -32,7 +32,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     var onSelectMeeting: (() -> Void)?
     var onNavigateSettings: ((ApplicationNavigationState.Destination) -> Void)?
     var currentFilter: ApplicationNavigationState.Destination { meetingFilter }
-    private let filterPicker = NSPopUpButton()
+    private let filterButton = LibraryFilterButton()
+    private let filterPopover = NSPopover()
+    private var filterOptions: [NSButton] = []
+    private let measuringListTitle = MeetingListView.titleLabel("")
     private let resultPicker = NSStackView()
     let meetingHeaderState = StudioMeetingHeaderState()
     private let meetingSearch = NSSearchField()
@@ -373,6 +376,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private func buildTable() {
         table.addTableColumn(NSTableColumn(identifier: .init("meeting-card")))
         table.headerView = nil
+        table.style = .plain
         table.selectionHighlightStyle = .regular
         table.backgroundColor = StudioStyle.sidebar
         table.rowHeight = 64
@@ -604,7 +608,12 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
 
     func applyFilter(_ filter: ApplicationNavigationState.Destination, clearSearch: Bool = false) {
         meetingFilter = filter
-        filterPicker.selectItem(at: [.allMeetings, .processing, .attention].firstIndex(of: filter) ?? 0)
+        filterButton.state = filter == .allMeetings ? .off : .on
+        filterButton.bezelColor = filter == .allMeetings ? nil : StudioStyle.selection
+        filterButton.contentTintColor = filter == .allMeetings ? StudioStyle.ink : StudioStyle.accent
+        filterButton.toolTip = localised("Filter meetings: ", "Фильтр встреч: ") + filter.title
+        filterButton.setAccessibilityLabel(filterButton.toolTip)
+        for option in filterOptions { option.state = option.identifier?.rawValue == "library.filter.\(filter.rawValue)" ? .on : .off }
         if clearSearch { search.stringValue = "" }
         show(allItems)
     }
@@ -647,9 +656,17 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         for case let button as JournalTabButton in resultPicker.arrangedSubviews { button.select(button === sender) }
         detailTabs.selectTabViewItem(withIdentifier: ["summary", "transcript", "participants"][sender.tag])
     }
-    @objc private func filterSelected() {
+    @objc private func showLibraryFilter() {
+        filterButton.state = meetingFilter == .allMeetings ? .off : .on
+        panel.makeFirstResponder(filterButton)
+        filterPopover.show(relativeTo: filterButton.bounds, of: filterButton, preferredEdge: .minY)
+    }
+    @objc private func filterSelected(_ sender: NSButton) {
         let filters: [ApplicationNavigationState.Destination] = [.allMeetings, .processing, .attention]
-        applyFilter(filters[filterPicker.indexOfSelectedItem])
+        guard filters.indices.contains(sender.tag) else { return }
+        applyFilter(filters[sender.tag])
+        filterPopover.performClose(nil)
+        panel.makeFirstResponder(filterButton)
         onSelectMeeting?()
     }
     @objc private func processingSettings() { onNavigateSettings?(.transcription) }
@@ -1684,6 +1701,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
 @MainActor
 private extension MeetingLibraryController {
     func buildJournal(detail: NSStackView, diarizationActions: NSStackView) -> NSView {
+        search.identifier = .init("library.search")
         search.placeholderString = localised("Meeting title", "Название встречи")
         search.setAccessibilityLabel(localised("Search meeting titles", "Поиск по названиям встреч"))
         search.target = self
@@ -1691,18 +1709,47 @@ private extension MeetingLibraryController {
         search.sendsSearchStringImmediately = true
         search.sendsWholeSearchString = false
         search.focusRingType = .default
-        search.backgroundColor = StudioStyle.inset
+        search.backgroundColor = StudioStyle.paper
         search.textColor = StudioStyle.ink
-        for filter in [ApplicationNavigationState.Destination.allMeetings, .processing, .attention] {
-            filterPicker.addItem(withTitle: filter == .allMeetings ? localised("All", "Все") : filter.title)
+        search.font = .systemFont(ofSize: 13)
+        search.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        search.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        filterButton.identifier = .init("library.filter")
+        filterButton.title = ""
+        filterButton.bezelStyle = .rounded
+        filterButton.setButtonType(.toggle)
+        filterButton.image = NSImage(systemSymbolName: "line.3.horizontal.decrease", accessibilityDescription: nil)
+        filterButton.imagePosition = .imageOnly
+        filterButton.target = self
+        filterButton.action = #selector(showLibraryFilter)
+        filterButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
+        filterButton.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        let filterHeading = NSTextField(labelWithString: localised("Filter meetings", "Фильтр встреч"))
+        filterHeading.font = .systemFont(ofSize: 13, weight: .semibold)
+        for (index, filter) in [ApplicationNavigationState.Destination.allMeetings, .processing, .attention].enumerated() {
+            let option = NSButton(radioButtonWithTitle: filter.title, target: self, action: #selector(filterSelected(_:)))
+            option.identifier = .init("library.filter.\(filter.rawValue)")
+            option.tag = index
+            option.state = filter == meetingFilter ? .on : .off
+            filterOptions.append(option)
         }
-        filterPicker.isBordered = false
-        filterPicker.font = .systemFont(ofSize: 11)
-        filterPicker.target = self
-        filterPicker.action = #selector(filterSelected)
-        filterPicker.setAccessibilityLabel(localised("Filter meetings", "Фильтр встреч"))
-        filterPicker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let listHeading = NSStackView(views: [StudioStyle.caption(localised("MEETINGS", "ВСТРЕЧИ")), NSView(), filterPicker])
+        let filters = NSStackView(views: [filterHeading] + filterOptions)
+        filters.orientation = .vertical
+        filters.alignment = .leading
+        filters.spacing = 10
+        filters.edgeInsets = .init(top: 14, left: 14, bottom: 14, right: 14)
+        let controller = NSViewController()
+        controller.view = filters
+        filterPopover.contentViewController = controller
+        filterPopover.behavior = .transient
+        filterPopover.animates = false
+        filterButton.toolTip = localised("Filter meetings: ", "Фильтр встреч: ") + meetingFilter.title
+        filterButton.setAccessibilityLabel(filterButton.toolTip)
+        let listHeading = NSTextField(labelWithString: localised("Library", "Библиотека"))
+        listHeading.font = .systemFont(ofSize: 12)
+        listHeading.textColor = StudioStyle.muted
+        let searchRow = NSStackView(views: [search, filterButton])
+        searchRow.spacing = 8
         emptyLabel.identifier = .init("meeting-list.empty")
         emptyLabel.font = .systemFont(ofSize: 12)
         emptyLabel.textColor = StudioStyle.muted
@@ -1716,11 +1763,11 @@ private extension MeetingLibraryController {
         scroll.drawsBackground = false
         scroll.autohidesScrollers = true
         scroll.setContentHuggingPriority(.init(1), for: .vertical)
-        let list = NSStackView(views: [search, listHeading, scroll, emptyView])
+        let list = NSStackView(views: [listHeading, searchRow, scroll, emptyView])
         list.orientation = .vertical
         list.distribution = .fill
         list.alignment = .leading
-        list.spacing = 16
+        list.spacing = 10
         for view in list.arrangedSubviews { view.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true }
         listContentView = Self.frameOwnedPane(list)
 
@@ -1917,7 +1964,13 @@ private extension MeetingLibraryController {
 
 extension MeetingLibraryController {
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        62
+        guard items.indices.contains(row) else { return 62 }
+        measuringListTitle.stringValue = items[row].title ?? items[row].name
+        measuringListTitle.preferredMaxLayoutWidth = max(1, tableView.tableColumns[0].width - 20)
+        return max(62, ceil(measuringListTitle.fittingSize.height) + 40)
+    }
+    func tableViewColumnDidResize(_ notification: Notification) {
+        table.needsLayout = true
     }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         JournalMeetingRow()
@@ -1935,13 +1988,24 @@ private final class MeetingSearchField: NSSearchField {
         override func draw(withFrame frame: NSRect, in controlView: NSView) {
             // The native bezel ignores backgroundColor.
             let bezel = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 0.5),
-                                     xRadius: frame.height / 2, yRadius: frame.height / 2)
-            StudioStyle.inset.setFill()
+                                     xRadius: 4, yRadius: 4)
+            StudioStyle.paper.setFill()
             bezel.fill()
             StudioStyle.line.setStroke()
             bezel.lineWidth = 1
             bezel.stroke()
             super.drawInterior(withFrame: frame, in: controlView)
+        }
+    }
+}
+
+@MainActor
+private final class LibraryFilterButton: NSButton {
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if state == .on {
+            StudioStyle.accent.setFill()
+            NSBezierPath(ovalIn: .init(x: bounds.maxX - 8, y: isFlipped ? 4 : bounds.maxY - 8, width: 4, height: 4)).fill()
         }
     }
 }

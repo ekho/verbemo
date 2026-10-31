@@ -3,36 +3,79 @@ import QuartzCore
 
 @MainActor
 final class MeetingListView: NSTableCellView {
+    private let title: NSTextField
+    static func titleLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = StudioStyle.ink
+        label.lineBreakMode = .byWordWrapping
+        return label
+    }
     init(item: SessionInventory.Item, active: MeetingPresentation.ActiveRecording? = nil) {
+        title = Self.titleLabel(item.title ?? item.name)
         super.init(frame: .zero)
-        let title = NSTextField(labelWithString: item.title ?? item.name)
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
-        title.lineBreakMode = .byTruncatingTail
-        let duration = item.duration.map { " · \(max(1, Int($0 / 60))) " + localised("min", "мин") } ?? ""
-        let date = item.started.map { MeetingPresentation.date($0) } ?? localised("Undated", "Без даты")
+        let duration = item.duration.map { seconds in
+            let total = seconds.isFinite ? Int(max(0, seconds)) : 0
+            return " · " + (total >= 3600 ? String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
+                : String(format: "%02d:%02d", total / 60, total % 60))
+        } ?? ""
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let date = item.started.map { formatter.string(from: $0) } ?? localised("Undated", "Без даты")
         let meta = NSTextField(labelWithString: date + duration)
         meta.identifier = .init("meeting.list-date")
-        meta.toolTip = meta.stringValue
-        meta.font = .systemFont(ofSize: 11)
+        meta.toolTip = item.started.map { MeetingPresentation.date($0) + duration } ?? meta.stringValue
+        meta.setAccessibilityLabel(meta.toolTip)
+        meta.font = .systemFont(ofSize: 12)
         meta.textColor = StudioStyle.muted
         meta.lineBreakMode = .byTruncatingTail
         let stages = MeetingPresentation.stages(item, active: active)
-        let status = stages.first { $0.state == .failed } ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending }
-        let metaRow = NSStackView(views: [meta, NSView()] + (status.map { [Self.icon($0)] } ?? []))
-        metaRow.spacing = 8
+        let naming: MeetingPresentation.Stage? = switch item.speakers {
+        case .failed(let reason): .init(symbol: "person", title: reason, state: .failed)
+        case .pending, .deferred: .init(symbol: "person", title: localised("Speaker names pending", "Имена говорящих ожидают обработки"), state: .pending)
+        case .done, .off: nil
+        }
+        let status = stages.first { $0.state == .failed } ?? (naming?.state == .failed ? naming : nil)
+            ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending } ?? naming
+        let failed = status?.state == .failed || item.unreadableDiarization || item.diarization?.status == .failed
+        let symbol = failed ? "exclamationmark.triangle" : status.map {
+            switch $0.state {
+            case .active: $0.symbol == "mic" ? "record.circle" : "arrow.triangle.2.circlepath"
+            case .paused: "pause.circle"
+            case .pending: "clock"
+            default: "checkmark.circle"
+            }
+        } ?? "checkmark.circle"
+        let image = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil) ?? NSImage())
+        image.identifier = .init("meeting.list-status")
+        image.contentTintColor = failed ? .systemRed : status?.state == .active ? StudioStyle.accent : StudioStyle.muted
+        image.toolTip = failed && status?.state != .failed ? localised("Speaker separation needs attention", "Диаризация требует внимания")
+            : status?.title ?? localised("Ready", "Готово")
+        image.setAccessibilityElement(true)
+        image.setAccessibilityLabel(image.toolTip)
+        image.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        image.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        let metaRow = NSStackView(views: [meta, image, NSView()])
+        metaRow.spacing = 6
         let stack = NSStackView(views: [title, metaRow])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
+        stack.spacing = 4
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
             title.widthAnchor.constraint(equalTo: stack.widthAnchor), metaRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layout() {
+        title.preferredMaxLayoutWidth = max(1, bounds.width - 20)
+        super.layout()
+    }
     static func icon(_ stage: MeetingPresentation.Stage) -> NSView {
         let host = NSView()
         host.widthAnchor.constraint(equalToConstant: 22).isActive = true
@@ -79,6 +122,14 @@ final class MeetingListView: NSTableCellView {
 @MainActor
 final class MeetingTableView: NSTableView {
     var onContext: ((Int) -> Void)?
+    private var measuredWidth: CGFloat = 0
+    override func layout() {
+        super.layout()
+        if let width = tableColumns.first?.width, abs(width - measuredWidth) > 0.5 {
+            measuredWidth = width
+            noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<numberOfRows))
+        }
+    }
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = row(at: convert(event.locationInWindow, from: nil))
         if row >= 0 { onContext?(row) }

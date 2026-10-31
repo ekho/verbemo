@@ -22,7 +22,7 @@ struct JournalWorkspaceTests {
         let actual = try #require(bitmap.colorAt(x: bitmap.pixelsWide - Int(32 * scale), y: bitmap.pixelsHigh / 2))
         var expected: NSColor?
         search.effectiveAppearance.performAsCurrentDrawingAppearance {
-            expected = StudioStyle.inset.usingColorSpace(bitmap.colorSpace)
+            expected = StudioStyle.paper.usingColorSpace(bitmap.colorSpace)
         }
         let background = try #require(expected)
         #expect(abs(actual.redComponent - background.redComponent) < 0.01)
@@ -237,7 +237,8 @@ struct JournalWorkspaceTests {
         for index in 0..<table.numberOfRows {
             let row = try #require(library.tableView(table, viewFor: nil, row: index))
             let date = try #require(row.allDescendants.first { $0.identifier?.rawValue == "meeting.list-date" } as? NSTextField)
-            #expect(date.stringValue == MeetingPresentation.date(ISO8601DateFormatter().date(from: dates[index])))
+            #expect(date.toolTip == MeetingPresentation.date(ISO8601DateFormatter().date(from: dates[index])))
+            #expect(date.stringValue == String(dates[index].prefix(10)))
             #expect(!date.stringValue.isEmpty)
             #expect(library.tableView(table, heightOfRow: index) == 62)
         }

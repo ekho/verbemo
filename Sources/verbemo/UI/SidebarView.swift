@@ -5,7 +5,7 @@ final class SidebarView: JournalSurface {
     private let libraryHost = NSView()
 
     init() {
-        super.init(JournalStyle.sidebar)
+        super.init(StudioStyle.sidebar)
         identifier = .init("journal.sidebar")
         libraryHost.translatesAutoresizingMaskIntoConstraints = false
         addSubview(libraryHost)
