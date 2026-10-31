@@ -23,7 +23,7 @@ struct MeetingTranscriptReadingTests {
         view.layoutSubtreeIfNeeded()
         #expect(view.readingPosition()?.segment == 8)
     }
-    @Test func closingEditorAfterReloadRestoresItsPencilFocus() throws {
+    @Test func closingEditorAfterReloadRestoresItsPencilFocus() async throws {
         _ = NSApplication.shared
         let view = MeetingTranscriptView()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 300),
@@ -42,6 +42,7 @@ struct MeetingTranscriptReadingTests {
         names.speakers["them A"] = .init(name: "New name", source: .manual)
         view.update(transcript: transcript, names: names, participants: [], canEdit: true)
         oldPencil.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
+        for _ in 0..<4 { await Task.yield() }
         let newRow = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
         let pencil = try #require(newRow.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
         #expect(window.firstResponder === pencil)

@@ -26,6 +26,7 @@ final class WorkspaceSplitView: NSSplitView, NSSplitViewDelegate {
     func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool { subview === subviews.first }
     func splitView(_ splitView: NSSplitView, shouldHideDividerAt dividerIndex: Int) -> Bool { subviews.first?.isHidden == true }
     override func resizeSubviews(withOldSize oldSize: NSSize) {
+        needsDisplay = true
         guard subviews.count == 2 else { return super.resizeSubviews(withOldSize: oldSize) }
         let sidebar = subviews[0], content = subviews[1]
         if sidebar.isHidden { content.frame = bounds; return }

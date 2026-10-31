@@ -10,6 +10,34 @@ import Testing
 @Suite(.serialized, .freshHome)
 @MainActor
 struct MeetingLibraryControllerTests {
+    @Test("Starting summary work immediately disables speaker editors and cancellation restores them")
+    func summaryWorkUpdatesSpeakerAvailability() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        try Data("Summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        let before = try Self.fileSnapshot(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        tabs.selectTabViewItem(withIdentifier: "participants")
+        let start = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.generate-summary" })
+        #expect(start.sendAction(start.action, to: start.target))
+        let editor = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        #expect(!editor.choice.isEnabled)
+        let sheet = try #require(app.panel.attachedSheet)
+        let cancel = try #require(sheet.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.title == "Cancel" })
+        #expect(cancel.sendAction(cancel.action, to: cancel.target))
+        await library.settled()
+        let restored = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        #expect(restored.choice.isEnabled)
+        #expect(try Self.fileSnapshot(dir) == before)
+    }
     @Test("Diarization details distinguish confirmed speakers, unknown speech and retained retry audio")
     func diarizationDetails() {
         var state = DiarizationState(

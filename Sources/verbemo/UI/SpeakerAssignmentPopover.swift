@@ -106,6 +106,8 @@ final class SpeakerEditButton: NSButton, NSPopoverDelegate {
         popover = nil
         let restore = restoreFocusAfterClose ?? onRestoreFocus
         restoreFocusAfterClose = nil
-        if let restore { restore() } else { window?.makeFirstResponder(self) }
+        if let restore {
+            Task { @MainActor in restore() }
+        } else { window?.makeFirstResponder(self) }
     }
 }

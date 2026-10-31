@@ -309,7 +309,12 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var summarySheet: SummaryRegenerationSheet?
     private var summaryDirectory: URL?
-    private var working = false { didSet { onActivityChange?() } }
+    private var working = false {
+        didSet {
+            if oldValue != working { showDetail() }
+            onActivityChange?()
+        }
+    }
 
     init(root: URL, pasteboard: NSPasteboard = .general,
          operations: ProcessingOperations = .shared, hostWindow: NSWindow) {
