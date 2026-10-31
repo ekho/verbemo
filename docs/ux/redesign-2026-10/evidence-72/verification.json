@@ -1,16 +1,16 @@
 {
   "date": "2026-10-31",
-  "status": "Mac pilot prepared for review; P3 open; user acceptance and Windows pending",
+  "status": "Mac pilot prepared for user review; collapse P3 resolved in build640; user acceptance and Windows pending",
   "build": {
-    "source_commit": "eef804e9cf8beb310ce9794b4825600b06ba050b",
+    "source_commit": "37566c576d9db1c7ed96e95ae8a7632b2e68f5a9",
     "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72/Verbemo Studio QA.app",
     "bundle_id": "name.ekho.verbemo.ux72",
     "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72/home",
     "fixtures": "/var/folders/4v/scwck4ld5nz14y5_5g196phw0000gn/T/verbemo-ux72-442le6z_",
-    "executable_sha256": "d4343846b68b96a30b8942366d78e17e5bf3b64ae72a9bd376cb2fa1fc7f8814",
+    "executable_sha256": "d8a92efe426336c2339974c3ac9289f9032ba70d37d2b15c2dc1f24bcf0a196d",
     "config_sha256": "52072055ede4c14a9b697274307d3860bb84dcc4ce22b595735a61990bd4ff73",
     "version": "0.17.2",
-    "build_number": "638",
+    "build_number": "640",
     "architectures": "x86_64 arm64",
     "minimum_macos": "14.2"
   },
@@ -68,9 +68,49 @@
       "log_path": "/tmp/verbemo-ux72-focus-readback-green.log",
       "log_sha256": "a21db1eb38d540b1a6af3360d2d9efd538ec55456c660560f9e7c003e15e0b0c",
       "skipped_tests": []
+    },
+    {
+      "source": "37566c576d9db1c7ed96e95ae8a7632b2e68f5a9",
+      "command": "swift test --no-parallel --filter 'StudioMeetingHeaderTests|JournalWorkspaceTests|MCPSettingsTests|ApplicationWindowTests'",
+      "result": "✔ Test run with 28 tests in 3 suites passed after 12.667 seconds.",
+      "log_path": "/tmp/verbemo-ux72-collapse-green.log",
+      "log_sha256": "a0ec15d87e3a95c1299b8b40a00869415d41bd0b0c18b5afb107a27b78befada",
+      "skipped_tests": []
+    },
+    {
+      "source": "37566c576d9db1c7ed96e95ae8a7632b2e68f5a9",
+      "command": "swift test --no-parallel",
+      "result": "✔ Test run with 1342 tests in 182 suites passed after 260.945 seconds.",
+      "log_path": "/tmp/verbemo-ux72-collapse-full.log",
+      "log_sha256": "f61531bcab7c2f45a5e3f1dcd3e3243209ae1d7d12fdf85b19328bf251d77bab",
+      "skipped_tests": [
+        "➜ Test interactiveJournal() skipped.",
+        "➜ Test \"Annotated corpus: thresholds, repeats, alignment and private numeric report\" skipped.",
+        "➜ Test \"Explicit pinned model download verifies every asset\" skipped.",
+        "➜ Test \"Opt-in pinned native model produces valid speaker turns on public audio\" skipped.",
+        "➜ Test \"The published GigaAM GGUF transcribes real Russian audio\" skipped.",
+        "➜ Test \"The downloaded model runs both shared live streams end to end\" skipped.",
+        "➜ Test \"CI has the echo canceller the release ships\" skipped.",
+        "➜ Test \"Downloaded Nemotron recognizes a real audio fixture with native word times\" skipped.",
+        "➜ Test \"Private stereo input completes the production decoder, AEC and AAC path\" skipped.",
+        "➜ Test \"Pinned Whisper model emits real timed words on a permitted AMI clip\" skipped.",
+        "➜ Test \"Summary provider form in both appearances, without calling a provider\" skipped.",
+        "➜ Test \"New recording with and without a calendar event, in both appearances\" skipped.",
+        "➜ Test \"First-run permissions inside Journal, in both appearances and at minimum width\" skipped.",
+        "➜ Test \"Every settings page in Journal, in both appearances and at minimum width\" skipped.",
+        "➜ Test \"Calendar selection with synthetic calendars, at narrow and wide widths\" skipped.",
+        "➜ Test \"Cloud-only transcription explains unavailable local speaker separation\" skipped.",
+        "➜ Test \"A long speaker-model error on the narrow transcription page\" skipped.",
+        "➜ Test \"Local and speaker download progress on the narrow transcription page\" skipped.",
+        "➜ Test \"About inside Journal, in both appearances\" skipped.",
+        "➜ Test \"Every view on Journal's transcription page with its frame and control state\" skipped.",
+        "➜ Test \"Journal's empty library and live transcript, in both appearances\" skipped.",
+        "➜ Test \"Meeting summary, transcript and speaker processing states inside Journal\" skipped.",
+        "➜ Test \"Transcript versions at Journal's minimum width, in both appearances\" skipped."
+      ]
     }
   ],
-  "post_test_changes": "Two small collapse/drawing changes were compiled and inspected in GUI; full suite was not repeated after the later focused fixes.",
+  "post_test_changes": "No product changes after full suite; packaged app640 GUI checked; documentation and evidence only.",
   "screenshots": [
     {
       "file": "01-transcript-light.jpg",
@@ -121,6 +161,16 @@
       "file": "10-hidden-library.jpg",
       "build": 638,
       "sha256": "7bcce16613354be411d50dcc34ab8d81bacf6188429d0848412e704f6b7b953e"
+    },
+    {
+      "file": "11-hidden-library-fixed.jpg",
+      "build": 640,
+      "sha256": "d6044b527668b50d6d87de775b6a6de4ab448accb75453e270dcdb609c6b9ed5"
+    },
+    {
+      "file": "12-restored-library.jpg",
+      "build": 640,
+      "sha256": "8a69aab60b5b553c17b5bf54834cc4e216e07fc5e8a6ed64abe40c51247821eb"
     }
   ],
   "integrity": {
@@ -129,14 +179,10 @@
     "after_assignment": "qa-after-assignment.json",
     "final": "qa-after.json",
     "unchanged": "all original audio, transcript JSON and summaries",
-    "expected_changed_paths": 8
+    "expected_changed_paths": 8,
+    "after_collapse_redesign": "All30 files match qa-after.json; no added, removed or changed paths."
   },
-  "known_open": [
-    {
-      "id": "P3-MAC-COLLAPSE-LINE",
-      "description": "Thin vertical line remains at the old sidebar boundary after hiding the library, including build 638. All actions remain accessible; see 10-hidden-library.jpg."
-    }
-  ],
+  "known_open": [],
   "unverified": [
     "Windows",
     "VoiceOver / Narrator",
@@ -147,5 +193,18 @@
     "Intel runtime",
     "physical audible output"
   ],
-  "release": "No merge, tag, release or installed app replacement"
+  "release": "No merge, tag, release or installed app replacement",
+  "resolved": [
+    {
+      "id": "P3-MAC-COLLAPSE-LINE",
+      "source_commit": "37566c576d9db1c7ed96e95ae8a7632b2e68f5a9",
+      "build": 640,
+      "regression_test": "collapsedLibraryHasNoVisibleDividerOverContent",
+      "red_log": "/tmp/verbemo-ux72-collapse-red.log",
+      "red_log_sha256": "0278bd3cfaadb3a963ba7572b21a7bbe535d0eddef746a701ae20da71afed7e8",
+      "fix": "NSSplitViewController owns pane geometry and NSSplitViewItem.isCollapsed state",
+      "gui": "Mouse248→324.5, Right340.5; hide/show at1340×820 and761×600; no old divider line",
+      "screenshot": "11-hidden-library-fixed.jpg"
+    }
+  ]
 }

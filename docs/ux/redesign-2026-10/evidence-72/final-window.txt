@@ -191,4 +191,4 @@ Window: "Verbemo", App: Verbemo Studio QA.
 	184 Правка
 	185 Окно
 
-The focused UI element is 51 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Placeholder: Найти в этой встрече, ID: meeting.search
+The focused UI element is 1 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
