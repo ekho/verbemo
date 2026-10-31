@@ -24,6 +24,7 @@ final class WorkspaceSplitView: NSSplitView, NSSplitViewDelegate {
         max(220, min(maximumWidth, proposedPosition))
     }
     func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool { subview === subviews.first }
+    func splitView(_ splitView: NSSplitView, shouldHideDividerAt dividerIndex: Int) -> Bool { subviews.first?.isHidden == true }
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         guard subviews.count == 2 else { return super.resizeSubviews(withOldSize: oldSize) }
         let sidebar = subviews[0], content = subviews[1]

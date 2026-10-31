@@ -52,3 +52,9 @@ GUI smoke Task 2 выполняется вместе с интегрирован
 Полный промежуточный прогон: 1330 tests / 182 suites passed, `/tmp/verbemo-ux72-full-verified.log`; opt-in real-model/gallery tests пропущены. `make app SIGN_ID=-` собрал universal x86_64/arm64 bundle с minimum 14.2. Первый запуск отдельной QA-копии подтвердил синтетическую библиотеку и изолированный профиль; это ещё не итоговый GUI-прогон.
 
 Дополнительные RED→GREEN проверки обнаружили потерю выделения из-за временного скрытия/перезагрузки неизменённой таблицы и потерю черновика Participants при фоновом refresh. Неизменённые строки/редакторы теперь сохраняются; Enter/ Escape в popover применяют/отменяют весь черновик, отложенная ошибка не перезаписывает новый ввод. 73 tests / 8 suites passed, `/tmp/verbemo-ux72-stable-green2.log`. Последняя правка требует итогового полного прогона и пересборки QA bundle перед GUI-свидетельствами.
+
+## Замечания живой проверки, 31.10
+
+GUI build 631 подтвердил чтение/поиск/копирование, реальные clock/seek/Stop, 180 реплик и mouse/keyboard resize библиотеки. После этих действий все 28 SHA одинаковы; отменённый pencil draft также не изменил файлы. Найдены и воспроизведены RED: конфликт ⌘F с боковой панелью/русской раскладкой, отсутствие переноса header при native resize, потеря позиции при реальном resize без ручного restore в тесте, потеря pencil focus после reload, перехват Enter раскрытого NSComboBox.
+
+Исправления: единый маршрут ⌘F с учётом characters/charactersIgnoringModifiers; host передаёт фактическую ширину SwiftUI; scroll view сохраняет сегмент до перерасчёта; закрытие editor находит актуальный pencil; Enter/Escape раскрытого списка передаются AppKit. 64 tests/7 suites passed, `/tmp/verbemo-ux72-final-gui-fixes.log`. Узкое скрытие библиотеки также проверяет реальные границы header/content. Требуются полный прогон и GUI повтор на обновлённом bundle.

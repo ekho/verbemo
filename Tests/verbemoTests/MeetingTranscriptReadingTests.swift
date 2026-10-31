@@ -4,6 +4,29 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct MeetingTranscriptReadingTests {
+    @Test func closingEditorAfterReloadRestoresItsPencilFocus() throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 300),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.orderOut(nil) }
+        let transcript = Transcript(engine: "test", model: "test", created_at: "test", segments: [
+            .init(speaker: "them A", start_ms: 0, end_ms: 1000, text: "Hello")])
+        view.update(transcript: transcript, names: nil, participants: [], canEdit: true)
+        view.layoutSubtreeIfNeeded()
+        let table = try #require(view.documentView as? NSTableView)
+        let oldRow = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        let oldPencil = try #require(oldRow.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        window.makeFirstResponder(oldPencil)
+        var names = SpeakerNames()
+        names.speakers["them A"] = .init(name: "New name", source: .manual)
+        view.update(transcript: transcript, names: names, participants: [], canEdit: true)
+        oldPencil.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
+        let newRow = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        let pencil = try #require(newRow.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        #expect(window.firstResponder === pencil)
+    }
     @Test func searchAndResizeRetainTheReadingSegment() throws {
         _ = NSApplication.shared
         let view = MeetingTranscriptView()
@@ -26,7 +49,6 @@ struct MeetingTranscriptReadingTests {
         #expect(abs(afterSearch.offset - before.offset) < 1)
         window.setContentSize(NSSize(width: 420, height: 320))
         view.layoutSubtreeIfNeeded()
-        view.restoreReadingPosition(before)
         let afterResize = try #require(view.readingPosition())
         #expect(afterResize.segment == before.segment)
         #expect(abs(afterResize.offset - before.offset) < 1)

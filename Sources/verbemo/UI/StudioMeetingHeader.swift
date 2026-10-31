@@ -19,7 +19,7 @@ struct StudioMeetingHeader: View {
     let versions: NSPopUpButton
     let tabs: NSStackView
     let search: NSSearchField
-    @State private var compact = false
+    var compact = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -55,14 +55,16 @@ struct StudioMeetingHeader: View {
         }
         .tint(Color(nsColor: StudioStyle.accent))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GeometryReader { proxy in Color.clear.preference(key: HeaderWidth.self, value: proxy.size.width) })
-        .onPreferenceChange(HeaderWidth.self) { compact = $0 < 560 }
     }
 }
 
-private struct HeaderWidth: PreferenceKey {
-    static let defaultValue: CGFloat = 560
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+@MainActor
+final class StudioMeetingHeaderHost: NSHostingView<StudioMeetingHeader> {
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        let compact = newSize.width < 560
+        if rootView.compact != compact { rootView.compact = compact }
+    }
 }
 
 @MainActor

@@ -148,10 +148,12 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             selectionChanged = false
             failedDraft = nil
             restoreChoice()
+            if choosing { return false }
             endEditing()
             return true
         }
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            if choosing { return false }
             if !choosing, let onSubmit { onSubmit(); return true }
             if let failedDraft, failedDraft.text == choice.stringValue {
                 self.failedDraft = nil

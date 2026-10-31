@@ -77,7 +77,9 @@ final class SpeakerAssignmentPopover: NSViewController {
 @MainActor
 final class SpeakerEditButton: NSButton, NSPopoverDelegate {
     var makeEditor: (() -> SpeakerAssignmentPopover?)?
+    var onRestoreFocus: (() -> Void)?
     private var popover: NSPopover?
+    private var restoreFocusAfterClose: (() -> Void)?
     init() {
         super.init(frame: .zero)
         image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
@@ -93,6 +95,7 @@ final class SpeakerEditButton: NSButton, NSPopoverDelegate {
         guard isEnabled, let editor = makeEditor?() else { return }
         let popover = NSPopover()
         self.popover = popover
+        restoreFocusAfterClose = onRestoreFocus
         popover.behavior = .transient
         popover.delegate = self
         popover.contentViewController = editor
@@ -101,6 +104,8 @@ final class SpeakerEditButton: NSButton, NSPopoverDelegate {
     }
     func popoverDidClose(_ notification: Notification) {
         popover = nil
-        window?.makeFirstResponder(self)
+        let restore = restoreFocusAfterClose ?? onRestoreFocus
+        restoreFocusAfterClose = nil
+        if let restore { restore() } else { window?.makeFirstResponder(self) }
     }
 }

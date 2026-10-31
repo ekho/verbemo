@@ -5,6 +5,21 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct StudioMeetingHeaderTests {
+    @Test func nativeControlsStackAtNarrowWidth() async throws {
+        let state = StudioMeetingHeaderState()
+        let versions = NSPopUpButton()
+        versions.addItem(withTitle: "Current")
+        let search = NSSearchField()
+        let host = StudioMeetingHeaderHost(rootView: StudioMeetingHeader(state: state, versions: versions,
+            tabs: NSStackView(), search: search))
+        for width: CGFloat in [420, 800] {
+            host.frame = NSRect(x: 0, y: 0, width: width, height: 120)
+            for _ in 0..<4 { host.layoutSubtreeIfNeeded(); await Task.yield() }
+            let versionY = versions.convert(versions.bounds, to: host).midY
+            let searchY = search.convert(search.bounds, to: host).midY
+            #expect((abs(versionY - searchY) > 10) == (width < 560))
+        }
+    }
     @Test func presentationUpdatesDoNotDispatchUserActions() throws {
         let state = StudioMeetingHeaderState()
         var steps: [Bool] = []
@@ -15,7 +30,7 @@ struct StudioMeetingHeaderTests {
         versions.addItems(withTitles: ["Current", "Archive"])
         let tabs = NSStackView(views: [NSButton(title: "Transcript", target: nil, action: nil)])
         let search = NSSearchField()
-        let host = NSHostingView(rootView: StudioMeetingHeader(state: state, versions: versions, tabs: tabs, search: search))
+        let host = StudioMeetingHeaderHost(rootView: StudioMeetingHeader(state: state, versions: versions, tabs: tabs, search: search))
         host.frame = NSRect(x: 0, y: 0, width: 500, height: 110)
         state.matchCount = 4
         state.matchIndex = 2
@@ -72,6 +87,11 @@ struct StudioMeetingHeaderTests {
         #expect(app.panel.performKeyEquivalent(with: event))
         #expect(!search.isHiddenOrHasHiddenAncestor)
         #expect(search.currentEditor() != nil)
+        _ = NSApp.sendAction(action, to: toggle.target, from: toggle)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(split.subviews[1].frame.maxX <= split.bounds.maxX + 1)
+        let header = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "meeting.studio-header" })
+        #expect(header.convert(header.bounds, to: app.panel.contentView).maxX <= app.panel.contentView!.bounds.maxX + 1)
     }
 
 }

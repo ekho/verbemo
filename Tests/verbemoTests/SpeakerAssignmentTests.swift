@@ -75,12 +75,27 @@ struct SpeakerAssignmentTests {
         editor.comboBoxWillPopUp(Notification(name: NSComboBox.willPopUpNotification))
         editor.choice.selectItem(at: 1)
         editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
-        #expect(editor.control(editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        #expect(!editor.control(editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
         editor.comboBoxWillDismiss(Notification(name: NSComboBox.willDismissNotification))
         try await Task.sleep(for: .milliseconds(50))
         #expect(assignments == 0)
         #expect(editor.choice.stringValue.isEmpty)
         #expect(editor.choice.indexOfSelectedItem == -1)
+    }
+
+    @Test func returnLetsTheNativeDropdownConfirmItsSelection() async throws {
+        let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1", entry: nil,
+            participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: false)
+        var assigned: String?
+        editor.onAssign = { participant, _ in assigned = participant?.id }
+        editor.comboBoxWillPopUp(Notification(name: NSComboBox.willPopUpNotification))
+        editor.choice.selectItem(at: 1)
+        editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
+        #expect(!editor.control(editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(assigned == nil)
+        editor.comboBoxWillDismiss(Notification(name: NSComboBox.willDismissNotification))
+        for _ in 0..<4 { await Task.yield() }
+        #expect(assigned == "anna")
     }
 
     @Test func participantsHaveTheirOwnTabWithVisibleEditors() throws {

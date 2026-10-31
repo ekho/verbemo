@@ -59,6 +59,11 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         documentView = table
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func setFrameSize(_ newSize: NSSize) {
+        let position = abs(newSize.width - frame.width) > 0.5 ? readingPosition() : nil
+        super.setFrameSize(newSize)
+        restoreReadingPosition(position)
+    }
     func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false, canMatchParticipants: Bool = true) {
         let changed = segments != transcript.segments || self.names?.speakers != names?.speakers
             || self.participants != participants || self.canEdit != canEdit
@@ -108,6 +113,13 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.edit.isEnabled = canEdit && !SpeakerNames.isUnknown(segment.speaker)
         cell.edit.toolTip = localised("Change speaker: ", "Изменить говорящего: ") + cell.name.stringValue
         cell.edit.setAccessibilityLabel(cell.edit.toolTip)
+        cell.edit.onRestoreFocus = { [weak self] in
+            guard let self, self.segments.indices.contains(row), self.segments[row] == segment else { return }
+            self.table.layoutSubtreeIfNeeded()
+            if let cell = self.table.view(atColumn: 0, row: row, makeIfNecessary: true) as? SegmentCell {
+                self.window?.makeFirstResponder(cell.edit)
+            }
+        }
         cell.edit.makeEditor = { [weak self] in
             guard let self else { return nil }
             let choices = self.canMatchParticipants || segment.speaker == "me" ? self.participants : []

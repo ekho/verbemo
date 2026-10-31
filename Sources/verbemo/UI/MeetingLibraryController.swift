@@ -513,7 +513,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         meetingSearch.delegate = self
         meetingHeaderState.onStep = { [weak self] forward in self?.moveMeetingSearch(forward: forward) }
         meetingHeaderState.onClear = { [weak self] in self?.setMeetingSearchQuery("") }
-        let header = NSHostingView(rootView: StudioMeetingHeader(state: meetingHeaderState, versions: versionSelector, tabs: resultPicker, search: meetingSearch))
+        let header = StudioMeetingHeaderHost(rootView: StudioMeetingHeader(state: meetingHeaderState, versions: versionSelector, tabs: resultPicker, search: meetingSearch))
         header.sizingOptions = [.intrinsicContentSize]
         header.identifier = .init("meeting.studio-header")
         meetingHeader = header
