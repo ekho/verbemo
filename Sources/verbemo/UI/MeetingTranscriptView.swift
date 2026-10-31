@@ -60,13 +60,16 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false, canMatchParticipants: Bool = true) {
+        let changed = segments != transcript.segments || self.names?.speakers != names?.speakers
+            || self.participants != participants || self.canEdit != canEdit
+            || self.canPlay != canPlay || self.canMatchParticipants != canMatchParticipants
         segments = transcript.segments
         self.names = names
         self.participants = participants
         self.canEdit = canEdit
         self.canPlay = canPlay
         self.canMatchParticipants = canMatchParticipants
-        table.reloadData()
+        if changed { table.reloadData() }
     }
     func numberOfRows(in tableView: NSTableView) -> Int { segments.count }
     func tableViewColumnDidResize(_ notification: Notification) {
@@ -105,10 +108,13 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.edit.isEnabled = canEdit && !SpeakerNames.isUnknown(segment.speaker)
         cell.edit.toolTip = localised("Change speaker: ", "Изменить говорящего: ") + cell.name.stringValue
         cell.edit.setAccessibilityLabel(cell.edit.toolTip)
-        let choices = canMatchParticipants || segment.speaker == "me" ? participants : []
-        let editable = cell.edit.isEnabled, assign = onAssign
-        cell.edit.makeEditor = {
-            let editor = SpeakerAssignmentPopover(speaker: segment.speaker, title: title, entry: entry,
+        cell.edit.makeEditor = { [weak self] in
+            guard let self else { return nil }
+            let choices = self.canMatchParticipants || segment.speaker == "me" ? self.participants : []
+            let editable = self.canEdit && !SpeakerNames.isUnknown(segment.speaker)
+            let currentEntry = SpeakerNames.isUnknown(segment.speaker) ? nil : self.names?.speakers[segment.speaker]
+            let assign = self.onAssign
+            let editor = SpeakerAssignmentPopover(speaker: segment.speaker, title: title, entry: currentEntry,
                                                   participants: choices, canEdit: editable)
             editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
             return editor

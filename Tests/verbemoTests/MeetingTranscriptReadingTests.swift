@@ -33,4 +33,28 @@ struct MeetingTranscriptReadingTests {
         view.setSearch(matches: [:])
         #expect(view.readingPosition()?.segment == before.segment)
     }
+    @Test func unchangedRefreshRetainsTheSelectedText() throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 300),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.orderOut(nil) }
+        let transcript = Transcript(engine: "test", model: "fixture", created_at: "test", segments: [
+            .init(speaker: "them A", start_ms: 0, end_ms: 1000, text: "Выделенная фраза 🎙️")
+        ])
+        view.update(transcript: transcript, names: nil, participants: [], canEdit: false)
+        view.layoutSubtreeIfNeeded()
+        let table = try #require(view.documentView as? NSTableView)
+        let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        let words = try #require(cell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "transcript.words" })
+        words.selectText(nil)
+        let editor = try #require(words.currentEditor() as? NSTextView)
+        editor.setSelectedRange(NSRange(location: 0, length: 10))
+        view.update(transcript: transcript, names: nil, participants: [], canEdit: false)
+        view.layoutSubtreeIfNeeded()
+        #expect(words.currentEditor() === editor)
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 10))
+    }
+
 }

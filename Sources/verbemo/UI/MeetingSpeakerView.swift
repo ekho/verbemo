@@ -26,6 +26,8 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     let link = SpeakerLinkButton()
     let choice: NSComboBox = SpeakerAssignmentChoice()
     var onAssign: ((CalendarParticipant?, String?) throws -> Void)?
+    var onSubmit: (() -> Void)?
+    var onCancel: (() -> Void)?
     private let participants: [CalendarParticipant]
     private let inline: Bool
     private var original: String
@@ -142,6 +144,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     func controlTextDidEndEditing(_ notification: Notification) { commitText() }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            if !choosing, let onCancel { onCancel(); return true }
             selectionChanged = false
             failedDraft = nil
             restoreChoice()
@@ -149,6 +152,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             return true
         }
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            if !choosing, let onSubmit { onSubmit(); return true }
             if let failedDraft, failedDraft.text == choice.stringValue {
                 self.failedDraft = nil
                 save(participant: failedDraft.participant, manual: failedDraft.manual)
@@ -180,7 +184,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             // Let AppKit finish dismissing its dropdown before presenting an error.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                choice.stringValue = draft
+                if failedDraft?.text == draft { choice.stringValue = draft }
                 reverting = false
                 if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
             }

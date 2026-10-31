@@ -256,6 +256,58 @@ struct MeetingLibraryControllerTests {
         #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript")
     }
 
+    @Test("An unchanged refresh preserves the participant's unsaved input")
+    func participantDraftSurvivesUnchangedRefresh() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        tabs.selectTabViewItem(withIdentifier: "participants")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let editor = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        editor.choice.stringValue = "Unsaved draft"
+        library.refresh()
+        await library.settled()
+        let current = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        #expect(current === editor)
+        #expect(current.choice.stringValue == "Unsaved draft")
+        #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.name == nil)
+    }
+
+    @Test("Background refresh preserves selected text in an active search result")
+    func selectionInSearchResultSurvivesRefresh() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        library.setMeetingSearchQuery("Hello")
+        library.moveMeetingSearch(forward: true)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let transcript = try #require(library.contentView.allDescendants.first { $0 is MeetingTranscriptView } as? MeetingTranscriptView)
+        let table = try #require(transcript.documentView as? NSTableView)
+        let row = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        let words = try #require(row.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "transcript.words" })
+        words.selectText(nil)
+        let editor = try #require(words.currentEditor() as? NSTextView)
+        editor.setSelectedRange(NSRange(location: 0, length: 5))
+        library.refresh()
+        await library.settled()
+        #expect(words.currentEditor() === editor)
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 5))
+        #expect(library.meetingSearchIndex == 0)
+    }
+
     @Test("Selecting another recording replaces both previews, including missing files")
     func previewsFollowSelection() throws {
         let root = try Self.folder()

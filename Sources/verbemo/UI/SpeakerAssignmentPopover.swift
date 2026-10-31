@@ -19,16 +19,22 @@ final class SpeakerAssignmentPopover: NSViewController {
             self?.draft = (participant, name)
             self?.hasChanges = true
         }
+        editor.onSubmit = { [weak self] in _ = self?.apply() }
+        editor.onCancel = { [weak self] in self?.cancel() }
         let scope = NSTextField(wrappingLabelWithString: localised(
             "All lines by \(title) in the selected transcript version.",
             "Все реплики «\(title)» в выбранной версии расшифровки."))
         scope.font = .systemFont(ofSize: 12)
         let save = NSButton(title: localised("Apply", "Применить"), target: self, action: #selector(applyClicked))
         save.identifier = .init("speaker.apply")
+        save.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+        save.imagePosition = .imageLeading
         save.bezelStyle = .rounded
         save.isEnabled = editor.choice.isEnabled
         save.keyEquivalent = "\r"
         let cancel = NSButton(title: localised("Cancel", "Отмена"), target: self, action: #selector(cancel))
+        cancel.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+        cancel.imagePosition = .imageLeading
         cancel.bezelStyle = .rounded
         cancel.keyEquivalent = "\u{1b}"
         let actions = NSStackView(views: [NSView(), cancel, save])
@@ -70,7 +76,7 @@ final class SpeakerAssignmentPopover: NSViewController {
 
 @MainActor
 final class SpeakerEditButton: NSButton, NSPopoverDelegate {
-    var makeEditor: (() -> SpeakerAssignmentPopover)?
+    var makeEditor: (() -> SpeakerAssignmentPopover?)?
     private var popover: NSPopover?
     init() {
         super.init(frame: .zero)

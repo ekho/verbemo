@@ -38,7 +38,7 @@ struct SpeakerNames: Codable {
         }
     }
 
-    struct Entry: Codable {
+    struct Entry: Codable, Equatable {
         /// nil when nobody could be identified: the label keeps printing as
         /// itself, which is honest in a way a guess isn't.
         var name: String?

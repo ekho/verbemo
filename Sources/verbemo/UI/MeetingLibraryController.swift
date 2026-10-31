@@ -54,7 +54,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         meetingHeaderState.hasQuery = !meetingSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         meetingHeader?.isHidden = selected == nil || activeRecording?.dir == selected?.dir
     }
-    @objc private func meetingSearchChanged() { setMeetingSearchQuery(meetingSearch.stringValue) }
+    @objc private func meetingSearchChanged() {
+        if meetingSearch.stringValue != meetingSearchQuery { setMeetingSearchQuery(meetingSearch.stringValue) }
+    }
     private let inspectorButton = NSButton()
     private let pipeline = NSStackView()
     private let route = NSTextField(wrappingLabelWithString: "")
@@ -128,6 +130,22 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let retryDiarizationButton = NSButton()
     private let skipDiarizationButton = NSButton()
     private let speakersStack = FlippedStackView()
+    private struct SpeakerRowsContext: Equatable {
+        let generation: MeetingSearchContext?
+        let names: [String: SpeakerNames.Entry]?
+        let participants: [CalendarParticipant]
+        let canEdit: Bool
+        let canPlay: Bool
+        let canMatch: Bool
+    }
+    private var renderedSpeakerRows: SpeakerRowsContext?
+    private func clearSpeakerRows() {
+        renderedSpeakerRows = nil
+        speakersStack.arrangedSubviews.forEach {
+            speakersStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+    }
     private let finishButton = NSButton()
     private let detailTabs = NSTabView()
     private let versionSelector = NSPopUpButton()
@@ -198,7 +216,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             searchOrigin = nil
         }
     }
-    private func rebuildMeetingSearch() {
+    private func rebuildMeetingSearch(preservingIndex: Bool = false) {
+        let previousHits = meetingSearchHits, previousIndex = meetingSearchIndex
         meetingSearchIndex = nil
         meetingSearchHits = []
         if let transcript = searchTranscript {
@@ -217,6 +236,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                 .init(tab: "summary", segment: nil, range: $0)
             }
         }
+        if preservingIndex, previousHits == meetingSearchHits, let index = previousIndex, meetingSearchHits.indices.contains(index) {
+            meetingSearchIndex = index
+        }
         for text in [summaryText, transcriptText] {
             let full = NSRange(location: 0, length: (text.string as NSString).length)
             text.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
@@ -224,7 +246,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                 text.layoutManager?.addTemporaryAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.25), forCharacterRange: hit.range)
             }
         }
-        meetingTranscript.setSearch(matches: transcriptSearchRanges())
+        let focused = meetingSearchIndex.map { meetingSearchHits[$0] }
+        meetingTranscript.setSearch(matches: transcriptSearchRanges(), focusedSegment: focused?.segment, focusedRange: focused?.range)
     }
     private func transcriptSearchRanges() -> [Int: [NSRange]] {
         var ranges: [Int: [NSRange]] = [:]
@@ -258,16 +281,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             for text in [summaryText, transcriptText] { text.scrollToBeginningOfDocument(nil) }
         }
         displayedSearchContext = currentSearchContext
-        let previousHits = meetingSearchHits, previousIndex = meetingSearchIndex
-        rebuildMeetingSearch()
-        if sameContext {
-            if previousHits == meetingSearchHits, let index = previousIndex, meetingSearchHits.indices.contains(index) {
-                meetingSearchIndex = index
-                let hit = meetingSearchHits[index]
-                meetingTranscript.setSearch(matches: transcriptSearchRanges(), focusedSegment: hit.segment, focusedRange: hit.range)
-            }
-            restoreMeetingReadingPosition(previousPosition)
-        }
+        rebuildMeetingSearch(preservingIndex: sameContext)
+        if sameContext { restoreMeetingReadingPosition(previousPosition) }
     }
     private let summaryText = NSTextView()
     private let transcriptText = NSTextView()
@@ -947,9 +962,15 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
 
     private func showDetail() {
         let previousPosition = captureMeetingReadingPosition()
+        var speakerRowsHandled = false
         searchTranscript = nil
         searchTranscriptData = nil
-        defer { finishSearchReload(previousPosition: previousPosition) }
+        defer {
+            meetingTranscript.isHidden = searchTranscript == nil
+            plainTranscriptScroll?.isHidden = searchTranscript != nil
+            if !speakerRowsHandled { clearSpeakerRows() }
+            finishSearchReload(previousPosition: previousPosition)
+        }
         let live = activeRecording.map { selected?.dir == $0.dir } ?? false
         meetingDocument?.isHidden = live && activeRecordingView != nil
         activeRecordingView?.isHidden = !live
@@ -957,10 +978,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         resultPicker.isHidden = selected == nil
         detailTabs.isHidden = selected == nil
         if renamingSession != selected?.dir { cancelTitleEdit() }
-        speakersStack.arrangedSubviews.forEach {
-            speakersStack.removeArrangedSubview($0)
-            $0.removeFromSuperview()
-        }
         defer { updateInspector() }
         if let activeRecording, selected?.dir == activeRecording.dir {
             showCalendar(for: selected)
@@ -983,8 +1000,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             return
         }
         showCalendar(for: selected)
-        meetingTranscript.isHidden = true
-        plainTranscriptScroll?.isHidden = false
         audioPlayer.setMeeting(selected?.dir)
         if versionSession != selected?.dir {
             versionSession = selected?.dir
@@ -1070,20 +1085,25 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         }
         meetingTranscript.update(transcript: transcript, names: names, participants: participantChoices,
                                  canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatchParticipants: diarized)
-        meetingTranscript.isHidden = false
-        plainTranscriptScroll?.isHidden = true
-        let hint = NSTextField(wrappingLabelWithString: localised(
-            "Listen to a voice, then choose a participant or type a name. The assignment applies to all their lines in this transcript version.",
-            "Прослушайте голос, затем выберите участника или введите имя. Сопоставление применяется ко всем его репликам в этой версии расшифровки."))
-        hint.font = .systemFont(ofSize: 12)
-        hint.textColor = StudioStyle.muted
-        speakersStack.addArrangedSubview(hint)
-        hint.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
-        for sample in SessionInventory.samples(transcript: transcript, names: names) {
-            let row = speakerRow(sample, in: dir, transcript: transcript, transcriptData: transcriptData, names: names,
-                                 participants: diarized || sample.label == "me" ? participantChoices : [])
-            speakersStack.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
+        speakerRowsHandled = true
+        let speakerContext = SpeakerRowsContext(generation: currentSearchContext, names: names?.speakers,
+            participants: participantChoices, canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatch: diarized)
+        if renderedSpeakerRows != speakerContext {
+            clearSpeakerRows()
+            let hint = NSTextField(wrappingLabelWithString: localised(
+                "Listen to a voice, then choose a participant or type a name. The assignment applies to all their lines in this transcript version.",
+                "Прослушайте голос, затем выберите участника или введите имя. Сопоставление применяется ко всем его репликам в этой версии расшифровки."))
+            hint.font = .systemFont(ofSize: 12)
+            hint.textColor = StudioStyle.muted
+            speakersStack.addArrangedSubview(hint)
+            hint.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
+            for sample in SessionInventory.samples(transcript: transcript, names: names) {
+                let row = speakerRow(sample, in: dir, transcript: transcript, transcriptData: transcriptData, names: names,
+                                     participants: diarized || sample.label == "me" ? participantChoices : [])
+                speakersStack.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
+            }
+            renderedSpeakerRows = speakerContext
         }
         updateButtons()
     }

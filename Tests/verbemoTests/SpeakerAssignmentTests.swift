@@ -281,4 +281,32 @@ struct SpeakerAssignmentTests {
         #expect(SpeakerNames.read(from: dir)?.speakers[speaker]?.name == "Manual alias")
     }
 
+    @Test func popoverKeyboardAppliesAndCancelsTheWholeDraft() {
+        let draft = SpeakerAssignmentPopover(speaker: "them A", title: "Speaker", entry: nil, participants: [], canEdit: true)
+        var saves = 0, dismissals = 0
+        draft.onAssign = { _, name in #expect(name == "Keyboard name"); saves += 1 }
+        draft.editor.choice.stringValue = "Keyboard name"
+        #expect(draft.editor.control(draft.editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(saves == 1)
+        let cancelled = SpeakerAssignmentPopover(speaker: "them A", title: "Speaker", entry: nil, participants: [], canEdit: true)
+        cancelled.onAssign = { _, _ in saves += 1 }
+        cancelled.onDismiss = { dismissals += 1 }
+        cancelled.editor.choice.stringValue = "Discard"
+        #expect(cancelled.editor.control(cancelled.editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        #expect(dismissals == 1)
+        #expect(saves == 1)
+    }
+
+    @Test func delayedErrorDoesNotOverwriteNewerInput() async {
+        let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker", entry: nil,
+            participants: [], canEdit: true, inline: false)
+        editor.onAssign = { _, _ in throw CocoaError(.fileWriteUnknown) }
+        editor.choice.stringValue = "Failed draft"
+        editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
+        editor.choice.stringValue = "Newer input"
+        editor.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
+        await Task.yield()
+        #expect(editor.choice.stringValue == "Newer input")
+    }
+
 }
