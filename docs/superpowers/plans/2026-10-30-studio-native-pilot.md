@@ -10,7 +10,7 @@
 
 **Spec:** [Компоненты](../../ux/redesign-2026-10/04-component-spec.md), [объём и P01–P09](../../ux/redesign-2026-10/05-native-pilots.md), [структура A](../../ux/redesign-2026-10/03-structure-and-flows.md).
 
-**Status:** Объём одобрен пользователем 30.10.2026; выполнение начато с Task 1. Исходная ревизия `6148bbc`; макет #71 принят. Mac-приёмка предшествует Windows-реализации. Все новые имена типов/функций ниже — проектируемые интерфейсы.
+**Status:** 31.10.2026: Mac-код Tasks 1–3 реализован, Task 4 — GUI-проверка и пользовательская приёмка; открыт P3-MAC-COLLAPSE-LINE. Ограничения P07/P08 записываются в evidence-72/macos.md; Windows Task 5 ожидает принятия Mac. Объём одобрен пользователем 30.10.2026; выполнение начато с Task 1. Исходная ревизия `6148bbc`; макет #71 принят. Mac-приёмка предшествует Windows-реализации. Все новые имена типов/функций ниже — проектируемые интерфейсы.
 
 ## Global Constraints
 
@@ -66,10 +66,10 @@
 - Consumes: состояние контроллера — список версий/выбранный ключ, вкладка, query, текущий hit/count, доступность; callbacks selectVersion/selectTab/queryChanged/next/previous/clear. Название и showDetails остаются в строке AppKit над плеером.
 - Produces: один NSHostingView с `StudioMeetingHeader: View`. Контроллер владеет стабильной observable presentation model; `.onAppear`/`.onChange` не запускают повторное чтение/запись. Тексты берутся из существующего RU/EN-механизма, не новой localization-системы.
 
-- [ ] Добавить focused проверки callback: одно действие — один вызов; программное обновление snapshot не выбирает версию повторно. Сохранить regression-проверку возвращения из настроек к той же встрече.
-- [ ] Порядок workspace: строка названия/деталей AppKit → существующий плеер → header (версия/поиск, затем вкладки) → содержимое. Встроить header, согласовать intrinsic height с Auto Layout. Добавить native tooltip/accessibility labels, команды ⌘F/Enter/Shift+Enter/Escape, не перехватывая ввод текста у чужих контролов. Фокус в поле переживает обновление count.
-- [ ] Применить StudioStyle локально: роль цвета/шрифта/интервалов из спецификации. Сохранить системный focus ring/contrast settings. Библиотечный фильтр подписать «Название встречи», убрать только дублирующее действие глобального поиска, если оно существует в native shell.
-- [ ] Сохранить/добавить нативный изменяемый разделитель библиотеки и возврат её ширины после скрытия; ограничения ширины и клавиатурное управление проверить в P07/P08.
+- [x] Добавить focused проверки callback: одно действие — один вызов; программное обновление snapshot не выбирает версию повторно. Сохранить regression-проверку возвращения из настроек к той же встрече.
+- [x] Порядок workspace: строка названия/деталей AppKit → существующий плеер → header (версия/поиск, затем вкладки) → содержимое. Встроить header, согласовать intrinsic height с Auto Layout. Добавить native tooltip/accessibility labels, команды ⌘F/Enter/Shift+Enter/Escape, не перехватывая ввод текста у чужих контролов. Фокус в поле переживает обновление count.
+- [x] Применить StudioStyle локально: роль цвета/шрифта/интервалов из спецификации. Сохранить системный focus ring/contrast settings. Библиотечный фильтр подписать «Название встречи», убрать только дублирующее действие глобального поиска, если оно существует в native shell.
+- [x] Сохранить/добавить нативный изменяемый разделитель библиотеки и возврат её ширины после скрытия; ограничения ширины и клавиатурное управление проверить в P07/P08.
 - [ ] Проверить узкое окно и крупный текст: header может прокручиваться, плеер/текст остаются достижимы. Не ставить фиксированную высоту, отсекающую переносы.
 - [ ] `swift test --no-parallel --filter 'StudioMeetingHeaderTests|JournalWorkspaceTests|MeetingLibraryControllerTests'` и `swift build`. GUI smoke: Tab туда/обратно через SwiftUI/AppKit, ⌘F, смена версии, resize. Commit: `feat(ux): host Studio meeting header in SwiftUI`.
 
@@ -81,19 +81,19 @@
 - Consumes: `MeetingTranscriptView.update(transcript:names:participants:canEdit:canPlay:canMatchParticipants:)`, callbacks `onPlayFrom` / `onAssign`; `PostProcessor.setSpeakerParticipant(_:participant:name:in:)` через существующий controller.
 - Consumes: `MeetingPlaybackView.setMeeting(_:)`, `.play(from:)`, существующие sources/offsets/скорость/громкость. Produces: отдельное stop-действие, при необходимости новый `stopPlayback()` сбрасывает позицию без потери настроек player.
 
-- [ ] Добавить failing tests: rename в архиве не затрагивает current; cancel ничего не пишет; busy/unknown не позволяет запрещённое назначение; обработка ошибки сохраняет ввод. Сохранять повторную проверку версии и canEdit перед записью.
-- [ ] Перестроить только представление NSTableView-строк: 190 + 16 + body, padding 10, перенос при нехватке места; row height вычислять из фактической ширины/шрифта/имени. Сохранить reuse и selectable text, не создавать hosting view на каждую строку.
-- [ ] Во вкладке «Участники» встроить имя и выбор участника прямо в строку, первые три реплики и icon-only playback. Имя сохраняется по blur/Enter, выбор сразу, Escape отменяет черновик; ошибка сохраняет ввод. Не дублировать сервис записи и проверку версии.
-- [ ] Карандаш открывает существующий editor в popover с Save/Cancel и областью действия. Ввод является черновиком до Save; закрытие popover ничего не записывает. Существующий cleanup dropdown accessibility в `SpeakerAssignmentChoice` сохранить. После read-back вернуть позицию и фокус по устойчивому speaker/segment identity.
-- [ ] Плеер: иконки Play/Pause/Stop и доступные имена отражают фактическое состояние, включая конец и ошибку. Смена вида/поиск/rename не пересоздаёт player. Проверить смещения sources и все существующие скорости/volume.
-- [ ] `swift test --no-parallel --filter 'SpeakerAssignmentTests|MeetingPlaybackTests|MeetingLibraryControllerTests|JournalWorkspaceTests'`. GUI проверить rapid scroll/resize и назначение на 180 репликах, копирование RU/emoji, stop/replay. Commit: `feat(ux): compact transcript and playback controls`.
+- [x] Добавить failing tests: rename в архиве не затрагивает current; cancel ничего не пишет; busy/unknown не позволяет запрещённое назначение; обработка ошибки сохраняет ввод. Сохранять повторную проверку версии и canEdit перед записью.
+- [x] Перестроить только представление NSTableView-строк: 190 + 16 + body, padding 10, перенос при нехватке места; row height вычислять из фактической ширины/шрифта/имени. Сохранить reuse и selectable text, не создавать hosting view на каждую строку.
+- [x] Во вкладке «Участники» встроить имя и выбор участника прямо в строку, первые три реплики и icon-only playback. Имя сохраняется по blur/Enter, выбор сразу, Escape отменяет черновик; ошибка сохраняет ввод. Не дублировать сервис записи и проверку версии.
+- [x] Карандаш открывает существующий editor в popover с Save/Cancel и областью действия. Ввод является черновиком до Save; закрытие popover ничего не записывает. Существующий cleanup dropdown accessibility в `SpeakerAssignmentChoice` сохранить. После read-back вернуть позицию и фокус по устойчивому speaker/segment identity.
+- [x] Плеер: иконки Play/Pause/Stop и доступные имена отражают фактическое состояние, включая конец и ошибку. Смена вида/поиск/rename не пересоздаёт player. Проверить смещения sources и все существующие скорости/volume.
+- [x] `swift test --no-parallel --filter 'SpeakerAssignmentTests|MeetingPlaybackTests|MeetingLibraryControllerTests|JournalWorkspaceTests'`. GUI проверить rapid scroll/resize и назначение на 180 репликах, копирование RU/emoji, stop/replay. Commit: `feat(ux): compact transcript and playback controls`.
 
 ## Task 4 — Mac-приёмка и решение по мосту
 
 **Files:** fixtures только при необходимом дополнении; новый `docs/ux/redesign-2026-10/evidence-72/macos.md`; обновить `05-native-pilots.md` фактическими результатами.
 
-- [ ] Запустить полный `swift test --no-parallel` и собрать локальный app существующим `make app` после проверки ресурсов/зависимостей. Сохранить команды и ошибки; не выдавать `swift build` за сборку GUI bundle.
-- [ ] Подготовить отдельную QA-копию bundle/профиль аналогично UX69, но с новым идентификатором и пустым home. До запуска сверить фактические `CFBundleIdentifier`, путь данных и изоляцию preferences; использовать только сгенерированные встречи. Не менять установленный пользовательский app.
+- [x] Запустить полный `swift test --no-parallel` и собрать локальный app существующим `make app` после проверки ресурсов/зависимостей. Сохранить команды и ошибки; не выдавать `swift build` за сборку GUI bundle.
+- [x] Подготовить отдельную QA-копию bundle/профиль аналогично UX69, но с новым идентификатором и пустым home. До запуска сверить фактические `CFBundleIdentifier`, путь данных и изоляцию preferences; использовать только сгенерированные встречи. Не менять установленный пользовательский app.
 - [ ] Выполнить P01–P09 и записать точные шаги, исходную ревизию, снимки, матрицу pass/fail/unverified. Для звука добавить синтетический тон существующим test audio helper; тишина не доказывает audible playback.
 - [ ] Сравнить до/после SHA. У назначения ожидаемые производные изменения определить по реальному существующему сервису, не whitelist одного файла. Перечислить непроверенные свойства, в том числе minimum macOS, если доступен только новый host.
 - [ ] Зафиксировать вывод SwiftUI: фокус/размер/состояния работают либо конкретный дефект и узкое исправление. Commit: `docs(ux): record macOS Studio pilot evidence`. Представить пользователю реальный Mac-пилот; переход к Task 5 после его приёмки.
