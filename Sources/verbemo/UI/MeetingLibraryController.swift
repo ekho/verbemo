@@ -39,6 +39,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var meetingHeader: NSHostingView<StudioMeetingHeader>?
     func focusMeetingSearch() -> Bool {
         guard !contentView.isHiddenOrHasHiddenAncestor, meetingSearch.isEnabled, panel.attachedSheet == nil else { return false }
+        if meetingSearch.isHiddenOrHasHiddenAncestor {
+            inspectorRequested = false
+            updateCompactLayout()
+        }
+        guard !meetingSearch.isHiddenOrHasHiddenAncestor else { return false }
         return panel.makeFirstResponder(meetingSearch)
     }
     private func syncMeetingSearchHeader() {
@@ -148,12 +153,15 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private(set) var meetingSearchHits: [MeetingSearchHit] = []
     private(set) var meetingSearchIndex: Int?
     private var searchTranscript: Transcript?
-    private var displayedSearchContext: String?
+    private struct MeetingSearchContext: Equatable { let location: String; let transcript: Data }
+    private var searchTranscriptData: Data?
+    private var displayedSearchContext: MeetingSearchContext?
     private var searchOrigin: MeetingReadingPosition?
-    private var currentSearchContext: String? {
+    private var currentSearchContext: MeetingSearchContext? {
         guard let selected, let dir = artifactDirectory, selectedVersion?.isRequest != true,
               activeRecording?.dir != selected.dir else { return nil }
-        return selected.dir.path + "\n" + dir.path
+        return MeetingSearchContext(location: selected.dir.path + "\n" + dir.path,
+                                    transcript: searchTranscriptData ?? Data(transcriptText.string.utf8))
     }
     private func captureMeetingReadingPosition() -> MeetingReadingPosition {
         .init(tab: detailTabs.selectedTabViewItem?.identifier as? String ?? "summary",
@@ -940,6 +948,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private func showDetail() {
         let previousPosition = captureMeetingReadingPosition()
         searchTranscript = nil
+        searchTranscriptData = nil
         defer { finishSearchReload(previousPosition: previousPosition) }
         let live = activeRecording.map { selected?.dir == $0.dir } ?? false
         meetingDocument?.isHidden = live && activeRecordingView != nil
@@ -1036,6 +1045,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let transcript = PostProcessor.readTranscript(dir)
         let transcriptData = try? Data(contentsOf: dir.appendingPathComponent("transcript.json"))
         searchTranscript = transcript
+        searchTranscriptData = transcriptData
         let markdown = try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)
         let transcriptPreview = markdown ?? transcript?.rendered(
             title: item.title ?? item.name, names: SpeakerNames.read(from: dir))

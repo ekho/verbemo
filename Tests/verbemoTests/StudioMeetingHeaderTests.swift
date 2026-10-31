@@ -59,6 +59,16 @@ struct StudioMeetingHeaderTests {
             charactersIgnoringModifiers: "f", isARepeat: false, keyCode: 3))
         #expect(app.panel.performKeyEquivalent(with: event))
         #expect(search.currentEditor() != nil)
+        app.panel.setContentSize(NSSize(width: 760, height: 820))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        library.updateCompactLayout()
+        let details = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.inspector" })
+        _ = NSApp.sendAction(try #require(details.action), to: details.target, from: details)
+        #expect(search.isHiddenOrHasHiddenAncestor)
+        #expect(app.panel.performKeyEquivalent(with: event))
+        #expect(!search.isHiddenOrHasHiddenAncestor)
+        #expect(search.currentEditor() != nil)
     }
 
 }

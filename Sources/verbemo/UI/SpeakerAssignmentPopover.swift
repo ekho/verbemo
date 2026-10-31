@@ -7,6 +7,7 @@ final class SpeakerAssignmentPopover: NSViewController {
     var onDismiss: (() -> Void)?
     private var draft: (CalendarParticipant?, String?)
     private var completed = false
+    private var hasChanges = false
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
 
     init(speaker: String, title: String, entry: SpeakerNames.Entry?, participants: [CalendarParticipant], canEdit: Bool) {
@@ -14,7 +15,10 @@ final class SpeakerAssignmentPopover: NSViewController {
                                          participants: participants, canEdit: canEdit, inline: false)
         draft = (participants.first { $0.id == entry?.participantID }, entry?.name)
         super.init(nibName: nil, bundle: nil)
-        editor.onAssign = { [weak self] participant, name in self?.draft = (participant, name) }
+        editor.onAssign = { [weak self] participant, name in
+            self?.draft = (participant, name)
+            self?.hasChanges = true
+        }
         let scope = NSTextField(wrappingLabelWithString: localised(
             "All lines by \(title) in the selected transcript version.",
             "Все реплики «\(title)» в выбранной версии расшифровки."))
@@ -49,7 +53,7 @@ final class SpeakerAssignmentPopover: NSViewController {
         view.window?.makeFirstResponder(nil)
         editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
         do {
-            try onAssign?(draft.0, draft.1)
+            if hasChanges { try onAssign?(draft.0, draft.1) }
             completed = true
             onDismiss?()
             return true

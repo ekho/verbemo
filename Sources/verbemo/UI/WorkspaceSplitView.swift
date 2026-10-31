@@ -17,13 +17,23 @@ final class WorkspaceSplitView: NSSplitView, NSSplitViewDelegate {
         setAccessibilityHelp(localised("Drag the divider or use left/right arrows", "Перетащите разделитель или используйте стрелки влево/вправо"))
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    private var maximumWidth: CGFloat { max(220, min(480, bounds.width - 420)) }
+    private var maximumWidth: CGFloat { max(220, min(480, bounds.width - 420 - dividerThickness)) }
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat { 220 }
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat { maximumWidth }
     func splitView(_ splitView: NSSplitView, constrainSplitPosition proposedPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
         max(220, min(maximumWidth, proposedPosition))
     }
     func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool { subview === subviews.first }
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        guard subviews.count == 2 else { return super.resizeSubviews(withOldSize: oldSize) }
+        let sidebar = subviews[0], content = subviews[1]
+        if sidebar.isHidden { content.frame = bounds; return }
+        let previousWidth = sidebar.frame.width > 0 ? sidebar.frame.width : JournalStyle.sidebarWidth
+        let width = max(220, min(maximumWidth, previousWidth))
+        sidebar.frame = NSRect(x: 0, y: 0, width: width, height: bounds.height)
+        content.frame = NSRect(x: width + dividerThickness, y: 0,
+                               width: max(0, bounds.width - width - dividerThickness), height: bounds.height)
+    }
     override var acceptsFirstResponder: Bool { true }
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)

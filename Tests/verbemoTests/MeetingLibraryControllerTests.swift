@@ -230,6 +230,32 @@ struct MeetingLibraryControllerTests {
         #expect(library.meetingSearchHits.isEmpty, "Placeholders are not meeting content")
     }
 
+    @Test("A new transcript generation in the same directory invalidates search origin")
+    func searchDoesNotRestoreAnEarlierTranscriptGeneration() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        library.setMeetingSearchQuery("Hello")
+        library.moveMeetingSearch(forward: true)
+        #expect(library.meetingSearchIndex == 0)
+        try Transcript(engine: "whisper", model: "new", created_at: "2026-10-31T12:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Hello, new generation")]).write(to: dir)
+        library.refresh()
+        await library.settled()
+        #expect(library.meetingSearchQuery.isEmpty)
+        #expect(library.meetingSearchHits.isEmpty)
+        #expect(library.meetingSearchIndex == nil)
+        library.setMeetingSearchQuery("")
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript")
+    }
+
     @Test("Selecting another recording replaces both previews, including missing files")
     func previewsFollowSelection() throws {
         let root = try Self.folder()

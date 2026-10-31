@@ -263,4 +263,22 @@ struct SpeakerAssignmentTests {
         #expect(saves == 2)
     }
 
+    @Test func unchangedPopoverPreservesThePriorManualAlias() throws {
+        let dir = try SessionFixture.make(meta: ["calendar": ["event_id": "event", "association": "confirmed",
+            "participants": [["id": "anna", "name": "Anna"]]]])
+        let speaker = try #require(SessionFixture.meeting.first?.speaker)
+        try PostProcessor.setSpeakerParticipant(speaker, participant: nil, name: "Manual alias", in: dir)
+        let participant = CalendarParticipant(id: "anna", name: "Anna")
+        try PostProcessor.setSpeakerParticipant(speaker, participant: participant, in: dir)
+        let entry = try #require(SpeakerNames.read(from: dir)?.speakers[speaker])
+        let before = try Data(contentsOf: dir.appendingPathComponent(SpeakerNames.file))
+        let draft = SpeakerAssignmentPopover(speaker: speaker, title: "Speaker", entry: entry,
+            participants: [participant], canEdit: true)
+        draft.onAssign = { participant, name in try PostProcessor.setSpeakerParticipant(speaker, participant: participant, name: name, in: dir) }
+        #expect(draft.apply())
+        #expect(try Data(contentsOf: dir.appendingPathComponent(SpeakerNames.file)) == before)
+        try PostProcessor.setSpeakerParticipant(speaker, participant: nil, in: dir)
+        #expect(SpeakerNames.read(from: dir)?.speakers[speaker]?.name == "Manual alias")
+    }
+
 }
