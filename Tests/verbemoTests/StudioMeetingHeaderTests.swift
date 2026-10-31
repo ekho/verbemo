@@ -44,6 +44,33 @@ struct StudioMeetingHeaderTests {
         #expect(steps == [true, false])
         #expect(clears == 1)
     }
+    @Test(.freshHome) func collapsedLibraryHasNoVisibleDividerOverContent() async throws {
+        _ = NSApplication.shared
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        app.show()
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        app.panel.displayIfNeeded()
+        let split = try #require(app.panel.contentView?.allDescendants.first { $0 is WorkspaceSplitView } as? NSSplitView)
+        _ = try #require(split.layer)
+        try await Task.sleep(for: .milliseconds(100))
+        let toggle = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "workspace.toggle-library" })
+        #expect(NSApp.sendAction(try #require(toggle.action), to: toggle.target, from: toggle))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        app.panel.displayIfNeeded()
+        func visibleVerticalLines(_ layer: CALayer) -> [CALayer] {
+            guard !layer.isHidden else { return [] }
+            let isLine = layer.frame.width > 0 && layer.frame.width <= split.dividerThickness
+                && layer.frame.height >= split.bounds.height - 1
+                && layer.frame.minX > 0 && layer.frame.maxX < split.bounds.width
+            return (isLine ? [layer] : []) + (layer.sublayers ?? []).flatMap(visibleVerticalLines)
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(visibleVerticalLines(try #require(split.layer)).isEmpty)
+        #expect(split.arrangedSubviews.last?.frame == split.bounds)
+    }
+
     @Test(.freshHome, arguments: ["f", "а"]) func meetingFindCommandAndLibraryResize(unmodified: String) throws {
         _ = NSApplication.shared
         let dir = Home.current.url.appendingPathComponent("meeting")
@@ -62,11 +89,11 @@ struct StudioMeetingHeaderTests {
             .first { $0.identifier?.rawValue == "workspace.toggle-library" })
         let action = try #require(toggle.action)
         _ = NSApp.sendAction(action, to: toggle.target, from: toggle)
-        #expect(split.subviews[0].isHidden)
+        #expect(split.arrangedSubviews[0].isHidden)
         #expect(app.primaryActionsAreVisible)
         _ = NSApp.sendAction(action, to: toggle.target, from: toggle)
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        #expect(abs(split.subviews[0].frame.width - 320) < 2)
+        #expect(abs(split.arrangedSubviews[0].frame.width - 320) < 2)
         let search = try #require(library.contentView.allDescendants.compactMap { $0 as? NSSearchField }
             .first { $0.identifier?.rawValue == "meeting.search" })
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
@@ -89,7 +116,7 @@ struct StudioMeetingHeaderTests {
         #expect(search.currentEditor() != nil)
         _ = NSApp.sendAction(action, to: toggle.target, from: toggle)
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        #expect(split.subviews[1].frame.maxX <= split.bounds.maxX + 1)
+        #expect(split.arrangedSubviews[1].frame.maxX <= split.bounds.maxX + 1)
         let header = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "meeting.studio-header" })
         #expect(header.convert(header.bounds, to: app.panel.contentView).maxX <= app.panel.contentView!.bounds.maxX + 1)
     }

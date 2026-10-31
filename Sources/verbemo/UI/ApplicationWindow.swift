@@ -6,8 +6,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     let panel: NSWindow
     private let calendar: CalendarWatcher
     private let sidebar = SidebarView()
-    private var workspaceSplit: WorkspaceSplitView!
-    private var rememberedLibraryWidth: CGFloat = JournalStyle.sidebarWidth
+    private var workspaceSplit: WorkspaceSplitController!
     private let libraryToggle = NSButton()
     private let compactPrimaryActions = NSStackView()
     private let compactRecord = NSButton()
@@ -74,7 +73,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private var presentedSetup: SetupPage?
     private var keepsDockIcon = Config.dockIcon()
     var toolbarIsHidden: Bool { toolbar.isHidden }
-    var primaryActionsAreVisible: Bool { !sidebar.isHidden || (!compactPrimaryActions.isHidden && !toolbar.isHidden) }
+    var primaryActionsAreVisible: Bool { !workspaceSplit.libraryItem.isCollapsed || (!compactPrimaryActions.isHidden && !toolbar.isHidden) }
     var recordingBarIsVisible: Bool { !recordingBar.isHidden }
     var isVisible: Bool { panel.isVisible && !panel.isMiniaturized }
 
@@ -131,7 +130,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         libraryToggle.identifier = .init("workspace.toggle-library")
         libraryToggle.toolTip = localised("Hide meeting list", "Скрыть список встреч")
         libraryToggle.setAccessibilityLabel(libraryToggle.toolTip)
-        libraryToggle.setAccessibilityValue(sidebar.isHidden ? 0 : 1)
+        libraryToggle.setAccessibilityValue(1)
         let compactImport = NSButton(), compactSettings = NSButton()
         for (button, label, symbol, action) in [
             (compactRecord, localised("New recording", "Новая запись"), "record.circle", #selector(compactRecordClicked)),
@@ -163,8 +162,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         right.detachesHiddenViews = true
         contentHost.setContentHuggingPriority(.init(1), for: .vertical)
         for view in right.arrangedSubviews { view.widthAnchor.constraint(equalTo: right.widthAnchor).isActive = true }
-        let root = WorkspaceSplitView(sidebar: sidebar, content: right)
-        workspaceSplit = root
+        workspaceSplit = WorkspaceSplitController(sidebar: sidebar, content: right)
+        let root = workspaceSplit.view
         let container = WorkspaceSurface(JournalStyle.paper)
         root.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(root)
@@ -184,7 +183,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         ])
         panel.contentView = container
         container.layoutSubtreeIfNeeded()
-        root.setPosition(JournalStyle.sidebarWidth, ofDividerAt: 0)
+        workspaceSplit.splitView.setPosition(JournalStyle.sidebarWidth, ofDividerAt: 0)
         panel.initialFirstResponder = container
         appearance = AppearanceController(window: panel)
         panel.contentMinSize = NSSize(width: 760, height: 600)
@@ -196,19 +195,12 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     @objc private func compactImportClicked() { onChooseImport?() }
     @objc private func compactSettingsClicked() { navigate(.general) }
     @objc private func toggleLibrary() {
-        if sidebar.isHidden {
-            sidebar.isHidden = false
-            workspaceSplit.adjustSubviews()
-            workspaceSplit.setPosition(rememberedLibraryWidth, ofDividerAt: 0)
-        } else {
-            rememberedLibraryWidth = sidebar.frame.width
-            sidebar.isHidden = true
-            workspaceSplit.adjustSubviews()
-        }
-        compactPrimaryActions.isHidden = !sidebar.isHidden
-        libraryToggle.toolTip = sidebar.isHidden ? localised("Show meeting list", "Показать список встреч") : localised("Hide meeting list", "Скрыть список встреч")
+        workspaceSplit.libraryItem.isCollapsed.toggle()
+        let collapsed = workspaceSplit.libraryItem.isCollapsed
+        compactPrimaryActions.isHidden = !collapsed
+        libraryToggle.toolTip = collapsed ? localised("Show meeting list", "Показать список встреч") : localised("Hide meeting list", "Скрыть список встреч")
         libraryToggle.setAccessibilityLabel(libraryToggle.toolTip)
-        libraryToggle.setAccessibilityValue(sidebar.isHidden ? 0 : 1)
+        libraryToggle.setAccessibilityValue(collapsed ? 0 : 1)
         libraryProvider?()?.updateCompactLayout()
     }
     private func connectLibrary() {
@@ -273,7 +265,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
 
     func showStopping(_ text: String) {
         toolbar.isHidden = true
-        sidebar.isHidden = true
+        workspaceSplit.libraryItem.isCollapsed = true
         recordingBar.isHidden = true
         settingsNavigation.isHidden = true
         let note = NSTextField(labelWithString: text)
