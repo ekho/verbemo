@@ -96,7 +96,9 @@ final class SidebarView: JournalSurface {
     func updateRecording(_ recording: Bool) { start.isEnabled = !recording }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-           event.characters == "f", let search = libraryHost.journalSearchField {
+           (event.characters?.lowercased() == "f" || event.charactersIgnoringModifiers?.lowercased() == "f") {
+            if (window as? WorkspaceWindow)?.onFindMeeting?() == true { return true }
+            guard let search = libraryHost.journalSearchField else { return false }
             window?.makeFirstResponder(search)
             return true
         }

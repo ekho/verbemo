@@ -29,7 +29,7 @@ struct StudioMeetingHeaderTests {
         #expect(steps == [true, false])
         #expect(clears == 1)
     }
-    @Test(.freshHome) func meetingFindCommandAndLibraryResize() throws {
+    @Test(.freshHome, arguments: ["f", "а"]) func meetingFindCommandAndLibraryResize(unmodified: String) throws {
         _ = NSApplication.shared
         let dir = Home.current.url.appendingPathComponent("meeting")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -56,8 +56,11 @@ struct StudioMeetingHeaderTests {
             .first { $0.identifier?.rawValue == "meeting.search" })
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
             timestamp: 0, windowNumber: app.panel.windowNumber, context: nil, characters: "f",
-            charactersIgnoringModifiers: "f", isARepeat: false, keyCode: 3))
+            charactersIgnoringModifiers: unmodified, isARepeat: false, keyCode: 3))
         #expect(app.panel.performKeyEquivalent(with: event))
+        #expect(search.currentEditor() != nil)
+        app.panel.makeFirstResponder(nil)
+        #expect(app.panel.contentView?.performKeyEquivalent(with: event) == true)
         #expect(search.currentEditor() != nil)
         app.panel.setContentSize(NSSize(width: 760, height: 820))
         app.panel.contentView?.layoutSubtreeIfNeeded()

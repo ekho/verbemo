@@ -59,7 +59,8 @@ final class WorkspaceWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if attachedSheet == nil,
            event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-           event.charactersIgnoringModifiers?.lowercased() == "f", onFindMeeting?() == true { return true }
+           (event.characters?.lowercased() == "f" || event.charactersIgnoringModifiers?.lowercased() == "f"),
+           onFindMeeting?() == true { return true }
         return super.performKeyEquivalent(with: event)
     }
 }
