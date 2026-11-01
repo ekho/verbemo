@@ -6,6 +6,8 @@ final class StudioMeetingHeaderState: ObservableObject {
     @Published var matchCount = 0
     @Published var matchIndex: Int?
     @Published var hasQuery = false
+    @Published var searchEnabled = true
+    @Published var versionsEnabled = true
     var onStep: ((Bool) -> Void)?
     var onClear: (() -> Void)?
     func step(forward: Bool) { onStep?(forward) }
@@ -29,10 +31,10 @@ struct StudioMeetingHeader: View {
             layout {
                 HStack(spacing: 8) {
                     Text(localised("Version", "Версия")).font(.callout)
-                    StudioHeaderControl(control: versions)
+                    StudioHeaderControl(control: versions).disabled(!state.versionsEnabled)
                 }.frame(width: 220)
                 HStack(spacing: 6) {
-                    StudioHeaderControl(control: search).frame(minWidth: 140)
+                    StudioHeaderControl(control: search).disabled(!state.searchEnabled).frame(minWidth: 140)
                     if state.hasQuery {
                         Text("\(state.matchIndex.map { $0 + 1 } ?? 0) / \(state.matchCount)")
                             .font(.caption).monospacedDigit().foregroundStyle(.secondary)

@@ -76,6 +76,7 @@ struct StudioMeetingHeaderTests {
         let dir = Home.current.url.appendingPathComponent("meeting")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data(#"{"title":"Planning"}"#.utf8).write(to: dir.appendingPathComponent("meta.json"))
+        try Data("Readable meeting summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
         let app = ApplicationWindow()
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)

@@ -24,6 +24,8 @@ struct MeetingLibraryControllerTests {
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.show()
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         let before = try Self.fileSnapshot(dir)
         let notice = try #require(library.contentView.allDescendants.first {
             $0.identifier?.rawValue == "meeting.result-notice"
@@ -37,6 +39,9 @@ struct MeetingLibraryControllerTests {
         #expect(!notice.isHiddenOrHasHiddenAncestor)
         #expect(status.stringValue.contains("Synthetic first failure"))
         #expect(close.image != nil && close.title.isEmpty && close.toolTip != nil)
+        let closeFrame = close.convert(close.bounds, to: notice)
+        #expect(abs(notice.bounds.maxX - closeFrame.maxX - 6) < 2,
+                "The notice close button belongs at the trailing edge even when the message is short")
         #expect(notice.superview?.allDescendants.contains { $0.identifier?.rawValue == "meeting.result-tabs" } == true)
         #expect(close.sendAction(close.action, to: close.target))
         library.refresh(); await library.settled()
@@ -48,6 +53,59 @@ struct MeetingLibraryControllerTests {
         #expect(!notice.isHiddenOrHasHiddenAncestor)
         #expect(status.stringValue.contains("Synthetic different failure"))
         for task in library.stopForTermination() { await task.value }
+    }
+
+    @Test("A short result notice keeps its close control at the right edge")
+    func shortResultNoticeKeepsTrailingClose() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try SessionState.amend(dir, with: [SessionState.Key.transcriptionFailed: "Synthetic"])
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        defer { _ = library.stopForTermination(); app.hide() }
+        app.show()
+        app.panel.setContentSize(.init(width: 1340, height: 600))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let notice = try #require(library.contentView.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.result-notice"
+        })
+        let close = try #require(notice.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.dismiss-notice"
+        })
+        #expect(abs(notice.bounds.maxX - close.convert(close.bounds, to: notice).maxX - 6) < 2)
+    }
+
+    @Test("Local search requires readable result text and explains an unavailable state")
+    func meetingSearchIsDisabledWithoutReadableResults() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        defer { _ = library.stopForTermination(); app.hide() }
+        app.show()
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let search = try #require(library.contentView.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.search"
+        } as? NSSearchField)
+        let versions = try #require(library.contentView.allDescendants.first {
+            $0.identifier?.rawValue == "transcript-versions"
+        } as? NSPopUpButton)
+        #expect(!versions.isEnabled, "SwiftUI must preserve the unavailable empty version selector")
+        #expect(!search.isEnabled)
+        #expect(search.toolTip?.isEmpty == false)
+        #expect(!library.focusMeetingSearch())
+        try Data("Readable summary only".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        library.refresh(); await library.settled()
+        #expect(search.isEnabled, "A readable legacy summary stays searchable without transcript JSON")
+        #expect(search.toolTip == nil)
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("summary.md"))
+        try Data("invalid JSON".utf8).write(to: dir.appendingPathComponent("transcript.json"))
+        library.refresh(); await library.settled()
+        #expect(!search.isEnabled, "An error message is not searchable meeting content")
     }
 
     @Test("Pending, deferred and failed requests keep the previous ready result",

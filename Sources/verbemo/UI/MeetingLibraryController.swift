@@ -52,6 +52,14 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private func syncMeetingSearchHeader() {
         if meetingSearch.stringValue != meetingSearchQuery { meetingSearch.stringValue = meetingSearchQuery }
         meetingSearch.isEnabled = currentSearchContext != nil
+        meetingHeaderState.searchEnabled = meetingSearch.isEnabled
+        meetingHeaderState.versionsEnabled = !versions.isEmpty
+        meetingSearch.toolTip = meetingSearch.isEnabled ? nil : localised(
+            "A readable transcript or summary is required.", "Поиск появится, когда будет готова расшифровка или сводка.")
+        meetingSearch.setAccessibilityHelp(meetingSearch.toolTip)
+        if !meetingSearch.isEnabled, meetingSearch.currentEditor() != nil {
+            panel.makeFirstResponder(resultPicker.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.state == .on })
+        }
         meetingHeaderState.matchCount = meetingSearchHits.count
         meetingHeaderState.matchIndex = meetingSearchIndex
         meetingHeaderState.hasQuery = !meetingSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -223,7 +231,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var searchOrigin: MeetingReadingPosition?
     private var currentSearchContext: MeetingSearchContext? {
         guard let selected, let dir = artifactDirectory, selectedVersion?.isRequest != true,
-              activeRecording?.dir != selected.dir else { return nil }
+              activeRecording?.dir != selected.dir,
+              searchTranscript != nil || transcriptText.identifier != nil || summaryText.identifier != nil else { return nil }
         return MeetingSearchContext(location: selected.dir.path + "\n" + dir.path,
                                     transcript: searchTranscriptData ?? Data(transcriptText.string.utf8))
     }
@@ -495,6 +504,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         dismissNotice.widthAnchor.constraint(equalToConstant: 28).isActive = true
         dismissNotice.heightAnchor.constraint(equalToConstant: 28).isActive = true
         let noticeRow = NSStackView(views: [processingStatus, dismissNotice])
+        noticeRow.distribution = .fill
         noticeRow.alignment = .top
         noticeRow.spacing = 8
         processingStatus.setContentHuggingPriority(.defaultLow, for: .horizontal)
