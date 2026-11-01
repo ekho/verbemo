@@ -68,7 +68,7 @@ struct NewRecordingSheetTests {
     }
 
     @Test(.freshHome)
-    func explicitNoEventClearsAssociationAndRestoresDefaultTitle() async throws {
+    func explicitNoEventClearsAssociationAndKeepsTitle() async throws {
         let event = meeting("event")
         let sheet = NewRecordingSheet(calendarEnabled: true, now: now) { _ in (event, [event]) }
         defer { sheet.panel.close() }
@@ -76,7 +76,10 @@ struct NewRecordingSheetTests {
         await sheet.settled()
         sheet.calendarPicker.clearSelection()
         #expect(sheet.selectedMeeting == nil)
-        #expect(sheet.name.stringValue.contains(MeetingPresentation.date(now)))
+        #expect(sheet.name.stringValue == event.title)
+        sheet.name.stringValue = "Свой заголовок"
+        sheet.calendarPicker.clearSelection()
+        #expect(sheet.name.stringValue == "Свой заголовок")
     }
 
     @Test(.freshHome, arguments: [false, true])

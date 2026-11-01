@@ -64,10 +64,12 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
             return options.events.filter(query.matches)
         }
         calendarPicker.onSelect = { [weak self] meeting in
-            self?.calendarPicker.setSelection(meeting)
-            self?.eventChanged(replacingDraft: meeting != nil)
-            self?.note.isHidden = true
-            self?.resize()
+            guard let self else { return }
+            calendarPicker.setSelection(meeting)
+            if meeting != nil { eventChanged(replacingDraft: true) }
+            else { suggestedTitle = fallbackTitle }
+            note.isHidden = true
+            resize()
         }
         note.font = .systemFont(ofSize: 12)
         note.textColor = JournalStyle.muted
