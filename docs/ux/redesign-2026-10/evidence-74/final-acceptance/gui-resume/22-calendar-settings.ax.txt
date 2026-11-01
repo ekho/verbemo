@@ -1,0 +1,64 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть разделы настроек, Value: 1, ID: workspace.toggle-library
+	2 button К встречам, ID: journal.breadcrumb
+	3 text /  Календарь
+	4 button Новая запись, ID: journal.new-recording
+	5 button Импорт, ID: journal.import
+	6 button Настройки, ID: journal.settings
+	7 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		8 radio button Общие, Value: 0, ID: settings.tab.general
+		9 radio button Запись, Value: 0, ID: settings.tab.recording
+		10 radio button Расшифровка, Value: 0, ID: settings.tab.transcription
+		11 radio button Сводки, Value: 0, ID: settings.tab.summary
+		12 radio button Календарь, Value: 1, ID: settings.tab.calendar
+		13 radio button Файлы и модели, Value: 0, ID: settings.tab.storage
+		14 radio button MCP, Value: 0, ID: settings.tab.mcp
+		15 radio button О Verbemo, Value: 0, ID: settings.tab.about
+		16 splitter (disabled, settable, float) 248
+		17 scroll area Secondary Actions: Scroll Up, Scroll Down
+			18 image не спрашивали
+			19 text Календарь не обязательно Связывает записи с событиями.
+			20 button Разрешить, Description: Разрешить — Календарь, ID: access.calendar.action
+			21 text ID: settings.heading, Value: Календарь Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются. Читать календарь
+			22 switch Description: Читать календарь, Value: 0, ID: calendar
+			23 text Называет встречу по событию и запоминает участников. Это не то же самое, что начинать запись по событию. Подействует при следующем запуске. Календари для событий
+			24 checkbox (disabled) Все календари, включая новые, Value: 1, ID: calendar_ids.all
+			25 text Используются для сопоставления, выбора событий и запуска записи по событиям. Изменения действуют сразу. Разрешите доступ к календарю выше, чтобы выбрать календари. Ваше имя
+			26 text field (settable) Description: Ваше имя, Value: Studio QA, Placeholder: полное имя учётной записи, ID: user_name
+			27 text Ставится вместо «me». Пусто — берётся полное имя учётной записи, а если оно не похоже на имя человека, остаётся «me». Ваши email-адреса
+			28 container Description: Ваши email-адреса, ID: user_email
+				29 text qa@example.invalid
+				30 button Description: Удалить qa@example.invalid, ID: user_email.remove
+				31 text field (settable) Description: Добавить email, ID: user_email.input
+				32 button Добавить, Description: add, ID: user_email.add
+				33 button Взять из календарей, Description: calendar, ID: user_email.lookup
+			34 text Ваши адреса в разных календарях. Связывает вас с единственным подходящим участником локально, без отправки модели.
+			35 disclosure triangle Дополнительные параметры, Description: Показать дополнительные параметры, Value: 0, ID: options.calendar
+			36 scroll bar (settable, float) 0
+				37 value indicator (settable, float) 0
+				38 increment arrow button
+				39 decrement arrow button
+				40 increment page button
+				41 decrement page button
+	42 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	43 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	44 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	45 button (disabled) Нет записи, ID: activity.recording
+	46 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	47 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	48 close button
+	49 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	50 minimize button
+51 menu bar
+	52 Verbemo Final Review
+	53 Файл
+	54 Правка
+	55 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

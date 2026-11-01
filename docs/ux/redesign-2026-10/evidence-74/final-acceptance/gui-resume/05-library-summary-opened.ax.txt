@@ -1,0 +1,133 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 text Библиотека
+		8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Value: Сапфировый маяк, Placeholder: Название, расшифровка, сводка, ID: library.search
+			9 button Поиск в библиотеке: названия, расшифровки и сводки
+			10 button cancel
+		11 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+		12 scroll area
+			13 table
+				14 row (selectable)
+					15 cell
+						16 text UX69 Назначения — ошибка и неизвестный 2026-10-30 · 03:00
+						17 image Description: Готово, ID: meeting.list-status
+						18 text ID: meeting.list-snippet, Description: Сводка · …ной встречи
+Сапфировый маяк — уникальная фраза только в сводке.
+Анна готовит материалы.
+Борис проверяет сроки.
+				19 row (selectable)
+					20 cell
+						21 text UX69 Атлас — длинная встреча 2026-10-29 · 30:00
+						22 image Description: Готово, ID: meeting.list-status
+						23 text ID: meeting.list-snippet, Description: Сводка · …ной встречи
+Сапфировый маяк — уникальная фраза только в сводке.
+Анна готовит материалы.
+Борис проверяет сроки.
+				24 row (selected)
+					25 cell (selected)
+						26 text UX69 Атлас — планирование 2026-10-29 · 03:00
+						27 image Description: Готово, ID: meeting.list-status
+						28 text ID: meeting.list-snippet, Description: Сводка · …ной встречи
+Сапфировый маяк — уникальная фраза только в сводке.
+Анна готовит материалы.
+Борис проверяет сроки.
+		29 splitter (disabled, settable, float) 248
+		30 text 29.10.2026 12:00 · 3 мин · Приглашены: 3
+		31 text Help: UX69 Атлас — планирование, ID: meeting.title
+		32 button Копировать, Description: copy, ID: meeting.copy
+		33 button Description: Действия со встречей, ID: meeting.actions
+		34 button Description: Показать или скрыть детали встречи, Value: 1, ID: meeting.inspector
+		35 button Description: Воспроизвести встречу, ID: playback.play
+		36 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		37 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+			38 value indicator (settable, float) 0
+		39 text 00:00 / 03:00
+		40 image volume high
+		41 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			42 value indicator (settable, float) 1
+		43 pop up button Description: Скорость воспроизведения, Value: 1×
+		44 container meeting.studio-header
+			45 text Версия
+			46 pop up button Description: Версия расшифровки, Value: 2 · Whisper · 29 окт. 2026 г., 12:00:00, ID: transcript-versions
+			47 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Value: Сапфировый маяк, Placeholder: Найти в этой встрече, ID: meeting.search
+				48 button Поиск в выбранной версии расшифровки и сводки
+				49 button cancel
+			50 text Совпадения поиска
+			51 button Description: Предыдущее совпадение, Help: Предыдущее совпадение · Shift+Enter
+			52 button Description: Следующее совпадение, Help: Следующее совпадение · Enter
+			53 button Description: Очистить поиск во встрече, Help: Очистить поиск · Escape
+			54 radio button Сводка, Value: 1, ID: meeting.result.summary
+			55 radio button Расшифровка, Description: comment lines, Value: 0, ID: meeting.result.transcript
+			56 radio button Участники, Value: 0, ID: meeting.result.participants
+		57 scroll area
+			58 text entry area ID: meeting-words, Value: **Решения учебной встречи**
+• Сапфировый маяк — уникальная фраза только в сводке.
+• Анна готовит материалы.
+• Борис проверяет сроки.
+		59 scroll area Secondary Actions: Scroll Up, Scroll Down
+			60 text ДЕТАЛИ ВСТРЕЧИ
+			61 button Description: Закрыть детали встречи, ID: meeting.inspector-close
+			62 text КАЛЕНДАРЬ
+			63 button UX69 Атлас — планирование, Help: Открыть событие календаря, ID: calendar.open
+			64 text Синтетические данные UX69 ПРИГЛАШЁННЫЕ Анна С Очень Длинной Фамилией Тестовая
+Борис Примеров
+Вера Макетная Приглашение не подтверждает присутствие.
+			65 button UX69 Атлас — планирование, Description: Выбрать событие календаря, ID: calendar.choose, Help: UX69 Атлас — планирование
+
+			66 button Description: Снять связь с событием календаря, ID: calendar.clear
+			67 text ОБРАБОТКА
+			68 image Запись сохранена
+				69 image microphone
+				70 image selected
+			71 text Запись сохранена
+			72 image Расшифровка готова · диаризация включена
+				73 image plain text document
+				74 image
+				75 image selected
+			76 text Расшифровка готова · диаризация включена
+			77 button (disabled) Description: Расшифровать повторно, Help: Включите расшифровку в настройках., ID: meeting.retranscribe
+			78 image Сводка готова
+				79 image
+				80 image selected
+			81 text Сводка готова
+			82 button Description: Перегенерировать сводку, ID: meeting.generate-summary
+			83 text НАСТРОЙКИ ОБРАБОТКИ Расшифровка: Отключена
+Диаризация: Отключена
+Сводка: Отключена
+			84 button Настройки →, Description: edit, ID: meeting.processing-settings
+			85 scroll bar (settable, float) 0
+				86 value indicator (settable, float) 0
+				87 increment arrow button
+				88 decrement arrow button
+				89 increment page button
+				90 decrement page button
+	91 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	92 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	93 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	94 button (disabled) Нет записи, ID: activity.recording
+	95 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	96 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	97 close button
+	98 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	99 minimize button
+100 menu bar
+	101 Verbemo Final Review
+	102 Файл
+	103 Правка
+	104 Окно
+
+Selected:
+	24 row (selected)
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

@@ -1,0 +1,71 @@
+Window: "Verbemo", App: Verbemo Import693.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Back to meetings, ID: journal.breadcrumb
+	2 text /  Transcription
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button All settings, Description: Back, ID: settings.all-categories
+		9 scroll area Secondary Actions: Scroll Up, Scroll Down
+			10 text Transcription models
+			11 switch Description: In the cloud, Help: Audio is sent to the selected provider for transcription and diarization., Value: 0, ID: transcription.cloud
+			12 text In the cloud Audio is sent to the selected provider for transcription and diarization.
+			13 switch Description: On this Mac, Help: Audio is processed on this Mac. Diarization can be enabled below., Value: 1, ID: transcription.local
+			14 text On this Mac Audio is processed on this Mac. Diarization can be enabled below.
+			15 radio button Description: Parakeet v3, Help: 25 European languages · about 482 MB, Value: 0, ID: choice.parakeet
+				16 image not chosen
+				17 text Parakeet v3
+				18 text 25 European languages · about 482 MB
+				19 pop up button Description: Parakeet version, Value: v3, ID: transcription.model
+				20 button Download…, Description: Arrow Down Circle, ID: transcription.download.parakeet
+			21 radio button (selected) Description: Whisper large-v3-turbo, Help: Multilingual recognition · about 577 MB. downloaded · 0 MB, Value: 1, ID: choice.whisper
+				22 image chosen
+				23 text Whisper large-v3-turbo
+				24 text Multilingual recognition · about 577 MB
+				25 text downloaded · 0 MB
+			26 radio button Description: GigaAM v3, Help: Alternative for Russian · about 272 MB, Value: 0, ID: choice.gigaam
+				27 image not chosen
+				28 text GigaAM v3
+				29 text Alternative for Russian · about 272 MB
+				30 button Download…, Description: Arrow Down Circle, ID: transcription.download.gigaam
+			31 radio button Description: NVIDIA Nemotron 3.5 ASR Streaming Multilingual 0.6B, Help: Shares the downloaded model with live transcription, Value: 0, ID: choice.nemotron
+				32 image not chosen
+				33 text NVIDIA Nemotron 3.5 ASR Streaming Multilingual 0.6B
+				34 text Shares the downloaded model with live transcription
+				35 button Download…, Description: Arrow Down Circle, ID: transcription.download.nemotron
+			36 text Diarization
+			37 switch Description: Enable diarization, Help: Separates speech by speaker after local transcription. Audio stays on this Mac., Value: 0, ID: transcription.local-diarization
+			38 text Enable diarization Separates speech by speaker after local transcription. Audio stays on this Mac. During the meeting
+			39 switch Description: I want a live transcript during meetings, Value: 0, ID: transcription.live, Help: Nemotron 3.5 ASR. Live and final transcription use the same downloaded files. The final-transcription model is selected independently.
+			40 text I want a live transcript during meetings Nemotron 3.5 ASR. Live and final transcription use the same downloaded files. The final-transcription model is selected independently. Not downloaded Meeting language
+			41 pop up button Description: Meeting language, Value: English, ID: transcription.language
+			42 text ID: settings.heading, Value: Transcription Settings apply to this profile. Recording and processing options apply to future operations. Existing transcripts and summaries stay unchanged.
+			43 disclosure triangle More options, Description: Show more options, Value: 0, ID: options.transcription
+			44 scroll bar (settable, float) 0
+				45 value indicator (settable, float) 0
+				46 increment arrow button
+				47 decrement arrow button
+				48 increment page button
+				49 decrement page button
+	50 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	51 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	52 button Access: ✓, ID: activity.access, Description: Access: ✓
+Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	53 button (disabled) Not recording, ID: activity.recording
+	54 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	55 close button
+	56 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	57 minimize button
+58 menu bar
+	59 Verbemo Import693
+	60 File
+	61 Edit
+	62 Window
+
+The focused UI element is 8 button All settings, Description: Back, ID: settings.all-categories

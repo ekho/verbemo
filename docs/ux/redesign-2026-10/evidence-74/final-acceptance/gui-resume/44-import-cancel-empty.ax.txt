@@ -1,0 +1,35 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 text Library
+		8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Placeholder: Title, transcript, summary, ID: library.search
+			9 button Search the library: titles, transcripts and summaries
+		10 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		11 text Value: No meetings yet. Start a recording or import an audio file., ID: meeting-list.empty
+		12 splitter (disabled, settable, float) 248
+		13 text Value: No recordings yet, ID: meeting.title
+	14 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	15 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	16 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+	17 button (disabled) Not recording, ID: activity.recording
+	18 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	19 close button
+	20 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	21 minimize button
+22 menu bar
+	23 Verbemo Final Review
+	24 File
+	25 Edit
+	26 Window
+
+The focused UI element is 5 button Settings, ID: journal.settings

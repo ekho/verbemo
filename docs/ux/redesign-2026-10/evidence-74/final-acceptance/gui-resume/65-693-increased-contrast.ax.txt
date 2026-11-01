@@ -1,0 +1,124 @@
+Window: "Verbemo", App: Verbemo Import693.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 text Library
+		8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: UX74-English-source, Placeholder: Title, transcript, summary, ID: library.search
+			9 button Search the library: titles, transcripts and summaries
+			10 button cancel
+		11 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		12 scroll area
+			13 table
+				14 row (selectable)
+					15 cell
+						16 text UX74-English-source renamed 2026-11-01 · 00:10
+						17 image Description: Ready, ID: meeting.list-status
+		18 splitter (disabled, settable, float) 248
+		19 text Imported 0 · 1 already here
+		20 text 01.11.2026 22:53 · 0 min
+		21 text Help: UX74-English-source renamed, ID: meeting.title
+		22 button Copy, Description: copy, ID: meeting.copy
+		23 button Description: Meeting actions, ID: meeting.actions
+		24 button Description: Show or hide meeting details, Value: 1, ID: meeting.inspector
+		25 button Description: Play meeting, ID: playback.play
+		26 button (disabled) Description: Stop and return to the beginning, ID: playback.stop
+		27 slider (settable, float) Description: Meeting position, Value: 0, Details: 00:00, ID: playback.timeline
+			28 value indicator (settable, float) 0
+		29 text 00:00 / 00:09
+		30 image volume high
+		31 slider (settable, float) Description: Playback volume, Value: 1
+			32 value indicator (settable, float) 1
+		33 pop up button Description: Playback speed, Value: 1×
+		34 container meeting.studio-header
+			35 text Version
+			36 pop up button Description: Transcript version, Value: 1 · Whisper · Nov 1, 2026 at 10:53:54 PM, ID: transcript-versions
+			37 search text field (settable) Description: Search selected transcript and summary version, Placeholder: Find in this meeting, ID: meeting.search
+				38 button Search selected transcript and summary version
+			39 radio button Summary, Value: 0, ID: meeting.result.summary
+			40 radio button Transcript, Value: 1, ID: meeting.result.transcript
+			41 radio button Participants, Value: 0, ID: meeting.result.participants
+		42 scroll area Secondary Actions: Scroll Up, Scroll Down
+			43 table Transcript and speaker assignments
+				44 row (selectable)
+					45 cell
+						46 text Help: Speaker 1, ID: transcript.speaker-name
+						47 button Description: Change speaker: Speaker 1, ID: speaker.edit
+						48 button 00:00, Description: Play from 00:00, ID: transcript.playFrom
+						49 text Value: Verbimo Audio Acceptance Test, ID: transcript.words
+				50 row (selectable)
+					51 cell
+						52 text Help: Speaker 1, ID: transcript.speaker-name
+						53 button Description: Change speaker: Speaker 1, ID: speaker.edit
+						54 button 00:02, Description: Play from 00:02, ID: transcript.playFrom
+						55 text Value: Blue Compass, ID: transcript.words
+				56 row (selectable)
+					57 cell
+						58 text Help: Speaker 1, ID: transcript.speaker-name
+						59 button Description: Change speaker: Speaker 1, ID: speaker.edit
+						60 button 00:03, Description: Play from 00:03, ID: transcript.playFrom
+						61 text Value: 1, 2, 3, ID: transcript.words
+				62 row (selectable)
+					63 cell
+						64 text Help: Speaker 1, ID: transcript.speaker-name
+						65 button Description: Change speaker: Speaker 1, ID: speaker.edit
+						66 button 00:04, Description: Play from 00:04, ID: transcript.playFrom
+						67 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+			68 scroll bar (settable, float) 0
+				69 value indicator (settable, float) 0
+				70 increment arrow button
+				71 decrement arrow button
+				72 increment page button
+				73 decrement page button
+		74 scroll area Secondary Actions: Scroll Up, Scroll Down
+			75 text MEETING DETAILS
+			76 button Description: Close meeting details, ID: meeting.inspector-close
+			77 text CALENDAR
+			78 button Choose event…, Description: Choose calendar event, ID: calendar.choose
+			79 text PROCESSING
+			80 image Recording saved
+				81 image microphone
+				82 image selected
+			83 text Recording saved
+			84 image Transcript ready
+				85 image plain text document
+				86 image selected
+			87 text Transcript ready
+			88 button Description: Transcribe again, ID: meeting.retranscribe
+			89 image Summary was not created
+				90 image
+			91 text Summary was not created
+			92 button Description: Generate summary, ID: meeting.generate-summary
+			93 text PROCESSING SETTINGS Transcription: Whisper large-v3-turbo
+Diarization: Disabled
+Summary: Disabled
+			94 button Settings →, Description: edit, ID: meeting.processing-settings
+			95 scroll bar (settable, float) 0
+				96 value indicator (settable, float) 0
+				97 increment arrow button
+				98 decrement arrow button
+				99 increment page button
+				100 decrement page button
+	101 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	102 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	103 button Access: ✓, ID: activity.access, Description: Access: ✓
+Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	104 button (disabled) Not recording, ID: activity.recording
+	105 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	106 close button
+	107 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	108 minimize button
+109 menu bar
+	110 Verbemo Import693
+	111 File
+	112 Edit
+	113 Window
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

@@ -1,0 +1,618 @@
+[
+  {
+    "name": "01-about691",
+    "build": "691",
+    "ax": "01-about691.ax.txt",
+    "ax_sha256": "b8890b3c0fc2c6ac1e0b3be9f6e9099253d1333898f3ab047631832460c191f8",
+    "image": "01-about691.jpg",
+    "image_sha256": "46bec1af76906b84728b3bdf37c812d07bcf427fcab0b2253318795f59a10d49"
+  },
+  {
+    "name": "02-first-open-release691",
+    "build": "691",
+    "ax": "02-first-open-release691.ax.txt",
+    "ax_sha256": "27e41464abb5fdcda764540254877b0a8ad445cc84cace53ffe3ab4a233fff83",
+    "image": "02-first-open-release691.jpg",
+    "image_sha256": "1c555835ee375c8222cd3bc251a5c82c8f0e281ba69e3781f08fa2bc069a7b80"
+  },
+  {
+    "name": "03-library-transcript-hits",
+    "build": "691",
+    "ax": "03-library-transcript-hits.ax.txt",
+    "ax_sha256": "d5f4166953cd066c61b4663726cfc0ff0c1c3f9759e0059545200c8e8df32079",
+    "image": "03-library-transcript-hits.jpg",
+    "image_sha256": "110d5f00e89b0a6564ae78a9c6f8344cc8f17f20400d0c40a84ea9632e3a8318"
+  },
+  {
+    "name": "04-library-hit-opened",
+    "build": "691",
+    "ax": "04-library-hit-opened.ax.txt",
+    "ax_sha256": "6bf666da484b5d34c8cd6f7b435cd0b275e54e91b2e41576f93d257e54d4489e",
+    "image": "04-library-hit-opened.jpg",
+    "image_sha256": "19970cdf2f70cf66e4f081239fc706aed6f8399aa3039967eca2e4dfcb83f3cd"
+  },
+  {
+    "name": "05-library-summary-opened",
+    "build": "691",
+    "ax": "05-library-summary-opened.ax.txt",
+    "ax_sha256": "71ec53f7ce46d2e877a54ef8c41a6809c094ba2435709551f8d09c1de864ed4a",
+    "image": "05-library-summary-opened.jpg",
+    "image_sha256": "73bbf25eca6ce6a8a35e720ee340f346ec32d903c7d3a8e4053ad6b2ec76a377"
+  },
+  {
+    "name": "06-library-empty",
+    "build": "691",
+    "ax": "06-library-empty.ax.txt",
+    "ax_sha256": "05e909b21babccd83135f09e911d21915b85356042dca77e829094f76293c7f7",
+    "image": "06-library-empty.jpg",
+    "image_sha256": "4f37f866a5cc194f0270fc281942397f35b525b26a164c5fa8ad53fea8572946"
+  },
+  {
+    "name": "07-library-reset",
+    "build": "691",
+    "ax": "07-library-reset.ax.txt",
+    "ax_sha256": "d435c6bc2ad293bb69edfc87a4804d3e6dd75e1a8cdef1df1bbb7df49fc142da",
+    "image": "07-library-reset.jpg",
+    "image_sha256": "10a0288e4f04f15391f5cc85d2b3f26d01666f1fb2b958a973c0912adc29bc29"
+  },
+  {
+    "name": "08-local-search-keyboard",
+    "build": "691",
+    "ax": "08-local-search-keyboard.ax.txt",
+    "ax_sha256": "8270f81845e4bd5506459205689331f119a29630a62032d0f7c8a903c9595e58",
+    "image": "08-local-search-keyboard.jpg",
+    "image_sha256": "4519a7075a7046be16d66eb3fa46fb2fca0763996dd3b29850159e4cd882ab4a"
+  },
+  {
+    "name": "09-archive-version-search",
+    "build": "691",
+    "ax": "09-archive-version-search.ax.txt",
+    "ax_sha256": "51deeacef7df5d3978fe1c4e46cd2f42e95eea6c57c321fdca6f9bbca2c290c5",
+    "image": "09-archive-version-search.jpg",
+    "image_sha256": "fac3fe77db74d83ec1f7bc7ad1808a51dcf4c087004b7d29ed3dc31efd1aafe1"
+  },
+  {
+    "name": "10-archive-participants",
+    "build": "691",
+    "ax": "10-archive-participants.ax.txt",
+    "ax_sha256": "f9eb6a43637bbc96b049f00c84b26cd1377cea386b12b67239c1b952201d1265",
+    "image": "10-archive-participants.jpg",
+    "image_sha256": "2cd952afe18154531a961a21af1a928b1e12f68963c4923e75c8e6ad18bfe193"
+  },
+  {
+    "name": "11-archive-local-search",
+    "build": "691",
+    "ax": "11-archive-local-search.ax.txt",
+    "ax_sha256": "75cff8c5e56c372e9c4e3179e1f38df4f0be8fdb8e48c33a8b3355b6c6562af9",
+    "image": "11-archive-local-search.jpg",
+    "image_sha256": "50d0cbaf17d6029f24328a1a79f7db243c82874afcd6df79e1053a8fa13e6c80"
+  },
+  {
+    "name": "12-archive-name-saved",
+    "build": "691",
+    "ax": "12-archive-name-saved.ax.txt",
+    "ax_sha256": "f0a23dac5405769594fe5dafd8dab3763f47ad594d8df31a109fb59b6f68acd5",
+    "image": "12-archive-name-saved.jpg",
+    "image_sha256": "7cf2a93f562e458df07e0744c9e179c33f0cfdd41428132c565746efa5dbd804"
+  },
+  {
+    "name": "13-current-version-restored",
+    "build": "691",
+    "ax": "13-current-version-restored.ax.txt",
+    "ax_sha256": "5b527ad32bf12527d7fd49abe33db8a3e696ce7a2879786ef23f20cabc982d6c",
+    "image": "13-current-version-restored.jpg",
+    "image_sha256": "9d1941a1cbafa40abcc7f2166bee8a6ab70c1de7c3a254d21512df193ace072e"
+  },
+  {
+    "name": "14-full-participant-menu",
+    "build": "691",
+    "ax": "14-full-participant-menu.ax.txt",
+    "ax_sha256": "520dc4c87e880c59aef3df0cb4b7fdd0e1978491bbf709229a6706f907239e61",
+    "image": "14-full-participant-menu.jpg",
+    "image_sha256": "95e1f92bae3441350124254ebefb6b9d08585ae23aa2aab073c1ebafe4f50687"
+  },
+  {
+    "name": "15-participant-selected",
+    "build": "691",
+    "ax": "15-participant-selected.ax.txt",
+    "ax_sha256": "ba6d005981a03816e1ea604410cc7d8210c835e068602ce1262982150767f432",
+    "image": "15-participant-selected.jpg",
+    "image_sha256": "8bd8da244c9eed4b319d4e0da5a01da2cf042c464a4fbbeb8a26f29c4d050597"
+  },
+  {
+    "name": "16-participant-restored",
+    "build": "691",
+    "ax": "16-participant-restored.ax.txt",
+    "ax_sha256": "7f8de8533bb156539eba3354f2f74fadf1d39ee3e2c740096c0812f8cce198bb",
+    "image": "16-participant-restored.jpg",
+    "image_sha256": "635bae5f393a7b6879d94501aa5745cc2a17226dd698c52b97ab9f767baa2979"
+  },
+  {
+    "name": "17-reading-before-settings",
+    "build": "691",
+    "ax": "17-reading-before-settings.ax.txt",
+    "ax_sha256": "da4ed937860dc7b56c65e3d1b66285c4f2afeb41edb87377bd861a9676ac3892",
+    "image": "17-reading-before-settings.jpg",
+    "image_sha256": "70289da0cd0878e73442b6b3bf602fe711793e61aee950e1440c08219ed95cb6"
+  },
+  {
+    "name": "18-general-settings",
+    "build": "691",
+    "ax": "18-general-settings.ax.txt",
+    "ax_sha256": "24d23e84aaa2dc5ee655a93ca4e1a9c604e1564017379c03d5579248db71ea6c",
+    "image": "18-general-settings.jpg",
+    "image_sha256": "e5d391a19bbeb6186cd1d6248e6b11171e8f9377be4687dfb332ba13575c2f73"
+  },
+  {
+    "name": "19-recording-settings",
+    "build": "691",
+    "ax": "19-recording-settings.ax.txt",
+    "ax_sha256": "dcb3c15fc76203514d2d3093e2ecf44633a109510ec8c12b6afc50d9d30fb12e",
+    "image": "19-recording-settings.jpg",
+    "image_sha256": "ee59ee1fcd47a4f071fe6396168a06d9d7803e07dce2cef5e1c04024c568ebe7"
+  },
+  {
+    "name": "20-transcription-settings",
+    "build": "691",
+    "ax": "20-transcription-settings.ax.txt",
+    "ax_sha256": "15974d8c176b23d8cec804c52e8908ee756052444de2cf90f1b8e3768219f60c",
+    "image": "20-transcription-settings.jpg",
+    "image_sha256": "f309f21f3bbdedaa67ecac43d89edaba5ee9f1fd98163bd5bbebc85d3cf7c489"
+  },
+  {
+    "name": "21-summary-settings",
+    "build": "691",
+    "ax": "21-summary-settings.ax.txt",
+    "ax_sha256": "e94d2fb62d5cdaabb5b77f6749e76ec61e6dfabaffb59863de244ff660d0b6d8",
+    "image": "21-summary-settings.jpg",
+    "image_sha256": "f1c32c5af63adb8124d8aeda9de5319d8c490069d37d47870246d716832a98ed"
+  },
+  {
+    "name": "22-calendar-settings",
+    "build": "691",
+    "ax": "22-calendar-settings.ax.txt",
+    "ax_sha256": "c81ac4da74849a58bdef52bd4313eaf466f511913dc48b6c45666eb1a448ff56",
+    "image": "22-calendar-settings.jpg",
+    "image_sha256": "9d20b91a5dc1d67adfe84f58216e2dac089d4330d138c295841a8980d1db2d0c"
+  },
+  {
+    "name": "23-mcp-settings",
+    "build": "691",
+    "ax": "23-mcp-settings.ax.txt",
+    "ax_sha256": "773f8ba4e7e24222d520310e9fdd3cdfa04052449d6da21c0670b622d18ca41a",
+    "image": "23-mcp-settings.jpg",
+    "image_sha256": "38c40faa4da34ac0f915a241b3bd197d34917cd76c5d455008f28abdfce194f1"
+  },
+  {
+    "name": "24-storage-settings",
+    "build": "691",
+    "ax": "24-storage-settings.ax.txt",
+    "ax_sha256": "34d7429d72a2249489b700bad85267101ec1a32bbd107d95e07ff8707aff3265",
+    "image": "24-storage-settings.jpg",
+    "image_sha256": "0e0613e68c3cd2198e25f1f12af1ee82294c8cc5144476f48e07bb2f3e0ab5b3"
+  },
+  {
+    "name": "25-dark-general",
+    "build": "691",
+    "ax": "25-dark-general.ax.txt",
+    "ax_sha256": "87d7a6083fd1d67914e0e0ad6d1968caf3e216dcf9b0652c740d914ff38252e7",
+    "image": "25-dark-general.jpg",
+    "image_sha256": "effe98093ccbbd250a83b38e4319e878b3ab383539305066711942f1bcd76b92"
+  },
+  {
+    "name": "26-language-selected-pending-restart",
+    "build": "691",
+    "ax": "26-language-selected-pending-restart.ax.txt",
+    "ax_sha256": "e4de05384bce70f58eaf6c51fc412366d6bdca17a242f387414ed619ed32cf91",
+    "image": "26-language-selected-pending-restart.jpg",
+    "image_sha256": "6d3d1cfcfa3d7a533fd28faf00075b3dff400115f579aa4bbf3f8a45d01dccd7"
+  },
+  {
+    "name": "27-settings-return-dark",
+    "build": "691",
+    "ax": "27-settings-return-dark.ax.txt",
+    "ax_sha256": "18c4803e99c41e56b5eb80380de9ad0a447816fce820fb1e2c7264e1be666d0a",
+    "image": "27-settings-return-dark.jpg",
+    "image_sha256": "46a4e9302752df7da5c276d8b40014a988853f48d6cd8057d6d5c94b694ce62b"
+  },
+  {
+    "name": "28-before-narrow-drag",
+    "build": "691",
+    "ax": "28-before-narrow-drag.ax.txt",
+    "ax_sha256": "097ac8885ac3bc7cfaf88c351953d51c30ebad51d5b1977c13d4f9525a32df10",
+    "image": "28-before-narrow-drag.jpg",
+    "image_sha256": "a34e041a271540c8878c63a2d48a166d20a967f913e27bbff2d430158ff07046"
+  },
+  {
+    "name": "29-dark-narrow-width",
+    "build": "691",
+    "ax": "29-dark-narrow-width.ax.txt",
+    "ax_sha256": "097ac8885ac3bc7cfaf88c351953d51c30ebad51d5b1977c13d4f9525a32df10",
+    "image": "29-dark-narrow-width.jpg",
+    "image_sha256": "802f81566c0c77b9aff9d77d9bcabfbffddef5ef58de17a3fe894d570755e33f"
+  },
+  {
+    "name": "30-dark-760x600",
+    "build": "691",
+    "ax": "30-dark-760x600.ax.txt",
+    "ax_sha256": "097ac8885ac3bc7cfaf88c351953d51c30ebad51d5b1977c13d4f9525a32df10",
+    "image": "30-dark-760x600.jpg",
+    "image_sha256": "ded63fb7c5c84d0b54ba6f2f97e5d6d64f03f5e0bac3660d1ebdd99966a3f210"
+  },
+  {
+    "name": "31-library-resized",
+    "build": "691",
+    "ax": "31-library-resized.ax.txt",
+    "ax_sha256": "9be96461619f550557fb81f13484fdfa3363bf0b7cfd49ec77a602fb9365f8f6",
+    "image": "31-library-resized.jpg",
+    "image_sha256": "c1077fb6be3d3781b5942071dbccf2f35cdafd16e5547b47e1e4e1cabfcec18d"
+  },
+  {
+    "name": "32-library-hidden-narrow",
+    "build": "691",
+    "ax": "32-library-hidden-narrow.ax.txt",
+    "ax_sha256": "30a7002487185476bb368cc8996be6bf1441bfd4d65b8ceef2780e94757ca009",
+    "image": "32-library-hidden-narrow.jpg",
+    "image_sha256": "d272945314237a4f7b78a0189662021674ecf0467765984ad5921b5fece6d3d7"
+  },
+  {
+    "name": "33-library-width-restored",
+    "build": "691",
+    "ax": "33-library-width-restored.ax.txt",
+    "ax_sha256": "9be96461619f550557fb81f13484fdfa3363bf0b7cfd49ec77a602fb9365f8f6",
+    "image": "33-library-width-restored.jpg",
+    "image_sha256": "900742145c5de08683f7077f8a06ffb314f740e6a6941d58bee7f98dbcf3417d"
+  },
+  {
+    "name": "34-attention-filter",
+    "build": "691",
+    "ax": "34-attention-filter.ax.txt",
+    "ax_sha256": "c3a7c502ab416018f0dd420ee2497c72bbd770fce1739b08341a6c675c78c403",
+    "image": "34-attention-filter.jpg",
+    "image_sha256": "a151b08dac41b7df260787d5c8e14b447be0035e14c514fe02ae3581417b4e36"
+  },
+  {
+    "name": "35-processing-filter",
+    "build": "691",
+    "ax": "35-processing-filter.ax.txt",
+    "ax_sha256": "1882f8b65a7fc2872f2b47d0751dd0849f36e0de52493430a9b5ace407f2eebf",
+    "image": "35-processing-filter.jpg",
+    "image_sha256": "4363fbd068b5307c753f3acee5ba0a0dbf151dc58f0f7928275ada0dbbd5295e"
+  },
+  {
+    "name": "36-filter-reset",
+    "build": "691",
+    "ax": "36-filter-reset.ax.txt",
+    "ax_sha256": "bca445e061a93653b8d2d59c574086c716a9bfcd53212a5bc89f5db0fda4b2b1",
+    "image": "36-filter-reset.jpg",
+    "image_sha256": "a5ae497c78f3e26394c59c696172e1dd128695b3ea5c3b3dd0358dd13e209fed"
+  },
+  {
+    "name": "37-english-restart",
+    "build": "691",
+    "ax": "37-english-restart.ax.txt",
+    "ax_sha256": "1e120b8020db55944a25586224f4d5ceea9ff97b1ee400a59ee00c0ba3d5a53b",
+    "image": "37-english-restart.jpg",
+    "image_sha256": "dedd10479a494e5d86dc14aa64a4769e2f7bf4eb60309807ba6e645faaab04f1"
+  },
+  {
+    "name": "38-recorded-playback",
+    "build": "691",
+    "ax": "38-recorded-playback.ax.txt",
+    "ax_sha256": "6c722bbec9d8fc0afc04d09e405017ea615e291f42cdb2a082375fad242cc94c",
+    "image": "38-recorded-playback.jpg",
+    "image_sha256": "1dfd6ac89561c9703a995874765dfd6f17e269e829959580880fdcc8024d23e4"
+  },
+  {
+    "name": "39-recorded-playback-paused",
+    "build": "691",
+    "ax": "39-recorded-playback-paused.ax.txt",
+    "ax_sha256": "34ba462c367601cdccbb54dc74d92bbd2e770122e6eb2b0da7ca8590776e4007",
+    "image": "39-recorded-playback-paused.jpg",
+    "image_sha256": "e6284ac1a48192d0f44b23d9ed9fecb02e4c1ae8743d03b8c69fa8c8e91eadfb"
+  },
+  {
+    "name": "40-recorded-playback-stopped",
+    "build": "691",
+    "ax": "40-recorded-playback-stopped.ax.txt",
+    "ax_sha256": "1e120b8020db55944a25586224f4d5ceea9ff97b1ee400a59ee00c0ba3d5a53b",
+    "image": "40-recorded-playback-stopped.jpg",
+    "image_sha256": "9e6b622352ec4fbf51605864c246f7fc77dd33f158d08319a8c0ae529f048e26"
+  },
+  {
+    "name": "41-pause-control-confirmed",
+    "build": "691",
+    "ax": "41-pause-control-confirmed.ax.txt",
+    "ax_sha256": "d9b795589d4443ec35b2de74b31493cd8ac17ddd26f4239c6a801fde28d1a6ae",
+    "image": "41-pause-control-confirmed.jpg",
+    "image_sha256": "8084ac600f9d558d2d286e898e936f2b8b21c7c3ebe29465b1b1e14e3bb45597"
+  },
+  {
+    "name": "42-storage-new-root",
+    "build": "691",
+    "ax": "42-storage-new-root.ax.txt",
+    "ax_sha256": "d2a590dc516543a38809b965dad66471babc8c56c41af098399ba8e1f721717a",
+    "image": "42-storage-new-root.jpg",
+    "image_sha256": "4dfe350a50febf78a4d3d63e3ea016dae92663b92f1238f0303a3d8543ea584e"
+  },
+  {
+    "name": "43-empty-import-root",
+    "build": "691",
+    "ax": "43-empty-import-root.ax.txt",
+    "ax_sha256": "8715cdfc10aabb3a3d43a2e0ad81bb61b3e6222e3ca07df438ac9846003871e0",
+    "image": "43-empty-import-root.jpg",
+    "image_sha256": "770e681e578ba19c034ef417162398f114a4acbc86cb2b3a3f849ca1f811aeda"
+  },
+  {
+    "name": "44-import-cancel-empty",
+    "build": "691",
+    "ax": "44-import-cancel-empty.ax.txt",
+    "ax_sha256": "8715cdfc10aabb3a3d43a2e0ad81bb61b3e6222e3ca07df438ac9846003871e0",
+    "image": "44-import-cancel-empty.jpg",
+    "image_sha256": "0701e6a21e35d1298b847188db154f028a58e8b9f966b37f24eeafcad962c07d"
+  },
+  {
+    "name": "45-invalid-import",
+    "build": "691",
+    "ax": "45-invalid-import.ax.txt",
+    "ax_sha256": "138cf5e1cd2de1da694e33dbc03b87484fc04a08561393409ee6c8c3a2371ecc",
+    "image": "45-invalid-import.jpg",
+    "image_sha256": "49da9f5e8ee10f11076929b513e3bd6f8c5674bf9f12bfe64e095ead3af55e2c"
+  },
+  {
+    "name": "46-new-recording-before-cancel",
+    "build": "691",
+    "ax": "46-new-recording-before-cancel.ax.txt",
+    "ax_sha256": "480d9f744ed6959b2e8d1e8d4ca8c7bfbe965a2d220ccbfb70500c4dac0809e5",
+    "image": "46-new-recording-before-cancel.jpg",
+    "image_sha256": "cacab592eb69ce4409eeaa3184ffffb789776157de822c3afb3cb3d72008dc42"
+  },
+  {
+    "name": "47-recording-cancel",
+    "build": "691",
+    "ax": "47-recording-cancel.ax.txt",
+    "ax_sha256": "138cf5e1cd2de1da694e33dbc03b87484fc04a08561393409ee6c8c3a2371ecc",
+    "image": "47-recording-cancel.jpg",
+    "image_sha256": "fc94362159aff82ff14d4a1d5a070432908a5f565fd0186c684fb881eb9fd2e1"
+  },
+  {
+    "name": "48-693-invalid-import",
+    "build": "693",
+    "ax": "48-693-invalid-import.ax.txt",
+    "ax_sha256": "66237e95bd7bda037946734228dd71eba3941fc83a3c70fc09243b0b5fc39aa3",
+    "image": "48-693-invalid-import.jpg",
+    "image_sha256": "380971b39ec4cdac43b2a07dc5578e5c524438ced45bcf0d0e09ded1c5e98401"
+  },
+  {
+    "name": "49-693-invalid-import-minimum",
+    "build": "693",
+    "ax": "49-693-invalid-import-minimum.ax.txt",
+    "ax_sha256": "556e7b139503ae2a284bdcc004d6a85f45ca73bd1e3309f251bfbe9d698a1bc6",
+    "image": "49-693-invalid-import-minimum.jpg",
+    "image_sha256": "cdfb8de99cd99a06e6fccaf89d80b696d34035ef3afba25010f5b41096bfc733"
+  },
+  {
+    "name": "50-693-local-whisper-enabled",
+    "build": "693",
+    "ax": "50-693-local-whisper-enabled.ax.txt",
+    "ax_sha256": "3775666c8ec6294d8090191452961c2bef5b57d8bf1df591c26bd1a189dbb115",
+    "image": "50-693-local-whisper-enabled.jpg",
+    "image_sha256": "0843a5557bd38b888136b92633dcecbb863b217d23d2cd9dc0abdcdba6c7d0c4"
+  },
+  {
+    "name": "51-693-import-english",
+    "build": "693",
+    "ax": "51-693-import-english.ax.txt",
+    "ax_sha256": "64b6fe95003d02a8daa3ea5848ddc6350082406e34ec1f76f348f004c41e0e0f",
+    "image": "51-693-import-english.jpg",
+    "image_sha256": "8bc3caa5276abb6d981fefd29b4ba3dbe64ee2b1ea9a1c8d09c25f50635353b8"
+  },
+  {
+    "name": "52-693-real-whisper-transcript",
+    "build": "693",
+    "ax": "52-693-real-whisper-transcript.ax.txt",
+    "ax_sha256": "7037c07d0ddd24f31e9722a0bd624d7cf42013698cd715750885737cf4a4d629",
+    "image": "52-693-real-whisper-transcript.jpg",
+    "image_sha256": "6729c0a5d32feea54737f2f815fef5b6b98d0b468bd8448a033c44fca9882697"
+  },
+  {
+    "name": "53-693-duplicate-import",
+    "build": "693",
+    "ax": "53-693-duplicate-import.ax.txt",
+    "ax_sha256": "2a8c9845d11628b492630ba8834f1e2dc44024b218884fc75e2f43e4f46be26b",
+    "image": "53-693-duplicate-import.jpg",
+    "image_sha256": "b7b4db53d8bc42625326f1e568eb5b769b099dd5d90df8fcebb680931c3ab815"
+  },
+  {
+    "name": "54-693-processing-cancel",
+    "build": "693",
+    "ax": "54-693-processing-cancel.ax.txt",
+    "ax_sha256": "268e56ff10c6e8689070e179b5a5354c0b301270a1abe362ee2315f7029636bc",
+    "image": "54-693-processing-cancel.jpg",
+    "image_sha256": "490ef5c30ac2a5f78fcf6148bfe344be26d7e6a056f6f1dd5cc57c648628cddd"
+  },
+  {
+    "name": "55-693-cancelled-result-preserved",
+    "build": "693",
+    "ax": "55-693-cancelled-result-preserved.ax.txt",
+    "ax_sha256": "8f862e49b758b685459e67bfe61c5101e98f39c5443c332da7abb6faaa2175a9",
+    "image": "55-693-cancelled-result-preserved.jpg",
+    "image_sha256": "842850210d0fdae06ce75377c91531faa3e49dfd45f1dbe2019c8834ed98eb41"
+  },
+  {
+    "name": "56-693-dismiss-notice",
+    "build": "693",
+    "ax": "56-693-dismiss-notice.ax.txt",
+    "ax_sha256": "b5caaf693780ab611c2a5d215b12700c969b1c67f70ce638ff97901d91bade28",
+    "image": "56-693-dismiss-notice.jpg",
+    "image_sha256": "00e56c0d8a504b2d7b2eb71ac90ef60eeb093f2dfdc72d9a087898e46e6d8001"
+  },
+  {
+    "name": "57-693-retry-running",
+    "build": "693",
+    "ax": "57-693-retry-running.ax.txt",
+    "ax_sha256": "26831e656cc0faeaba00fb67a46d950eec22fc2d42967078fcf15feeb1abd467",
+    "image": "57-693-retry-running.jpg",
+    "image_sha256": "db69e5a73948b5b03cd70dc5cf90dd1397ea682eced27e6d4aaaa0d2ffdd7170"
+  },
+  {
+    "name": "59-693-retry-complete",
+    "build": "693",
+    "ax": "59-693-retry-complete.ax.txt",
+    "ax_sha256": "ae69ff09c6951cdc535b3eae7bd08793cd4ae1cfb9485f847656ba917f8cd887",
+    "image": "59-693-retry-complete.jpg",
+    "image_sha256": "6dce331fabfe7b82781cb76b5aa5cae842a732805ca589564e3780e2c1b34a9d"
+  },
+  {
+    "name": "60-693-rename-saved",
+    "build": "693",
+    "ax": "60-693-rename-saved.ax.txt",
+    "ax_sha256": "1a69479f7a93c5e31f0a60e28aae4ff95d123ac97852daf89b96e7ad5a585609",
+    "image": "60-693-rename-saved.jpg",
+    "image_sha256": "2dcad280cb9a0c9dab364177a186d92ff53b26338ed55a73d83833028a873a61"
+  },
+  {
+    "name": "61-693-rename-confirmed",
+    "build": "693",
+    "ax": "61-693-rename-confirmed.ax.txt",
+    "ax_sha256": "5065a83620a36bf50fe2c0ec2d62d08bfccfab5e3a412a1620447d2cfb34f0e6",
+    "image": "61-693-rename-confirmed.jpg",
+    "image_sha256": "564c808f23b45456bd63aa5b1a3ed07bbc529e913c50330a3747055da2388973"
+  },
+  {
+    "name": "62-693-copy-readback",
+    "build": "693",
+    "ax": "62-693-copy-readback.ax.txt",
+    "ax_sha256": "ed1060afc2e412fd487c356a032304e48151ceb64fdc6ab365ed86cb1e657a59",
+    "image": "62-693-copy-readback.jpg",
+    "image_sha256": "e367681dace94947847114ed6e2cb3742ee743a8009a767cbdc34d56d1ac8683"
+  },
+  {
+    "name": "63-693-copy-transcript-text",
+    "build": "693",
+    "ax": "63-693-copy-transcript-text.ax.txt",
+    "ax_sha256": "91b5d4ea950708a016399eb7d8bb36b544216d9f35e9171c501e167ed729fe6b",
+    "image": "63-693-copy-transcript-text.jpg",
+    "image_sha256": "5b03e2827e900308d1346cfa5f72ac9803290eb5c2390aa09650a6e877b3f075"
+  },
+  {
+    "name": "64-693-delete-undo",
+    "build": "693",
+    "ax": "64-693-delete-undo.ax.txt",
+    "ax_sha256": "5065a83620a36bf50fe2c0ec2d62d08bfccfab5e3a412a1620447d2cfb34f0e6",
+    "image": "64-693-delete-undo.jpg",
+    "image_sha256": "d0dfef60889c9a7aac19b695cbdcc6bf1171cde3f18a45b0081122948327aaa3"
+  },
+  {
+    "name": "65-693-increased-contrast",
+    "build": "693",
+    "ax": "65-693-increased-contrast.ax.txt",
+    "ax_sha256": "16fdab375778a5573285974b93164c99cf2ebd6ee11dc958e73060aa2b6dc756",
+    "image": "65-693-increased-contrast.jpg",
+    "image_sha256": "7ae4036aab380eefa22383a164e8a44d0a7177e7e220e13c66a24c05b73eddcf"
+  },
+  {
+    "name": "66-694-compact-import-result",
+    "build": "694",
+    "ax": "66-694-compact-import-result.ax.txt",
+    "ax_sha256": "35be83b4790b46ed6207b66f675984a4f0341ba076e2eee7d9c2782e4f25cfaa",
+    "image": "66-694-compact-import-result.jpg",
+    "image_sha256": "85c348428362232e1648e51f1cac02c7209e10734e21f0bf06ccb72e4343610a"
+  },
+  {
+    "name": "67-694-about",
+    "build": "694",
+    "ax": "67-694-about.ax.txt",
+    "ax_sha256": "eaa541539ee65da2cff1476c90865a8170d26ebfbde1c36faf2c87e1c9a2bce3",
+    "image": "67-694-about.jpg",
+    "image_sha256": "d002ee83ac47992820cf2eca20f13dcf8f3c52a02ed84cb1046854b75b6c6492"
+  },
+  {
+    "name": "69-695-processing-notice-bottom",
+    "build": "695",
+    "ax": "69-695-processing-notice-bottom.ax.txt",
+    "ax_sha256": "fb3d328784249474a9684a3fd90fbe8890d717caa6639fdb831aa7cbd09028cd",
+    "image": "69-695-processing-notice-bottom.jpg",
+    "image_sha256": "ab502d04428a4734e3968cf97bc8731b438e5699908581124cabf736b4a2cf66"
+  },
+  {
+    "name": "70-695-import-error-bottom",
+    "build": "695",
+    "ax": "70-695-import-error-bottom.ax.txt",
+    "ax_sha256": "0800bea5e8e79dc68d2a838c9b81030afcbe603a1173ac2beeafb8fa0ab586ec",
+    "image": "70-695-import-error-bottom.jpg",
+    "image_sha256": "2e2c1e7a48eabd63afe3a9a4af82c1ca9692ffa92ff46172e2ada7d9712baaea"
+  },
+  {
+    "name": "71-695-status-narrow",
+    "build": "695",
+    "ax": "71-695-status-narrow.ax.txt",
+    "ax_sha256": "90bea3c007a49013627c3a41efc5905b10df76fdb679a59dc7556f53da6e1e81",
+    "image": "71-695-status-narrow.jpg",
+    "image_sha256": "63eb8ff95074780f7ea0632638db6f3400a6a8cc2bf31507e027f471a3bb1856"
+  },
+  {
+    "name": "72-696-status-narrow",
+    "build": "696",
+    "ax": "72-696-status-narrow.ax.txt",
+    "ax_sha256": "e5c08d6c17a0a5a931c7d7f485b92e38ceca5002bcad4cba3a4e724a68cbe32a",
+    "image": "72-696-status-narrow.jpg",
+    "image_sha256": "aaef349cc1dc6b5e80cf5fa9d860d4842aa903faf5a178531ed5589f91b89429"
+  },
+  {
+    "name": "73-696-import-dismissed",
+    "build": "696",
+    "ax": "73-696-import-dismissed.ax.txt",
+    "ax_sha256": "ec0ba713f01eb68cc9bf80b807aa389bcfcc473577588ef8ae476b909f2c7d7a",
+    "image": "73-696-import-dismissed.jpg",
+    "image_sha256": "db4077a46775ce461014de7a8940990c13a7ff55a594773b6ac1086e52e5bf05"
+  },
+  {
+    "name": "74-696-notices-dismissed",
+    "build": "696",
+    "ax": "74-696-notices-dismissed.ax.txt",
+    "ax_sha256": "eb6e3ab08b2c29cb0895bf497a309cd3b96529c4b96ee802bd8f4241568b21e8",
+    "image": "74-696-notices-dismissed.jpg",
+    "image_sha256": "74f43cdac46ac0535065f866ccb7b1174cc4c0f618db3bd5cd5ed5c60b64a17f"
+  },
+  {
+    "name": "75-696-settings-notice-bottom",
+    "build": "696",
+    "ax": "75-696-settings-notice-bottom.ax.txt",
+    "ax_sha256": "2b37fc3a4316a1f2e9997d819b5ccacd0782ee455e611fa2fc79a2a6428d0cc4",
+    "image": "75-696-settings-notice-bottom.jpg",
+    "image_sha256": "2b1f2a1b31f50014070817832d0ae0793725b915d2c2fbfc193f1f65f29ec505"
+  },
+  {
+    "name": "76-697-playback-error-bottom",
+    "build": "697",
+    "ax": "76-697-playback-error-bottom.ax.txt",
+    "ax_sha256": "1b72124474f59cc163524a7c010f77eb5ff43850641c2bf12f5d370d36341d4f",
+    "image": "76-697-playback-error-bottom.jpg",
+    "image_sha256": "94ba3b9005202b7c739b769efe72b668bd2a316e02cd02e8e17e8ae11821fd42"
+  },
+  {
+    "name": "77-697-wide-transcript",
+    "build": "697",
+    "ax": "77-697-wide-transcript.ax.txt",
+    "ax_sha256": "36847c7334da90294e0c4a96d2affad29abf397c3e7104f4525efd216c9edde5",
+    "image": "77-697-wide-transcript.jpg",
+    "image_sha256": "02ec00dc34115e4037240aeec692ebeeaf980e58b7d679bdc7354916ba377807"
+  },
+  {
+    "name": "78-697-about",
+    "build": "697",
+    "ax": "78-697-about.ax.txt",
+    "ax_sha256": "9ee2c3b734a1600700d4e394f4ced5040df74dbb57c2e4014500a8781306d99b",
+    "image": "78-697-about.jpg",
+    "image_sha256": "bf9bc1162ecb395270593cd84cd65036b4eda3cad06139e3cb89dfae57729457"
+  },
+  {
+    "name": "79-697-handoff",
+    "build": "697",
+    "ax": "79-697-handoff.ax.txt",
+    "ax_sha256": "11e9338a414b4a072fa92fb0a811d7e9c0ffdd9f43bade6c3fd65d82020e9209",
+    "image": "79-697-handoff.jpg",
+    "image_sha256": "043d4953e4c5865da406faa6023243a447dd70c2f878820b8b896fdc50856dd1"
+  }
+]

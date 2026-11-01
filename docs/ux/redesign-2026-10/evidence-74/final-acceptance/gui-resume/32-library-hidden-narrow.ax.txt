@@ -1,0 +1,173 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Показать список встреч, Value: 0, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 text 29.10.2026 12:00 · 3 мин · Приглашены: 3
+		9 text Help: UX69 Атлас — планирование, ID: meeting.title
+		10 button Копировать, Description: copy, ID: meeting.copy
+		11 button Description: Действия со встречей, ID: meeting.actions
+		12 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+		13 button Description: Воспроизвести встречу, ID: playback.play
+		14 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		15 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+			16 value indicator (settable, float) 0
+		17 text 00:00 / 03:00
+		18 image volume high
+		19 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			20 value indicator (settable, float) 1
+		21 pop up button Description: Скорость воспроизведения, Value: 1×
+		22 container meeting.studio-header
+			23 text Версия
+			24 pop up button Description: Версия расшифровки, Value: 2 · Whisper · 29 окт. 2026 г., 12:00:00, ID: transcript-versions
+			25 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Value: Кварцевый компас, Placeholder: Найти в этой встрече, ID: meeting.search
+				26 button Поиск в выбранной версии расшифровки и сводки
+				27 button cancel
+			28 text Совпадения поиска
+			29 button Description: Предыдущее совпадение, Help: Предыдущее совпадение · Shift+Enter
+			30 button Description: Следующее совпадение, Help: Следующее совпадение · Enter
+			31 button Description: Очистить поиск во встрече, Help: Очистить поиск · Escape
+			32 radio button Сводка, Value: 0, ID: meeting.result.summary
+			33 radio button Расшифровка, Value: 1, ID: meeting.result.transcript
+			34 radio button Участники, Value: 0, ID: meeting.result.participants
+		35 scroll area Secondary Actions: Scroll Up, Scroll Down
+			36 table Расшифровка и сопоставление участников
+				37 row (selectable)
+					38 cell
+						39 text Help: Анна С Очень Длинной Фамилией Тестовая, ID: transcript.speaker-name
+						40 button Description: Изменить говорящего: Анна С Очень Длинной Фамилией Тестовая, ID: speaker.edit
+						41 button 00:00, Description: Воспроизвести с 00:00, ID: transcript.playFrom
+						42 text ID: transcript.words, Value: Реплика 1. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. 
+				43 row (selectable)
+					44 cell
+						45 text Help: Борис Примеров, ID: transcript.speaker-name
+						46 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						47 button 00:10, Description: Воспроизвести с 00:10, ID: transcript.playFrom
+						48 text ID: transcript.words, Value: Реплика 2. Обсуждаем подготовку учебного проекта. Кварцевый компас нужен для проверки поиска по тексту. Нужно согласовать сроки, проверить материалы и записать решение. 
+				49 row (selectable)
+					50 cell
+						51 text Help: Вера Макетная, ID: transcript.speaker-name
+						52 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						53 button 00:20, Description: Воспроизвести с 00:20, ID: transcript.playFrom
+						54 text ID: transcript.words, Value: Реплика 3. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				55 row (selectable)
+					56 cell
+						57 text Help: Анна С Очень Длинной Фамилией Тестовая, ID: transcript.speaker-name
+						58 button Description: Изменить говорящего: Анна С Очень Длинной Фамилией Тестовая, ID: speaker.edit
+						59 button 00:30, Description: Воспроизвести с 00:30, ID: transcript.playFrom
+						60 text ID: transcript.words, Value: Реплика 4. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				61 row (selectable)
+					62 cell
+						63 text Help: Борис Примеров, ID: transcript.speaker-name
+						64 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						65 button 00:40, Description: Воспроизвести с 00:40, ID: transcript.playFrom
+						66 text ID: transcript.words, Value: Реплика 5. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				67 row (selectable)
+					68 cell
+						69 text Help: Вера Макетная, ID: transcript.speaker-name
+						70 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						71 button 00:50, Description: Воспроизвести с 00:50, ID: transcript.playFrom
+						72 text ID: transcript.words, Value: Реплика 6. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				73 row (selectable)
+					74 cell
+						75 text Help: Анна С Очень Длинной Фамилией Тестовая, ID: transcript.speaker-name
+						76 button Description: Изменить говорящего: Анна С Очень Длинной Фамилией Тестовая, ID: speaker.edit
+						77 button 01:00, Description: Воспроизвести с 01:00, ID: transcript.playFrom
+						78 text ID: transcript.words, Value: Реплика 7. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				79 row (selectable)
+					80 cell
+						81 text Help: Борис Примеров, ID: transcript.speaker-name
+						82 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						83 button 01:10, Description: Воспроизвести с 01:10, ID: transcript.playFrom
+						84 text ID: transcript.words, Value: Реплика 8. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. 
+				85 row (selectable)
+					86 cell
+						87 text Help: Вера Макетная, ID: transcript.speaker-name
+						88 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						89 button 01:20, Description: Воспроизвести с 01:20, ID: transcript.playFrom
+						90 text ID: transcript.words, Value: Реплика 9. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				91 row (selectable)
+					92 cell
+						93 text Help: Анна С Очень Длинной Фамилией Тестовая, ID: transcript.speaker-name
+						94 button Description: Изменить говорящего: Анна С Очень Длинной Фамилией Тестовая, ID: speaker.edit
+						95 button 01:30, Description: Воспроизвести с 01:30, ID: transcript.playFrom
+						96 text ID: transcript.words, Value: Реплика 10. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				97 row (selectable)
+					98 cell
+						99 text Help: Борис Примеров, ID: transcript.speaker-name
+						100 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						101 button 01:40, Description: Воспроизвести с 01:40, ID: transcript.playFrom
+						102 text ID: transcript.words, Value: Реплика 11. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				103 row (selectable)
+					104 cell
+						105 text Help: Вера Макетная, ID: transcript.speaker-name
+						106 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						107 button 01:50, Description: Воспроизвести с 01:50, ID: transcript.playFrom
+						108 text ID: transcript.words, Value: Реплика 12. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				109 row (selectable)
+					110 cell
+						111 text Help: Анна С Очень Длинной Фамилией Тестовая, ID: transcript.speaker-name
+						112 button Description: Изменить говорящего: Анна С Очень Длинной Фамилией Тестовая, ID: speaker.edit
+						113 button 02:00, Description: Воспроизвести с 02:00, ID: transcript.playFrom
+						114 text ID: transcript.words, Value: Реплика 13. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				115 row (selectable)
+					116 cell
+						117 text Help: Борис Примеров, ID: transcript.speaker-name
+						118 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						119 button 02:10, Description: Воспроизвести с 02:10, ID: transcript.playFrom
+						120 text ID: transcript.words, Value: Реплика 14. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				121 row (selectable)
+					122 cell
+						123 text Help: Вера Макетная, ID: transcript.speaker-name
+						124 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						125 button 02:20, Description: Воспроизвести с 02:20, ID: transcript.playFrom
+						126 text ID: transcript.words, Value: Реплика 15. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. 
+				127 row (selectable)
+					128 cell
+						129 text Help: Анна С Очень Длинной Фамилией Тестовая, ID: transcript.speaker-name
+						130 button Description: Изменить говорящего: Анна С Очень Длинной Фамилией Тестовая, ID: speaker.edit
+						131 button 02:30, Description: Воспроизвести с 02:30, ID: transcript.playFrom
+						132 text ID: transcript.words, Value: Реплика 16. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				133 row (selectable)
+					134 cell
+						135 text Help: Борис Примеров, ID: transcript.speaker-name
+						136 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						137 button 02:40, Description: Воспроизвести с 02:40, ID: transcript.playFrom
+						138 text ID: transcript.words, Value: Реплика 17. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				139 row (selectable)
+					140 cell
+						141 text Help: Вера Макетная, ID: transcript.speaker-name
+						142 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						143 button 02:50, Description: Воспроизвести с 02:50, ID: transcript.playFrom
+						144 text ID: transcript.words, Value: Реплика 18. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+			145 scroll bar (settable, float) 0
+				146 value indicator (settable, float) 0
+				147 increment arrow button
+				148 decrement arrow button
+				149 increment page button
+				150 decrement page button
+	151 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	152 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	153 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	154 button (disabled) Нет записи, ID: activity.recording
+	155 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	156 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	157 close button
+	158 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	159 minimize button
+160 menu bar
+	161 Verbemo Final Review
+	162 Файл
+	163 Правка
+	164 Окно
+
+The focused UI element is 6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split

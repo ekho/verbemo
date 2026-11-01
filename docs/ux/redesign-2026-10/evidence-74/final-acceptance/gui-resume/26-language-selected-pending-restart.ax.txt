@@ -1,0 +1,58 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть разделы настроек, Value: 1, ID: workspace.toggle-library
+	2 button К встречам, ID: journal.breadcrumb
+	3 text /  Общие
+	4 button Новая запись, ID: journal.new-recording
+	5 button Импорт, ID: journal.import
+	6 button Настройки, ID: journal.settings
+	7 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		8 radio button Общие, Value: 1, ID: settings.tab.general
+		9 radio button Запись, Value: 0, ID: settings.tab.recording
+		10 radio button Расшифровка, Value: 0, ID: settings.tab.transcription
+		11 radio button Сводки, Value: 0, ID: settings.tab.summary
+		12 radio button Календарь, Value: 0, ID: settings.tab.calendar
+		13 radio button Файлы и модели, Value: 0, ID: settings.tab.storage
+		14 radio button MCP, Value: 0, ID: settings.tab.mcp
+		15 radio button О Verbemo, Value: 0, ID: settings.tab.about
+		16 splitter (disabled, settable, float) 248
+		17 scroll area Secondary Actions: Scroll Up, Scroll Down
+			18 switch Description: Запуск при входе, Help: Открывать verbemo автоматически при входе в систему., Value: 0, ID: access.login.toggle
+			19 text Запуск при входе Открывать verbemo автоматически при входе в систему.
+			20 switch Description: В строке меню, Help: Волна, во время встречи рядом с ней часы, и меню со всем остальным., Value: 1, ID: icons.menu-bar
+			21 text В строке меню Волна, во время встречи рядом с ней часы, и меню со всем остальным.
+			22 switch Description: В доке, Value: 1, ID: icons.dock, Help: Оставлять значок в доке и ⌘-Tab, когда окно свёрнуто или закрыто. При открытом окне значок виден всегда.
+			23 text В доке Оставлять значок в доке и ⌘-Tab, когда окно свёрнуто или закрыто. При открытом окне значок виден всегда. Общие Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются. «Язык окон verbemo» подействует при следующем запуске verbemo. Тема
+			24 pop up button Description: Тема, Value: Тёмная, ID: interface_theme
+			25 text Системная тема следует настройке macOS. Язык окон verbemo
+			26 pop up button Description: Язык окон verbemo, Value: English, ID: interface_language
+			27 text Системный язык следует настройке macOS. Язык встреч и сводки настраивается отдельно. Подействует при следующем запуске. Открывать окно при запуске
+			28 switch Description: Открывать окно при запуске, Value: 1, ID: window
+			29 text Значок в доке открывает его в любом случае. Подействует при следующем запуске.
+			30 scroll bar (settable, float) 0
+				31 value indicator (settable, float) 0
+				32 increment arrow button
+				33 decrement arrow button
+				34 increment page button
+				35 decrement page button
+	36 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	37 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	38 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	39 button (disabled) Нет записи, ID: activity.recording
+	40 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	41 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	42 close button
+	43 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	44 minimize button
+45 menu bar
+	46 Verbemo Final Review
+	47 Файл
+	48 Правка
+	49 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

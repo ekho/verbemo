@@ -1,0 +1,38 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 text /  В обработке
+	4 button Новая запись, ID: journal.new-recording
+	5 button Импорт, ID: journal.import
+	6 button Настройки, ID: journal.settings
+	7 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		8 text Библиотека
+		9 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Placeholder: Название, расшифровка, сводка, ID: library.search
+			10 button Поиск в библиотеке: названия, расшифровки и сводки
+		11 toggle button Description: Фильтр встреч: В обработке, Value: on, ID: library.filter
+		12 text Value: Сейчас ничего не обрабатывается., ID: meeting-list.empty
+		13 button Сбросить поиск и фильтр, Description: close, ID: library.reset
+		14 splitter (disabled, settable, float) 248
+		15 text Value: Нет встреч по выбранному фильтру, ID: meeting.title
+	16 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	17 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	18 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	19 button (disabled) Нет записи, ID: activity.recording
+	20 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	21 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	22 close button
+	23 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	24 minimize button
+25 menu bar
+	26 Verbemo Final Review
+	27 Файл
+	28 Правка
+	29 Окно
+
+The focused UI element is 11 toggle button Description: Фильтр встреч: В обработке, Value: on, ID: library.filter

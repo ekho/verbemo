@@ -1,0 +1,123 @@
+Window: "Verbemo", App: Verbemo Review695.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 text Library
+		8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: processing retry, Placeholder: Title, transcript, summary, ID: library.search
+			9 button Search the library: titles, transcripts and summaries
+			10 button cancel
+		11 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		12 scroll area
+			13 table
+				14 row (selected)
+					15 cell (selected)
+						16 text UX74 processing retry fixture 2026-11-01 · 30:00
+						17 image Description: Synthetic UX74: backend unavailable, ID: meeting.list-status
+		18 splitter (disabled, settable, float) 248
+		19 text 01.11.2026 23:00 · 30 min
+		20 text Help: UX74 processing retry fixture, ID: meeting.title
+		21 button Copy, Description: copy, ID: meeting.copy
+		22 button Description: Meeting actions, ID: meeting.actions
+		23 button Description: Show or hide meeting details, Value: 1, ID: meeting.inspector
+		24 button Description: Play meeting, ID: playback.play
+		25 button (disabled) Description: Stop and return to the beginning, ID: playback.stop
+		26 slider (settable, float) Description: Meeting position, Value: 0, Details: 00:00, ID: playback.timeline
+			27 value indicator (settable, float) 0
+		28 text 00:00 / 30:00
+		29 image volume high
+		30 slider (settable, float) Description: Playback volume, Value: 1
+			31 value indicator (settable, float) 1
+		32 pop up button Description: Playback speed, Value: 1×
+		33 container meeting.studio-header
+			34 text Version
+			35 pop up button Description: Transcript version, Value: 3 · Whisper · Nov 1, 2026 at 11:03:52 PM · Diarization off, ID: transcript-versions
+			36 search text field (settable) Description: Search selected transcript and summary version, Placeholder: Find in this meeting, ID: meeting.search
+				37 button Search selected transcript and summary version
+			38 radio button Summary, Value: 0, ID: meeting.result.summary
+			39 radio button Transcript, Value: 1, ID: meeting.result.transcript
+			40 radio button Participants, Value: 0, ID: meeting.result.participants
+		41 scroll area Secondary Actions: Scroll Up, Scroll Down
+			42 table Transcript and speaker assignments (showing 0-4 of 100 items)
+				43 row (selectable)
+					44 cell
+						45 text Help: Speaker 1, ID: transcript.speaker-name
+						46 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						47 button 00:00, Description: Play from 00:00, ID: transcript.playFrom
+						48 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				49 row (selectable)
+					50 cell
+						51 text Help: Speaker 1, ID: transcript.speaker-name
+						52 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						53 button 00:02, Description: Play from 00:02, ID: transcript.playFrom
+						54 text Value: Blue Compass., ID: transcript.words
+				55 row (selectable)
+					56 cell
+						57 text Help: Speaker 1, ID: transcript.speaker-name
+						58 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						59 button 00:03, Description: Play from 00:03, ID: transcript.playFrom
+						60 text Value: 1, 2, 3., ID: transcript.words
+				61 row (selectable)
+					62 cell
+						63 text Help: Speaker 1, ID: transcript.speaker-name
+						64 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						65 button 00:05, Description: Play from 00:05, ID: transcript.playFrom
+						66 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+			67 scroll bar (settable, float) 0
+				68 value indicator (settable, float) 0
+				69 increment arrow button
+				70 decrement arrow button
+				71 increment page button
+				72 decrement page button
+		73 scroll area
+			74 text MEETING DETAILS
+			75 button Description: Close meeting details, ID: meeting.inspector-close
+			76 text CALENDAR
+			77 button Choose event…, Description: Choose calendar event, ID: calendar.choose
+			78 text PROCESSING
+			79 image Recording saved
+				80 image microphone
+				81 image selected
+			82 text Recording saved
+			83 image Synthetic UX74: backend unavailable
+				84 image plain text document
+				85 image Error
+			86 text Synthetic UX74: backend unavailable
+			87 button (disabled) Description: Transcribe again, Help: Enable transcription in settings., ID: meeting.retranscribe
+			88 image Summary was not created
+				89 image
+			90 text Summary was not created
+			91 button (disabled) Description: Regenerate summary, Help: A finished transcript is required., ID: meeting.generate-summary
+			92 text PROCESSING SETTINGS Transcription: Disabled
+Diarization: Disabled
+Summary: Disabled
+			93 button Settings →, Description: edit, ID: meeting.processing-settings
+	94 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	95 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	96 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	97 button (disabled) Not recording, ID: activity.recording
+	98 button Active: 0 · Waiting: 1, Description: Running: 0. Waiting: 1. Open processing., Help: Import · Waiting, ID: activity.queue
+	99 button Waiting, ID: activity.job
+	100 text Help: Imported 0 · 1 failed · UX74-invalid.wav: Could not open this audio file., ID: media-import.message
+	101 button Description: Dismiss notice, ID: media-import.dismiss
+	102 text ID: meeting.processing-status, Help: Whisper · failed · Diarization off: Synthetic UX74: backend unavailable Completed results are preserved.
+	103 button Description: Dismiss notice, ID: meeting.dismiss-notice
+	104 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+	105 close button
+	106 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	107 minimize button
+108 menu bar
+	109 Verbemo Review695
+	110 File
+	111 Edit
+	112 Window
+
+The focused UI element is 8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: processing retry, Placeholder: Title, transcript, summary, ID: library.search

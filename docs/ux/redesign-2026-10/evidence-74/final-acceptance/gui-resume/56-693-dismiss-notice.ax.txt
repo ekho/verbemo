@@ -1,0 +1,563 @@
+Window: "Verbemo", App: Verbemo Import693.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 text Library
+		8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: processing retry, Placeholder: Title, transcript, summary, ID: library.search
+			9 button Search the library: titles, transcripts and summaries
+			10 button cancel
+		11 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		12 scroll area
+			13 table
+				14 row (selected)
+					15 cell (selected)
+						16 text UX74 processing retry fixture 2026-11-01 · 30:00
+						17 image Description: Transcription, ID: meeting.list-status
+		18 splitter (disabled, settable, float) 248
+		19 text Imported 0 · 1 already here
+		20 text 01.11.2026 23:00 · 30 min
+		21 text Help: UX74 processing retry fixture, ID: meeting.title
+		22 button Copy, Description: copy, ID: meeting.copy
+		23 button Description: Meeting actions, ID: meeting.actions
+		24 button Description: Show or hide meeting details, Value: 0, ID: meeting.inspector
+		25 button Description: Play meeting, ID: playback.play
+		26 button (disabled) Description: Stop and return to the beginning, ID: playback.stop
+		27 slider (settable, float) Description: Meeting position, Value: 0, Details: 00:00, ID: playback.timeline
+			28 value indicator (settable, float) 0
+		29 text 00:00 / 03:00
+		30 image volume high
+		31 slider (settable, float) Description: Playback volume, Value: 1
+			32 value indicator (settable, float) 1
+		33 pop up button Description: Playback speed, Value: 1×
+		34 container meeting.studio-header
+			35 text Version
+			36 pop up button Description: Transcript version, Value: 2 · Whisper · Nov 1, 2026 at 10:59:01 PM · Diarization off, ID: transcript-versions
+			37 search text field (settable) Description: Search selected transcript and summary version, Placeholder: Find in this meeting, ID: meeting.search
+				38 button Search selected transcript and summary version
+			39 radio button Summary, Value: 0, ID: meeting.result.summary
+			40 radio button Transcript, Value: 1, ID: meeting.result.transcript
+			41 radio button Participants, Value: 0, ID: meeting.result.participants
+		42 scroll area Secondary Actions: Scroll Up, Scroll Down
+			43 table Transcript and speaker assignments
+				44 row (selectable)
+					45 cell
+						46 text Help: Speaker 1, ID: transcript.speaker-name
+						47 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						48 button 00:00, Description: Play from 00:00, ID: transcript.playFrom
+						49 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				50 row (selectable)
+					51 cell
+						52 text Help: Speaker 1, ID: transcript.speaker-name
+						53 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						54 button 00:02, Description: Play from 00:02, ID: transcript.playFrom
+						55 text Value: Blue Compass., ID: transcript.words
+				56 row (selectable)
+					57 cell
+						58 text Help: Speaker 1, ID: transcript.speaker-name
+						59 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						60 button 00:03, Description: Play from 00:03, ID: transcript.playFrom
+						61 text Value: 1, 2, 3., ID: transcript.words
+				62 row (selectable)
+					63 cell
+						64 text Help: Speaker 1, ID: transcript.speaker-name
+						65 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						66 button 00:05, Description: Play from 00:05, ID: transcript.playFrom
+						67 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				68 row (selectable)
+					69 cell
+						70 text Help: Speaker 1, ID: transcript.speaker-name
+						71 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						72 button 00:09, Description: Play from 00:09, ID: transcript.playFrom
+						73 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				74 row (selectable)
+					75 cell
+						76 text Help: Speaker 1, ID: transcript.speaker-name
+						77 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						78 button 00:11, Description: Play from 00:11, ID: transcript.playFrom
+						79 text Value: Blue Compass., ID: transcript.words
+				80 row (selectable)
+					81 cell
+						82 text Help: Speaker 1, ID: transcript.speaker-name
+						83 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						84 button 00:12, Description: Play from 00:12, ID: transcript.playFrom
+						85 text Value: 1, 2, 3., ID: transcript.words
+				86 row (selectable)
+					87 cell
+						88 text Help: Speaker 1, ID: transcript.speaker-name
+						89 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						90 button 00:14, Description: Play from 00:14, ID: transcript.playFrom
+						91 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				92 row (selectable)
+					93 cell
+						94 text Help: Speaker 1, ID: transcript.speaker-name
+						95 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						96 button 00:18, Description: Play from 00:18, ID: transcript.playFrom
+						97 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				98 row (selectable)
+					99 cell
+						100 text Help: Speaker 1, ID: transcript.speaker-name
+						101 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						102 button 00:21, Description: Play from 00:21, ID: transcript.playFrom
+						103 text Value: Blue Compass., ID: transcript.words
+				104 row (selectable)
+					105 cell
+						106 text Help: Speaker 1, ID: transcript.speaker-name
+						107 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						108 button 00:22, Description: Play from 00:22, ID: transcript.playFrom
+						109 text Value: 1, 2, 3., ID: transcript.words
+				110 row (selectable)
+					111 cell
+						112 text Help: Speaker 1, ID: transcript.speaker-name
+						113 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						114 button 00:23, Description: Play from 00:23, ID: transcript.playFrom
+						115 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				116 row (selectable)
+					117 cell
+						118 text Help: Speaker 1, ID: transcript.speaker-name
+						119 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						120 button 00:28, Description: Play from 00:28, ID: transcript.playFrom
+						121 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				122 row (selectable)
+					123 cell
+						124 text Help: Speaker 1, ID: transcript.speaker-name
+						125 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						126 button 00:30, Description: Play from 00:30, ID: transcript.playFrom
+						127 text Value: Blue Compass., ID: transcript.words
+				128 row (selectable)
+					129 cell
+						130 text Help: Speaker 1, ID: transcript.speaker-name
+						131 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						132 button 00:31, Description: Play from 00:31, ID: transcript.playFrom
+						133 text Value: 1, 2, 3., ID: transcript.words
+				134 row (selectable)
+					135 cell
+						136 text Help: Speaker 1, ID: transcript.speaker-name
+						137 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						138 button 00:33, Description: Play from 00:33, ID: transcript.playFrom
+						139 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				140 row (selectable)
+					141 cell
+						142 text Help: Speaker 1, ID: transcript.speaker-name
+						143 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						144 button 00:37, Description: Play from 00:37, ID: transcript.playFrom
+						145 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				146 row (selectable)
+					147 cell
+						148 text Help: Speaker 1, ID: transcript.speaker-name
+						149 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						150 button 00:39, Description: Play from 00:39, ID: transcript.playFrom
+						151 text Value: Blue Compass., ID: transcript.words
+				152 row (selectable)
+					153 cell
+						154 text Help: Speaker 1, ID: transcript.speaker-name
+						155 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						156 button 00:40, Description: Play from 00:40, ID: transcript.playFrom
+						157 text Value: 1, 2, 3., ID: transcript.words
+				158 row (selectable)
+					159 cell
+						160 text Help: Speaker 1, ID: transcript.speaker-name
+						161 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						162 button 00:42, Description: Play from 00:42, ID: transcript.playFrom
+						163 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				164 row (selectable)
+					165 cell
+						166 text Help: Speaker 1, ID: transcript.speaker-name
+						167 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						168 button 00:46, Description: Play from 00:46, ID: transcript.playFrom
+						169 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				170 row (selectable)
+					171 cell
+						172 text Help: Speaker 1, ID: transcript.speaker-name
+						173 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						174 button 00:49, Description: Play from 00:49, ID: transcript.playFrom
+						175 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				176 row (selectable)
+					177 cell
+						178 text Help: Speaker 1, ID: transcript.speaker-name
+						179 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						180 button 00:49, Description: Play from 00:49, ID: transcript.playFrom
+						181 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				182 row (selectable)
+					183 cell
+						184 text Help: Speaker 1, ID: transcript.speaker-name
+						185 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						186 button 00:51, Description: Play from 00:51, ID: transcript.playFrom
+						187 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				188 row (selectable)
+					189 cell
+						190 text Help: Speaker 1, ID: transcript.speaker-name
+						191 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						192 button 00:56, Description: Play from 00:56, ID: transcript.playFrom
+						193 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				194 row (selectable)
+					195 cell
+						196 text Help: Speaker 1, ID: transcript.speaker-name
+						197 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						198 button 00:58, Description: Play from 00:58, ID: transcript.playFrom
+						199 text Value: Blue Compass., ID: transcript.words
+				200 row (selectable)
+					201 cell
+						202 text Help: Speaker 1, ID: transcript.speaker-name
+						203 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						204 button 00:59, Description: Play from 00:59, ID: transcript.playFrom
+						205 text Value: Blue Compass., ID: transcript.words
+				206 row (selectable)
+					207 cell
+						208 text Help: Speaker 1, ID: transcript.speaker-name
+						209 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						210 button 00:59, Description: Play from 00:59, ID: transcript.playFrom
+						211 text Value: 1, 2, 3., ID: transcript.words
+				212 row (selectable)
+					213 cell
+						214 text Help: Speaker 1, ID: transcript.speaker-name
+						215 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						216 button 01:00, Description: Play from 01:00, ID: transcript.playFrom
+						217 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				218 row (selectable)
+					219 cell
+						220 text Help: Speaker 1, ID: transcript.speaker-name
+						221 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						222 button 01:05, Description: Play from 01:05, ID: transcript.playFrom
+						223 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				224 row (selectable)
+					225 cell
+						226 text Help: Speaker 1, ID: transcript.speaker-name
+						227 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						228 button 01:07, Description: Play from 01:07, ID: transcript.playFrom
+						229 text Value: Blue Compass., ID: transcript.words
+				230 row (selectable)
+					231 cell
+						232 text Help: Speaker 1, ID: transcript.speaker-name
+						233 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						234 button 01:08, Description: Play from 01:08, ID: transcript.playFrom
+						235 text Value: 1, 2, 3., ID: transcript.words
+				236 row (selectable)
+					237 cell
+						238 text Help: Speaker 1, ID: transcript.speaker-name
+						239 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						240 button 01:10, Description: Play from 01:10, ID: transcript.playFrom
+						241 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				242 row (selectable)
+					243 cell
+						244 text Help: Speaker 1, ID: transcript.speaker-name
+						245 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						246 button 01:14, Description: Play from 01:14, ID: transcript.playFrom
+						247 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				248 row (selectable)
+					249 cell
+						250 text Help: Speaker 1, ID: transcript.speaker-name
+						251 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						252 button 01:17, Description: Play from 01:17, ID: transcript.playFrom
+						253 text Value: Blue Compass., ID: transcript.words
+				254 row (selectable)
+					255 cell
+						256 text Help: Speaker 1, ID: transcript.speaker-name
+						257 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						258 button 01:18, Description: Play from 01:18, ID: transcript.playFrom
+						259 text Value: 1, 2, 3., ID: transcript.words
+				260 row (selectable)
+					261 cell
+						262 text Help: Speaker 1, ID: transcript.speaker-name
+						263 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						264 button 01:19, Description: Play from 01:19, ID: transcript.playFrom
+						265 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				266 row (selectable)
+					267 cell
+						268 text Help: Speaker 1, ID: transcript.speaker-name
+						269 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						270 button 01:24, Description: Play from 01:24, ID: transcript.playFrom
+						271 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				272 row (selectable)
+					273 cell
+						274 text Help: Speaker 1, ID: transcript.speaker-name
+						275 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						276 button 01:26, Description: Play from 01:26, ID: transcript.playFrom
+						277 text Value: Blue Compass., ID: transcript.words
+				278 row (selectable)
+					279 cell
+						280 text Help: Speaker 1, ID: transcript.speaker-name
+						281 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						282 button 01:27, Description: Play from 01:27, ID: transcript.playFrom
+						283 text Value: Blue Compass., ID: transcript.words
+				284 row (selectable)
+					285 cell
+						286 text Help: Speaker 1, ID: transcript.speaker-name
+						287 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						288 button 01:27, Description: Play from 01:27, ID: transcript.playFrom
+						289 text Value: 1, 2, 3., ID: transcript.words
+				290 row (selectable)
+					291 cell
+						292 text Help: Speaker 1, ID: transcript.speaker-name
+						293 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						294 button 01:28, Description: Play from 01:28, ID: transcript.playFrom
+						295 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				296 row (selectable)
+					297 cell
+						298 text Help: Speaker 1, ID: transcript.speaker-name
+						299 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						300 button 01:33, Description: Play from 01:33, ID: transcript.playFrom
+						301 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				302 row (selectable)
+					303 cell
+						304 text Help: Speaker 1, ID: transcript.speaker-name
+						305 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						306 button 01:35, Description: Play from 01:35, ID: transcript.playFrom
+						307 text Value: Blue Compass., ID: transcript.words
+				308 row (selectable)
+					309 cell
+						310 text Help: Speaker 1, ID: transcript.speaker-name
+						311 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						312 button 01:36, Description: Play from 01:36, ID: transcript.playFrom
+						313 text Value: 1, 2, 3., ID: transcript.words
+				314 row (selectable)
+					315 cell
+						316 text Help: Speaker 1, ID: transcript.speaker-name
+						317 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						318 button 01:38, Description: Play from 01:38, ID: transcript.playFrom
+						319 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				320 row (selectable)
+					321 cell
+						322 text Help: Speaker 1, ID: transcript.speaker-name
+						323 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						324 button 01:42, Description: Play from 01:42, ID: transcript.playFrom
+						325 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				326 row (selectable)
+					327 cell
+						328 text Help: Speaker 1, ID: transcript.speaker-name
+						329 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						330 button 01:45, Description: Play from 01:45, ID: transcript.playFrom
+						331 text Value: Blue Compass., ID: transcript.words
+				332 row (selectable)
+					333 cell
+						334 text Help: Speaker 1, ID: transcript.speaker-name
+						335 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						336 button 01:46, Description: Play from 01:46, ID: transcript.playFrom
+						337 text Value: 1, 2, 3., ID: transcript.words
+				338 row (selectable)
+					339 cell
+						340 text Help: Speaker 1, ID: transcript.speaker-name
+						341 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						342 button 01:48, Description: Play from 01:48, ID: transcript.playFrom
+						343 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				344 row (selectable)
+					345 cell
+						346 text Help: Speaker 1, ID: transcript.speaker-name
+						347 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						348 button 01:52, Description: Play from 01:52, ID: transcript.playFrom
+						349 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				350 row (selectable)
+					351 cell
+						352 text Help: Speaker 1, ID: transcript.speaker-name
+						353 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						354 button 01:54, Description: Play from 01:54, ID: transcript.playFrom
+						355 text Value: Blue Compass., ID: transcript.words
+				356 row (selectable)
+					357 cell
+						358 text Help: Speaker 1, ID: transcript.speaker-name
+						359 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						360 button 01:55, Description: Play from 01:55, ID: transcript.playFrom
+						361 text Value: Blue Compass., ID: transcript.words
+				362 row (selectable)
+					363 cell
+						364 text Help: Speaker 1, ID: transcript.speaker-name
+						365 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						366 button 01:55, Description: Play from 01:55, ID: transcript.playFrom
+						367 text Value: 1, 2, 3., ID: transcript.words
+				368 row (selectable)
+					369 cell
+						370 text Help: Speaker 1, ID: transcript.speaker-name
+						371 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						372 button 01:57, Description: Play from 01:57, ID: transcript.playFrom
+						373 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				374 row (selectable)
+					375 cell
+						376 text Help: Speaker 1, ID: transcript.speaker-name
+						377 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						378 button 02:01, Description: Play from 02:01, ID: transcript.playFrom
+						379 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				380 row (selectable)
+					381 cell
+						382 text Help: Speaker 1, ID: transcript.speaker-name
+						383 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						384 button 02:03, Description: Play from 02:03, ID: transcript.playFrom
+						385 text Value: Blue Compass., ID: transcript.words
+				386 row (selectable)
+					387 cell
+						388 text Help: Speaker 1, ID: transcript.speaker-name
+						389 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						390 button 02:04, Description: Play from 02:04, ID: transcript.playFrom
+						391 text Value: 1, 2, 3., ID: transcript.words
+				392 row (selectable)
+					393 cell
+						394 text Help: Speaker 1, ID: transcript.speaker-name
+						395 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						396 button 02:06, Description: Play from 02:06, ID: transcript.playFrom
+						397 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				398 row (selectable)
+					399 cell
+						400 text Help: Speaker 1, ID: transcript.speaker-name
+						401 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						402 button 02:10, Description: Play from 02:10, ID: transcript.playFrom
+						403 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				404 row (selectable)
+					405 cell
+						406 text Help: Speaker 1, ID: transcript.speaker-name
+						407 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						408 button 02:12, Description: Play from 02:12, ID: transcript.playFrom
+						409 text Value: Blue Compass., ID: transcript.words
+				410 row (selectable)
+					411 cell
+						412 text Help: Speaker 1, ID: transcript.speaker-name
+						413 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						414 button 02:13, Description: Play from 02:13, ID: transcript.playFrom
+						415 text Value: 1, 2, 3., ID: transcript.words
+				416 row (selectable)
+					417 cell
+						418 text Help: Speaker 1, ID: transcript.speaker-name
+						419 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						420 button 02:16, Description: Play from 02:16, ID: transcript.playFrom
+						421 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				422 row (selectable)
+					423 cell
+						424 text Help: Speaker 1, ID: transcript.speaker-name
+						425 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						426 button 02:20, Description: Play from 02:20, ID: transcript.playFrom
+						427 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				428 row (selectable)
+					429 cell
+						430 text Help: Speaker 1, ID: transcript.speaker-name
+						431 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						432 button 02:22, Description: Play from 02:22, ID: transcript.playFrom
+						433 text Value: Blue Compass., ID: transcript.words
+				434 row (selectable)
+					435 cell
+						436 text Help: Speaker 1, ID: transcript.speaker-name
+						437 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						438 button 02:23, Description: Play from 02:23, ID: transcript.playFrom
+						439 text Value: Blue Compass., ID: transcript.words
+				440 row (selectable)
+					441 cell
+						442 text Help: Speaker 1, ID: transcript.speaker-name
+						443 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						444 button 02:23, Description: Play from 02:23, ID: transcript.playFrom
+						445 text Value: 1, 2, 3., ID: transcript.words
+				446 row (selectable)
+					447 cell
+						448 text Help: Speaker 1, ID: transcript.speaker-name
+						449 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						450 button 02:25, Description: Play from 02:25, ID: transcript.playFrom
+						451 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				452 row (selectable)
+					453 cell
+						454 text Help: Speaker 1, ID: transcript.speaker-name
+						455 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						456 button 02:29, Description: Play from 02:29, ID: transcript.playFrom
+						457 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				458 row (selectable)
+					459 cell
+						460 text Help: Speaker 1, ID: transcript.speaker-name
+						461 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						462 button 02:31, Description: Play from 02:31, ID: transcript.playFrom
+						463 text Value: Blue Compass., ID: transcript.words
+				464 row (selectable)
+					465 cell
+						466 text Help: Speaker 1, ID: transcript.speaker-name
+						467 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						468 button 02:32, Description: Play from 02:32, ID: transcript.playFrom
+						469 text Value: 1, 2, 3., ID: transcript.words
+				470 row (selectable)
+					471 cell
+						472 text Help: Speaker 1, ID: transcript.speaker-name
+						473 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						474 button 02:34, Description: Play from 02:34, ID: transcript.playFrom
+						475 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				476 row (selectable)
+					477 cell
+						478 text Help: Speaker 1, ID: transcript.speaker-name
+						479 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						480 button 02:38, Description: Play from 02:38, ID: transcript.playFrom
+						481 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				482 row (selectable)
+					483 cell
+						484 text Help: Speaker 1, ID: transcript.speaker-name
+						485 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						486 button 02:40, Description: Play from 02:40, ID: transcript.playFrom
+						487 text Value: Blue Compass., ID: transcript.words
+				488 row (selectable)
+					489 cell
+						490 text Help: Speaker 1, ID: transcript.speaker-name
+						491 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						492 button 02:41, Description: Play from 02:41, ID: transcript.playFrom
+						493 text Value: 1, 2, 3., ID: transcript.words
+				494 row (selectable)
+					495 cell
+						496 text Help: Speaker 1, ID: transcript.speaker-name
+						497 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						498 button 02:43, Description: Play from 02:43, ID: transcript.playFrom
+						499 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				500 row (selectable)
+					501 cell
+						502 text Help: Speaker 1, ID: transcript.speaker-name
+						503 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						504 button 02:48, Description: Play from 02:48, ID: transcript.playFrom
+						505 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+				506 row (selectable)
+					507 cell
+						508 text Help: Speaker 1, ID: transcript.speaker-name
+						509 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						510 button 02:50, Description: Play from 02:50, ID: transcript.playFrom
+						511 text Value: Blue Compass., ID: transcript.words
+				512 row (selectable)
+					513 cell
+						514 text Help: Speaker 1, ID: transcript.speaker-name
+						515 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						516 button 02:51, Description: Play from 02:51, ID: transcript.playFrom
+						517 text Value: Blue Compass., ID: transcript.words
+				518 row (selectable)
+					519 cell
+						520 text Help: Speaker 1, ID: transcript.speaker-name
+						521 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						522 button 02:52, Description: Play from 02:52, ID: transcript.playFrom
+						523 text Value: 1, 2, 3., ID: transcript.words
+				524 row (selectable)
+					525 cell
+						526 text Help: Speaker 1, ID: transcript.speaker-name
+						527 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						528 button 02:53, Description: Play from 02:53, ID: transcript.playFrom
+						529 text Value: This synthetic speech was generated locally for a short recording check., ID: transcript.words
+				530 row (selectable)
+					531 cell
+						532 text Help: Speaker 1, ID: transcript.speaker-name
+						533 button (disabled) Description: Change speaker: Speaker 1, ID: speaker.edit
+						534 button 02:58, Description: Play from 02:58, ID: transcript.playFrom
+						535 text Value: Verbimo Audio Acceptance Test., ID: transcript.words
+			536 scroll bar (settable, float) 0
+				537 value indicator (settable, float) 0
+				538 increment arrow button
+				539 decrement arrow button
+				540 increment page button
+				541 decrement page button
+	542 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	543 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	544 button Access: ✓, ID: activity.access, Description: Access: ✓
+Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	545 button (disabled) Not recording, ID: activity.recording
+	546 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	547 close button
+	548 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	549 minimize button
+550 menu bar
+	551 Verbemo Import693
+	552 File
+	553 Edit
+	554 Window
+
+The focused UI element is 40 radio button Transcript, Value: 1, ID: meeting.result.transcript

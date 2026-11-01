@@ -1,0 +1,18 @@
+Window: "New recording", App: Verbemo Final Review.
+0 sheet Secondary Actions: Raise
+	1 text New recording You can close the window while recording. Audio capture follows your recording settings.
+	2 text field (settable) Description: Meeting title, Value: Recording 01.11.2026 22:23, ID: recording.new-title
+	3 button Start, Description: Screen Recording, ID: recording.start
+	4 button Cancel, Description: Close, ID: recording.cancel
+	5 button Description: Recording settings, ID: recording.settings
+6 menu bar
+	7 Verbemo Final Review
+	8 File
+	9 Edit
+	10 Window
+
+Selected text: ```
+Recording 01.11.2026 22:23
+```
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

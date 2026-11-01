@@ -1,0 +1,70 @@
+Window: "Verbemo", App: Verbemo Import693.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 text Library
+		8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: processing retry, Placeholder: Title, transcript, summary, ID: library.search
+			9 button Search the library: titles, transcripts and summaries
+			10 button cancel
+		11 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		12 scroll area
+			13 table
+				14 row (selected)
+					15 cell (selected)
+						16 text UX74 processing retry fixture 2026-11-01 · 30:00
+						17 image Description: Transcription, ID: meeting.list-status
+		18 splitter (disabled, settable, float) 248
+		19 text Imported 0 · 1 already here
+		20 scroll area Secondary Actions: Scroll Up, Scroll Down
+			21 text MEETING DETAILS
+			22 button Description: Close meeting details, ID: meeting.inspector-close
+			23 text CALENDAR
+			24 button Choose event…, Description: Choose calendar event, ID: calendar.choose
+			25 text PROCESSING
+			26 image Recording saved
+				27 image microphone
+				28 image selected
+			29 text Recording saved
+			30 image Transcription
+				31 image plain text document
+				32 image clock
+			33 text Waiting: Transcription
+			34 button Description: Transcribe again, ID: meeting.retranscribe
+			35 image Summary was not created
+				36 image
+			37 text Summary was not created
+			38 button (disabled) Description: Regenerate summary, Help: A finished transcript is required., ID: meeting.generate-summary
+			39 text PROCESSING SETTINGS Transcription: Whisper large-v3-turbo
+Diarization: Disabled
+Summary: Disabled
+			40 button Settings →, Description: edit, ID: meeting.processing-settings
+			41 scroll bar (settable, float) 0
+				42 value indicator (settable, float) 0
+				43 increment arrow button
+				44 decrement arrow button
+				45 increment page button
+				46 decrement page button
+	47 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	48 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	49 button Access: ✓, ID: activity.access, Description: Access: ✓
+Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	50 button (disabled) Not recording, ID: activity.recording
+	51 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	52 close button
+	53 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	54 minimize button
+55 menu bar
+	56 Verbemo Import693
+	57 File
+	58 Edit
+	59 Window
+
+The focused UI element is 5 button Settings, ID: journal.settings
