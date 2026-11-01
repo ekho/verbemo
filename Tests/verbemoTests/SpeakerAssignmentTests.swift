@@ -54,8 +54,14 @@ struct SpeakerAssignmentTests {
         for _ in 0..<4 { await Task.yield() }
         #expect(assigned == "anna")
         #expect(editor.choice.stringValue == title)
+        #expect(editor.choice.isAccessibilityElement())
+        #expect(editor.choice.accessibilityRole() == .comboBox)
+        #expect(editor.choice.accessibilityValue() as? String == title)
         #expect(editor.choice.makeSelectionMenu().items[1].state == .on)
         #expect(editor.choice.bounds.width == 120)
+        editor.choice.isEnabled = false
+        let button = try #require(editor.choice.accessibilityChildren()?.first as? NSAccessibilityElement)
+        #expect(!button.accessibilityPerformPress())
     }
 
     @Test("Retiring a speaker editor clears its dropdown window's accessibility parent", arguments: [false, true])
@@ -66,9 +72,7 @@ struct SpeakerAssignmentTests {
             let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1", entry: nil,
                 participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: inline)
             let cell = try #require(editor.choice.cell)
-            let popup = try #require(app.windows.first {
-                !existing.contains(ObjectIdentifier($0)) && ($0.accessibilityParent() as? NSCell) === cell
-            })
+            let popup = try #require(app.windows.first { !existing.contains(ObjectIdentifier($0)) })
             return (popup, cell)
         }
         // Keep the old cell alive so a regression reports the dangling link instead of crashing the suite.

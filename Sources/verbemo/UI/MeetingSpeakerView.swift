@@ -23,7 +23,7 @@ final class SpeakerAssignmentChoice: NSComboBox {
     }
     override func accessibilityPerformShowMenu() -> Bool {
         guard isEnabled else { return false }
-        showSelectionMenu()
+        Task { @MainActor [weak self] in self?.showSelectionMenu() }
         return true
     }
     func makeSelectionMenu() -> NSMenu {
@@ -66,22 +66,23 @@ final class SpeakerAssignmentChoice: NSComboBox {
             setAccessibilityIdentifier("speaker.options")
         }
         override func accessibilityPerformPress() -> Bool {
-            let owner = owner
-            return MainActor.assumeIsolated { owner?.accessibilityPerformShowMenu() ?? false }
+            guard isAccessibilityEnabled(), let owner else { return false }
+            Task { @MainActor [weak owner] in owner?.showSelectionMenu() }
+            return true
         }
     }
 
     override init(frame frameRect: NSRect) {
         let existing = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
         super.init(frame: frameRect)
-        dropdownWindows = NSApp.windows.filter {
-            !existing.contains(ObjectIdentifier($0)) && ($0.accessibilityParent() as? NSCell) === cell
-        }
+        setAccessibilityElement(true)
+        setAccessibilityRole(.comboBox)
+        dropdownWindows = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     isolated deinit {
-        // AppKit can keep hidden dropdown windows after releasing their unretained AX parent cell.
+        // AppKit can keep hidden dropdown windows after releasing their unretained AX parent.
         for window in dropdownWindows { window.setAccessibilityParent(nil) }
     }
 }
