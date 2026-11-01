@@ -1,0 +1,65 @@
+[
+  {
+    "file": "00-about.jpg",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "87faa0a961f80d4ee161fb0e940b7f220e1ec0a66c41b6b64fc80792a58dd288",
+    "ax_sha256": "87d1209dac4611b77979b737eaadd748a040fb953c6e94b8bc6c6ca0fc89fedf"
+  },
+  {
+    "file": "01-search-match.jpg",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "482cb5300df7e6a8d72f06282cd5e99518980a1b0fc7faf891a43a43379e49d3",
+    "ax_sha256": "af233ebb54a1a9172c3f690444c790a8cf81f413e8ed2b219feebd9e6cce5113"
+  },
+  {
+    "file": "02-version-menu.jpg",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "7398081c451276859a12898a40869b9cebd48a68ed6bc560cc554ac5bcd70917",
+    "ax_sha256": "93a74fdd7ce5d9cb5a22f4f30607dfd43c796f4c2a60983b4b30a453f1c3d08a"
+  },
+  {
+    "file": "03-filter-popover.jpg",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "cc3ebcd013740c4ba94b9ce97dc71e08f5f72ac69b657563a21446ebfed08f2a",
+    "ax_sha256": "89fa03b7ccc3b0df28510a3c801f94f4781d41d5534cd04eddaa4527180ded9c"
+  },
+  {
+    "file": "04-inputs-light.jpg",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "26c8d728f1b5323baaaa7089c11a101e97d3eaf2a506ccf5498e06541138bb09",
+    "ax_sha256": "6dec387bb8017ebbdabef6d9fb0a2911236370f54e83ab2fb9110d8feee5976a"
+  },
+  {
+    "file": "05-inputs-narrow.jpg",
+    "width": 1960,
+    "height": 1256,
+    "sha256": "4faed092568d0fdbe57ecf327f6e148a279d7465a04c25594100ad5089cc1b28",
+    "ax_sha256": "4ce3b61f2473d092e1a2d7227fdc3db04e6656f9a68e6df3be5b041292defa0d"
+  },
+  {
+    "file": "06-inputs-minimum.jpg",
+    "width": 1520,
+    "height": 1256,
+    "sha256": "15e404100cdc10ec337b012cd8997473ac39d2b8d212623a8d20c3a4848b2798",
+    "ax_sha256": "4ce3b61f2473d092e1a2d7227fdc3db04e6656f9a68e6df3be5b041292defa0d"
+  },
+  {
+    "file": "07-inputs-dark.jpg",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "d10012d28d20e27739c82e47542db9bb2105a49ea09875070a8f8e9440fc4518",
+    "ax_sha256": "6ce8719048e05c595137fb3a080af0581e580f604a714ec7beb680f751358a70"
+  },
+  {
+    "file": "08-handoff-light.jpg",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "f2544bf0ef6fbb09ccbdce03c6e2d46d76ef55234e02fe8b6625409bbc7dbda5",
+    "ax_sha256": "6ce8719048e05c595137fb3a080af0581e580f604a714ec7beb680f751358a70"
+  }
+]

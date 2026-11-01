@@ -1,12 +1,12 @@
 {
-  "status": "meeting actions moved in DebugReview679; awaiting user acceptance; initial redraw issue open",
+  "status": "input controls unified in DebugReview682; awaiting user acceptance; initial transcript redraw issue open",
   "started_at": "2026-11-01T15:02:31.891166+03:00",
-  "source_commit": "2dc140937789f49dd132996b2395822715fcab91",
+  "source_commit": "d288a8b1a9320446891c9983cb530740c10853cd",
   "version": "0.17.2",
-  "build": "679",
-  "executable_sha256": "c86031b88a5ce27a49c4dceb8d8a8553ffe4d595c56d6d9a3ebf97a8a4e7e4de",
+  "build": "682",
+  "executable_sha256": "578358c2067646fdbe31c8d0b250ee47144c5701122363bcbb8284f50b685673",
   "sdk_at_build": "27.0",
-  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-meeting-actions/home",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home",
   "fixture_meetings": 206,
   "baseline_files": 433,
   "human_results": [
@@ -47,9 +47,21 @@
       "feedback": "Move meeting-related controls from global toolbar into the meeting near its title",
       "evidence": "meeting-actions/00-user-request.png",
       "result": "change requested; implemented679, repeat feedback pending"
+    },
+    {
+      "scenario": "input control styling",
+      "date": "2026-11-01",
+      "candidate_build": "679",
+      "feedback": [
+        "filter button and search same height",
+        "version picker needs border and background",
+        "use library search appearance for meeting search, with previous meeting field height"
+      ],
+      "evidence": "input-controls/00-user-request.png",
+      "result": "implemented682; repeat feedback pending"
     }
   ],
-  "pending_scenario": "human acceptance of local meeting actions; investigate initial incomplete transcript draw; final universal build on latest source",
+  "pending_scenario": "human acceptance of input controls; investigate initial incomplete transcript draw; final universal build on latest source",
   "runtime": {
     "macos": "26.7.1",
     "architecture": "arm64",
@@ -78,13 +90,14 @@
   "handoff_screen": {
     "meeting": "UX69 Атлас — планирование",
     "version": "2 · Whisper",
-    "tab": "transcript",
+    "tab": "summary",
     "theme": "light",
     "library": "visible",
-    "inspector": "hidden",
+    "inspector": "visible",
     "recording": false,
     "queue": 0,
-    "meeting_actions": "beside meeting title"
+    "meeting_actions": "beside meeting title",
+    "window_width_pt": 1340
   },
   "previous_candidates": [
     {
@@ -100,7 +113,14 @@
       "build": "677",
       "executable_sha256": "a184a5ab496792aaf0c2ca1c917ed329de8e9bf8c7cf8b44b6458a1432e62459",
       "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-insets/home"
+    },
+    {
+      "source_commit": "2dc140937789f49dd132996b2395822715fcab91",
+      "version": "0.17.2",
+      "build": "679",
+      "executable_sha256": "c86031b88a5ce27a49c4dceb8d8a8553ffe4d595c56d6d9a3ebf97a8a4e7e4de",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-meeting-actions/home"
     }
   ],
-  "candidate_kind": "arm64 Debug ad-hoc UI review; assets/helpers from Review677"
+  "candidate_kind": "arm64 Debug ad-hoc UI review; existing packaged assets/helpers"
 }
