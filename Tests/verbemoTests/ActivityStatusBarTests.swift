@@ -4,6 +4,56 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct ActivityStatusBarTests {
+    @Test("Settings and import notices share the bottom row without expanding a narrow window", .freshHome)
+    func simultaneousServiceNoticesFit() throws {
+        try FileManager.default.createDirectory(at: Home.current.configDirectory, withIntermediateDirectories: true)
+        try Data("{\"synthetic_status_fixture\":true}".utf8).write(to: Home.current.configFile)
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination() }
+        app.navigate(.general)
+        app.updateConfigProblem("Synthetic configuration problem\nMore detail")
+        var result = MediaImportCoordinator.Result()
+        result.failures = [.init(source: URL(fileURLWithPath: "/tmp/fixture.wav"),
+                                 message: String(repeating: "Synthetic import failure. ", count: 20))]
+        app.finishImport(result)
+        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        let notice = try #require(bar.allDescendants.first { $0.identifier?.rawValue == "settings.notice" } as? NSTextField)
+        #expect(!notice.isHidden)
+        #expect(notice.toolTip?.contains("synthetic_status_fixture") == true)
+        #expect(!app.settings.content(for: .general).allDescendants.contains { $0 === notice })
+        for width in [760.0, 1340.0] {
+            app.panel.setContentSize(.init(width: width, height: 600))
+            app.panel.contentView?.layoutSubtreeIfNeeded()
+            #expect(bar.frame.height == 36)
+            #expect(abs(bar.frame.width - width) < 1)
+            #expect(notice.frame.width > 0)
+            let frame = notice.convert(notice.bounds, to: bar)
+            #expect(frame.minX >= 0 && frame.maxX <= bar.bounds.width)
+        }
+    }
+
+    @Test("Import and configuration messages use the persistent status row", .freshHome)
+    func serviceMessagesUseStatusRow() throws {
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination() }
+        app.updateConfigProblem("Synthetic configuration problem")
+        app.updateImport(.init(source: URL(fileURLWithPath: "/tmp/fixture.wav"),
+                               index: 1, total: 1, stage: .normalizing, fraction: 0.5))
+        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        let progress = try #require(app.panel.contentView?.allDescendants.first { $0 is MediaImportStatusView })
+        #expect(bar.allDescendants.contains { $0 === progress })
+        #expect(bar.allDescendants.compactMap { $0 as? NSTextField }.contains {
+            $0.stringValue == "Synthetic configuration problem"
+        })
+        app.finishImport(.init())
+        app.navigate(.general)
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(bar.frame.height == 36)
+        #expect(bar.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Imported 0" })
+        #expect(!app.isVisible, "Status updates must not reveal a hidden window")
+    }
+
     @Test(.freshHome)
     func globalQueueAndWarningsClearUnrelatedSearch() throws {
         let app = ApplicationWindow()

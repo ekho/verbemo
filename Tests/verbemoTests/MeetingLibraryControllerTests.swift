@@ -57,7 +57,7 @@ struct MeetingLibraryControllerTests {
         app.panel.setContentSize(.init(width: 760, height: 600))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let before = try Self.fileSnapshot(dir)
-        let notice = try #require(library.contentView.allDescendants.first {
+        let notice = try #require(app.panel.contentView?.allDescendants.first {
             $0.identifier?.rawValue == "meeting.result-notice"
         })
         let close = try #require(notice.allDescendants.first {
@@ -72,7 +72,9 @@ struct MeetingLibraryControllerTests {
         let closeFrame = close.convert(close.bounds, to: notice)
         #expect(abs(notice.bounds.maxX - closeFrame.maxX - 6) < 2,
                 "The notice close button belongs at the trailing edge even when the message is short")
-        #expect(notice.superview?.allDescendants.contains { $0.identifier?.rawValue == "meeting.result-tabs" } == true)
+        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        #expect(bar.allDescendants.contains { $0 === notice })
+        #expect(!library.contentView.allDescendants.contains { $0 === notice })
         #expect(close.sendAction(close.action, to: close.target))
         library.refresh(); await library.settled()
         #expect(notice.isHiddenOrHasHiddenAncestor)
@@ -98,7 +100,7 @@ struct MeetingLibraryControllerTests {
         app.show()
         app.panel.setContentSize(.init(width: 1340, height: 600))
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let notice = try #require(library.contentView.allDescendants.first {
+        let notice = try #require(app.panel.contentView?.allDescendants.first {
             $0.identifier?.rawValue == "meeting.result-notice"
         })
         let close = try #require(notice.allDescendants.first {
@@ -154,7 +156,8 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         defer { _ = library.stopForTermination(); app.hide() }
-        let notice = try #require(library.contentView.allDescendants.first {
+        app.libraryProvider = { library }
+        let notice = try #require(app.panel.contentView?.allDescendants.first {
             $0.identifier?.rawValue == "meeting.result-notice"
         })
         #expect(!notice.isHiddenOrHasHiddenAncestor)

@@ -307,13 +307,18 @@ struct SpeakerAssignmentTests {
             entry: .init(name: "Original", source: .manual),
             participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: false)
         var attempts = 0
+        var errors = 0
+        let reported = Gate()
+        editor.onError = { _ in errors += 1; reported.open() }
         editor.onAssign = { _, _ in attempts += 1; throw CocoaError(.fileWriteUnknown) }
         editor.choice.selectItem(at: 1)
         editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
         editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
         await Task.yield()
+        await reported.pass()
         #expect(editor.choice.stringValue == "Anna · anna")
         #expect(attempts == 1)
+        #expect(errors == 1)
     }
     @Test func popoverDraftRequiresApplyAndSurvivesErrors() {
         let draft = SpeakerAssignmentPopover(speaker: "them A", title: "Speaker A", entry: nil,
@@ -377,12 +382,15 @@ struct SpeakerAssignmentTests {
         let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker", entry: nil,
             participants: [], canEdit: true, inline: false)
         editor.onAssign = { _, _ in throw CocoaError(.fileWriteUnknown) }
+        var errors = 0
+        editor.onError = { _ in errors += 1 }
         editor.choice.stringValue = "Failed draft"
         editor.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
         editor.choice.stringValue = "Newer input"
         editor.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
         await Task.yield()
         #expect(editor.choice.stringValue == "Newer input")
+        #expect(errors == 0)
     }
 
 }

@@ -8,6 +8,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
     var loadEvents: Loader?
     var resolveEvent: Resolver?
     var onSelect: ((CalendarWatcher.Meeting?) throws -> Void)?
+    var onError: ((Error) -> Void)?
     let button = NSButton()
     let clear = NSButton()
     let search = NSSearchField()
@@ -193,7 +194,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
     }
     private func present(_ error: Error) {
         show(error)
-        if !popover.isShown, let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
+        if !popover.isShown { onError?(error) }
     }
     func numberOfRows(in tableView: NSTableView) -> Int { meetings.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {

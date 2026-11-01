@@ -20,7 +20,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     ] }
 
     var onImportFiles: (([URL]) -> Void)?
-    var onCancelImport: (() -> Void)?
     var onResumeDiarization: (@MainActor (URL, DiarizationState.Request) async throws -> Void)?
     var onRetryDiarization: ((URL) async throws -> Void)?
     var onSkipDiarization: ((URL) async throws -> Void)?
@@ -73,8 +72,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let pipeline = NSStackView()
     private let route = NSTextField(wrappingLabelWithString: "")
     private let cancelProcessingButton = NSButton()
-    private let processingStatus = NSTextField(wrappingLabelWithString: "")
-    private let resultNotice = JournalSurface(StudioStyle.inset)
+    private let processingStatus = NSTextField(labelWithString: "")
+    private let resultNotice = NSView()
     private let dismissNotice = NSButton()
     private var noticeKey = ""
     private var noticeDismissed = false
@@ -150,7 +149,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let detailMeta = NSTextField(labelWithString: "")
     private let detailTitle = NSTextField(labelWithString: "")
     private let titleDoubleClick = NSClickGestureRecognizer()
-    private let detailError = NSTextField(wrappingLabelWithString: "")
+    private let detailError = NSTextField(labelWithString: "")
     private var renamingSession: URL?
     private let diarizationLabel = NSTextField(labelWithString: "")
     private let retryDiarizationButton = NSButton()
@@ -346,7 +345,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let summaryText = NSTextView()
     private let transcriptText = NSTextView()
     private let busyLabel = NSTextField(labelWithString: "")
-    private let importStatus = MediaImportStatusView()
 
     private var items: [SessionInventory.Item] = []
     private var selected: SessionInventory.Item? {
@@ -363,6 +361,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     var mcpPendingDeletion: Set<String> { Set(allItems.filter { deletion.isPending($0.dir) }.map { $0.dir.lastPathComponent }) }
     private let deletionNotice = NSStackView()
     private let deletionLabel = NSTextField(labelWithString: "")
+    var serviceViews: [NSView] { [detailError, resultNotice, deletionNotice, busyLabel] }
     private var undoDeletionID: UUID?
     var isProcessing: Bool { working || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
@@ -370,6 +369,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var summaryDirectory: URL?
     private var working = false {
         didSet {
+            if working {
+                detailError.isHidden = true
+                detailError.stringValue = ""
+                detailError.toolTip = nil
+            }
             if oldValue != working { showDetail() }
             onActivityChange?()
         }
@@ -388,6 +392,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         ) { [weak self] _ in MainActor.assumeIsolated { self?.table.reloadData() } }, center: NSWorkspace.shared.notificationCenter)
         contentView = buildLayout()
         meetingTranscript.onPlayFrom = { [weak self] seconds in self?.audioPlayer.play(from: seconds) }
+        meetingTranscript.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
+        calendarPicker.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
         // Populate the first view synchronously; later scans run off the main thread.
         show(SessionInventory.scan(root: root))
         processingCancellation.onChange = { [weak self] in
@@ -467,6 +473,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private func buildLayout() -> NSView {
         busyLabel.font = .systemFont(ofSize: 11)
         busyLabel.textColor = .secondaryLabelColor
+        busyLabel.isHidden = true
+        busyLabel.identifier = .init("meeting.work-status")
         diarizationLabel.font = .systemFont(ofSize: 11)
         diarizationLabel.textColor = .secondaryLabelColor
         diarizationLabel.lineBreakMode = .byWordWrapping
@@ -491,6 +499,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         processingStatus.identifier = .init("meeting.processing-status")
         processingStatus.font = .systemFont(ofSize: 11)
         processingStatus.textColor = StudioStyle.muted
+        processingStatus.lineBreakMode = .byTruncatingTail
         resultNotice.identifier = .init("meeting.result-notice")
         resultNotice.isHidden = true
         dismissNotice.identifier = .init("meeting.dismiss-notice")
@@ -502,11 +511,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         dismissNotice.setAccessibilityLabel(dismissNotice.toolTip)
         dismissNotice.target = self
         dismissNotice.action = #selector(dismissResultNotice)
-        dismissNotice.widthAnchor.constraint(equalToConstant: 28).isActive = true
-        dismissNotice.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        dismissNotice.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        dismissNotice.heightAnchor.constraint(equalToConstant: 22).isActive = true
         let noticeRow = NSStackView(views: [processingStatus, dismissNotice])
         noticeRow.distribution = .fill
-        noticeRow.alignment = .top
+        noticeRow.alignment = .centerY
         noticeRow.spacing = 8
         processingStatus.setContentHuggingPriority(.defaultLow, for: .horizontal)
         processingStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -515,8 +524,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         NSLayoutConstraint.activate([
             noticeRow.leadingAnchor.constraint(equalTo: resultNotice.leadingAnchor, constant: 10),
             noticeRow.trailingAnchor.constraint(equalTo: resultNotice.trailingAnchor, constant: -6),
-            noticeRow.topAnchor.constraint(equalTo: resultNotice.topAnchor, constant: 8),
-            noticeRow.bottomAnchor.constraint(equalTo: resultNotice.bottomAnchor, constant: -8),
+            noticeRow.topAnchor.constraint(equalTo: resultNotice.topAnchor),
+            noticeRow.bottomAnchor.constraint(equalTo: resultNotice.bottomAnchor),
         ])
         retryDiarizationButton.identifier = .init("diarization.retry")
         skipDiarizationButton.identifier = .init("diarization.skip")
@@ -580,8 +589,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         titleDoubleClick.action = #selector(beginRenamingMeeting)
         detailTitle.addGestureRecognizer(titleDoubleClick)
         detailError.textColor = .systemOrange
-        detailError.font = .systemFont(ofSize: 12)
+        detailError.font = .systemFont(ofSize: 11)
         detailError.isHidden = true
+        detailError.identifier = .init("meeting.operation-error")
+        detailError.lineBreakMode = .byTruncatingTail
+        detailError.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         calendarView.setContentHuggingPriority(.required, for: .vertical)
         titleRow.spacing = 12
         detailTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -621,7 +633,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         header.sizingOptions = [.intrinsicContentSize]
         header.identifier = .init("meeting.studio-header")
         meetingHeader = header
-        let detail = NSStackView(views: [detailMeta, titleRow, detailError, openActiveButton, audioPlayer, header, resultNotice, detailTabs, busyLabel])
+        let detail = NSStackView(views: [detailMeta, titleRow, openActiveButton, audioPlayer, header, detailTabs])
         detail.orientation = .vertical
         detail.distribution = .fill
         detail.alignment = .leading
@@ -682,7 +694,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         detailMeta.stringValue = [MeetingPresentation.date(item.started), duration, invited].compactMap { $0 }.joined(separator: " · ")
         calendarView.onOpen = { [weak self] in
             guard let self, let metadata, let reason = CalendarEventOpener.open(metadata) else { return }
-            let alert = NSAlert(); alert.messageText = reason; alert.beginJournalSheetModal(for: self.panel)
+            self.showServiceError(reason)
         }
 
     }
@@ -901,8 +913,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         guard let dir = renamingSession, let item = selected, item.dir == dir else { cancelTitleEdit(); return }
         let title = detailTitle.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
-            detailError.stringValue = localised("Enter a meeting name.", "Введите название встречи.")
-            detailError.isHidden = false
+            showServiceError(localised("Enter a meeting name.", "Введите название встречи."))
             return
         }
         do {
@@ -912,15 +923,15 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             detailTitle.abortEditing()
             reload()
         }
-        catch { detailError.stringValue = error.localizedDescription; detailError.isHidden = false }
+        catch { showServiceError(error.localizedDescription) }
     }
     private func cancelTitleEdit() {
+        if renamingSession != nil { detailError.isHidden = true }
         renamingSession = nil
         titleDoubleClick.isEnabled = true
         detailTitle.isEditable = false
         detailTitle.isBezeled = false
         detailTitle.drawsBackground = false
-        detailError.isHidden = true
         detailTitle.stringValue = selected.map { $0.title ?? $0.name } ?? ""
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -981,15 +992,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         libraryReadingPosition = nil
         table.deselectAll(nil)
         show([])
-        reload()
-    }
-
-    func updateImport(_ update: MediaImportCoordinator.Update) {
-        importStatus.update(update)
-    }
-
-    func finishImport(_ result: MediaImportCoordinator.Result) {
-        importStatus.finish(result)
         reload()
     }
 
@@ -1369,6 +1371,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let editor = SpeakerAssignmentEditor(speaker: sample.label, title: title,
             entry: SpeakerNames.isUnknown(sample.label) ? nil : names?.speakers[sample.label],
             participants: participants, canEdit: canEdit, inline: false)
+        editor.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
         editor.onAssign = { [weak self] participant, name in
             guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
             try self.assignSpeaker(sample.label, participant: participant, name: name, session: session, version: dir, expectedTranscript: transcriptData)
@@ -1664,11 +1667,15 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     /// sentence saying what happened to it.
     private func say(_ sentence: String, about item: SessionInventory.Item) {
         guard !terminating else { return }
-        let alert = NSAlert()
-        alert.messageText = item.title ?? item.name
-        alert.informativeText = sentence
-        alert.addButton(withTitle: localised("OK", "Ладно"))
-        alert.beginJournalSheetModal(for: panel)
+        showServiceError((item.title ?? item.name) + ": " + sentence)
+    }
+
+    private func showServiceError(_ message: String) {
+        guard !terminating else { return }
+        detailError.stringValue = message.split(whereSeparator: \.isNewline).joined(separator: " ")
+        detailError.toolTip = message
+        detailError.isHidden = false
+        NSAccessibility.post(element: detailError, notification: .valueChanged)
     }
 
     private func confirmRetranscription(engine: String?) {
@@ -1736,11 +1743,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                 guard let textEdit = NSWorkspace.shared.urlForApplication(
                     withBundleIdentifier: "com.apple.TextEdit"
                 ) else {
-                    let alert = NSAlert()
-                    alert.messageText = localised(
-                        "Could not open the transcript", "Не удалось открыть расшифровку")
-                    alert.informativeText = file.path
-                    alert.beginJournalSheetModal(for: self.panel)
+                    self.showServiceError(localised(
+                        "Could not open the transcript", "Не удалось открыть расшифровку") + ": " + file.path)
                     return
                 }
                 NSWorkspace.shared.open(
@@ -1748,7 +1752,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                     configuration: NSWorkspace.OpenConfiguration()
                 ) { _, error in
                     if let error {
-                        Task { @MainActor in NSAlert(error: error).beginJournalSheetModal(for: self.panel, completionHandler: nil) }
+                        Task { @MainActor in self.showServiceError(error.localizedDescription) }
                     }
                 }
             })
@@ -1814,14 +1818,14 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                     self.deletionNotice.isHidden = true
                     self.onActivityChange?()
                     self.reload()
-                    if case .failure(let error) = result { NSAlert(error: error).beginJournalSheetModal(for: self.panel) }
+                    if case .failure(let error) = result { self.showServiceError(error.localizedDescription) }
                 }
                 undoDeletionID = id
                 deletionLabel.stringValue = localised("Meeting deleted", "Встреча удалена")
                 deletionNotice.isHidden = false
                 onActivityChange?()
                 show(allItems)
-            } catch { NSAlert(error: error).beginJournalSheetModal(for: panel, completionHandler: nil) }
+            } catch { showServiceError(error.localizedDescription) }
         }
     }
 
@@ -2079,23 +2083,21 @@ private extension MeetingLibraryController {
         journalColumns = columns
         columns.onResize = { [weak self] in self?.updateCompactLayout() }
         columns.setContentHuggingPriority(.init(1), for: .vertical)
-        importStatus.onCancel = { [weak self] in self?.onCancelImport?() }
         let undo = NSButton(title: localised("Undo", "Отменить"), target: self, action: #selector(undoDeletion))
         undo.image = NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
         undo.imagePosition = .imageLeading
         deletionNotice.setViews([deletionLabel, undo], in: .center)
+        deletionNotice.identifier = .init("meeting.deletion-notice")
         deletionNotice.spacing = 10
-        deletionNotice.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)
+        deletionNotice.alignment = .centerY
+        deletionLabel.lineBreakMode = .byTruncatingTail
+        deletionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        undo.bezelStyle = .inline
+        undo.controlSize = .small
         deletionNotice.isHidden = true
-        let content = NSStackView(views: [importStatus, columns, deletionNotice])
-        content.orientation = .vertical
-        content.distribution = .fill
-        content.spacing = 0
-        content.alignment = .leading
-        for view in content.arrangedSubviews { view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true }
         let container = MediaDropView()
         container.onFiles = { [weak self] in self?.onImportFiles?($0) }
-        let frame = Self.frameOwnedPane(content)
+        let frame = Self.frameOwnedPane(columns)
         frame.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(frame)
         NSLayoutConstraint.activate([
@@ -2115,7 +2117,9 @@ private extension MeetingLibraryController {
         guard !processingCancellation.isCancelling else { return }
         noticeDismissed = true
         resultNotice.isHidden = true
-        panel.makeFirstResponder(resultPicker.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.state == .on })
+        if contentView.window === panel {
+            panel.makeFirstResponder(resultPicker.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.state == .on })
+        }
     }
 
     private func updateCancellationControls() {
@@ -2162,8 +2166,10 @@ private extension MeetingLibraryController {
         if noticeKey != key { noticeKey = key; noticeDismissed = false }
         resultNotice.isHidden = message.isEmpty || noticeDismissed
         dismissNotice.isHidden = cancelling
-        if processingStatus.stringValue != message {
-            processingStatus.stringValue = message
+        let line = message.split(whereSeparator: \.isNewline).joined(separator: " ")
+        if processingStatus.stringValue != line || processingStatus.toolTip != message {
+            processingStatus.stringValue = line
+            processingStatus.toolTip = message
             NSAccessibility.post(element: processingStatus, notification: .valueChanged)
         }
     }

@@ -84,6 +84,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     let link = SpeakerLinkButton()
     let choice = SpeakerAssignmentChoice()
     var onAssign: ((CalendarParticipant?, String?) throws -> Void)?
+    var onError: ((Error) -> Void)?
     var onSubmit: (() -> Void)?
     var onCancel: (() -> Void)?
     private let participants: [CalendarParticipant]
@@ -245,12 +246,13 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             let draft = participant.map(Self.title) ?? manual ?? ""
             failedDraft = (draft, participant, manual)
             reverting = true
-            // Let AppKit finish dismissing its dropdown before presenting an error.
+            // Let AppKit finish dismissing its dropdown before reporting an error.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if failedDraft?.text == draft { choice.stringValue = draft }
+                let current = failedDraft?.text == draft
+                if current { choice.stringValue = draft }
                 reverting = false
-                if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
+                if current { onError?(error) }
             }
         }
     }

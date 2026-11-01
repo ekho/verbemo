@@ -10,6 +10,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
     private let name = NSTextField()
     let meetingActionsHost = NSStackView()
     private var savedTitle = ""
+    var onError: ((String?) -> Void)?
     var title: String {
         get { savedTitle }
         set {
@@ -99,9 +100,10 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         do {
             try onRename?(proposed)
             title = proposed
+            onError?(nil)
         } catch {
             name.stringValue = savedTitle
-            if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
+            onError?(error.localizedDescription)
         }
     }
 }

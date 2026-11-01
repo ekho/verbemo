@@ -258,13 +258,13 @@ struct JournalProcessingCancellationTests {
         library.onActivityChange = { if operations.snapshot().isEmpty { finished.open() } }
         let cancel = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
             .first { $0.identifier?.rawValue == "meeting.cancel-processing" })
-        let status = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTextField }
+        let status = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSTextField }
             .first { $0.identifier?.rawValue == "meeting.processing-status" })
         #expect(cancel.sendAction(cancel.action, to: cancel.target))
         await cancelled.pass()
         #expect(!cancel.isEnabled)
         #expect(status.stringValue == "Cancelling…")
-        let close = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+        let close = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
             .first { $0.identifier?.rawValue == "meeting.dismiss-notice" })
         #expect(close.isHidden, "An active cancellation stays visible until cleanup finishes")
         #expect(SessionClaim.isHeld(a))

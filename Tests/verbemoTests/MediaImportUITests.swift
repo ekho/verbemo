@@ -15,9 +15,11 @@ struct MediaImportUITests {
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.show()
-        library.finishImport(.init())
+        app.finishImport(.init())
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let progress = try #require(app.panel.contentView?.allDescendants.first { $0 is MediaImportStatusView })
+        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        #expect(bar.allDescendants.contains { $0 === progress })
         #expect(progress.frame.height <= 44)
         app.panel.setContentSize(.init(width: 760, height: 600))
         app.panel.contentView?.layoutSubtreeIfNeeded()
@@ -36,7 +38,7 @@ struct MediaImportUITests {
         let label = try #require(view.arrangedSubviews.compactMap { $0 as? NSTextField }.first)
         let bar = try #require(view.arrangedSubviews.compactMap { $0 as? NSProgressIndicator }.first)
         #expect(label.frame.height <= 20)
-        #expect(label.frame.minX >= 12 && label.frame.maxX <= view.bounds.width - 12)
+        #expect(label.frame.minX >= 0 && label.frame.maxX <= view.bounds.width)
         #expect(!label.stringValue.contains("\n"))
         #expect(label.toolTip?.contains(result.failures[0].message) == true)
         #expect(bar.isHidden)
@@ -57,7 +59,7 @@ struct MediaImportUITests {
         #expect(requests == 2)
     }
 
-    @Test("Live import progress finishes in the main window and hides cancellation", .freshHome)
+    @Test("Live import progress finishes in the status row with a dismiss action", .freshHome)
     @MainActor
     func importProgressCompletesInPlace() throws {
         let app = ApplicationWindow()
@@ -76,10 +78,13 @@ struct MediaImportUITests {
         cancel.performClick(nil)
         #expect(requests == 1)
         app.finishImport(.init())
-        #expect(cancel.isHidden)
+        #expect(!cancel.isHidden && cancel.image != nil && cancel.title.isEmpty)
         #expect(progress.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Imported 0" })
         #expect(progress.window === panel)
         #expect(!panel.isVisible, "Progress must not reopen the window")
+        cancel.performClick(nil)
+        #expect(progress.isHidden)
+        #expect(requests == 1, "Dismissal must not cancel another import")
     }
 
     @Test("Import progress names the file and its place in a multi-file queue")

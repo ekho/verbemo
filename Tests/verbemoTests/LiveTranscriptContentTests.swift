@@ -12,17 +12,21 @@ struct LiveTranscriptContentTests {
         var requests: [Bool] = []
         content.onToggleLive = { requests.append($0) }
         content.updateLive(.init(isRecording: true, isEnabled: true, entries: [], status: .modelMissing))
-        let download = try #require(content.contentView.allDescendants.compactMap { $0 as? NSButton }
+        let download = try #require(content.serviceViews.compactMap { $0 as? NSButton }
             .first { $0.identifier?.rawValue == "live.download" })
-        #expect(!download.isHidden)
+        #expect(download.isHidden == !Platform.supportsLocalModels)
         #expect(download.title == "Скачать модель")
         #expect(NSApp.sendAction(try #require(download.action), to: download.target, from: download))
         #expect(requests == [true])
         content.updateLive(.init(isRecording: true, isEnabled: false, entries: [], status: .paused))
         #expect(download.isHidden)
         content.updateLive(.init(isRecording: true, isEnabled: true, entries: [], status: .error("Offline")))
-        #expect(!download.isHidden)
+        #expect(download.isHidden == !Platform.supportsLocalModels)
         #expect(download.title == "Повторить")
+        let status = try #require(content.serviceViews.compactMap { $0 as? NSTextField }
+            .first { $0.identifier?.rawValue == "activity.live-status" })
+        #expect(status.stringValue.contains("Расшифровка на лету"))
+        #expect(status.toolTip?.contains("Offline") == true)
         content.updateLive(.init(isRecording: false, isEnabled: true, entries: [], status: .idle))
         #expect(download.isHidden)
     }

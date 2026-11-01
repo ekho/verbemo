@@ -4,11 +4,11 @@ import AppKit
 final class SpeakerAssignmentPopover: NSViewController {
     let editor: SpeakerAssignmentEditor
     var onAssign: ((CalendarParticipant?, String?) throws -> Void)?
+    var onError: ((Error) -> Void)?
     var onDismiss: (() -> Void)?
     private var draft: (CalendarParticipant?, String?)
     private var completed = false
     private var hasChanges = false
-    private let errorLabel = NSTextField(wrappingLabelWithString: "")
 
     init(speaker: String, title: String, entry: SpeakerNames.Entry?, participants: [CalendarParticipant], canEdit: Bool) {
         editor = SpeakerAssignmentEditor(speaker: speaker, title: title, entry: entry,
@@ -39,10 +39,7 @@ final class SpeakerAssignmentPopover: NSViewController {
         cancel.keyEquivalent = "\u{1b}"
         let actions = NSStackView(views: [NSView(), cancel, save])
         actions.spacing = 8
-        errorLabel.textColor = .systemRed
-        errorLabel.isHidden = true
-        errorLabel.setAccessibilityRole(.staticText)
-        let stack = NSStackView(views: [scope, editor, errorLabel, actions])
+        let stack = NSStackView(views: [scope, editor, actions])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
@@ -64,9 +61,7 @@ final class SpeakerAssignmentPopover: NSViewController {
             onDismiss?()
             return true
         } catch {
-            errorLabel.stringValue = error.localizedDescription
-            errorLabel.isHidden = false
-            preferredContentSize = NSSize(width: 380, height: max(180, view.fittingSize.height))
+            onError?(error)
             return false
         }
     }

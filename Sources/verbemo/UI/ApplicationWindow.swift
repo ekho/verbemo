@@ -32,6 +32,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private lazy var live = LiveTranscriptContent()
     private lazy var liveView: LiveTranscriptView = {
         let view = LiveTranscriptView(content: live.contentView)
+        view.onError = { [weak self] in self?.activityBar.reportError($0) }
         view.readAudioLevels = { [weak self] in self?.readAudioLevels?() ?? (.off, .off) }
         view.onRename = { [weak self] name in
             guard let self, let rename = self.onRenameRecording else { throw CocoaError(.fileNoSuchFile) }
@@ -44,6 +45,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
     var onRenameRecording: ((String) throws -> Void)?
     private var settingsBuilt = false
+    private var settingsServiceViews: [NSView] = []
     var mcp: MCPController? { didSet { if settingsBuilt { settings.mcp = mcp } } }
     private var stopping = false
     lazy var settings: SettingsController = {
@@ -52,6 +54,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         settings.mcp = mcp
         settings.isProcessing = { [weak self] in self?.isProcessing?() == true }
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
+        settingsServiceViews = settings.serviceViews
+        activityBar.setServiceViews(live.serviceViews + (libraryProvider?()?.serviceViews ?? []) + settingsServiceViews)
         return settings
     }()
     private lazy var about = AboutPage()
@@ -73,7 +77,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     var onToggleLive: ((Bool) -> Void)? { didSet { live.onToggleLive = onToggleLive } }
     var onChooseImport: (() -> Void)?
     var onImportFiles: (([URL]) -> Void)? { didSet { live.onImportFiles = onImportFiles } }
-    var onCancelImport: (() -> Void)? { didSet { live.onCancelImport = onCancelImport } }
+    var onCancelImport: (() -> Void)? { didSet { activityBar.onCancelImport = onCancelImport } }
     var recordingTitle: String {
         get { recordingBar.title }
         set { recordingBar.title = newValue; liveView.title = newValue }
@@ -222,6 +226,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         panel.contentMinSize = NSSize(width: 760, height: 600)
         panel.setFrameAutosaveName("name.ekho.verbemo.workspace")
         if panel.frame.origin == .zero { panel.center() }
+        activityBar.setServiceViews(live.serviceViews)
         navigate(.allMeetings)
     }
     @objc private func primaryRecordClicked() { newRecording() }
@@ -320,6 +325,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     }
     private func connectLibrary() {
         guard let library = libraryProvider?() else { return }
+        activityBar.setServiceViews(live.serviceViews + library.serviceViews + settingsServiceViews)
         library.activeRecordingView = liveView
         if navigation.destination.isMeetings { sidebar.mount(library.listContentView) }
         library.setMeetingSelectionActive(navigation.destination.isMeetings)
@@ -512,12 +518,10 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     func updateLivePreference(enabled: Bool) { live.updateLivePreference(enabled: enabled) }
     func updateConfigProblem(_ headline: String?) { live.updateConfigProblem(headline) }
     func updateImport(_ update: MediaImportCoordinator.Update) {
-        live.updateImport(update)
-        activityBar.updateImport(MediaImportPresentation.progress(update))
+        activityBar.showImport(update)
     }
     func finishImport(_ result: MediaImportCoordinator.Result) {
-        activityBar.updateImport(nil)
-        live.finishImport(result)
+        activityBar.finishImport(result)
         libraryProvider?()?.sessionsChanged()
     }
     func startRecording() {
@@ -541,6 +545,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         guard !stopping else { return }
         guard !recordingBarIsVisible, panel.attachedSheet == nil else { return }
         let sheet = NewRecordingSheet(calendarEnabled: Config.useCalendar(), loadCalendar: recordingCalendar)
+        sheet.calendarPicker.onError = { [weak self] error in self?.activityBar.reportError(error.localizedDescription) }
         if let calendarSearch { sheet.calendarPicker.loadEvents = calendarSearch }
         sheet.calendarPicker.resolveEvent = calendarResolve
         recordingSheet = sheet

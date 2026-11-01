@@ -5,6 +5,7 @@ import AppKit
 final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableViewDelegate {
     var onPlayFrom: ((TimeInterval) -> Void)?
     var onAssign: ((String, CalendarParticipant?, String?) throws -> Void)?
+    var onError: ((Error) -> Void)?
     struct ReadingPosition { let segment: Int; let offset: CGFloat }
     private var searchRanges: [Int: [NSRange]] = [:]
     private var focusedSearch: (segment: Int, range: NSRange)?
@@ -172,6 +173,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
             let editor = SpeakerAssignmentPopover(speaker: segment.speaker, title: title, entry: currentEntry,
                                                   participants: choices, canEdit: editable)
             editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
+            editor.onError = self.onError
             return editor
         }
         cell.updateWidth(tableView.tableColumns[0].width)

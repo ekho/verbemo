@@ -77,6 +77,7 @@ final class ActivityStatusBar: NSStackView {
     var onJob: ((URL?) -> Void)?
     var onAccess: ((ApplicationNavigationState.Destination) -> Void)?
     var onAttention: (() -> Void)?
+    var onCancelImport: (() -> Void)?
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
     private let automatic = NSSwitch()
     private let autoLabel = NSButton()
@@ -86,6 +87,9 @@ final class ActivityStatusBar: NSStackView {
     private let job = NSButton()
     private let warning = NSButton()
     private let spinner = NSProgressIndicator()
+    private let serviceContent = NSStackView()
+    private let importStatus = MediaImportStatusView()
+    private let serviceError = NSTextField(labelWithString: "")
     private let mic = AudioLevelView(title: localised("Microphone", "Микрофон"), source: "status-mic", compact: true)
     private let system = AudioLevelView(title: localised("System", "Система"), source: "status-system", compact: true)
     private let levels = NSStackView()
@@ -144,7 +148,20 @@ final class ActivityStatusBar: NSStackView {
         job.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         job.setContentHuggingPriority(.init(1), for: .horizontal)
         recording.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        setViews([auto, access, recording, levels, queue, spinner, job, warning], in: .center)
+        serviceContent.orientation = .horizontal
+        serviceContent.alignment = .centerY
+        serviceContent.spacing = 8
+        serviceContent.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        serviceContent.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        importStatus.onCancel = { [weak self] in self?.onCancelImport?() }
+        serviceError.font = .systemFont(ofSize: 11)
+        serviceError.textColor = .systemOrange
+        serviceError.lineBreakMode = .byTruncatingTail
+        serviceError.isHidden = true
+        serviceError.identifier = .init("activity.error")
+        serviceError.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setServiceViews([])
+        setViews([auto, access, recording, levels, queue, spinner, job, serviceContent, warning], in: .center)
         updateAutomatic(false, reason: nil)
         updateRecording(.idle, elapsed: nil)
         updateAccess(.init(microphone: .unknown, systemAudio: nil, calendar: nil))
@@ -202,6 +219,26 @@ final class ActivityStatusBar: NSStackView {
         importProgress = progress
         refreshJob()
     }
+    func setServiceViews(_ views: [NSView]) {
+        serviceContent.setViews([importStatus, serviceError] + views, in: .center)
+        for view in serviceContent.arrangedSubviews {
+            view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+    }
+    func reportError(_ message: String?) {
+        serviceError.stringValue = message?.split(whereSeparator: \.isNewline).joined(separator: " ") ?? ""
+        serviceError.toolTip = message
+        serviceError.isHidden = message == nil
+        NSAccessibility.post(element: serviceError, notification: .valueChanged)
+    }
+    func showImport(_ update: MediaImportCoordinator.Update) {
+        importStatus.update(update)
+        updateImport(MediaImportPresentation.progress(update))
+    }
+    func finishImport(_ result: MediaImportCoordinator.Result) {
+        importStatus.finish(result)
+        updateImport(nil)
+    }
     private func refreshJob() {
         let current = work.current
         currentSession = current?.session
@@ -216,6 +253,7 @@ final class ActivityStatusBar: NSStackView {
         job.toolTip = text
         job.setAccessibilityLabel(text)
         job.isEnabled = current != nil
+        job.isHidden = current?.kind == .importMedia && importProgress != nil && !importStatus.isHidden
     }
 
     func updateAttention(count: Int, detail: String?) {

@@ -19,7 +19,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     private var deletionTask: Task<Void, Never>?
     private var emailLookupTask: Task<Void, Never>?
     private var pages: [ApplicationNavigationState.Destination: NSView] = [:]
-    private var pageNotices: [NSTextField] = []
+    private let serviceNotice = NSTextField(labelWithString: "")
+    var serviceViews: [NSView] { [serviceNotice] }
+    private var operationNotice = ""
     private var providerRows: [(SettingsSchema.Entry, NSView)] = []
     private var configWatch: ConfigWatch.Token?
     private var rows: [Row] = []
@@ -41,6 +43,12 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         setup = SetupForm(mode: .settings, calendar: calendar)
         calendarSelection = CalendarSettingsView(calendar: calendar)
         super.init()
+        serviceNotice.textColor = .systemOrange
+        serviceNotice.font = .systemFont(ofSize: 11)
+        serviceNotice.lineBreakMode = .byTruncatingTail
+        serviceNotice.isHidden = true
+        serviceNotice.identifier = .init("settings.notice")
+        serviceNotice.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         mcpSettings.onError = { [weak self] message in
             guard let self, mcpNotice != message else { return }
             mcpNotice = message
@@ -128,14 +136,6 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             scope.maximumNumberOfLines = 0
             form.insertArrangedSubview(scope, at: 1)
             scope.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
-            let notice = NSTextField(wrappingLabelWithString: "")
-            notice.textColor = .systemOrange
-            notice.font = .systemFont(ofSize: 12)
-            notice.isHidden = true
-            notice.identifier = .init("settings.notice")
-            pageNotices.append(notice)
-            form.insertArrangedSubview(notice, at: 0)
-            notice.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             let entries = SettingsSchema.sections.flatMap(\.entries).filter {
                 SettingsPage.destination(for: $0.path) == destination
                     && $0.path.first != "mcp"
@@ -377,12 +377,13 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     @objc private func deleteModelClicked(_ sender: NSButton) {
         guard shownModels.indices.contains(sender.tag), panel.attachedSheet == nil else { return }
         let model = shownModels[sender.tag]
+        operationNotice = ""
         if let reason = modelDeletionReason(model) {
-            let alert = NSAlert()
-            alert.messageText = reason
-            alert.beginJournalSheetModal(for: panel)
+            operationNotice = reason
+            refresh()
             return
         }
+        refresh()
         let previewChoice = TranscriptionChoice.read(
             engine: Config.transcriptionEngine(), cloudProvider: Config.transcriptionCloudProvider(),
             enabled: Config.transcriptionEnabled(), localModels: Platform.supportsLocalModels,
@@ -404,9 +405,8 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             guard panel.attachedSheet == nil,
                   await alert.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
             if let reason = modelDeletionReason(model) {
-                let failure = NSAlert()
-                failure.messageText = reason
-                failure.beginJournalSheetModal(for: panel, completionHandler: nil)
+                operationNotice = reason
+                refresh()
                 return
             }
             do {
@@ -429,9 +429,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                     selectedDiarizationModel: Config.diarizationModel())
                 for update in updates { Config.update(path: update.path, value: update.value) }
             } catch {
-                let failed = NSAlert(error: error)
-                failed.messageText = localised("Couldn't delete \(model.name)", "Не удалось удалить \(model.name)")
-                failed.beginJournalSheetModal(for: panel, completionHandler: nil)
+                operationNotice = localised("Couldn't delete \(model.name)", "Не удалось удалить \(model.name)")
+                    + ": " + error.localizedDescription
+                refresh()
             }
             refreshModels()
             setup.refresh()
@@ -678,13 +678,12 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         let stray = SettingsSchema.strayKeys(in: config)
         let strayNotice = stray.isEmpty ? ""
             : localised("Not read by this version: ", "Эта версия не читает: ") + stray.joined(separator: ", ")
-        let notices = (Config.problems().map(\.explanation) + [restartNotice, strayNotice, mcpNotice])
+        let notices = (Config.problems().map(\.explanation) + [restartNotice, strayNotice, mcpNotice, operationNotice])
             .filter { !$0.isEmpty }.joined(separator: "\n")
         refreshModels()
-        for notice in pageNotices {
-            notice.stringValue = notices
-            notice.isHidden = notices.isEmpty
-        }
+        serviceNotice.stringValue = notices.split(whereSeparator: \.isNewline).joined(separator: " · ")
+        serviceNotice.toolTip = notices
+        serviceNotice.isHidden = notices.isEmpty
         for (entry, view) in providerRows { view.isHidden = !providerIsSelected(entry.path) }
         mcpSettings.refresh()
     }
