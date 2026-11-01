@@ -60,7 +60,7 @@ struct SpeakerAssignmentTests {
         #expect(editor.choice.makeSelectionMenu().items[1].state == .on)
         #expect(editor.choice.bounds.width == 120)
         editor.choice.isEnabled = false
-        let button = try #require(editor.choice.cell?.accessibilityChildren()?.first as? NSButton)
+        let button = try #require(editor.choice.cell?.accessibilityChildren()?.first as? NSButtonCell)
         #expect(!button.accessibilityPerformPress())
     }
 

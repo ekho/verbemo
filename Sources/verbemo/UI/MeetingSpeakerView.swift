@@ -66,7 +66,7 @@ final class SpeakerAssignmentChoice: NSComboBox {
         addSubview(menuButton)
         // Keep the native editable AX cell and replace only its disclosure action.
         menuButton.setAccessibilityParent(cell)
-        cell?.setAccessibilityChildren([menuButton])
+        cell?.setAccessibilityChildren(NSAccessibility.unignoredChildren(from: [menuButton]))
         dropdownWindows = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
