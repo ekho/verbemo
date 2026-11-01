@@ -1,0 +1,12 @@
+{
+  "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+  "kind": "Debug arm64 preflight",
+  "build": "667",
+  "version": "0.17.2",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-final/Verbemo Studio Debug.app",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-final/home",
+  "fixtures": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-final/recordings",
+  "executable_sha256": "6445cfdf7af4f5de0750f731603def36a2656a46f0d0bbd009160ff2ca092725",
+  "fixture_files": 430,
+  "fixture_meetings": 205
+}

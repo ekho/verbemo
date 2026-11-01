@@ -1,0 +1,156 @@
+{
+  "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+  "kind": "Debug arm64 preflight",
+  "checks": [
+    {
+      "check": "sanitized settings general wide",
+      "pass": true
+    },
+    {
+      "check": "sanitized settings recording wide",
+      "pass": true
+    },
+    {
+      "check": "sanitized settings transcription wide",
+      "pass": true
+    },
+    {
+      "check": "sanitized settings summary wide",
+      "pass": true
+    },
+    {
+      "check": "sanitized settings calendar wide",
+      "pass": true
+    },
+    {
+      "check": "sanitized settings storage wide",
+      "pass": true
+    },
+    {
+      "check": "sanitized settings mcp wide",
+      "pass": true
+    },
+    {
+      "check": "sanitized settings about wide",
+      "pass": true
+    },
+    {
+      "check": "edited recording draft Cancel returns to meeting without capture",
+      "pass": true
+    },
+    {
+      "check": "Import opens native picker directly; Escape cancels with queue zero",
+      "pass": true
+    },
+    {
+      "check": "recording title edited and read back before Cancel",
+      "pass": true
+    },
+    {
+      "check": "failed result visible outside inspector; close hides notice only",
+      "pass": true
+    }
+  ],
+  "shots": [
+    {
+      "name": "04-settings-overview-minimum-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "05-settings-mcp-minimum-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "06-settings-general-minimum-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "01-settings-general-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "02-settings-recording-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "02-settings-transcription-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "02-settings-summary-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "03-settings-calendar-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "03-settings-storage-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "03-settings-mcp-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "03-settings-about-wide-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "07-recording-draft-minimum-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "08-edited-draft-before-cancel",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "09-synthetic-import-complete-minimum-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "10-result-failure-visible-minimum-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    },
+    {
+      "name": "11-result-failure-dismissed-minimum-ru-light",
+      "kind": "Debug arm64 preflight",
+      "source": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667"
+    }
+  ],
+  "findings": [
+    "notice close button does not align to trailing edge",
+    "search available without finished text"
+  ]
+}
