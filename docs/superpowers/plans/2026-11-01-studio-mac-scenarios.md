@@ -41,10 +41,10 @@
 
 ### Task 3: B3 new and current recording
 **Files:** NewRecordingSheet.swift, ApplicationWindow.swift/RecordingBar.swift only if gaps remain; NewRecordingSheetTests.swift, RecordingWorkspaceTests.swift.
-- [ ] RED explicit event selection overwrites a manually edited draft; delayed initial suggestion does not. Preserve calendar filtering, access/unavailable/empty/error states and start-time revalidation.
-- [ ] Implement the accepted distinction using existing picker callbacks; title remains full width. Cancel creates nothing.
-- [ ] Verify one active session, pause/stop/open current controls across library/settings/hide/show using synthetic callbacks. No real microphone/calendar authorization or capture.
-- [ ] GREEN recording/calendar tests; commit fix(ui): honor explicit calendar titles for new recordings.
+- [x] RED explicit event selection overwrites a manually edited draft; delayed initial suggestion does not. Preserve calendar filtering, access/unavailable/empty/error states and start-time revalidation.
+- [x] Implement the accepted distinction using existing picker callbacks; title remains full width. Cancel creates nothing.
+- [x] Verify one active session, pause/stop/open current controls across library/settings/hide/show using synthetic callbacks. No real microphone/calendar authorization or capture.
+- [x] GREEN recording/calendar tests; commit fix(ui): honor explicit calendar titles for new recordings.
 
 ### Task 4: B4 results and processing
 **Files:** MeetingLibraryController.swift, shared native action-image helper only if needed; relevant meeting/action/cancellation tests.

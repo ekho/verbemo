@@ -65,7 +65,7 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
         }
         calendarPicker.onSelect = { [weak self] meeting in
             self?.calendarPicker.setSelection(meeting)
-            self?.eventChanged()
+            self?.eventChanged(replacingDraft: meeting != nil)
             self?.note.isHidden = true
             self?.resize()
         }
@@ -170,10 +170,10 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
     }
     func settled() async { await loadTask?.value }
     var selectedMeeting: CalendarWatcher.Meeting? { calendarPicker.selectedMeeting }
-    @objc private func eventChanged() {
+    private func eventChanged(replacingDraft: Bool = false) {
         let eventTitle = selectedMeeting?.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let nextTitle = eventTitle?.isEmpty == false ? eventTitle! : fallbackTitle
-        if name.stringValue == suggestedTitle || name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if replacingDraft || name.stringValue == suggestedTitle || name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             name.stringValue = nextTitle
         }
         suggestedTitle = nextTitle
