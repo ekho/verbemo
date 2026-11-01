@@ -17,7 +17,7 @@ final class SidebarView: JournalSurface {
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    func mountLibrary(_ view: NSView) {
+    func mount(_ view: NSView) {
         guard view.superview !== libraryHost else { return }
         libraryHost.subviews.forEach { $0.removeFromSuperview() }
         view.translatesAutoresizingMaskIntoConstraints = false

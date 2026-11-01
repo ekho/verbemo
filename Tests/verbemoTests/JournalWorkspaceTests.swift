@@ -73,8 +73,9 @@ struct JournalWorkspaceTests {
         #expect(search.stringValue == "Planning")
         #expect(versions.indexOfSelectedItem == 0)
         app.navigate(.general)
-        table.selectRowIndexes([1], byExtendingSelection: false)
-        _ = NSApp.sendAction(try #require(table.action), to: table.target, from: table)
+        #expect(library.listContentView.window == nil, "Settings categories replace the library")
+        let back = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "journal.breadcrumb" } as? NSButton)
+        #expect(back.sendAction(back.action, to: back.target))
         #expect(app.navigation.destination == .allMeetings)
         #expect(table.selectedRow == 1)
         #expect(settings.state == .off)
@@ -445,7 +446,7 @@ struct JournalWorkspaceTests {
         #expect(!title.isHiddenOrHasHiddenAncestor)
     }
 
-    @Test(.freshHome) func journalKeepsLibraryAndRecordingControlsWhileInSettings() throws {
+    @Test(.freshHome) func settingsKeepCategoriesAndGlobalRecordingControls() throws {
         let app = ApplicationWindow()
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
@@ -455,13 +456,14 @@ struct JournalWorkspaceTests {
         app.navigate(.general)
         let views = try #require(app.panel.contentView).allDescendants
         let sidebar = try #require(views.first { $0 is SidebarView })
-        #expect(sidebar.allDescendants.contains { $0 is MeetingTableView })
+        #expect(!sidebar.allDescendants.contains { $0 is MeetingTableView })
+        #expect(sidebar.allDescendants.contains { $0.identifier?.rawValue == "settings.categories" })
         let bar = try #require(views.first { $0.identifier?.rawValue == "recording-bar" })
         app.panel.contentView?.layoutSubtreeIfNeeded()
         #expect(!bar.isHiddenOrHasHiddenAncestor)
         let rect = bar.convert(bar.bounds, to: app.panel.contentView)
         #expect(rect.midY > app.panel.contentLayoutRect.height / 2, "Recording controls stay above the document")
-        #expect(views.contains { $0.identifier?.rawValue == "settings.navigation" && !$0.isHiddenOrHasHiddenAncestor })
+        #expect(views.contains { $0.identifier?.rawValue == "settings.categories" && !$0.isHiddenOrHasHiddenAncestor })
     }
 
     @Test(.freshHome, .speaking(.russian)) func sectionBreadcrumbsNavigateAndThereIsNoIdleFooter() throws {
@@ -482,9 +484,9 @@ struct JournalWorkspaceTests {
         #expect(search.stringValue.isEmpty)
         app.navigate(.calendar)
         let settings = try crumb()
-        #expect(settings.title == "Настройки")
+        #expect(settings.title == "К встречам")
         _ = NSApplication.shared.sendAction(try #require(settings.action), to: settings.target, from: settings)
-        #expect(app.navigation.destination == .general)
+        #expect(app.navigation.destination == .allMeetings)
         let texts = app.panel.contentView?.allDescendants.compactMap { ($0 as? NSTextField)?.stringValue } ?? []
         #expect(!texts.contains("Запись не идёт"))
         #expect(!texts.contains("Файлы в папке встреч"))

@@ -27,9 +27,9 @@
 **Files:** ApplicationWindow.swift, SidebarView.swift; SettingsNavigationTests.swift, JournalWorkspaceTests.swift.
 **Consumes:** existing navigation destinations, SidebarView host, library reading-context owner from B1.
 **Produces:** wide settings categories in place of the meeting list; explicit return to the previous meeting; narrow category overview then selected page with a return to all categories. Native window/split sizing remains owned by AppKit.
-- [ ] RED native wide/narrow navigation, context return, categories/meeting selection exclusivity, resizing and hidden-library preference. Replace legacy test assumptions that expose the library while settings categories occupy its place.
-- [ ] Implement category presentation and return using existing destinations/controls; preserve direct links to recording/calendar/MCP and global recording/queue.
-- [ ] GREEN navigation/workspace/recording/library tests; commit feat(ui): organize Studio settings navigation.
+- [x] RED native wide/narrow navigation, context return, categories/meeting selection exclusivity, resizing and hidden-library preference. Replace legacy test assumptions that expose the library while settings categories occupy its place.
+- [x] Implement category presentation and return using existing destinations/controls; preserve direct links to recording/calendar/MCP and global recording/queue.
+- [x] GREEN navigation/workspace/recording/library tests; commit feat(ui): organize Studio settings navigation.
 
 ### Task 2: B2 settings style and scope
 **Files:** JournalStyle.swift, StudioStyle.swift, SettingsController.swift, SetupLayout.swift where needed; focused settings/schema/model/MCP tests.
