@@ -95,6 +95,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var libraryHits: [URL: MeetingLibrarySearch.Hit]?
     private var librarySearchPending = false
     private var libraryUnreadable = 0
+    private var libraryNavigationFailed = false
     private var libraryQuery: String { search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) }
     private let emptyLabel = NSTextField(wrappingLabelWithString: "")
     private let clearSearch = NSButton()
@@ -272,6 +273,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         guard currentSearchContext == displayedSearchContext, !meetingSearchHits.isEmpty else { return }
         let count = meetingSearchHits.count
         let index = meetingSearchIndex.map { ($0 + (forward ? 1 : count - 1)) % count } ?? (forward ? 0 : count - 1)
+        revealMeetingSearchHit(at: index)
+    }
+    private func revealMeetingSearchHit(at index: Int) {
         meetingSearchIndex = index
         syncMeetingSearchHeader()
         let hit = meetingSearchHits[index]
@@ -702,10 +706,33 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     @objc private func copyFromMenu(_ sender: NSMenuItem) {
         copyMeetingContent(transcript: sender.tag >= 2, plainText: sender.tag % 2 == 0)
     }
-    @objc private func searchChanged() { restartLibrarySearch() }
+    @objc private func searchChanged() { libraryNavigationFailed = false; restartLibrarySearch() }
     @objc private func meetingClicked() {
         if let selected, selected.dir == activeRecording?.dir { onOpenActiveRecording?(); return }
+        revealLibraryHit()
         onSelectMeeting?()
+    }
+    private func revealLibraryHit() {
+        guard let item = selected, let hit = libraryHits?[item.dir],
+              hit.source == .transcript || hit.source == .summary else { return }
+        guard MeetingLibrarySearch.isCurrent(hit, in: item.dir) else { restartLibrarySearch(); return }
+        versionSession = nil
+        versionKey = nil
+        showDetail()
+        guard artifactDirectory == item.dir, currentSearchContext != nil,
+              MeetingLibrarySearch.isCurrent(hit, in: item.dir) else {
+            libraryNavigationFailed = true
+            restartLibrarySearch()
+            return
+        }
+        setMeetingSearchQuery(hit.query)
+        let tab = hit.source == .summary ? "summary" : "transcript"
+        guard let index = meetingSearchHits.firstIndex(where: { $0.tab == tab && $0.segment == hit.segment }) else {
+            libraryNavigationFailed = true
+            restartLibrarySearch()
+            return
+        }
+        revealMeetingSearchHit(at: index)
     }
     @objc private func openActiveRecording() { onOpenActiveRecording?() }
     @objc private func moreClicked(_ sender: NSButton) {
@@ -866,6 +893,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     /// Show another recordings folder: the one Setup has just moved verbemo to.
     func setRoot(_ folder: URL) {
         root = folder
+        libraryNavigationFailed = false
         table.deselectAll(nil)
         show([])
         reload()
@@ -934,6 +962,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         libraryHits = nil
         libraryUnreadable = 0
         librarySearchPending = !libraryQuery.isEmpty
+        if libraryQuery.isEmpty { libraryNavigationFailed = false }
     }
 
     private func restartLibrarySearch() {
@@ -979,7 +1008,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         reload()
     }
 
-    func refresh() { reload() }
+    func refresh() { libraryNavigationFailed = false; reload() }
 
     func activityTitle(for dir: URL) -> String {
         activityTitles[dir] ?? dir.lastPathComponent
@@ -1020,7 +1049,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         scroll.isHidden = items.isEmpty
         clearSearch.isHidden = libraryQuery.isEmpty && meetingFilter == .allMeetings
         librarySearchStatus.stringValue = librarySearchPending ? localised("Searching…", "Поиск…")
-            : libraryUnreadable > 0 ? localised("Some materials could not be searched. Try refreshing the library.", "Не удалось проверить часть материалов. Попробуйте обновить библиотеку.") : ""
+            : libraryUnreadable > 0 ? localised("Some materials could not be searched. Try refreshing the library.", "Не удалось проверить часть материалов. Попробуйте обновить библиотеку.")
+            : libraryNavigationFailed ? localised("The current result could not be opened. Refresh the library or check the meeting details.", "Не удалось открыть текущий результат. Обновите библиотеку или проверьте детали встречи.") : ""
         librarySearchStatus.isHidden = librarySearchStatus.stringValue.isEmpty
         emptyLabel.stringValue = !librarySearchStatus.isHidden ? librarySearchStatus.stringValue
             : !libraryQuery.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
@@ -1760,7 +1790,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
         row: Int
     ) -> NSView? {
         guard items.indices.contains(row) else { return nil }
-        return MeetingListView(item: items[row], active: activeRecording)
+        return MeetingListView(item: items[row], active: activeRecording, hit: libraryHits?[items[row].dir])
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -1770,6 +1800,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
             rememberedMeeting = nil
         }
         showDetail()
+        revealLibraryHit()
         onSelectMeeting?()
     }
 }
@@ -2052,7 +2083,13 @@ extension MeetingLibraryController {
         guard items.indices.contains(row) else { return 62 }
         measuringListTitle.stringValue = items[row].title ?? items[row].name
         measuringListTitle.preferredMaxLayoutWidth = max(1, tableView.tableColumns[0].width - 20)
-        return max(62, ceil(measuringListTitle.fittingSize.height) + 40)
+        let titleHeight = ceil(measuringListTitle.fittingSize.height)
+        if let hit = libraryHits?[items[row].dir], hit.source != .title {
+            let snippet = MeetingListView.snippetLabel(hit)
+            snippet.preferredMaxLayoutWidth = measuringListTitle.preferredMaxLayoutWidth
+            return max(62, titleHeight + 44 + ceil(snippet.fittingSize.height))
+        }
+        return max(62, titleHeight + 40)
     }
     func tableViewColumnDidResize(_ notification: Notification) {
         table.needsLayout = true

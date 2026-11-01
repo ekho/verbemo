@@ -4,6 +4,7 @@ import QuartzCore
 @MainActor
 final class MeetingListView: NSTableCellView {
     private let title: NSTextField
+    private var snippet: NSTextField?
     static func titleLabel(_ text: String) -> NSTextField {
         let label = NSTextField(wrappingLabelWithString: text)
         label.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -11,7 +12,30 @@ final class MeetingListView: NSTableCellView {
         label.lineBreakMode = .byWordWrapping
         return label
     }
-    init(item: SessionInventory.Item, active: MeetingPresentation.ActiveRecording? = nil) {
+    static func snippetLabel(_ hit: MeetingLibrarySearch.Hit) -> NSTextField {
+        let source = switch hit.source {
+        case .title: localised("Title", "Название")
+        case .metadata: localised("Meeting", "Встреча")
+        case .transcript: localised("Transcript", "Расшифровка")
+        case .summary: localised("Summary", "Сводка")
+        }
+        let text = source + " · " + hit.excerpt
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.identifier = .init("meeting.list-snippet")
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = StudioStyle.muted
+        label.maximumNumberOfLines = 2
+        label.lineBreakMode = .byTruncatingTail
+        let marked = NSMutableAttributedString(string: text, attributes: [.font: label.font!, .foregroundColor: StudioStyle.muted])
+        for range in MeetingTextSearch.matches(in: text, query: hit.query) {
+            marked.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.25), range: range)
+        }
+        label.attributedStringValue = marked
+        label.toolTip = text
+        label.setAccessibilityLabel(text)
+        return label
+    }
+    init(item: SessionInventory.Item, active: MeetingPresentation.ActiveRecording? = nil, hit: MeetingLibrarySearch.Hit? = nil) {
         title = Self.titleLabel(item.title ?? item.name)
         super.init(frame: .zero)
         let duration = item.duration.map { seconds in
@@ -60,6 +84,12 @@ final class MeetingListView: NSTableCellView {
         let metaRow = NSStackView(views: [meta, image, NSView()])
         metaRow.spacing = 6
         let stack = NSStackView(views: [title, metaRow])
+        if let hit, hit.source != .title {
+            let snippet = Self.snippetLabel(hit)
+            self.snippet = snippet
+            stack.addArrangedSubview(snippet)
+            snippet.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
@@ -75,6 +105,7 @@ final class MeetingListView: NSTableCellView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layout() {
         title.preferredMaxLayoutWidth = max(1, bounds.width - 20)
+        snippet?.preferredMaxLayoutWidth = max(1, bounds.width - 20)
         super.layout()
     }
     static func icon(_ stage: MeetingPresentation.Stage) -> NSView {

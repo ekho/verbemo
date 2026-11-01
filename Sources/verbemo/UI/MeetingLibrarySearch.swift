@@ -19,6 +19,11 @@ enum MeetingLibrarySearch {
     static func revision(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
+    static func isCurrent(_ hit: Hit, in dir: URL) -> Bool {
+        let file = hit.source == .summary ? "summary.md" : hit.segment == nil ? "transcript.md" : "transcript.json"
+        guard let data = try? read(dir.appendingPathComponent(file)) else { return false }
+        return revision(data) == hit.revision
+    }
     static func search(_ inputs: [Input], query: String) throws -> Outcome {
         try Task.checkCancellation()
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)

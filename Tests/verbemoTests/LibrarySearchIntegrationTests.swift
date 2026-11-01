@@ -68,6 +68,144 @@ struct LibrarySearchIntegrationTests {
         #expect(title.stringValue != "No recordings yet")
     }
 
+    @Test func contentResultOpensCurrentVersionAndCorrectTab() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        let dir = try session(root, name: "one", text: "Old archived words", summary: "Old summary")
+        try TranscriptVersions.archiveCurrent(dir)
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-11-01T10:00:00Z", segments: [
+            .init(speaker: "me", start_ms: 0, end_ms: 1000, text: "😀 Кварцевый компас"),
+        ]).write(to: dir)
+        try Data("# Сапфи**ровый** маяк".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        let versions = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "transcript-versions" } as? NSPopUpButton)
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        for (query, tab) in [("Кварцевый компас", "transcript"), ("Сапфировый маяк", "summary")] {
+            try await search(query, in: library)
+            versions.selectItem(at: 0)
+            #expect(versions.sendAction(versions.action, to: versions.target))
+            #expect(table.sendAction(table.action, to: table.target))
+            #expect(versions.indexOfSelectedItem == 1)
+            #expect(tabs.selectedTabViewItem?.identifier as? String == tab)
+            #expect(library.meetingSearchQuery == query)
+            let index = try #require(library.meetingSearchIndex)
+            #expect(library.meetingSearchHits[index].tab == tab)
+            if tab == "transcript" { #expect(library.meetingSearchHits[index].segment == 0) }
+        }
+    }
+
+    @Test func snippetsFitResizedLibraryAndKeyboardSelectionNavigates() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        for name in ["one", "two"] {
+            _ = try session(root, name: name, text: String(repeating: "Контекст ", count: 5) + "Кварцевый компас " + String(repeating: "продолжение ", count: 20), summary: "")
+        }
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(.init(width: 1340, height: 600))
+        app.show()
+        try await search("Кварцевый компас", in: library)
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        let split = try #require(app.panel.contentView?.allDescendants.first { $0 is WorkspaceSplitView } as? NSSplitView)
+        for width in [220.0, 400] {
+            split.setPosition(width, ofDividerAt: 0)
+            app.panel.contentView?.layoutSubtreeIfNeeded()
+            let row = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+            row.layoutSubtreeIfNeeded()
+            let snippet = try #require(row.allDescendants.first { $0.identifier?.rawValue == "meeting.list-snippet" } as? NSTextField)
+            #expect(snippet.stringValue.contains("Transcript"))
+            #expect(snippet.stringValue.contains("Кварцевый компас"))
+            #expect(snippet.maximumNumberOfLines == 2)
+            let frame = snippet.convert(snippet.bounds, to: row)
+            #expect(frame.maxY <= row.bounds.height - 8)
+            #expect(frame.width >= 150)
+        }
+        table.selectRowIndexes([1], byExtendingSelection: false)
+        #expect(library.meetingSearchQuery == "Кварцевый компас")
+        #expect(library.meetingSearchIndex != nil)
+    }
+
+    @Test func changedContentResultRefreshesInsteadOfOpeningStaleHit() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        let dir = try session(root, name: "one", text: "Old compass", summary: "")
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        try await search("compass", in: library)
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-11-01T10:00:00Z", segments: [
+            .init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Changed text"),
+        ]).write(to: dir)
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        #expect(table.sendAction(table.action, to: table.target))
+        #expect(library.meetingSearchIndex == nil)
+        await library.settled()
+        #expect(table.numberOfRows == 0)
+    }
+
+    @Test func incompleteSearchAndResetKeepAbsenceHonest() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        let dir = try session(root, name: "one", text: "Actual text", summary: "")
+        try Data("{ broken".utf8).write(to: dir.appendingPathComponent("transcript.json"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        library.applyFilter(.attention)
+        try await search("absent", in: library)
+        let title = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.title" } as? NSTextField)
+        #expect(title.stringValue == "Search incomplete")
+        let status = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.search-status" } as? NSTextField)
+        #expect(!status.isHidden)
+        #expect(status.stringValue.contains("could not be searched"))
+        let reset = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.reset" } as? NSButton)
+        #expect(reset.sendAction(reset.action, to: reset.target))
+        #expect(library.currentFilter == .allMeetings)
+        #expect(status.isHidden)
+        #expect(title.stringValue == "Meeting one")
+    }
+
+    @Test func legacyResultCannotSilentlyNavigateIntoAnArchive() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        let dir = try session(root, name: "one", text: "Archived compass", summary: "")
+        try TranscriptVersions.archiveCurrent(dir)
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("transcript.json"))
+        try Data("Current compass".utf8).write(to: dir.appendingPathComponent("transcript.md"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        try await search("compass", in: library)
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        #expect(table.sendAction(table.action, to: table.target))
+        await library.settled()
+        #expect(library.meetingSearchIndex == nil)
+        let status = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.search-status" } as? NSTextField)
+        #expect(status.stringValue.contains("could not be opened"))
+    }
+
+    @Test func shutdownAwaitsCancelledQueriesWithoutApplyingTheirResults() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        _ = try session(root, name: "one", text: "compass", summary: "")
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        let field = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.search" } as? NSSearchField)
+        field.stringValue = "compass"
+        #expect(field.sendAction(field.action, to: field.target))
+        let cleanup = library.stopForTermination()
+        for task in cleanup { await task.value }
+        await library.settled()
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        #expect(table.numberOfRows == 0)
+    }
+
     private func search(_ query: String, in library: MeetingLibraryController) async throws {
         let field = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.search" } as? NSSearchField)
         field.stringValue = query
