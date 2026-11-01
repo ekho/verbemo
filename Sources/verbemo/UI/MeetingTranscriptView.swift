@@ -65,7 +65,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
-        table.intercellSpacing = .zero
+        table.intercellSpacing = NSSize(width: 0, height: 6)
         table.gridStyleMask = []
         table.dataSource = self
         table.delegate = self
@@ -88,6 +88,12 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let position = resizePosition
         resizePosition = nil
         restoreReadingPosition(position)
+        // AppKit can update row heights while retaining the cached cells' old frames.
+        table.enumerateAvailableRowViews { rowView, row in
+            guard let cell = self.table.view(atColumn: 0, row: row, makeIfNecessary: false) else { return }
+            let frame = rowView.convert(self.table.frameOfCell(atColumn: 0, row: row), from: self.table)
+            if cell.frame != frame { cell.frame = frame }
+        }
     }
     func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false, canMatchParticipants: Bool = true) {
         let changed = segments != transcript.segments || self.names?.speakers != names?.speakers
@@ -117,7 +123,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         measuringText.stringValue = segments[row].text
         measuringText.preferredMaxLayoutWidth = width
         let height = ceil(measuringText.fittingSize.height)
-        return (available >= 590 ? max(52, height) : height + 60) + 20
+        return (available >= 590 ? max(52, height) : height + 60) + 24
     }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("utterance")
@@ -197,7 +203,7 @@ private final class SegmentCell: NSTableCellView {
     private let stack = NSStackView()
     private var metadataWidth: NSLayoutConstraint!
     private var bodyWidth: NSLayoutConstraint!
-    static func textWidth(_ available: CGFloat) -> CGFloat { max(160, available >= 590 ? available - 206 : available) }
+    static func textWidth(_ available: CGFloat) -> CGFloat { max(160, available - 24 - (available >= 590 ? 206 : 0)) }
     init() {
         super.init(frame: .zero)
         time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -227,19 +233,13 @@ private final class SegmentCell: NSTableCellView {
         stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
-        let separator = SetupLayout.hairline()
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(separator)
         metadataWidth = metadata.widthAnchor.constraint(equalToConstant: 190)
         bodyWidth = body.widthAnchor.constraint(equalTo: stack.widthAnchor)
         bodyWidth.isActive = true
         NSLayoutConstraint.activate([
-            separator.leadingAnchor.constraint(equalTo: leadingAnchor),
-            separator.trailingAnchor.constraint(equalTo: trailingAnchor),
-            separator.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
         ])
     }
     func updateWidth(_ available: CGFloat) {

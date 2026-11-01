@@ -4,6 +4,38 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct MeetingTranscriptReadingTests {
+    @Test(arguments: [NSScroller.Style.overlay, .legacy])
+    func resizingKeepsEveryLineInsideTheUtteranceBackground(scroller: NSScroller.Style) async throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        view.scrollerStyle = scroller
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1000, height: 700),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.orderOut(nil) }
+        view.update(transcript: .init(engine: "test", model: "test", created_at: "test", segments: (0..<20).map {
+            .init(speaker: "them A", start_ms: $0 * 1000, end_ms: ($0 + 1) * 1000,
+                  text: "Реплика \($0). " + String(repeating: "Нужно согласовать сроки, проверить материалы и записать решение. ", count: 4))
+        }), names: nil, participants: [], canEdit: true)
+        let table = try #require(view.documentView as? NSTableView)
+        for width in [1000, 850, 720, 640, 600, 580, 460, 1000, 720] {
+            window.setContentSize(.init(width: width, height: 700))
+            for _ in 0..<4 { view.layoutSubtreeIfNeeded(); window.displayIfNeeded(); await Task.yield() }
+            for row in 0..<2 {
+                let cell = try #require(table.view(atColumn: 0, row: row, makeIfNecessary: true))
+                cell.layoutSubtreeIfNeeded()
+                let body = try #require(cell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "transcript.words" })
+                let rect = cell.convert(body.alignmentRect(forFrame: body.frame), from: body.superview)
+                #expect(abs(cell.bounds.height + table.intercellSpacing.height - table.rect(ofRow: row).height) <= 1,
+                        "Background and row heights must agree after resize to \(width); row=\(table.rowView(atRow: row, makeIfNecessary: false)?.bounds as Any), cell=\(cell.frame), expected=\(table.frameOfCell(atColumn: 0, row: row)), mask=\(cell.autoresizingMask.rawValue)")
+                #expect(rect.minY >= 11 && cell.bounds.height - rect.maxY >= 11,
+                        "All wrapped lines need vertical padding inside the background at width \(width); cell=\(cell.bounds), text=\(rect)")
+                #expect(rect.minX >= 11 && cell.bounds.width - rect.maxX >= 11,
+                        "Text needs horizontal padding at width \(width)")
+            }
+        }
+        #expect(table.intercellSpacing.height == 6, "Utterance backgrounds have a small gap")
+    }
     @Test func wideningALongUtteranceKeepsItsSegment() throws {
         _ = NSApplication.shared
         let view = MeetingTranscriptView()

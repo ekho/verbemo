@@ -39,11 +39,12 @@ struct StudioDensityTests {
             currentCell.layoutSubtreeIfNeeded()
             let currentName = try #require(currentCell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "transcript.speaker-name" })
             let nameRect = currentName.convert(currentName.bounds, to: document)
+            let surfaceRect = currentCell.convert(currentCell.bounds, to: document)
             let tabsRect = tab.convert(tab.bounds, to: document)
-            #expect(nameRect.minX <= 25, "One page gutter, without a second inset around the transcript")
-            #expect(abs(nameRect.minX - title.convert(title.bounds, to: document).minX) <= 2)
+            #expect(abs(surfaceRect.minX - title.convert(title.bounds, to: document).minX) <= 2)
+            #expect(abs(nameRect.minX - surfaceRect.minX - 12) <= 2, "Name is padded inside the utterance surface")
             #expect(abs(transcript.bounds.width - (document.bounds.width - 48)) <= 1)
-            #expect((0...16).contains(tabsRect.minY - nameRect.maxY), "Text starts directly below the tab strip at width \(width), library hidden \(hideLibrary)")
+            #expect((0...20).contains(tabsRect.minY - nameRect.maxY), "Text starts directly below the tab strip at width \(width), library hidden \(hideLibrary)")
         }
     }
 
