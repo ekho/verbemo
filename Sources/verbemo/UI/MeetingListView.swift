@@ -31,6 +31,8 @@ final class MeetingListView: NSTableCellView {
             marked.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.25), range: range)
         }
         label.attributedStringValue = marked
+        // AppKit's intrinsic size can ignore maximumNumberOfLines for attributed text.
+        label.heightAnchor.constraint(equalToConstant: 2 * ceil(NSLayoutManager().defaultLineHeight(for: label.font!))).isActive = true
         label.toolTip = text
         label.setAccessibilityLabel(text)
         return label

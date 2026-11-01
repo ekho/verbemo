@@ -122,6 +122,12 @@ struct LibrarySearchIntegrationTests {
             #expect(snippet.stringValue.contains("Кварцевый компас"))
             #expect(snippet.maximumNumberOfLines == 2)
             let frame = snippet.convert(snippet.bounds, to: row)
+            let lineHeight = ceil(NSLayoutManager().defaultLineHeight(for: try #require(snippet.font)))
+            #expect(frame.height <= 2 * lineHeight + 1, "The rendered snippet must fit two actual native text lines")
+            let match = (snippet.stringValue as NSString).range(of: "Кварцевый компас")
+            let leadingText = snippet.attributedStringValue.attributedSubstring(from: .init(location: 0, length: NSMaxRange(match)))
+            #expect(leadingText.boundingRect(with: .init(width: frame.width, height: 1000), options: [.usesLineFragmentOrigin]).height <= 2 * lineHeight + 1,
+                    "The matching phrase must be visible within the two lines")
             #expect(frame.maxY <= row.bounds.height - 8)
             #expect(frame.width >= 150)
         }

@@ -32,7 +32,7 @@ enum MeetingLibrarySearch {
         func match(_ text: String, source: Source, segment: Int? = nil, revision: String? = nil) -> Hit? {
             let range = (text as NSString).range(of: query, options: .caseInsensitive)
             guard range.location != NSNotFound, let found = Range(range, in: text) else { return nil }
-            let start = text.index(found.lowerBound, offsetBy: -40, limitedBy: text.startIndex) ?? text.startIndex
+            let start = text.index(found.lowerBound, offsetBy: -12, limitedBy: text.startIndex) ?? text.startIndex
             let end = text.index(start, offsetBy: max(160, query.count + 40), limitedBy: text.endIndex) ?? text.endIndex
             let excerpt = (start > text.startIndex ? "…" : "") + text[start..<end] + (end < text.endIndex ? "…" : "")
             return Hit(source: source, segment: segment, excerpt: String(excerpt), query: query, revision: revision)
