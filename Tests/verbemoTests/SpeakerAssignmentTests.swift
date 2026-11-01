@@ -54,13 +54,13 @@ struct SpeakerAssignmentTests {
         for _ in 0..<4 { await Task.yield() }
         #expect(assigned == "anna")
         #expect(editor.choice.stringValue == title)
-        #expect(editor.choice.isAccessibilityElement())
-        #expect(editor.choice.accessibilityRole() == .comboBox)
-        #expect(editor.choice.accessibilityValue() as? String == title)
+        #expect(editor.choice.isEditable)
+        #expect(editor.choice.cell?.accessibilityRole() == .comboBox)
+        #expect(editor.choice.cell?.accessibilityValue() as? String == title)
         #expect(editor.choice.makeSelectionMenu().items[1].state == .on)
         #expect(editor.choice.bounds.width == 120)
         editor.choice.isEnabled = false
-        let button = try #require(editor.choice.accessibilityChildren()?.first as? NSAccessibilityElement)
+        let button = try #require(editor.choice.cell?.accessibilityChildren()?.first as? NSButton)
         #expect(!button.accessibilityPerformPress())
     }
 

@@ -3,7 +3,7 @@ import AppKit
 @MainActor
 final class SpeakerAssignmentChoice: NSComboBox {
     private var dropdownWindows: [NSWindow] = []
-    private lazy var menuButton = MenuButton(owner: self)
+    private let menuButton = NSButton()
 
     override var intrinsicContentSize: NSSize {
         .init(width: 360, height: super.intrinsicContentSize.height)
@@ -11,15 +11,14 @@ final class SpeakerAssignmentChoice: NSComboBox {
     private var menuButtonRect: NSRect {
         .init(x: bounds.maxX - 24, y: bounds.minY, width: 24, height: bounds.height)
     }
-    override func mouseDown(with event: NSEvent) {
-        if menuButtonRect.contains(convert(event.locationInWindow, from: nil)) { showSelectionMenu() }
-        else { super.mouseDown(with: event) }
+    override func layout() {
+        super.layout()
+        menuButton.frame = menuButtonRect
     }
-    override func accessibilityChildren() -> [Any]? {
-        menuButton.setAccessibilityFrameInParentSpace(menuButtonRect)
+    override var isEnabled: Bool { didSet { menuButton.isEnabled = isEnabled } }
+    override func setAccessibilityLabel(_ label: String?) {
+        super.setAccessibilityLabel(label)
         menuButton.setAccessibilityLabel(accessibilityLabel())
-        menuButton.setAccessibilityEnabled(isEnabled)
-        return [menuButton]
     }
     override func accessibilityPerformShowMenu() -> Bool {
         guard isEnabled else { return false }
@@ -40,7 +39,7 @@ final class SpeakerAssignmentChoice: NSComboBox {
         }
         return menu
     }
-    func showSelectionMenu() {
+    @objc func showSelectionMenu() {
         guard isEnabled else { return }
         delegate?.comboBoxWillPopUp?(.init(name: NSComboBox.willPopUpNotification, object: self))
         window?.makeFirstResponder(self)
@@ -56,27 +55,18 @@ final class SpeakerAssignmentChoice: NSComboBox {
         delegate?.comboBoxSelectionDidChange?(.init(name: NSComboBox.selectionDidChangeNotification, object: self))
     }
 
-    private final class MenuButton: NSAccessibilityElement {
-        weak var owner: SpeakerAssignmentChoice?
-        init(owner: SpeakerAssignmentChoice) {
-            self.owner = owner
-            super.init()
-            setAccessibilityParent(owner)
-            setAccessibilityRole(.button)
-            setAccessibilityIdentifier("speaker.options")
-        }
-        override func accessibilityPerformPress() -> Bool {
-            guard isAccessibilityEnabled(), let owner else { return false }
-            Task { @MainActor [weak owner] in owner?.showSelectionMenu() }
-            return true
-        }
-    }
-
     override init(frame frameRect: NSRect) {
         let existing = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
         super.init(frame: frameRect)
-        setAccessibilityElement(true)
-        setAccessibilityRole(.comboBox)
+        menuButton.title = ""
+        menuButton.isBordered = false
+        menuButton.target = self
+        menuButton.action = #selector(showSelectionMenu)
+        menuButton.identifier = .init("speaker.options")
+        addSubview(menuButton)
+        // Keep the native editable AX cell and replace only its disclosure action.
+        menuButton.setAccessibilityParent(cell)
+        cell?.setAccessibilityChildren([menuButton])
         dropdownWindows = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
