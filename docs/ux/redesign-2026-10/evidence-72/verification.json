@@ -1,6 +1,6 @@
 {
   "date": "2026-11-01",
-  "status": "Mac Studio library, shared header and density fixes verified in Review651; human Mac acceptance and Windows pending",
+  "status": "Mac-only bounded pilot72 closed by explicit user scope decision; Mac73 started; final Mac74 and Windows75/76/77 pending",
   "build": {
     "source_commit": "10335b6d4f63bf064ca5a77fc5b8144042c6bcb6",
     "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux72-density/Verbemo Studio Review.app",
@@ -1004,5 +1004,17 @@
       "log_sha256": "3a9562bf9072ff4fffae40e654084413618500ca25b0a1007ec16a1cadbf443f",
       "result": "Universal build650; minimum14.2 validation and ad-hoc codesign passed; Review copy verification passed."
     }
-  ]
+  ],
+  "scope_decision": {
+    "date": "2026-11-01",
+    "authority": "User explicitly instructed split Windows redesign into separate tasks, finish72 then start73",
+    "mac_pilot": "accepted bounded Review651/source10335b6",
+    "windows_tasks": [
+      75,
+      76,
+      77
+    ],
+    "mac_unverified_to": 74,
+    "unverified_items_are_not_passed": true
+  }
 }
