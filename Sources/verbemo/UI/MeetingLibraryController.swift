@@ -82,11 +82,20 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         guard activeRecording != value else { return }
         let refreshDetail = selected == nil || selected?.dir == activeRecording?.dir || selected?.dir == value?.dir
         activeRecording = value
-        show(allItems, refreshDetail: refreshDetail)
+        if libraryQuery.isEmpty { show(allItems, refreshDetail: refreshDetail) }
+        else { restartLibrarySearch() }
     }
     private var allItems: [SessionInventory.Item] = []
     private var meetingFilter: ApplicationNavigationState.Destination = .allMeetings
     private let search = MeetingSearchField()
+    private let librarySearchStatus = NSTextField(wrappingLabelWithString: "")
+    private var librarySearchTask: Task<Void, Never>?
+    private var librarySearchTasks: [Int: Task<Void, Never>] = [:]
+    private var librarySearchGeneration = 0
+    private var libraryHits: [URL: MeetingLibrarySearch.Hit]?
+    private var librarySearchPending = false
+    private var libraryUnreadable = 0
+    private var libraryQuery: String { search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) }
     private let emptyLabel = NSTextField(wrappingLabelWithString: "")
     private let clearSearch = NSButton()
     private let emptyView = NSStackView()
@@ -348,7 +357,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         }
     }
 
-    deinit { processingMonitor?.cancel() }
+    deinit {
+        processingMonitor?.cancel()
+        for task in librarySearchTasks.values { task.cancel() }
+    }
 
     /// Stop UI-owned work synchronously; the application awaits these after its processing barrier.
     func stopForTermination() -> [Task<Void, Never>] {
@@ -364,6 +376,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         for task in scans { task.cancel() }
         scan = nil
         var cleanup = scans + processingCancellation.stopObserving()
+        for task in librarySearchTasks.values { task.cancel(); cleanup.append(task) }
+        librarySearchTask = nil
         if let monitor { cleanup.append(monitor) }
         cleanup.append(deletion.stopForTermination())
         cleanup.append(Task { [audioPlayer] in await audioPlayer.settled() })
@@ -614,8 +628,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         filterButton.toolTip = localised("Filter meetings: ", "Фильтр встреч: ") + filter.title
         filterButton.setAccessibilityLabel(filterButton.toolTip)
         for option in filterOptions { option.state = option.identifier?.rawValue == "library.filter.\(filter.rawValue)" ? .on : .off }
-        if clearSearch { search.stringValue = "" }
-        show(allItems)
+        if clearSearch { search.stringValue = ""; restartLibrarySearch() }
+        else { show(allItems) }
     }
     func setMeetingSelectionActive(_ active: Bool) {
         guard meetingSelectionActive != active else { return }
@@ -688,7 +702,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     @objc private func copyFromMenu(_ sender: NSMenuItem) {
         copyMeetingContent(transcript: sender.tag >= 2, plainText: sender.tag % 2 == 0)
     }
-    @objc private func searchChanged() { show(allItems) }
+    @objc private func searchChanged() { restartLibrarySearch() }
     @objc private func meetingClicked() {
         if let selected, selected.dir == activeRecording?.dir { onOpenActiveRecording?(); return }
         onSelectMeeting?()
@@ -853,6 +867,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     func setRoot(_ folder: URL) {
         root = folder
         table.deselectAll(nil)
+        show([])
         reload()
     }
 
@@ -882,6 +897,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     /// every rename and every delete, and growing with every meeting kept.
     private func reload() {
         guard !terminating else { return }
+        invalidateLibrarySearch()
         scans += 1
         let generation = scans
         let root = self.root
@@ -895,8 +911,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             guard let self else { return }
             self.scansInFlight.removeValue(forKey: generation)
             guard !Task.isCancelled, generation == self.scans, !self.terminating else { return }
-            self.show(found)
             self.scan = nil
+            self.show(found)
+            self.restartLibrarySearch()
         }
         scansInFlight[generation] = scan
     }
@@ -904,7 +921,54 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     /// Wait for the latest scan to be on screen. For tests, which would
     /// otherwise have to guess how long reading a folder takes.
     func settled() async {
-        while let scan { await scan.value }
+        while scan != nil || librarySearchTask != nil {
+            if let scan { await scan.value }
+            if let task = librarySearchTask { await task.value }
+        }
+    }
+
+    private func invalidateLibrarySearch() {
+        librarySearchGeneration += 1
+        librarySearchTask?.cancel()
+        librarySearchTask = nil
+        libraryHits = nil
+        libraryUnreadable = 0
+        librarySearchPending = !libraryQuery.isEmpty
+    }
+
+    private func restartLibrarySearch() {
+        invalidateLibrarySearch()
+        show(allItems)
+        guard !terminating, !libraryQuery.isEmpty, scan == nil else { return }
+        let generation = librarySearchGeneration, query = libraryQuery, root = self.root
+        let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
+        let inputs = inventory.map { item in
+            MeetingLibrarySearch.Input(dir: item.dir, title: item.title ?? item.name,
+                metadata: [item.name, MeetingPresentation.date(item.started)]
+                    + (MeetingCalendarMetadata.read(from: item.dir)?.participants.map(\.name) ?? []))
+        }
+        let task = Task { [weak self] in
+            defer {
+                self?.librarySearchTasks.removeValue(forKey: generation)
+                if self?.librarySearchGeneration == generation { self?.librarySearchTask = nil }
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(150))
+                let worker = Task.detached(priority: .userInitiated) { try MeetingLibrarySearch.search(inputs, query: query) }
+                let outcome = try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: { worker.cancel() }
+                try Task.checkCancellation()
+                guard let self, !self.terminating, generation == self.librarySearchGeneration,
+                      root == self.root, query == self.libraryQuery else { return }
+                self.libraryHits = outcome.hits
+                self.libraryUnreadable = outcome.unreadable
+                self.librarySearchPending = false
+                self.show(self.allItems)
+            } catch { /* Cancelled searches never replace the current query. */ }
+        }
+        librarySearchTask = task
+        librarySearchTasks[generation] = task
     }
 
     /// Something changed in the recordings folder that this window did not
@@ -947,11 +1011,19 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         allItems = found.filter { $0.dir != activeRecording?.dir }
         activityTitles = Dictionary(allItems.map { ($0.dir.standardizedFileURL.resolvingSymlinksInPath(), $0.title ?? $0.name) }, uniquingKeysWith: { first, _ in first })
         let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
-        items = inventory.filter { !deletion.isPending($0.dir) && MeetingPresentation.matches($0, filter: meetingFilter, query: search.stringValue, active: activeRecording) }
+        items = inventory.filter { item in
+            !deletion.isPending(item.dir) && MeetingPresentation.matches(item, filter: meetingFilter, query: "", active: activeRecording)
+                && (libraryQuery.isEmpty || (libraryHits.map { $0[item.dir] != nil }
+                    ?? MeetingPresentation.matches(item, filter: .allMeetings, query: libraryQuery, active: activeRecording)))
+        }
         emptyView.isHidden = !items.isEmpty
         scroll.isHidden = items.isEmpty
-        clearSearch.isHidden = search.stringValue.isEmpty
-        emptyLabel.stringValue = !search.stringValue.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
+        clearSearch.isHidden = libraryQuery.isEmpty && meetingFilter == .allMeetings
+        librarySearchStatus.stringValue = librarySearchPending ? localised("Searching…", "Поиск…")
+            : libraryUnreadable > 0 ? localised("Some materials could not be searched. Try refreshing the library.", "Не удалось проверить часть материалов. Попробуйте обновить библиотеку.") : ""
+        librarySearchStatus.isHidden = librarySearchStatus.stringValue.isEmpty
+        emptyLabel.stringValue = !librarySearchStatus.isHidden ? librarySearchStatus.stringValue
+            : !libraryQuery.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
             : meetingFilter == .processing ? localised("Nothing is being processed right now.", "Сейчас ничего не обрабатывается.")
             : meetingFilter == .attention ? localised("No meetings need your attention.", "Нет встреч, требующих действий.")
             : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
@@ -969,7 +1041,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         if refreshDetail || selected?.dir != previous { showDetail() }
         updateCompactLayout()
     }
-    @objc private func clearSearchClicked() { search.stringValue = ""; show(allItems) }
+    @objc private func clearSearchClicked() { applyFilter(.allMeetings, clearSearch: true) }
 
     @objc private func versionSelected(_ sender: NSPopUpButton) {
         versionKey = selectedVersion.map(key)
@@ -1037,9 +1109,12 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         versionKey = selectedVersion.map(key)
 
         guard let item = selected else {
-            detailTitle.stringValue = items.isEmpty
-                ? localised("No recordings yet", "Записей пока нет")
-                : localised("Select a recording", "Выберите запись")
+            detailTitle.stringValue = !items.isEmpty ? localised("Select a recording", "Выберите запись")
+                : librarySearchPending ? localised("Searching…", "Поиск…")
+                : libraryUnreadable > 0 ? localised("Search incomplete", "Поиск выполнен не полностью")
+                : !libraryQuery.isEmpty ? localised("No matching meetings", "Совпадений не найдено")
+                : meetingFilter != .allMeetings ? localised("No meetings in this filter", "Нет встреч по выбранному фильтру")
+                : localised("No recordings yet", "Записей пока нет")
             summaryText.string = ""
             transcriptText.string = ""
             diarizationLabel.isHidden = true
@@ -1147,6 +1222,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             let focused = (self.panel.firstResponder as? NSTextView)?.delegate as? NSView ?? self.panel.firstResponder as? NSView
             let restoreFocus = focused == nil || focused?.isDescendant(of: self.meetingTranscript) == true || focused?.isDescendant(of: self.speakersStack) == true
             self.showDetail()
+            if !self.libraryQuery.isEmpty { self.restartLibrarySearch() }
             guard restoreFocus, self.detailTabs.selectedTabViewItem?.identifier as? String == editedTab else { return }
             if editedTab == "transcript" { self.meetingTranscript.focusSpeaker(speaker) }
             if editedTab == "participants",
@@ -1702,8 +1778,8 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
 private extension MeetingLibraryController {
     func buildJournal(detail: NSStackView, diarizationActions: NSStackView) -> NSView {
         search.identifier = .init("library.search")
-        search.placeholderString = localised("Meeting title", "Название встречи")
-        search.setAccessibilityLabel(localised("Search meeting titles", "Поиск по названиям встреч"))
+        search.placeholderString = localised("Title, transcript, summary", "Название, расшифровка, сводка")
+        search.setAccessibilityLabel(localised("Search the library: titles, transcripts and summaries", "Поиск в библиотеке: названия, расшифровки и сводки"))
         search.target = self
         search.action = #selector(searchChanged)
         search.sendsSearchStringImmediately = true
@@ -1757,7 +1833,8 @@ private extension MeetingLibraryController {
         emptyLabel.identifier = .init("meeting-list.empty")
         emptyLabel.font = .systemFont(ofSize: 12)
         emptyLabel.textColor = StudioStyle.muted
-        clearSearch.title = localised("Clear search", "Очистить поиск")
+        clearSearch.title = localised("Reset search and filter", "Сбросить поиск и фильтр")
+        clearSearch.identifier = .init("library.reset")
         clearSearch.target = self
         clearSearch.action = #selector(clearSearchClicked)
         emptyView.setViews([emptyLabel, clearSearch, NSView()], in: .center)
@@ -1767,7 +1844,11 @@ private extension MeetingLibraryController {
         scroll.drawsBackground = false
         scroll.autohidesScrollers = true
         scroll.setContentHuggingPriority(.init(1), for: .vertical)
-        let list = NSStackView(views: [listHeading, searchRow, scroll, emptyView])
+        librarySearchStatus.identifier = .init("library.search-status")
+        librarySearchStatus.font = .systemFont(ofSize: 12)
+        librarySearchStatus.textColor = StudioStyle.muted
+        librarySearchStatus.isHidden = true
+        let list = NSStackView(views: [listHeading, searchRow, librarySearchStatus, scroll, emptyView])
         list.orientation = .vertical
         list.distribution = .fill
         list.alignment = .leading
