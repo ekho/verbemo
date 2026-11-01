@@ -32,6 +32,7 @@ struct StudioMeetingHeader: View {
                 HStack(spacing: 8) {
                     Text(localised("Version", "Версия")).font(.callout)
                     StudioHeaderControl(control: versions).disabled(!state.versionsEnabled)
+                        .padding(.horizontal, 6)
                         .frame(height: StudioStyle.inputHeight)
                         .background(Color(nsColor: StudioStyle.paper), in: RoundedRectangle(cornerRadius: 4))
                         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color(nsColor: StudioStyle.line), lineWidth: 1).allowsHitTesting(false))
