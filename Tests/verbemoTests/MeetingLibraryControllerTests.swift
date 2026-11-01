@@ -10,6 +10,36 @@ import Testing
 @Suite(.serialized, .freshHome)
 @MainActor
 struct MeetingLibraryControllerTests {
+    @Test func firstTranscriptOpeningHasVisibleRowBackgrounds() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try JSONEncoder().encode(Transcript(engine: "test", model: "test", created_at: "test", segments: (0..<18).map {
+            .init(speaker: "them A", start_ms: $0 * 1000, end_ms: ($0 + 1) * 1000,
+                  text: "Реплика \($0). " + String(repeating: "Нужно согласовать сроки, проверить материалы и записать решение. ", count: $0 == 0 ? 4 : 1))
+        })).write(to: dir.appendingPathComponent("transcript.json"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        defer { _ = library.stopForTermination() }
+        app.libraryProvider = { library }
+        app.show()
+        app.panel.setContentSize(.init(width: 1340, height: 628))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let button = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.result.transcript" })
+        #expect(button.sendAction(button.action, to: button.target))
+        for _ in 0..<4 { app.panel.displayIfNeeded(); await Task.yield() }
+        let view = try #require(library.contentView.allDescendants.first { $0 is MeetingTranscriptView } as? MeetingTranscriptView)
+        let table = try #require(view.documentView as? NSTableView)
+        let visible = table.rows(in: view.documentVisibleRect)
+        #expect(visible.length >= 3, "Opening the transcript must draw every visible row without resizing: \(table.rect(ofRow: 0)), column \(table.tableColumns[0].width)")
+        for row in 0..<min(3, visible.length) {
+            let cell = try #require(table.view(atColumn: 0, row: row, makeIfNecessary: false))
+            #expect(abs(cell.bounds.height + table.intercellSpacing.height - table.rect(ofRow: row).height) <= 1,
+                    "The initial background must fill its row: \(cell.frame), \(table.rect(ofRow: row))")
+        }
+    }
     @Test("Result errors can be dismissed without changing artifacts, and changed errors return")
     func resultNoticeDismissalIsPresentationOnly() async throws {
         let root = try Self.folder()

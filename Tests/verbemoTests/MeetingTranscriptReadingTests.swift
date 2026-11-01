@@ -4,6 +4,52 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct MeetingTranscriptReadingTests {
+    @Test func firstOpeningOfAPreloadedTabUsesTheVisibleWidth() async throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        let tabs = NSTabView()
+        tabs.tabViewType = .noTabsNoBorder
+        let summary = NSTabViewItem(identifier: "summary")
+        summary.view = NSView()
+        tabs.addTabViewItem(summary)
+        let transcript = NSTabViewItem(identifier: "transcript")
+        transcript.view = view
+        tabs.addTabViewItem(transcript)
+        let fixture = Transcript(engine: "test", model: "test", created_at: "test", segments: (0..<18).map {
+            .init(speaker: "them A", start_ms: $0 * 1000, end_ms: ($0 + 1) * 1000,
+                  text: "Реплика \($0). " + String(repeating: "Нужно согласовать сроки, проверить материалы и записать решение. ", count: $0 == 0 ? 4 : 1))
+        })
+        view.update(transcript: fixture, names: nil, participants: [], canEdit: true)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 780, height: 500),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = tabs
+        defer { window.orderOut(nil) }
+        tabs.layoutSubtreeIfNeeded()
+        tabs.selectTabViewItem(transcript)
+        for _ in 0..<4 { tabs.layoutSubtreeIfNeeded(); window.displayIfNeeded(); await Task.yield() }
+        let table = try #require(view.documentView as? NSTableView)
+        #expect(table.rect(ofRow: 0).height < 220, "The first row must be measured at the visible width, not the hidden tab's initial width")
+        let visible = table.rows(in: view.documentVisibleRect)
+        #expect(visible.length >= 3, "Opening the transcript must draw all visible rows without a resize")
+        for row in 0..<min(3, visible.length) {
+            let cell = try #require(table.view(atColumn: 0, row: row, makeIfNecessary: false))
+            #expect(abs(cell.bounds.height + table.intercellSpacing.height - table.rect(ofRow: row).height) <= 1,
+                    "The initial background must fill its row: \(cell.frame), \(table.rect(ofRow: row))")
+        }
+        view.setFrameSize(.init(width: 460, height: 500))
+        view.layout()
+        for row in 0..<3 {
+            let rowView = try #require(table.rowView(atRow: row, makeIfNecessary: false))
+            #expect(rowView.frame == table.rect(ofRow: row), "Width changes must not animate rows away from their cell backgrounds")
+        }
+        view.update(transcript: .init(engine: "test", model: "test", created_at: "test", segments: Array(fixture.segments.reversed())),
+                    names: nil, participants: [], canEdit: true)
+        view.layout()
+        for row in 0..<3 {
+            let rowView = try #require(table.rowView(atRow: row, makeIfNecessary: false))
+            #expect(rowView.frame == table.rect(ofRow: row), "Row containers must use the new heights before cells are positioned")
+        }
+    }
     @Test(arguments: [NSScroller.Style.overlay, .legacy])
     func resizingKeepsEveryLineInsideTheUtteranceBackground(scroller: NSScroller.Style) async throws {
         _ = NSApplication.shared

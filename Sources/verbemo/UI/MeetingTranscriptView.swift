@@ -82,8 +82,13 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let width = table.tableColumns[0].width
         if abs(measuredColumnWidth - width) > 0.5 {
             measuredColumnWidth = width
-            table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
+            }
         }
+        // Position cells only after their row containers have reached the new heights.
+        table.layoutSubtreeIfNeeded()
         // Restoring inside setFrameSize re-enters Auto Layout with the previous page size.
         let position = resizePosition
         resizePosition = nil
