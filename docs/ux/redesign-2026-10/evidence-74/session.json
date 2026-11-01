@@ -1,0 +1,31 @@
+{
+  "status": "started; awaiting first human reading result",
+  "started_at": "2026-11-01T15:02:31.891166+03:00",
+  "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+  "version": "0.17.2",
+  "build": "670",
+  "executable_sha256": "004f1732d973f826ac344d871619062f305ac3fd688e9fc9923185d52b5901cc",
+  "sdk_at_build": "27.0",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/home",
+  "fixture_meetings": 206,
+  "baseline_files": 433,
+  "human_results": [],
+  "pending_scenario": "reading transcript and distinguishing speakers in wide/narrow windows",
+  "runtime": {
+    "macos": "26.7.1",
+    "architecture": "arm64",
+    "sdk_at_build": "27.0"
+  },
+  "metadata_verified": true,
+  "initial_screen": {
+    "meeting": "UX69 Атлас — планирование",
+    "tab": "transcript",
+    "version": "2 · Whisper",
+    "recording": false,
+    "queue": 0
+  },
+  "initial_evidence": {
+    "01-start-reading-ru-light.jpg": "f66034ac5c00fa81ec2826c3b9eab0ab6f1c3deca64571177696cbc3d482f945",
+    "01-start-reading-ru-light.ax.txt": "3b6bc1a2f1a5b92d3d7e0a3bea48269e311356390ed2a357d9951a82b90aa3ef"
+  }
+}
