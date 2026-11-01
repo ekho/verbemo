@@ -65,4 +65,4 @@
 - [x] Full swift test --no-parallel; universal make app SIGN_ID=-; separate source-pinned synthetic Review, code signature/minimum metadata check.
 - [x] Native GUI RU/EN/light/dark/minimum/wide: settings categories/back/resize; every settings page and scope; new-recording draft/Cancel; result notices/actions; import Cancel; About; remaining safe entries. Check persisted state where actually changed and reset test state.
 - [x] One fresh whole-change review; sort findings, RED/GREEN material fixes, full suite after fixes. No second reviewer.
-- [ ] Record all skipped/unverified checks, rulings and deferred minors. Update F01–F18 and GitHub accurately; push same epic branch. Close #73 only when its Mac map is complete; #74 remains final user/platform acceptance. No merge/release.
+- [x] Record all skipped/unverified checks, rulings and deferred minors. Update F01–F18 and GitHub accurately; push same epic branch. Close #73 only when its Mac map is complete; #74 remains final user/platform acceptance. No merge/release.
