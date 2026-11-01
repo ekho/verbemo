@@ -1,0 +1,41 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button Copy, Description: copy, ID: meeting.copy
+	4 button (disabled) Meeting actions
+	5 button Description: Show or hide meeting details, Value: 0, ID: meeting.inspector
+	6 button New recording, ID: journal.new-recording
+	7 button Import, ID: journal.import
+	8 button Settings, ID: journal.settings
+	9 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		10 text Library
+		11 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: absent-ux73-needle, Placeholder: Title, transcript, summary, ID: library.search
+			12 button Search the library: titles, transcripts and summaries
+			13 button cancel
+		14 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		15 text Value: No meetings match your search., ID: meeting-list.empty
+		16 button Reset search and filter, ID: library.reset
+		17 splitter (disabled, settable, float) 248
+		18 text Help: UX69 Назначения — ошибка и неизвестный, Value: No matching meetings, ID: meeting.title
+	19 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	20 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	21 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	22 button (disabled) Not recording, ID: activity.recording
+	23 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	24 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+	25 close button
+	26 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	27 minimize button
+28 menu bar
+	29 Verbemo Studio Review
+	30 File
+	31 Edit
+	32 Window
+
+The focused UI element is 11 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: absent-ux73-needle, Placeholder: Title, transcript, summary, ID: library.search

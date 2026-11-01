@@ -45,16 +45,18 @@ struct SummaryProviderSheetTests {
             for _ in 0..<200 where library.isProcessing { try await Task.sleep(for: .milliseconds(10)) }
             #expect(!library.isProcessing)
             await library.settled()
-            let errorWindow = try #require(app.panel.attachedSheet)
-            #expect(errorWindow !== window)
-            #expect(errorWindow.contentView?.allDescendants.compactMap { ($0 as? NSTextField)?.stringValue }
-                .contains { $0.contains("previous summary") } == true)
-            app.panel.endSheet(errorWindow)
-            errorWindow.orderOut(nil)
+            #expect(app.panel.attachedSheet == nil)
+            let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+            let message = try #require(bar.allDescendants.compactMap { $0 as? NSTextField }.first {
+                $0.identifier?.rawValue == "meeting.operation-error"
+            })
+            #expect(!message.isHiddenOrHasHiddenAncestor)
+            #expect(message.stringValue.contains("previous summary"))
             #expect(try String(contentsOf: dir.appendingPathComponent("summary.md"), encoding: .utf8) == "old summary")
             try home.writeConfig(["summary": ["backend": "claude-cli", "openai_base_url": "http://localhost:8181/v1"]])
             #expect(generate.isEnabled)
             #expect(generate.sendAction(generate.action, to: generate.target))
+            #expect(message.isHidden)
             #expect(app.panel.attachedSheet === window)
             #expect(picker.indexOfSelectedItem == 3)
             let destination = try #require(window.contentView?.allDescendants.compactMap { $0 as? NSTextField }

@@ -1,0 +1,38 @@
+{
+  "checked_at_utc": "2026-11-01T21:57:12.908970+00:00",
+  "primary_qa_files": 439,
+  "unchanged": true,
+  "delete_undo_files_unchanged": {
+    "transcript.md": true,
+    "transcript.json": true,
+    "transcribe.log": true,
+    "meta.json": true,
+    "source.m4a": true
+  },
+  "ready_results_preserved_after_cancel_and_retry": {
+    "transcript.json": [
+      "transcripts/1426c5e062ceb017df7dbbd675d7f35305ad1800cc53d5b79cc468360a630d3e/transcript.json"
+    ],
+    "transcript.md": [
+      "transcripts/1426c5e062ceb017df7dbbd675d7f35305ad1800cc53d5b79cc468360a630d3e/transcript.md"
+    ],
+    "summary.md": [
+      "summary.md",
+      "transcripts/9f1b52656428a1a99680da783aa7b57f768a80cf899e339f124bbd1fe561fe68/summary.md",
+      "transcripts/1426c5e062ceb017df7dbbd675d7f35305ad1800cc53d5b79cc468360a630d3e/summary.md"
+    ]
+  },
+  "synthetic_audio_preserved": true,
+  "raw_audio_included": false,
+  "original_speaker_mapping_preserved": [
+    "transcripts/9f1b52656428a1a99680da783aa7b57f768a80cf899e339f124bbd1fe561fe68/speakers.json"
+  ],
+  "dismiss_notices_check": {
+    "artifacts_and_metadata_unchanged": true,
+    "files_unchanged": 15,
+    "log_changed": "transcribe.log appended post-processing skipped entries across QA restarts; not attributed to dismissal"
+  },
+  "primary_qa_sessions": 208,
+  "temporary_footer_audio_fixture_removed": true,
+  "primary_file_set_matches_baseline": true
+}

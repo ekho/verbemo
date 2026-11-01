@@ -1,0 +1,59 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Back to meetings, ID: journal.breadcrumb
+	2 text /  Storage and models
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button All settings, Description: Back, ID: settings.all-categories
+		9 scroll area Secondary Actions: Scroll Up, Scroll Down
+			10 image move
+			11 text /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-gui-flow/recordings Outside Documents and Desktop, so macOS never has to ask.
+			12 button Open folder, Description: move
+			13 button Choose…, Description: new folder
+			14 image
+			15 text Keep the audio after transcribing
+			16 switch Description: Keep the audio after transcribing, Value: 0, ID: files.keep-audio
+			17 text ID: settings.heading, Value: Storage and models Settings apply to this profile. Recording and processing options apply to future operations. Existing transcripts and summaries stay unchanged. Model files 0 MB in total · ~/Library/Application Support/verbemo/models Transcription parakeet v3
+			18 button Download, Description: Arrow Down Circle, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/home/Library/Application Support/verbemo/models/parakeet-tdt-0.6b-v3
+			19 text Transcribes on this Mac, after the meeting. • about 482 MB Whisper large-v3-turbo
+			20 button (disabled) Delete, Description: trash, Help: Wait for recording and processing to finish.
+			21 text Local multilingual transcription with whisper.cpp. • 0 MB GigaAM v3
+			22 button Download, Description: Arrow Down Circle, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/home/Library/Application Support/verbemo/models/gigaam
+			23 text Local Russian transcription with transcribe.cpp. • about 272 MB NVIDIA Nemotron 3.5 ASR Streaming Multilingual 0.6B
+			24 button Download, Description: Arrow Down Circle, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/home/Library/Application Support/verbemo/models/FluidAudio/nemotron-multilingual
+			25 text Shared files for live and final transcription. Downloaded once. • about 629 MB Diarization Nemotron 3
+			26 button Download, Description: Arrow Down Circle, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/home/.cache/verbemo/diarization-nemotron-3
+			27 text Meetings up to 8 speakers · OpenMDW 1.1 • about 107 MB LS-EEND AMI
+			28 button Download, Description: Arrow Down Circle, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/home/.cache/verbemo/diarization-ls-eend-ami
+			29 text Meetings up to 4 speakers · MIT • about 45 MB Community-1
+			30 button Download, Description: Arrow Down Circle, ID: /Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/home/.cache/verbemo/diarization
+			31 text Compact alternative · CC BY 4.0 • about 22 MB
+			32 scroll bar (settable, float) 0
+				33 value indicator (settable, float) 0
+				34 increment arrow button
+				35 decrement arrow button
+				36 increment page button
+				37 decrement page button
+	38 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	39 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	40 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+	41 button (disabled) Not recording, ID: activity.recording
+	42 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	43 close button
+	44 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	45 minimize button
+46 menu bar
+	47 Verbemo Final Review
+	48 File
+	49 Edit
+	50 Window
+
+The focused UI element is 8 button All settings, Description: Back, ID: settings.all-categories

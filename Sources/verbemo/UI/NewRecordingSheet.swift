@@ -64,10 +64,12 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
             return options.events.filter(query.matches)
         }
         calendarPicker.onSelect = { [weak self] meeting in
-            self?.calendarPicker.setSelection(meeting)
-            self?.eventChanged()
-            self?.note.isHidden = true
-            self?.resize()
+            guard let self else { return }
+            calendarPicker.setSelection(meeting)
+            if meeting != nil { eventChanged(replacingDraft: true) }
+            else { suggestedTitle = fallbackTitle }
+            note.isHidden = true
+            resize()
         }
         note.font = .systemFont(ofSize: 12)
         note.textColor = JournalStyle.muted
@@ -170,10 +172,10 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
     }
     func settled() async { await loadTask?.value }
     var selectedMeeting: CalendarWatcher.Meeting? { calendarPicker.selectedMeeting }
-    @objc private func eventChanged() {
+    private func eventChanged(replacingDraft: Bool = false) {
         let eventTitle = selectedMeeting?.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let nextTitle = eventTitle?.isEmpty == false ? eventTitle! : fallbackTitle
-        if name.stringValue == suggestedTitle || name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if replacingDraft || name.stringValue == suggestedTitle || name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             name.stringValue = nextTitle
         }
         suggestedTitle = nextTitle

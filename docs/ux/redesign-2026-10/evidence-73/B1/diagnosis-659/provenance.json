@@ -1,0 +1,8 @@
+{
+  "source_commit": "e7b8ca205df4fe88139fe9775d2afbd0e2e06cb4",
+  "build": "659",
+  "status": "failing GUI evidence, before snippet-height fix",
+  "executable_sha256": "498b3923d6285fede1499e4b21c25112b1b20a624918f18603687a8dd1caab75",
+  "image_sha256": "e570395b239fccd9045b894ce1b9e2113ce86e4f9fddad12593444e48d864c64",
+  "accessibility_sha256": "fa5bf8a8b865503adf4fae5baa7b1b1589d424e9f68f9b7b99d81fe8c1d6c5e4"
+}

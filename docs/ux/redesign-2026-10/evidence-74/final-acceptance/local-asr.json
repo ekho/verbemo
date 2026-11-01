@@ -1,0 +1,87 @@
+{
+  "source_commit": "700b544424bb36a7a767f67bdc46fc4c160cb317",
+  "build": "691",
+  "interface": "CLI process; native GUI route not verified",
+  "backend": "local whisper",
+  "model": "large-v3-turbo-q5_0",
+  "model_sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+  "network_or_paid_provider_used": false,
+  "capture_excerpt": {
+    "expected_phrase_match": false,
+    "transcript_sha256": "7e8b319442d6da915c26958c8994cb4ad2e76e0135c214cc94eec83728abd67e",
+    "raw_transcript_included": false,
+    "note": "The selected captured excerpt produced different text. The user separately confirmed intelligible English in native playback of the full saved recording in Release691."
+  },
+  "pure_source": {
+    "expected_phrase_match": true,
+    "segments": [
+      {
+        "end_ms": 1980,
+        "speaker": "them",
+        "start_ms": 0,
+        "text": "Verbimo Audio Acceptance Test."
+      },
+      {
+        "end_ms": 3020,
+        "speaker": "them",
+        "start_ms": 2400,
+        "text": "Blue Compass."
+      },
+      {
+        "end_ms": 4880,
+        "speaker": "them",
+        "start_ms": 3480,
+        "text": "1, 2, 3."
+      },
+      {
+        "end_ms": 9260,
+        "speaker": "them",
+        "start_ms": 5300,
+        "text": "This synthetic speech was generated locally for a short recording check."
+      }
+    ],
+    "transcript_sha256": "aab902f7b00ea7467b6d910d35b4525d903dc52b357481a6287c64fb6ee7bd78",
+    "input_sha256": "24d87a21b9f8e1264b40d15b9e0049702826143f4f875f32e847bcf94844c13a",
+    "log": "/tmp/ux74-real-local-asr-source.log",
+    "log_sha256": "7a0ad0e4c997adcca2adacd21be7936f64ec3a7a8c2c56530ff47ef4e62dadba",
+    "exit_code": 0,
+    "note": "Brand name recognized as Verbimo; this is a short smoke check, not an ASR quality benchmark."
+  },
+  "raw_audio_uploaded": false,
+  "capture_playback": {
+    "interface": "native Release691",
+    "user_confirmed_intelligible_english": true,
+    "pause_and_stop_verified": true
+  },
+  "full_capture_local_asr": {
+    "system": {
+      "segments": 38,
+      "transcript_sha256": "61b14b8fbfb887291c12a2e33748d107eb49eae5bb3a459887b94105235297af",
+      "expected_phrase_match": false,
+      "raw_transcript_included": false
+    },
+    "mic": {
+      "segments": 42,
+      "transcript_sha256": "72f7f7bf3ea56d40c871650dd4d46a3ed966b14b825395ddd453be9f571c8c6e",
+      "expected_phrase_match": false,
+      "raw_transcript_included": false
+    }
+  },
+  "independent_whisper_cli_excerpt": {
+    "exit_code": 0,
+    "expected_phrase_match": false,
+    "transcript_sha256": "4f16f35bc3b2923ed7c96fc829e57203cc8f22b6b6f0b7cc02173811d3da03eb",
+    "raw_transcript_included": false,
+    "note": "A separate installed whisper-cli with the same local model did not find the expected phrase in the same 10s excerpt. Root cause remains unresolved."
+  },
+  "native_import_smoke": {
+    "build": "693",
+    "interface": "Native file picker import and saved transcript read-back",
+    "backend": "local whisper / large-v3-turbo-q5_0",
+    "source": "same pure synthetic AIFF, independent from captured audio",
+    "segments": 4,
+    "expected_phrase_match": true,
+    "brand_recognized_as": "Verbimo",
+    "network_or_paid_provider_used": false
+  }
+}

@@ -1,0 +1,139 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 text Библиотека
+		8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Value: UX69 Атлас — планирование, Placeholder: Название, расшифровка, сводка, ID: library.search
+			9 button Поиск в библиотеке: названия, расшифровки и сводки
+			10 button cancel
+		11 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+		12 scroll area
+			13 table
+				14 row (selected)
+					15 cell (selected)
+						16 text UX69 Атлас — планирование 2026-10-29 · 03:00
+						17 image Description: Готово, ID: meeting.list-status
+		18 splitter (disabled, settable, float) 248
+		19 text 29.10.2026 12:00 · 3 мин · Приглашены: 3
+		20 text Help: UX69 Атлас — планирование, ID: meeting.title
+		21 button Копировать, Description: copy, ID: meeting.copy
+		22 button Description: Действия со встречей, ID: meeting.actions
+		23 button Description: Показать или скрыть детали встречи, Value: 1, ID: meeting.inspector
+		24 button Description: Воспроизвести встречу, ID: playback.play
+		25 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		26 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+			27 value indicator (settable, float) 0
+		28 text 00:00 / 03:00
+		29 image volume high
+		30 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			31 value indicator (settable, float) 1
+		32 pop up button Description: Скорость воспроизведения, Value: 1×
+		33 container meeting.studio-header
+			34 text Версия
+			35 pop up button Description: Версия расшифровки, Value: 2 · Whisper · 29 окт. 2026 г., 12:00:00, ID: transcript-versions
+			36 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Placeholder: Найти в этой встрече, ID: meeting.search
+				37 button Поиск в выбранной версии расшифровки и сводки
+			38 radio button Сводка, Value: 0, ID: meeting.result.summary
+			39 radio button Расшифровка, Description: comment lines, Value: 0, ID: meeting.result.transcript
+			40 radio button Участники, Value: 1, ID: meeting.result.participants
+		41 scroll area Secondary Actions: Scroll Up, Scroll Down
+			42 text Прослушайте голос, затем выберите участника или введите имя. Сопоставление применяется ко всем его репликам в этой версии расшифровки. A
+			43 combo box (settable) Description: Имя для Говорящий 1, Value: Борис Примеров · ux69-1@example.invalid, Placeholder: Выберите или введите имя, ID: speaker.choice, Secondary Actions: Confirm
+				44 button Description: Имя для Говорящий 1, ID: speaker.options
+			45 text Реплик: 6
+			46 button Description: Прослушать Говорящий 1 с 00:00, ID: speaker.play
+			47 text 00:00 Реплика 1. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. 
+			48 button Description: Прослушать Говорящий 1 с 00:30, ID: speaker.play
+			49 text 00:30 Реплика 4. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+			50 button Description: Прослушать Говорящий 1 с 01:00, ID: speaker.play
+			51 text 01:00 Реплика 7. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.  B
+			52 combo box (settable) Description: Имя для Говорящий 2, Value: Борис Примеров · ux69-1@example.invalid, Placeholder: Выберите или введите имя, ID: speaker.choice, Secondary Actions: Confirm
+				53 button Description: Имя для Говорящий 2, ID: speaker.options
+			54 text Реплик: 6
+			55 button Description: Прослушать Говорящий 2 с 00:10, ID: speaker.play
+			56 text 00:10 Реплика 2. Обсуждаем подготовку учебного проекта. Кварцевый компас нужен для проверки поиска по тексту. Нужно согласовать сроки, проверить материалы и записать решение. 
+			57 button Description: Прослушать Говорящий 2 с 00:40, ID: speaker.play
+			58 text 00:40 Реплика 5. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+			59 button Description: Прослушать Говорящий 2 с 01:10, ID: speaker.play
+			60 text 01:10 Реплика 8. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение.  C
+			61 combo box (settable) Description: Имя для Говорящий 3, Value: Вера Макетная · ux69-2@example.invalid, Placeholder: Выберите или введите имя, ID: speaker.choice, Secondary Actions: Confirm
+				62 button Description: Имя для Говорящий 3, ID: speaker.options
+			63 text Реплик: 6
+			64 button Description: Прослушать Говорящий 3 с 00:20, ID: speaker.play
+			65 text 00:20 Реплика 3. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+			66 button Description: Прослушать Говорящий 3 с 00:50, ID: speaker.play
+			67 text 00:50 Реплика 6. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+			68 button Description: Прослушать Говорящий 3 с 01:20, ID: speaker.play
+			69 text 01:20 Реплика 9. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+			70 scroll bar (settable, float) 0
+				71 value indicator (settable, float) 0
+				72 increment arrow button
+				73 decrement arrow button
+				74 increment page button
+				75 decrement page button
+		76 scroll area Secondary Actions: Scroll Up, Scroll Down
+			77 text ДЕТАЛИ ВСТРЕЧИ
+			78 button Description: Закрыть детали встречи, ID: meeting.inspector-close
+			79 text КАЛЕНДАРЬ
+			80 button UX69 Атлас — планирование, Help: Открыть событие календаря, ID: calendar.open
+			81 text Синтетические данные UX69 ПРИГЛАШЁННЫЕ Анна С Очень Длинной Фамилией Тестовая
+Борис Примеров
+Вера Макетная Приглашение не подтверждает присутствие.
+			82 button UX69 Атлас — планирование, Description: Выбрать событие календаря, ID: calendar.choose, Help: UX69 Атлас — планирование
+
+			83 button Description: Снять связь с событием календаря, ID: calendar.clear
+			84 text ОБРАБОТКА
+			85 image Запись сохранена
+				86 image microphone
+				87 image selected
+			88 text Запись сохранена
+			89 image Расшифровка готова · диаризация включена
+				90 image plain text document
+				91 image
+				92 image selected
+			93 text Расшифровка готова · диаризация включена
+			94 button (disabled) Description: Расшифровать повторно, Help: Включите расшифровку в настройках., ID: meeting.retranscribe
+			95 image Сводка готова
+				96 image
+				97 image selected
+			98 text Сводка готова
+			99 button Description: Перегенерировать сводку, ID: meeting.generate-summary
+			100 text НАСТРОЙКИ ОБРАБОТКИ Расшифровка: Отключена
+Диаризация: Отключена
+Сводка: Отключена
+			101 button Настройки →, Description: edit, ID: meeting.processing-settings
+			102 scroll bar (settable, float) 0
+				103 value indicator (settable, float) 0
+				104 increment arrow button
+				105 decrement arrow button
+				106 increment page button
+				107 decrement page button
+	108 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	109 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	110 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	111 button (disabled) Нет записи, ID: activity.recording
+	112 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	113 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	114 close button
+	115 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	116 minimize button
+117 menu bar
+	118 Verbemo Final Review
+	119 Файл
+	120 Правка
+	121 Окно
+
+Selected text: ```
+Борис Примеров · ux69-1@example.invalid
+```
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

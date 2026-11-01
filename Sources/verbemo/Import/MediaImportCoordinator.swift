@@ -122,7 +122,7 @@ actor MediaImportCoordinator {
                     result.cancelled = true
                     break
                 }
-                result.failures.append(Failure(source: source, message: "\(error)"))
+                result.failures.append(Failure(source: source, message: (error as? LocalizedError)?.errorDescription ?? "\(error)"))
             }
         }
         activeNormalization = nil

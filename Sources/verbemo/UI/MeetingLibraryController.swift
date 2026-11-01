@@ -1,8 +1,9 @@
 import AppKit
+import SwiftUI
 
 /// The Journal meeting list, document and inspector hosted by ApplicationWindow.
 @MainActor
-final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
+final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     struct RetranscriptionEngine {
         let id: String
         let title: String
@@ -19,7 +20,6 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     ] }
 
     var onImportFiles: (([URL]) -> Void)?
-    var onCancelImport: (() -> Void)?
     var onResumeDiarization: (@MainActor (URL, DiarizationState.Request) async throws -> Void)?
     var onRetryDiarization: ((URL) async throws -> Void)?
     var onSkipDiarization: ((URL) async throws -> Void)?
@@ -28,16 +28,55 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private(set) var contentView = NSView()
     private(set) var listContentView = NSView()
     let toolbarContent = NSStackView()
+    private let titleActions = NSStackView()
     var onSelectMeeting: (() -> Void)?
     var onNavigateSettings: ((ApplicationNavigationState.Destination) -> Void)?
     var currentFilter: ApplicationNavigationState.Destination { meetingFilter }
-    private let filterPicker = NSPopUpButton()
+    private let filterButton = LibraryFilterButton()
+    private let filterPopover = NSPopover()
+    private var filterOptions: [NSButton] = []
+    private let measuringListTitle = MeetingListView.titleLabel("")
     private let resultPicker = NSStackView()
+    let meetingHeaderState = StudioMeetingHeaderState()
+    private let meetingSearch = MeetingSearchField()
+    private var meetingHeader: NSHostingView<StudioMeetingHeader>?
+    func focusMeetingSearch() -> Bool {
+        guard !contentView.isHiddenOrHasHiddenAncestor, meetingSearch.isEnabled, panel.attachedSheet == nil else { return false }
+        if meetingSearch.isHiddenOrHasHiddenAncestor {
+            inspectorRequested = false
+            updateCompactLayout()
+        }
+        guard !meetingSearch.isHiddenOrHasHiddenAncestor else { return false }
+        return panel.makeFirstResponder(meetingSearch)
+    }
+    private func syncMeetingSearchHeader() {
+        if meetingSearch.stringValue != meetingSearchQuery { meetingSearch.stringValue = meetingSearchQuery }
+        meetingSearch.isEnabled = currentSearchContext != nil
+        meetingHeaderState.searchEnabled = meetingSearch.isEnabled
+        meetingHeaderState.versionsEnabled = !versions.isEmpty
+        meetingSearch.toolTip = meetingSearch.isEnabled ? nil : localised(
+            "A readable transcript or summary is required.", "Поиск появится, когда будет готова расшифровка или сводка.")
+        meetingSearch.setAccessibilityHelp(meetingSearch.toolTip)
+        if !meetingSearch.isEnabled, meetingSearch.currentEditor() != nil {
+            panel.makeFirstResponder(resultPicker.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.state == .on })
+        }
+        meetingHeaderState.matchCount = meetingSearchHits.count
+        meetingHeaderState.matchIndex = meetingSearchIndex
+        meetingHeaderState.hasQuery = !meetingSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        meetingHeader?.isHidden = selected == nil || activeRecording?.dir == selected?.dir
+    }
+    @objc private func meetingSearchChanged() {
+        if meetingSearch.stringValue != meetingSearchQuery { setMeetingSearchQuery(meetingSearch.stringValue) }
+    }
     private let inspectorButton = NSButton()
     private let pipeline = NSStackView()
     private let route = NSTextField(wrappingLabelWithString: "")
     private let cancelProcessingButton = NSButton()
-    private let processingStatus = NSTextField(wrappingLabelWithString: "")
+    private let processingStatus = NSTextField(labelWithString: "")
+    private let resultNotice = NSView()
+    private let dismissNotice = NSButton()
+    private var noticeKey = ""
+    private var noticeDismissed = false
     private let processingCancellation: MeetingProcessingCancellation
     private var processingMonitor: Task<Void, Never>?
     private var terminating = false
@@ -55,11 +94,21 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         guard activeRecording != value else { return }
         let refreshDetail = selected == nil || selected?.dir == activeRecording?.dir || selected?.dir == value?.dir
         activeRecording = value
-        show(allItems, refreshDetail: refreshDetail)
+        if libraryQuery.isEmpty { show(allItems, refreshDetail: refreshDetail) }
+        else { restartLibrarySearch() }
     }
     private var allItems: [SessionInventory.Item] = []
     private var meetingFilter: ApplicationNavigationState.Destination = .allMeetings
     private let search = MeetingSearchField()
+    private let librarySearchStatus = NSTextField(labelWithString: "")
+    private var librarySearchTask: Task<Void, Never>?
+    private var librarySearchTasks: [Int: Task<Void, Never>] = [:]
+    private var librarySearchGeneration = 0
+    private var libraryHits: [URL: MeetingLibrarySearch.Hit]?
+    private var librarySearchPending = false
+    private var libraryUnreadable = 0
+    private var libraryNavigationFailed = false
+    private var libraryQuery: String { search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) }
     private let emptyLabel = NSTextField(wrappingLabelWithString: "")
     private let clearSearch = NSButton()
     private let emptyView = NSStackView()
@@ -69,7 +118,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private let regenerateButton = NSButton()
     private let repeatButton = NSButton()
     private var journalColumns: JournalColumns?
-    private let documentHost = NSView()
+    private let documentHost = JournalSurface(StudioStyle.paper)
     private var meetingDocument: NSView?
     var activeRecordingView: LiveTranscriptView? {
         didSet {
@@ -100,12 +149,28 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private let detailMeta = NSTextField(labelWithString: "")
     private let detailTitle = NSTextField(labelWithString: "")
     private let titleDoubleClick = NSClickGestureRecognizer()
-    private let detailError = NSTextField(wrappingLabelWithString: "")
+    private let detailError = NSTextField(labelWithString: "")
     private var renamingSession: URL?
     private let diarizationLabel = NSTextField(labelWithString: "")
     private let retryDiarizationButton = NSButton()
     private let skipDiarizationButton = NSButton()
     private let speakersStack = FlippedStackView()
+    private struct SpeakerRowsContext: Equatable {
+        let generation: MeetingSearchContext?
+        let names: [String: SpeakerNames.Entry]?
+        let participants: [CalendarParticipant]
+        let canEdit: Bool
+        let canPlay: Bool
+        let canMatch: Bool
+    }
+    private var renderedSpeakerRows: SpeakerRowsContext?
+    private func clearSpeakerRows() {
+        renderedSpeakerRows = nil
+        speakersStack.arrangedSubviews.forEach {
+            speakersStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+    }
     private let finishButton = NSButton()
     private let detailTabs = NSTabView()
     private let versionSelector = NSPopUpButton()
@@ -120,10 +185,166 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private func key(_ version: TranscriptVersions.Version) -> String {
         version.dir.path + (version.isRequest ? "#request" : "#result")
     }
+    struct MeetingSearchHit: Equatable { let tab: String; let segment: Int?; let range: NSRange }
+    private struct MeetingReadingPosition {
+        let tab: String
+        let summary: NSPoint
+        let plainTranscript: NSPoint
+        let transcript: MeetingTranscriptView.ReadingPosition?
+    }
+    private struct LibraryReadingPosition {
+        let dir: URL
+        let version: String?
+        let context: MeetingSearchContext?
+        let position: MeetingReadingPosition
+        let query: String
+        let index: Int?
+        let origin: MeetingReadingPosition?
+    }
+    private var libraryReadingPosition: LibraryReadingPosition?
+    private func saveLibraryReadingPosition() {
+        guard meetingSelectionActive, let selected else { return }
+        libraryReadingPosition = .init(dir: selected.dir, version: versionKey, context: currentSearchContext,
+            position: captureMeetingReadingPosition(), query: meetingSearchQuery, index: meetingSearchIndex, origin: searchOrigin)
+    }
+    private func applyLibraryResults() {
+        guard meetingSelectionActive else { show(allItems); return }
+        if selected?.dir == libraryReadingPosition?.dir,
+           currentSearchContext == libraryReadingPosition?.context { saveLibraryReadingPosition() }
+        let saved = libraryReadingPosition
+        libraryReadingPosition = nil
+        if let saved { versionSession = saved.dir; versionKey = saved.version }
+        show(allItems, preferredSelection: saved?.dir)
+        guard let saved, selected?.dir == saved.dir, currentSearchContext == saved.context else { return }
+        setMeetingSearchQuery(saved.query)
+        if let index = saved.index, meetingSearchHits.indices.contains(index) { revealMeetingSearchHit(at: index) }
+        searchOrigin = saved.origin
+        restoreMeetingReadingPosition(saved.position)
+    }
+    private(set) var meetingSearchQuery = ""
+    private(set) var meetingSearchHits: [MeetingSearchHit] = []
+    private(set) var meetingSearchIndex: Int?
+    private var searchTranscript: Transcript?
+    private struct MeetingSearchContext: Equatable { let location: String; let transcript: Data }
+    private var searchTranscriptData: Data?
+    private var displayedSearchContext: MeetingSearchContext?
+    private var searchOrigin: MeetingReadingPosition?
+    private var currentSearchContext: MeetingSearchContext? {
+        guard let selected, let dir = artifactDirectory, selectedVersion?.isRequest != true,
+              activeRecording?.dir != selected.dir,
+              searchTranscript != nil || transcriptText.identifier != nil || summaryText.identifier != nil else { return nil }
+        return MeetingSearchContext(location: selected.dir.path + "\n" + dir.path,
+                                    transcript: searchTranscriptData ?? Data(transcriptText.string.utf8))
+    }
+    private func captureMeetingReadingPosition() -> MeetingReadingPosition {
+        .init(tab: detailTabs.selectedTabViewItem?.identifier as? String ?? "summary",
+              summary: summaryText.enclosingScrollView?.contentView.bounds.origin ?? .zero,
+              plainTranscript: transcriptText.enclosingScrollView?.contentView.bounds.origin ?? .zero,
+              transcript: meetingTranscript.readingPosition())
+    }
+    private func selectResultTab(_ id: String) {
+        detailTabs.selectTabViewItem(withIdentifier: id)
+        for case let button as JournalTabButton in resultPicker.arrangedSubviews {
+            button.select(button.identifier?.rawValue == "meeting.result.\(id)")
+        }
+    }
+    private func restoreMeetingReadingPosition(_ position: MeetingReadingPosition) {
+        selectResultTab(position.tab)
+        for (text, point) in [(summaryText, position.summary), (transcriptText, position.plainTranscript)] {
+            if let scroll = text.enclosingScrollView {
+                scroll.contentView.scroll(to: point)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+        }
+        meetingTranscript.restoreReadingPosition(position.transcript)
+    }
+    func setMeetingSearchQuery(_ query: String) {
+        guard currentSearchContext != nil, currentSearchContext == displayedSearchContext else { return }
+        let wasEmpty = meetingSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let isEmpty = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if wasEmpty && !isEmpty { searchOrigin = captureMeetingReadingPosition() }
+        meetingSearchQuery = query
+        defer { syncMeetingSearchHeader() }
+        rebuildMeetingSearch()
+        if isEmpty {
+            if let origin = searchOrigin { restoreMeetingReadingPosition(origin) }
+            searchOrigin = nil
+        }
+    }
+    private func rebuildMeetingSearch(preservingIndex: Bool = false) {
+        let previousHits = meetingSearchHits, previousIndex = meetingSearchIndex
+        meetingSearchIndex = nil
+        meetingSearchHits = []
+        if let transcript = searchTranscript {
+            for (index, segment) in transcript.segments.enumerated() {
+                meetingSearchHits += MeetingTextSearch.matches(in: segment.text, query: meetingSearchQuery).map {
+                    .init(tab: "transcript", segment: index, range: $0)
+                }
+            }
+        } else if transcriptText.identifier != nil {
+            meetingSearchHits += MeetingTextSearch.matches(in: transcriptText.string, query: meetingSearchQuery).map {
+                .init(tab: "transcript", segment: nil, range: $0)
+            }
+        }
+        if summaryText.identifier != nil {
+            meetingSearchHits += MeetingTextSearch.matches(in: summaryText.string, query: meetingSearchQuery).map {
+                .init(tab: "summary", segment: nil, range: $0)
+            }
+        }
+        if preservingIndex, previousHits == meetingSearchHits, let index = previousIndex, meetingSearchHits.indices.contains(index) {
+            meetingSearchIndex = index
+        }
+        for text in [summaryText, transcriptText] {
+            let full = NSRange(location: 0, length: (text.string as NSString).length)
+            text.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
+            for hit in meetingSearchHits where hit.segment == nil && hit.tab == (text === summaryText ? "summary" : "transcript") {
+                text.layoutManager?.addTemporaryAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.25), forCharacterRange: hit.range)
+            }
+        }
+        let focused = meetingSearchIndex.map { meetingSearchHits[$0] }
+        meetingTranscript.setSearch(matches: transcriptSearchRanges(), focusedSegment: focused?.segment, focusedRange: focused?.range)
+    }
+    private func transcriptSearchRanges() -> [Int: [NSRange]] {
+        var ranges: [Int: [NSRange]] = [:]
+        for hit in meetingSearchHits {
+            if let segment = hit.segment { ranges[segment, default: []].append(hit.range) }
+        }
+        return ranges
+    }
+    func moveMeetingSearch(forward: Bool) {
+        guard currentSearchContext == displayedSearchContext, !meetingSearchHits.isEmpty else { return }
+        let count = meetingSearchHits.count
+        let index = meetingSearchIndex.map { ($0 + (forward ? 1 : count - 1)) % count } ?? (forward ? 0 : count - 1)
+        revealMeetingSearchHit(at: index)
+    }
+    private func revealMeetingSearchHit(at index: Int) {
+        meetingSearchIndex = index
+        syncMeetingSearchHeader()
+        let hit = meetingSearchHits[index]
+        selectResultTab(hit.tab)
+        meetingTranscript.setSearch(matches: transcriptSearchRanges(), focusedSegment: hit.segment, focusedRange: hit.range)
+        if let segment = hit.segment { meetingTranscript.revealSearchSegment(segment) }
+        else {
+            let text = hit.tab == "summary" ? summaryText : transcriptText
+            text.scrollRangeToVisible(hit.range)
+            text.showFindIndicator(for: hit.range)
+        }
+    }
+    private func finishSearchReload(previousPosition: MeetingReadingPosition) {
+        defer { syncMeetingSearchHeader() }
+        let sameContext = displayedSearchContext != nil && displayedSearchContext == currentSearchContext
+        if !sameContext {
+            meetingSearchQuery = ""
+            searchOrigin = nil
+            for text in [summaryText, transcriptText] { text.scrollToBeginningOfDocument(nil) }
+        }
+        displayedSearchContext = currentSearchContext
+        rebuildMeetingSearch(preservingIndex: sameContext)
+        if sameContext { restoreMeetingReadingPosition(previousPosition) }
+    }
     private let summaryText = NSTextView()
     private let transcriptText = NSTextView()
     private let busyLabel = NSTextField(labelWithString: "")
-    private let importStatus = MediaImportStatusView()
 
     private var items: [SessionInventory.Item] = []
     private var selected: SessionInventory.Item? {
@@ -140,12 +361,23 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     var mcpPendingDeletion: Set<String> { Set(allItems.filter { deletion.isPending($0.dir) }.map { $0.dir.lastPathComponent }) }
     private let deletionNotice = NSStackView()
     private let deletionLabel = NSTextField(labelWithString: "")
+    var serviceViews: [NSView] { [detailError, resultNotice, deletionNotice, busyLabel, librarySearchStatus] + audioPlayer.serviceViews }
     private var undoDeletionID: UUID?
     var isProcessing: Bool { working || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var summarySheet: SummaryRegenerationSheet?
     private var summaryDirectory: URL?
-    private var working = false { didSet { onActivityChange?() } }
+    private var working = false {
+        didSet {
+            if working {
+                detailError.isHidden = true
+                detailError.stringValue = ""
+                detailError.toolTip = nil
+            }
+            if oldValue != working { showDetail() }
+            onActivityChange?()
+        }
+    }
 
     init(root: URL, pasteboard: NSPasteboard = .general,
          operations: ProcessingOperations = .shared, hostWindow: NSWindow) {
@@ -160,6 +392,8 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         ) { [weak self] _ in MainActor.assumeIsolated { self?.table.reloadData() } }, center: NSWorkspace.shared.notificationCenter)
         contentView = buildLayout()
         meetingTranscript.onPlayFrom = { [weak self] seconds in self?.audioPlayer.play(from: seconds) }
+        meetingTranscript.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
+        calendarPicker.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
         // Populate the first view synchronously; later scans run off the main thread.
         show(SessionInventory.scan(root: root))
         processingCancellation.onChange = { [weak self] in
@@ -176,7 +410,10 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         }
     }
 
-    deinit { processingMonitor?.cancel() }
+    deinit {
+        processingMonitor?.cancel()
+        for task in librarySearchTasks.values { task.cancel() }
+    }
 
     /// Stop UI-owned work synchronously; the application awaits these after its processing barrier.
     func stopForTermination() -> [Task<Void, Never>] {
@@ -192,6 +429,8 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         for task in scans { task.cancel() }
         scan = nil
         var cleanup = scans + processingCancellation.stopObserving()
+        for task in librarySearchTasks.values { task.cancel(); cleanup.append(task) }
+        librarySearchTask = nil
         if let monitor { cleanup.append(monitor) }
         cleanup.append(deletion.stopForTermination())
         cleanup.append(Task { [audioPlayer] in await audioPlayer.settled() })
@@ -204,8 +443,9 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private func buildTable() {
         table.addTableColumn(NSTableColumn(identifier: .init("meeting-card")))
         table.headerView = nil
+        table.style = .plain
         table.selectionHighlightStyle = .regular
-        table.backgroundColor = JournalStyle.sidebar
+        table.backgroundColor = StudioStyle.sidebar
         table.rowHeight = 64
         table.intercellSpacing = NSSize(width: 0, height: 4)
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
@@ -233,20 +473,24 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     private func buildLayout() -> NSView {
         busyLabel.font = .systemFont(ofSize: 11)
         busyLabel.textColor = .secondaryLabelColor
+        busyLabel.isHidden = true
+        busyLabel.identifier = .init("meeting.work-status")
         diarizationLabel.font = .systemFont(ofSize: 11)
         diarizationLabel.textColor = .secondaryLabelColor
         diarizationLabel.lineBreakMode = .byWordWrapping
         diarizationLabel.maximumNumberOfLines = 3
         diarizationLabel.identifier = .init("diarization.status")
-        for (button, title, action) in [
+        for (button, title, symbol, action) in [
             (retryDiarizationButton, localised("Retry diarization", "Повторить диаризацию"),
-             #selector(retryDiarizationClicked)),
+             "arrow.clockwise", #selector(retryDiarizationClicked)),
             (skipDiarizationButton, localised("Skip diarization", "Пропустить диаризацию"),
-             #selector(skipDiarizationClicked)),
-            (finishButton, localised("Finish processing", "Доделать"), #selector(finishClicked)),
-            (cancelProcessingButton, localised("Cancel processing", "Отменить обработку"), #selector(cancelProcessingClicked)),
-        ] as [(NSButton, String, Selector)] {
+             "forward.end", #selector(skipDiarizationClicked)),
+            (finishButton, localised("Finish processing", "Доделать"), "play", #selector(finishClicked)),
+            (cancelProcessingButton, localised("Cancel processing", "Отменить обработку"), "xmark", #selector(cancelProcessingClicked)),
+        ] as [(NSButton, String, String, Selector)] {
             button.title = title
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            button.imagePosition = .imageLeading
             button.bezelStyle = .rounded
             button.target = self
             button.action = action
@@ -254,7 +498,35 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         cancelProcessingButton.identifier = .init("meeting.cancel-processing")
         processingStatus.identifier = .init("meeting.processing-status")
         processingStatus.font = .systemFont(ofSize: 11)
-        processingStatus.textColor = JournalStyle.muted
+        processingStatus.textColor = StudioStyle.muted
+        processingStatus.lineBreakMode = .byTruncatingTail
+        resultNotice.identifier = .init("meeting.result-notice")
+        resultNotice.isHidden = true
+        dismissNotice.identifier = .init("meeting.dismiss-notice")
+        dismissNotice.title = ""
+        dismissNotice.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+        dismissNotice.imagePosition = .imageOnly
+        dismissNotice.isBordered = false
+        dismissNotice.toolTip = localised("Dismiss notice", "Скрыть уведомление")
+        dismissNotice.setAccessibilityLabel(dismissNotice.toolTip)
+        dismissNotice.target = self
+        dismissNotice.action = #selector(dismissResultNotice)
+        dismissNotice.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        dismissNotice.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        let noticeRow = NSStackView(views: [processingStatus, dismissNotice])
+        noticeRow.distribution = .fill
+        noticeRow.alignment = .centerY
+        noticeRow.spacing = 8
+        processingStatus.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        processingStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        noticeRow.translatesAutoresizingMaskIntoConstraints = false
+        resultNotice.addSubview(noticeRow)
+        NSLayoutConstraint.activate([
+            noticeRow.leadingAnchor.constraint(equalTo: resultNotice.leadingAnchor, constant: 10),
+            noticeRow.trailingAnchor.constraint(equalTo: resultNotice.trailingAnchor, constant: -6),
+            noticeRow.topAnchor.constraint(equalTo: resultNotice.topAnchor),
+            noticeRow.bottomAnchor.constraint(equalTo: resultNotice.bottomAnchor),
+        ])
         retryDiarizationButton.identifier = .init("diarization.retry")
         skipDiarizationButton.identifier = .init("diarization.skip")
 
@@ -264,13 +536,14 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         ] {
             button.identifier = .init(id)
             button.title = ""
-            button.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+            button.image = StudioStyle.regenerationImage(symbol: button === repeatButton ? "text.bubble" : "checklist")
             button.imagePosition = .imageOnly
-            button.bezelStyle = .rounded
+            button.isBordered = false
+            button.imageScaling = .scaleProportionallyDown
             button.target = self
             button.action = action
-            button.widthAnchor.constraint(equalToConstant: 28).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         }
 
         speakersStack.orientation = .vertical
@@ -290,6 +563,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         }
 
         versionSelector.identifier = .init("transcript-versions")
+        versionSelector.setAccessibilityLabel(localised("Transcript version", "Версия расшифровки"))
         versionSelector.target = self
         versionSelector.action = #selector(versionSelected(_:))
         versionSelector.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -301,7 +575,11 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         moreButton.isBordered = false
         moreButton.target = self
         moreButton.action = #selector(moreClicked(_:))
-        let titleRow = NSStackView(views: [detailTitle])
+        let titleSpacer = NSView()
+        titleSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let titleRow = NSStackView(views: [detailTitle, titleSpacer, titleActions])
+        titleActions.setContentHuggingPriority(.required, for: .horizontal)
+        titleActions.setContentCompressionResistancePriority(.required, for: .horizontal)
         detailTitle.identifier = .init("meeting.title")
         detailTitle.delegate = self
         detailTitle.target = self
@@ -311,8 +589,11 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         titleDoubleClick.action = #selector(beginRenamingMeeting)
         detailTitle.addGestureRecognizer(titleDoubleClick)
         detailError.textColor = .systemOrange
-        detailError.font = .systemFont(ofSize: 12)
+        detailError.font = .systemFont(ofSize: 11)
         detailError.isHidden = true
+        detailError.identifier = .init("meeting.operation-error")
+        detailError.lineBreakMode = .byTruncatingTail
+        detailError.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         calendarView.setContentHuggingPriority(.required, for: .vertical)
         titleRow.spacing = 12
         detailTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -330,28 +611,40 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             let button = JournalTabButton(title: title, symbol: symbol, target: self, action: #selector(resultSelected(_:)))
             button.tag = index
             button.identifier = .init("meeting.result.\(id)")
+            button.selectedTint = StudioStyle.accent
+            button.unselectedTint = StudioStyle.muted
+            button.markerTint = StudioStyle.accent
             button.select(index == 0)
             resultPicker.addArrangedSubview(button)
         }
         resultPicker.identifier = .init("meeting.result-tabs")
         resultPicker.setAccessibilityRole(.tabGroup)
         resultPicker.setAccessibilityLabel(localised("Meeting result", "Результат встречи"))
-        let versionActions = NSStackView(views: [resultPicker, NSView(), versionSelector])
-        versionActions.orientation = .horizontal
-        versionActions.spacing = 8
-        let detail = NSStackView(views: [detailMeta, titleRow, detailError, openActiveButton, audioPlayer, versionActions, detailTabs, busyLabel])
+        meetingSearch.identifier = .init("meeting.search")
+        meetingSearch.placeholderString = localised("Find in this meeting", "Найти в этой встрече")
+        meetingSearch.setAccessibilityLabel(localised("Search selected transcript and summary version", "Поиск в выбранной версии расшифровки и сводки"))
+        meetingSearch.sendsSearchStringImmediately = true
+        meetingSearch.target = self
+        meetingSearch.action = #selector(meetingSearchChanged)
+        meetingSearch.delegate = self
+        meetingHeaderState.onStep = { [weak self] forward in self?.moveMeetingSearch(forward: forward) }
+        meetingHeaderState.onClear = { [weak self] in self?.setMeetingSearchQuery("") }
+        let header = StudioMeetingHeaderHost(rootView: StudioMeetingHeader(state: meetingHeaderState, versions: versionSelector, tabs: resultPicker, search: meetingSearch))
+        header.sizingOptions = [.intrinsicContentSize]
+        header.identifier = .init("meeting.studio-header")
+        meetingHeader = header
+        let detail = NSStackView(views: [detailMeta, titleRow, openActiveButton, audioPlayer, header, detailTabs])
         detail.orientation = .vertical
         detail.distribution = .fill
         detail.alignment = .leading
         detail.spacing = 10
         detailMeta.textColor = .secondaryLabelColor
         detailMeta.font = .systemFont(ofSize: 12)
-        detailTitle.font = JournalStyle.titleFont()
-        detailTitle.textColor = JournalStyle.ink
+        detailTitle.font = StudioStyle.titleFont()
+        detailTitle.textColor = StudioStyle.ink
         detailTitle.maximumNumberOfLines = 2
         detailTitle.lineBreakMode = .byWordWrapping
         NSLayoutConstraint.activate([
-            versionSelector.widthAnchor.constraint(lessThanOrEqualTo: detail.widthAnchor),
             detail.heightAnchor.constraint(greaterThanOrEqualToConstant: 260),
         ])
         return buildJournal(detail: detail, diarizationActions: diarizationActions)
@@ -401,7 +694,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         detailMeta.stringValue = [MeetingPresentation.date(item.started), duration, invited].compactMap { $0 }.joined(separator: " · ")
         calendarView.onOpen = { [weak self] in
             guard let self, let metadata, let reason = CalendarEventOpener.open(metadata) else { return }
-            let alert = NSAlert(); alert.messageText = reason; alert.beginJournalSheetModal(for: self.panel)
+            self.showServiceError(reason)
         }
 
     }
@@ -422,15 +715,22 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
 
     func applyFilter(_ filter: ApplicationNavigationState.Destination, clearSearch: Bool = false) {
         meetingFilter = filter
-        filterPicker.selectItem(at: [.allMeetings, .processing, .attention].firstIndex(of: filter) ?? 0)
-        if clearSearch { search.stringValue = "" }
-        show(allItems)
+        filterButton.state = filter == .allMeetings ? .off : .on
+        filterButton.bezelColor = filter == .allMeetings ? nil : StudioStyle.selection
+        filterButton.contentTintColor = filter == .allMeetings ? StudioStyle.ink : StudioStyle.accent
+        filterButton.toolTip = localised("Filter meetings: ", "Фильтр встреч: ") + filter.title
+        filterButton.setAccessibilityLabel(filterButton.toolTip)
+        for option in filterOptions { option.state = option.identifier?.rawValue == "library.filter.\(filter.rawValue)" ? .on : .off }
+        if clearSearch { search.stringValue = ""; restartLibrarySearch() }
+        else { show(allItems) }
     }
     func setMeetingSelectionActive(_ active: Bool) {
         guard meetingSelectionActive != active else { return }
+        if !active { saveLibraryReadingPosition() }
         rememberedMeeting = selected?.dir ?? rememberedMeeting
         meetingSelectionActive = active
-        show(allItems)
+        if active { applyLibraryResults() }
+        else { show(allItems) }
     }
     @discardableResult
     func selectActiveRecording() -> Bool {
@@ -447,7 +747,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     }
     func updateCompactLayout() {
         guard let columns = journalColumns else { return }
-        let compact = min(columns.bounds.width, max(0, panel.contentLayoutRect.width - JournalStyle.sidebarWidth)) < 850
+        let compact = columns.bounds.width < 850
         let visible = inspectorRequested ?? !compact
         inspectorWidth?.isActive = !compact
         columns.arrangedSubviews[0].isHidden = compact && visible
@@ -461,13 +761,26 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         inspectorRequested = columns.arrangedSubviews[2].isHidden
         updateCompactLayout()
     }
+    @objc private func closeInspector() {
+        inspectorRequested = false
+        updateCompactLayout()
+        panel.makeFirstResponder(inspectorButton)
+    }
     @objc private func resultSelected(_ sender: NSButton) {
         for case let button as JournalTabButton in resultPicker.arrangedSubviews { button.select(button === sender) }
         detailTabs.selectTabViewItem(withIdentifier: ["summary", "transcript", "participants"][sender.tag])
     }
-    @objc private func filterSelected() {
+    @objc private func showLibraryFilter() {
+        filterButton.state = meetingFilter == .allMeetings ? .off : .on
+        panel.makeFirstResponder(filterButton)
+        filterPopover.show(relativeTo: filterButton.bounds, of: filterButton, preferredEdge: .minY)
+    }
+    @objc private func filterSelected(_ sender: NSButton) {
         let filters: [ApplicationNavigationState.Destination] = [.allMeetings, .processing, .attention]
-        applyFilter(filters[filterPicker.indexOfSelectedItem])
+        guard filters.indices.contains(sender.tag) else { return }
+        applyFilter(filters[sender.tag])
+        filterPopover.performClose(nil)
+        panel.makeFirstResponder(filterButton)
         onSelectMeeting?()
     }
     @objc private func processingSettings() { onNavigateSettings?(.transcription) }
@@ -489,10 +802,33 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     @objc private func copyFromMenu(_ sender: NSMenuItem) {
         copyMeetingContent(transcript: sender.tag >= 2, plainText: sender.tag % 2 == 0)
     }
-    @objc private func searchChanged() { show(allItems) }
+    @objc private func searchChanged() { libraryNavigationFailed = false; restartLibrarySearch() }
     @objc private func meetingClicked() {
         if let selected, selected.dir == activeRecording?.dir { onOpenActiveRecording?(); return }
+        revealLibraryHit()
         onSelectMeeting?()
+    }
+    private func revealLibraryHit() {
+        guard let item = selected, let hit = libraryHits?[item.dir],
+              hit.source == .transcript || hit.source == .summary else { return }
+        guard MeetingLibrarySearch.isCurrent(hit, in: item.dir) else { restartLibrarySearch(); return }
+        versionSession = nil
+        versionKey = nil
+        showDetail()
+        guard artifactDirectory == item.dir, currentSearchContext != nil,
+              MeetingLibrarySearch.isCurrent(hit, in: item.dir) else {
+            libraryNavigationFailed = true
+            restartLibrarySearch()
+            return
+        }
+        setMeetingSearchQuery(hit.query)
+        let tab = hit.source == .summary ? "summary" : "transcript"
+        guard let index = meetingSearchHits.firstIndex(where: { $0.tab == tab && $0.segment == hit.segment }) else {
+            libraryNavigationFailed = true
+            restartLibrarySearch()
+            return
+        }
+        revealMeetingSearchHit(at: index)
     }
     @objc private func openActiveRecording() { onOpenActiveRecording?() }
     @objc private func moreClicked(_ sender: NSButton) {
@@ -514,13 +850,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         }
     }
     private func textPane(content: NSView) -> NSView {
-        let pane = NSStackView(views: [content])
-        pane.orientation = .vertical
-        pane.alignment = .leading
-        pane.spacing = 10
-        pane.edgeInsets = NSEdgeInsets(top: 16, left: 10, bottom: 10, right: 10)
-        for view in pane.arrangedSubviews { view.widthAnchor.constraint(equalTo: pane.widthAnchor, constant: -20).isActive = true }
-        return Self.frameOwnedPane(pane)
+        Self.frameOwnedPane(content)
     }
     private static func summaryMethodName(_ backend: String) -> String {
         switch backend {
@@ -583,8 +913,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         guard let dir = renamingSession, let item = selected, item.dir == dir else { cancelTitleEdit(); return }
         let title = detailTitle.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
-            detailError.stringValue = localised("Enter a meeting name.", "Введите название встречи.")
-            detailError.isHidden = false
+            showServiceError(localised("Enter a meeting name.", "Введите название встречи."))
             return
         }
         do {
@@ -594,18 +923,26 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             detailTitle.abortEditing()
             reload()
         }
-        catch { detailError.stringValue = error.localizedDescription; detailError.isHidden = false }
+        catch { showServiceError(error.localizedDescription) }
     }
     private func cancelTitleEdit() {
+        if renamingSession != nil { detailError.isHidden = true }
         renamingSession = nil
         titleDoubleClick.isEnabled = true
         detailTitle.isEditable = false
         detailTitle.isBezeled = false
         detailTitle.drawsBackground = false
-        detailError.isHidden = true
         detailTitle.stringValue = selected.map { $0.title ?? $0.name } ?? ""
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if control === meetingSearch {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                moveMeetingSearch(forward: NSApp.currentEvent?.modifierFlags.contains(.shift) != true)
+                return true
+            }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) { setMeetingSearchQuery(""); return true }
+            return false
+        }
         guard control === detailTitle, renamingSession != nil else { return false }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) { cancelTitleEdit(); panel.makeFirstResponder(nil); return true }
         if commandSelector == #selector(NSResponder.insertNewline(_:)) { saveMeetingTitle(); return true }
@@ -651,16 +988,10 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// Show another recordings folder: the one Setup has just moved verbemo to.
     func setRoot(_ folder: URL) {
         root = folder
+        libraryNavigationFailed = false
+        libraryReadingPosition = nil
         table.deselectAll(nil)
-        reload()
-    }
-
-    func updateImport(_ update: MediaImportCoordinator.Update) {
-        importStatus.update(update)
-    }
-
-    func finishImport(_ result: MediaImportCoordinator.Result) {
-        importStatus.finish(result)
+        show([])
         reload()
     }
 
@@ -681,6 +1012,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// every rename and every delete, and growing with every meeting kept.
     private func reload() {
         guard !terminating else { return }
+        invalidateLibrarySearch()
         scans += 1
         let generation = scans
         let root = self.root
@@ -694,8 +1026,9 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             guard let self else { return }
             self.scansInFlight.removeValue(forKey: generation)
             guard !Task.isCancelled, generation == self.scans, !self.terminating else { return }
-            self.show(found)
             self.scan = nil
+            self.show(found)
+            self.restartLibrarySearch()
         }
         scansInFlight[generation] = scan
     }
@@ -703,7 +1036,57 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// Wait for the latest scan to be on screen. For tests, which would
     /// otherwise have to guess how long reading a folder takes.
     func settled() async {
-        while let scan { await scan.value }
+        while scan != nil || librarySearchTask != nil {
+            if let scan { await scan.value }
+            if let task = librarySearchTask { await task.value }
+        }
+    }
+
+    private func invalidateLibrarySearch() {
+        if libraryReadingPosition == nil, !libraryQuery.isEmpty { saveLibraryReadingPosition() }
+        librarySearchGeneration += 1
+        librarySearchTask?.cancel()
+        librarySearchTask = nil
+        libraryHits = nil
+        libraryUnreadable = 0
+        librarySearchPending = !libraryQuery.isEmpty
+        if libraryQuery.isEmpty { libraryNavigationFailed = false }
+    }
+
+    private func restartLibrarySearch() {
+        invalidateLibrarySearch()
+        if libraryQuery.isEmpty { applyLibraryResults(); return }
+        show(allItems)
+        guard !terminating, !libraryQuery.isEmpty, scan == nil else { return }
+        let generation = librarySearchGeneration, query = libraryQuery, root = self.root
+        let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
+        let inputs = inventory.map { item in
+            MeetingLibrarySearch.Input(dir: item.dir, title: item.title ?? item.name,
+                metadata: [item.name, MeetingPresentation.date(item.started)]
+                    + (MeetingCalendarMetadata.read(from: item.dir)?.participants.map(\.name) ?? []))
+        }
+        let task = Task { [weak self] in
+            defer {
+                self?.librarySearchTasks.removeValue(forKey: generation)
+                if self?.librarySearchGeneration == generation { self?.librarySearchTask = nil }
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(150))
+                let worker = Task.detached(priority: .userInitiated) { try MeetingLibrarySearch.search(inputs, query: query) }
+                let outcome = try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: { worker.cancel() }
+                try Task.checkCancellation()
+                guard let self, !self.terminating, generation == self.librarySearchGeneration,
+                      root == self.root, query == self.libraryQuery else { return }
+                self.libraryHits = outcome.hits
+                self.libraryUnreadable = outcome.unreadable
+                self.librarySearchPending = false
+                self.applyLibraryResults()
+            } catch { /* Cancelled searches never replace the current query. */ }
+        }
+        librarySearchTask = task
+        librarySearchTasks[generation] = task
     }
 
     /// Something changed in the recordings folder that this window did not
@@ -714,7 +1097,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         reload()
     }
 
-    func refresh() { reload() }
+    func refresh() { libraryNavigationFailed = false; reload() }
 
     func activityTitle(for dir: URL) -> String {
         activityTitles[dir] ?? dir.lastPathComponent
@@ -739,18 +1122,28 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         return true
     }
 
-    private func show(_ found: [SessionInventory.Item], refreshDetail: Bool = true) {
+    private func show(_ found: [SessionInventory.Item], refreshDetail: Bool = true, preferredSelection: URL? = nil) {
         reloadingList = true
         defer { reloadingList = false }
-        let previous = selected?.dir ?? rememberedMeeting
+        let previous = preferredSelection ?? selected?.dir ?? rememberedMeeting
         allItems = found.filter { $0.dir != activeRecording?.dir }
         activityTitles = Dictionary(allItems.map { ($0.dir.standardizedFileURL.resolvingSymlinksInPath(), $0.title ?? $0.name) }, uniquingKeysWith: { first, _ in first })
         let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
-        items = inventory.filter { !deletion.isPending($0.dir) && MeetingPresentation.matches($0, filter: meetingFilter, query: search.stringValue, active: activeRecording) }
+        items = inventory.filter { item in
+            !deletion.isPending(item.dir) && MeetingPresentation.matches(item, filter: meetingFilter, query: "", active: activeRecording)
+                && (libraryQuery.isEmpty || (libraryHits.map { $0[item.dir] != nil }
+                    ?? MeetingPresentation.matches(item, filter: .allMeetings, query: libraryQuery, active: activeRecording)))
+        }
         emptyView.isHidden = !items.isEmpty
         scroll.isHidden = items.isEmpty
-        clearSearch.isHidden = search.stringValue.isEmpty
-        emptyLabel.stringValue = !search.stringValue.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
+        clearSearch.isHidden = libraryQuery.isEmpty && meetingFilter == .allMeetings
+        librarySearchStatus.stringValue = librarySearchPending ? localised("Searching…", "Поиск…")
+            : libraryUnreadable > 0 ? localised("Some materials could not be searched. Try refreshing the library.", "Не удалось проверить часть материалов. Попробуйте обновить библиотеку.")
+            : libraryNavigationFailed ? localised("The current result could not be opened. Refresh the library or check the meeting details.", "Не удалось открыть текущий результат. Обновите библиотеку или проверьте детали встречи.") : ""
+        librarySearchStatus.isHidden = librarySearchStatus.stringValue.isEmpty
+        librarySearchStatus.toolTip = librarySearchStatus.stringValue
+        emptyLabel.isHidden = !librarySearchStatus.isHidden
+        emptyLabel.stringValue = !libraryQuery.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
             : meetingFilter == .processing ? localised("Nothing is being processed right now.", "Сейчас ничего не обрабатывается.")
             : meetingFilter == .attention ? localised("No meetings need your attention.", "Нет встреч, требующих действий.")
             : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
@@ -768,33 +1161,48 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         if refreshDetail || selected?.dir != previous { showDetail() }
         updateCompactLayout()
     }
-    @objc private func clearSearchClicked() { search.stringValue = ""; show(allItems) }
+    @objc private func clearSearchClicked() { applyFilter(.allMeetings, clearSearch: true) }
 
     @objc private func versionSelected(_ sender: NSPopUpButton) {
         versionKey = selectedVersion.map(key)
         showDetail()
+        if librarySearchPending { saveLibraryReadingPosition() }
     }
 
     private func showDetail() {
+        let previousPosition = captureMeetingReadingPosition()
+        var speakerRowsHandled = false
+        searchTranscript = nil
+        searchTranscriptData = nil
+        defer {
+            meetingTranscript.isHidden = searchTranscript == nil
+            plainTranscriptScroll?.isHidden = searchTranscript != nil
+            if !speakerRowsHandled { clearSpeakerRows() }
+            finishSearchReload(previousPosition: previousPosition)
+        }
         let live = activeRecording.map { selected?.dir == $0.dir } ?? false
+        let actionsHost = live ? activeRecordingView?.meetingActionsHost ?? titleActions : titleActions
+        if toolbarContent.superview !== actionsHost {
+            (toolbarContent.superview as? NSStackView)?.removeArrangedSubview(toolbarContent)
+            toolbarContent.removeFromSuperview()
+            actionsHost.addArrangedSubview(toolbarContent)
+        }
+        toolbarContent.isHidden = selected == nil
         meetingDocument?.isHidden = live && activeRecordingView != nil
         activeRecordingView?.isHidden = !live
         openActiveButton.isHidden = true
         resultPicker.isHidden = selected == nil
         detailTabs.isHidden = selected == nil
         if renamingSession != selected?.dir { cancelTitleEdit() }
-        speakersStack.arrangedSubviews.forEach {
-            speakersStack.removeArrangedSubview($0)
-            $0.removeFromSuperview()
-        }
         defer { updateInspector() }
         if let activeRecording, selected?.dir == activeRecording.dir {
             showCalendar(for: selected)
             detailTitle.stringValue = activeRecording.title
+            detailTitle.toolTip = activeRecording.title
             moreButton.isEnabled = true
             versions = []
             versionSelector.removeAllItems()
-            versionSelector.isHidden = true
+            versionSelector.isEnabled = false
             audioPlayer.setMeeting(nil)
             detailTabs.isHidden = true
             diarizationLabel.isHidden = true
@@ -809,8 +1217,6 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
             return
         }
         showCalendar(for: selected)
-        meetingTranscript.isHidden = true
-        plainTranscriptScroll?.isHidden = false
         audioPlayer.setMeeting(selected?.dir)
         if versionSession != selected?.dir {
             versionSession = selected?.dir
@@ -828,13 +1234,17 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         } else if let index = versions.lastIndex(where: { !$0.isRequest }) {
             versionSelector.selectItem(at: index)
         }
-        versionSelector.isHidden = versions.count < 2
+        versionSelector.isEnabled = !versions.isEmpty
         versionKey = selectedVersion.map(key)
 
         guard let item = selected else {
-            detailTitle.stringValue = items.isEmpty
-                ? localised("No recordings yet", "Записей пока нет")
-                : localised("Select a recording", "Выберите запись")
+            detailTitle.toolTip = nil
+            detailTitle.stringValue = !items.isEmpty ? localised("Select a recording", "Выберите запись")
+                : librarySearchPending ? localised("Searching…", "Поиск…")
+                : libraryUnreadable > 0 ? localised("Search incomplete", "Поиск выполнен не полностью")
+                : !libraryQuery.isEmpty ? localised("No matching meetings", "Совпадений не найдено")
+                : meetingFilter != .allMeetings ? localised("No meetings in this filter", "Нет встреч по выбранному фильтру")
+                : localised("No recordings yet", "Записей пока нет")
             summaryText.string = ""
             transcriptText.string = ""
             diarizationLabel.isHidden = true
@@ -869,13 +1279,15 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         }
         summaryText.textStorage?.setAttributedString(MarkdownPreview.render(summaryPreview, fontSize: 15))
         let transcript = PostProcessor.readTranscript(dir)
+        let transcriptData = try? Data(contentsOf: dir.appendingPathComponent("transcript.json"))
+        searchTranscript = transcript
+        searchTranscriptData = transcriptData
         let markdown = try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)
         let transcriptPreview = markdown ?? transcript?.rendered(
             title: item.title ?? item.name, names: SpeakerNames.read(from: dir))
             ?? localised("No transcript yet.", "Расшифровки пока нет.")
         transcriptText.textStorage?.setAttributedString(MarkdownPreview.render(transcriptPreview, fontSize: 15))
         transcriptText.identifier = markdown != nil || transcript != nil ? .init("meeting-words") : nil
-        for text in [summaryText, transcriptText] { text.scrollToBeginningOfDocument(nil) }
         guard let transcript else {
             updateButtons()
             return
@@ -889,63 +1301,126 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
         let canEdit = !working && !SessionClaim.isHeld(item.dir) && !TranscriptVersions.isRequested(item.dir)
             && DiarizationState.persisted(in: dir).isFinal
         meetingTranscript.onAssign = { [weak self] speaker, participant, name in
-            try PostProcessor.setSpeakerParticipant(speaker, participant: participant, name: name, in: dir)
-            Task { @MainActor [weak self] in self?.showDetail() }
+            guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
+            try self.assignSpeaker(speaker, participant: participant, name: name, session: item.dir, version: dir, expectedTranscript: transcriptData)
         }
         meetingTranscript.update(transcript: transcript, names: names, participants: participantChoices,
                                  canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatchParticipants: diarized)
-        meetingTranscript.isHidden = false
-        plainTranscriptScroll?.isHidden = true
-        let hint = NSTextField(wrappingLabelWithString: localised(
-            "Listen to a voice, then choose a participant or type a name. The assignment applies to all their lines in this transcript version.",
-            "Прослушайте голос, затем выберите участника или введите имя. Сопоставление применяется ко всем его репликам в этой версии расшифровки."))
-        hint.font = .systemFont(ofSize: 12)
-        hint.textColor = JournalStyle.muted
-        speakersStack.addArrangedSubview(hint)
-        hint.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
-        for sample in SessionInventory.samples(transcript: transcript, names: names) {
-            let row = speakerRow(sample, in: dir, transcript: transcript, names: names,
-                                 participants: diarized || sample.label == "me" ? participantChoices : [])
-            speakersStack.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
+        speakerRowsHandled = true
+        let speakerContext = SpeakerRowsContext(generation: currentSearchContext, names: names?.speakers,
+            participants: participantChoices, canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatch: diarized)
+        if renderedSpeakerRows != speakerContext {
+            clearSpeakerRows()
+            let hint = NSTextField(wrappingLabelWithString: localised(
+                "Listen to a voice, then choose a participant or type a name. The assignment applies to all their lines in this transcript version.",
+                "Прослушайте голос, затем выберите участника или введите имя. Сопоставление применяется ко всем его репликам в этой версии расшифровки."))
+            hint.font = .systemFont(ofSize: 12)
+            hint.textColor = StudioStyle.muted
+            speakersStack.addArrangedSubview(hint)
+            hint.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
+            for sample in SessionInventory.samples(transcript: transcript, names: names) {
+                let row = speakerRow(sample, in: dir, transcript: transcript, transcriptData: transcriptData, names: names,
+                                     participants: diarized || sample.label == "me" ? participantChoices : [])
+                speakersStack.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
+            }
+            renderedSpeakerRows = speakerContext
         }
         updateButtons()
     }
 
-    private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
+    func assignSpeaker(_ speaker: String, participant: CalendarParticipant?, name: String?, session: URL, version: URL, expectedTranscript: Data? = nil) throws {
+        let unavailable = CocoaError(.fileWriteNoPermission, userInfo: [NSLocalizedDescriptionKey: localised(
+            "The meeting or transcript has changed, or editing is temporarily unavailable. Reopen the speaker editor.",
+            "Встреча или расшифровка изменилась либо редактирование сейчас недоступно. Откройте редактор говорящего заново.")])
+        guard selected?.dir.standardizedFileURL.path == session.standardizedFileURL.path,
+              artifactDirectory?.standardizedFileURL.path == version.standardizedFileURL.path, selectedVersion?.isRequest != true,
+              !working, !SessionClaim.isHeld(session), !TranscriptVersions.isRequested(session),
+              DiarizationState.persisted(in: version).isFinal, !SpeakerNames.isUnknown(speaker) else {
+            throw unavailable
+        }
+        if let expectedTranscript {
+            guard try Data(contentsOf: version.appendingPathComponent("transcript.json")) == expectedTranscript else {
+                throw unavailable
+            }
+        }
+        let editedTab = detailTabs.selectedTabViewItem?.identifier as? String
+        try PostProcessor.setSpeakerParticipant(speaker, participant: participant, name: name, in: version)
+        Task { @MainActor [weak self] in
+            guard let self, self.selected?.dir.standardizedFileURL.path == session.standardizedFileURL.path,
+                  self.artifactDirectory?.standardizedFileURL.path == version.standardizedFileURL.path else { return }
+            let focused = (self.panel.firstResponder as? NSTextView)?.delegate as? NSView ?? self.panel.firstResponder as? NSView
+            let restoreFocus = focused == nil || focused?.isDescendant(of: self.meetingTranscript) == true || focused?.isDescendant(of: self.speakersStack) == true
+            self.showDetail()
+            if !self.libraryQuery.isEmpty { self.restartLibrarySearch() }
+            guard restoreFocus, self.detailTabs.selectedTabViewItem?.identifier as? String == editedTab else { return }
+            if editedTab == "transcript" { self.meetingTranscript.focusSpeaker(speaker) }
+            if editedTab == "participants",
+               let row = self.speakersStack.arrangedSubviews.first(where: { $0.identifier?.rawValue == "speaker-row.\(speaker)" }),
+               let contents = (row as? MeetingSpeakerView)?.editor as? NSStackView,
+               let head = contents.arrangedSubviews.first as? NSStackView,
+               let editor = head.arrangedSubviews.compactMap({ $0 as? SpeakerAssignmentEditor }).first {
+                self.panel.makeFirstResponder(editor.choice)
+            }
+        }
+    }
+    private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, transcriptData: Data?, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
         let title = MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments)
-        let canEdit = !working && !SessionClaim.isHeld(selected?.dir ?? dir)
-            && !TranscriptVersions.isRequested(selected?.dir ?? dir) && DiarizationState.persisted(in: dir).isFinal
+        let session = selected?.dir ?? dir
+        let canEdit = !working && !SessionClaim.isHeld(session)
+            && !TranscriptVersions.isRequested(session) && DiarizationState.persisted(in: dir).isFinal
         let editor = SpeakerAssignmentEditor(speaker: sample.label, title: title,
             entry: SpeakerNames.isUnknown(sample.label) ? nil : names?.speakers[sample.label],
             participants: participants, canEdit: canEdit, inline: false)
+        editor.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
         editor.onAssign = { [weak self] participant, name in
-            try PostProcessor.setSpeakerParticipant(sample.label, participant: participant, name: name, in: dir)
-            Task { @MainActor [weak self] in self?.showDetail() }
+            guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
+            try self.assignSpeaker(sample.label, participant: participant, name: name, session: session, version: dir, expectedTranscript: transcriptData)
         }
-        let play = NSButton(title: localised("Listen", "Прослушать"), target: self, action: #selector(playSpeaker(_:)))
-        play.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)
-        play.imagePosition = .imageLeading
-        play.bezelStyle = .rounded
-        play.identifier = .init("speaker.play")
-        play.tag = transcript.segments.first(where: { $0.speaker == sample.label })?.start_ms ?? 0
-        play.isEnabled = !audioPlayer.isHidden
-        play.setAccessibilityLabel(localised("Listen to ", "Прослушать: ") + title)
-        let head = NSStackView(views: [editor, play])
+        let count = NSTextField(labelWithString: localised("\(sample.turns) turns", "Реплик: \(sample.turns)"))
+        count.font = .systemFont(ofSize: 11)
+        count.textColor = StudioStyle.muted
+        let colorIndex = MeetingTranscriptView.speakerLabels(in: transcript.segments).firstIndex(of: sample.label)
+        let badge = StudioStyle.voiceBadge(StudioStyle.voiceLabel(sample.label), colorIndex: colorIndex)
+        let head = NSStackView(views: [badge, editor, NSView(), count])
         head.spacing = 8
-        let quotes = NSTextField(wrappingLabelWithString: [sample.first,
-            sample.longest == sample.first ? nil : sample.longest].compactMap { $0 }.joined(separator: "\n"))
-        quotes.font = .systemFont(ofSize: 12)
-        quotes.textColor = .secondaryLabelColor
-        quotes.maximumNumberOfLines = 4
-        quotes.lineBreakMode = .byTruncatingTail
-        quotes.preferredMaxLayoutWidth = 400
-        let contents = NSStackView(views: [head, quotes])
+        let contents = NSStackView(views: [head])
         contents.orientation = .vertical
         contents.alignment = .leading
         contents.spacing = 8
-        for view in [head, quotes] { view.widthAnchor.constraint(equalTo: contents.widthAnchor).isActive = true }
-        return MeetingSpeakerView(title: title + localised(" · \(sample.turns) turns", " · реплик: \(sample.turns)"), editor: contents)
+        contents.edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 12, right: 0)
+        head.widthAnchor.constraint(equalTo: contents.widthAnchor).isActive = true
+        for segment in transcript.segments.filter({ $0.speaker == sample.label }).prefix(3) {
+            let play = NSButton(title: "", target: self, action: #selector(playSpeaker(_:)))
+            play.image = NSImage(systemSymbolName: "play", accessibilityDescription: nil)
+            play.isBordered = false
+            play.identifier = .init("speaker.play")
+            play.tag = segment.start_ms
+            play.isEnabled = !audioPlayer.isHidden
+            let stamp = String(format: "%02d:%02d", segment.start_ms / 60_000, (segment.start_ms / 1000) % 60)
+            play.toolTip = localised("Play \(title) from \(stamp)", "Прослушать \(title) с \(stamp)")
+            play.setAccessibilityLabel(play.toolTip)
+            play.widthAnchor.constraint(equalToConstant: 26).isActive = true
+            let time = NSTextField(labelWithString: stamp)
+            time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            time.textColor = StudioStyle.muted
+            let quote = NSTextField(wrappingLabelWithString: segment.text)
+            quote.font = .systemFont(ofSize: 13)
+            quote.textColor = StudioStyle.ink
+            quote.maximumNumberOfLines = 2
+            quote.lineBreakMode = .byTruncatingTail
+            quote.toolTip = segment.text
+            quote.isSelectable = true
+            let row = NSStackView(views: [play, time, quote])
+            row.alignment = .top
+            row.spacing = 8
+            contents.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: contents.widthAnchor).isActive = true
+        }
+        contents.addArrangedSubview(SetupLayout.hairline())
+        let row = MeetingSpeakerView(editor: contents)
+        row.identifier = .init("speaker-row.\(sample.label)")
+        return row
     }
     @objc private func playSpeaker(_ sender: NSButton) {
         guard sender.isEnabled else { return }
@@ -1193,11 +1668,15 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
     /// sentence saying what happened to it.
     private func say(_ sentence: String, about item: SessionInventory.Item) {
         guard !terminating else { return }
-        let alert = NSAlert()
-        alert.messageText = item.title ?? item.name
-        alert.informativeText = sentence
-        alert.addButton(withTitle: localised("OK", "Ладно"))
-        alert.beginJournalSheetModal(for: panel)
+        showServiceError((item.title ?? item.name) + ": " + sentence)
+    }
+
+    private func showServiceError(_ message: String) {
+        guard !terminating else { return }
+        detailError.stringValue = message.split(whereSeparator: \.isNewline).joined(separator: " ")
+        detailError.toolTip = message
+        detailError.isHidden = false
+        NSAccessibility.post(element: detailError, notification: .valueChanged)
     }
 
     private func confirmRetranscription(engine: String?) {
@@ -1265,11 +1744,8 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
                 guard let textEdit = NSWorkspace.shared.urlForApplication(
                     withBundleIdentifier: "com.apple.TextEdit"
                 ) else {
-                    let alert = NSAlert()
-                    alert.messageText = localised(
-                        "Could not open the transcript", "Не удалось открыть расшифровку")
-                    alert.informativeText = file.path
-                    alert.beginJournalSheetModal(for: self.panel)
+                    self.showServiceError(localised(
+                        "Could not open the transcript", "Не удалось открыть расшифровку") + ": " + file.path)
                     return
                 }
                 NSWorkspace.shared.open(
@@ -1277,7 +1753,7 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
                     configuration: NSWorkspace.OpenConfiguration()
                 ) { _, error in
                     if let error {
-                        Task { @MainActor in NSAlert(error: error).beginJournalSheetModal(for: self.panel, completionHandler: nil) }
+                        Task { @MainActor in self.showServiceError(error.localizedDescription) }
                     }
                 }
             })
@@ -1343,14 +1819,14 @@ final class MeetingLibraryController: NSObject, NSTextFieldDelegate {
                     self.deletionNotice.isHidden = true
                     self.onActivityChange?()
                     self.reload()
-                    if case .failure(let error) = result { NSAlert(error: error).beginJournalSheetModal(for: self.panel) }
+                    if case .failure(let error) = result { self.showServiceError(error.localizedDescription) }
                 }
                 undoDeletionID = id
                 deletionLabel.stringValue = localised("Meeting deleted", "Встреча удалена")
                 deletionNotice.isHidden = false
                 onActivityChange?()
                 show(allItems)
-            } catch { NSAlert(error: error).beginJournalSheetModal(for: panel, completionHandler: nil) }
+            } catch { showServiceError(error.localizedDescription) }
         }
     }
 
@@ -1416,7 +1892,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
         row: Int
     ) -> NSView? {
         guard items.indices.contains(row) else { return nil }
-        return MeetingListView(item: items[row], active: activeRecording)
+        return MeetingListView(item: items[row], active: activeRecording, hit: libraryHits?[items[row].dir])
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -1424,8 +1900,11 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
         if table.selectedRow >= 0 {
             meetingSelectionActive = true
             rememberedMeeting = nil
+            libraryReadingPosition = nil
         }
         showDetail()
+        revealLibraryHit()
+        if librarySearchPending { saveLibraryReadingPosition() }
         onSelectMeeting?()
     }
 }
@@ -1433,29 +1912,62 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
 @MainActor
 private extension MeetingLibraryController {
     func buildJournal(detail: NSStackView, diarizationActions: NSStackView) -> NSView {
-        search.placeholderString = localised("Find a meeting", "Найти встречу")
-        search.setAccessibilityLabel(localised("Find a meeting", "Найти встречу"))
+        search.identifier = .init("library.search")
+        search.placeholderString = localised("Title, transcript, summary", "Название, расшифровка, сводка")
+        search.setAccessibilityLabel(localised("Search the library: titles, transcripts and summaries", "Поиск в библиотеке: названия, расшифровки и сводки"))
         search.target = self
         search.action = #selector(searchChanged)
         search.sendsSearchStringImmediately = true
         search.sendsWholeSearchString = false
-        search.focusRingType = .default
-        search.backgroundColor = JournalStyle.inset
-        search.textColor = JournalStyle.ink
-        for filter in [ApplicationNavigationState.Destination.allMeetings, .processing, .attention] {
-            filterPicker.addItem(withTitle: filter == .allMeetings ? localised("All", "Все") : filter.title)
+        search.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        filterButton.identifier = .init("library.filter")
+        filterButton.title = ""
+        filterButton.bezelStyle = .rounded
+        filterButton.isBordered = false
+        filterButton.setButtonType(.toggle)
+        filterButton.image = NSImage(systemSymbolName: "line.3.horizontal.decrease", accessibilityDescription: nil)
+        filterButton.imagePosition = .imageOnly
+        filterButton.target = self
+        filterButton.action = #selector(showLibraryFilter)
+        filterButton.widthAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+        filterButton.heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+        let filterHeading = NSTextField(labelWithString: localised("Filter meetings", "Фильтр встреч"))
+        filterHeading.font = .systemFont(ofSize: 13, weight: .semibold)
+        for (index, filter) in [ApplicationNavigationState.Destination.allMeetings, .processing, .attention].enumerated() {
+            let option = NSButton(radioButtonWithTitle: filter.title, target: self, action: #selector(filterSelected(_:)))
+            option.identifier = .init("library.filter.\(filter.rawValue)")
+            option.alignment = .left
+            option.tag = index
+            option.state = filter == meetingFilter ? .on : .off
+            filterOptions.append(option)
         }
-        filterPicker.isBordered = false
-        filterPicker.font = .systemFont(ofSize: 11)
-        filterPicker.target = self
-        filterPicker.action = #selector(filterSelected)
-        filterPicker.setAccessibilityLabel(localised("Filter meetings", "Фильтр встреч"))
-        filterPicker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let listHeading = NSStackView(views: [JournalStyle.caption(localised("MEETINGS", "ВСТРЕЧИ")), NSView(), filterPicker])
+        let filters = NSStackView(views: [filterHeading] + filterOptions)
+        filters.orientation = .vertical
+        filters.alignment = .leading
+        filters.spacing = 10
+        filters.edgeInsets = .init(top: 14, left: 14, bottom: 14, right: 14)
+        filters.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        for option in filterOptions { option.widthAnchor.constraint(equalTo: filters.widthAnchor, constant: -28).isActive = true }
+        let controller = NSViewController()
+        controller.view = filters
+        controller.preferredContentSize = filters.fittingSize
+        filterPopover.contentViewController = controller
+        filterPopover.behavior = .transient
+        filterPopover.animates = false
+        filterButton.toolTip = localised("Filter meetings: ", "Фильтр встреч: ") + meetingFilter.title
+        filterButton.setAccessibilityLabel(filterButton.toolTip)
+        let listHeading = NSTextField(labelWithString: localised("Library", "Библиотека"))
+        listHeading.font = .systemFont(ofSize: 12)
+        listHeading.textColor = StudioStyle.muted
+        let searchRow = NSStackView(views: [search, filterButton])
+        searchRow.spacing = 8
         emptyLabel.identifier = .init("meeting-list.empty")
         emptyLabel.font = .systemFont(ofSize: 12)
-        emptyLabel.textColor = JournalStyle.muted
-        clearSearch.title = localised("Clear search", "Очистить поиск")
+        emptyLabel.textColor = StudioStyle.muted
+        clearSearch.title = localised("Reset search and filter", "Сбросить поиск и фильтр")
+        clearSearch.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+        clearSearch.imagePosition = .imageLeading
+        clearSearch.identifier = .init("library.reset")
         clearSearch.target = self
         clearSearch.action = #selector(clearSearchClicked)
         emptyView.setViews([emptyLabel, clearSearch, NSView()], in: .center)
@@ -1465,11 +1977,16 @@ private extension MeetingLibraryController {
         scroll.drawsBackground = false
         scroll.autohidesScrollers = true
         scroll.setContentHuggingPriority(.init(1), for: .vertical)
-        let list = NSStackView(views: [search, listHeading, scroll, emptyView])
+        librarySearchStatus.identifier = .init("library.search-status")
+        librarySearchStatus.font = .systemFont(ofSize: 11)
+        librarySearchStatus.textColor = StudioStyle.muted
+        librarySearchStatus.lineBreakMode = .byTruncatingTail
+        librarySearchStatus.isHidden = true
+        let list = NSStackView(views: [listHeading, searchRow, scroll, emptyView])
         list.orientation = .vertical
         list.distribution = .fill
         list.alignment = .leading
-        list.spacing = 16
+        list.spacing = 10
         for view in list.arrangedSubviews { view.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true }
         listContentView = Self.frameOwnedPane(list)
 
@@ -1486,15 +2003,17 @@ private extension MeetingLibraryController {
         inspectorButton.target = self
         inspectorButton.action = #selector(toggleInspector)
         toolbarContent.setViews([copy, moreButton, inspectorButton], in: .center)
-        toolbarContent.spacing = 20
-        detail.edgeInsets = NSEdgeInsets(top: 36, left: 40, bottom: 18, right: 40)
+        toolbarContent.spacing = 12
+        moreButton.identifier = .init("meeting.actions")
+        detail.edgeInsets = NSEdgeInsets(top: 16, left: 24, bottom: 12, right: 24)
         // The document's arranged views fill its readable column, without setting a window minimum.
         for constraint in detail.constraints where constraint.firstAttribute == .width { constraint.isActive = false }
-        for view in detail.arrangedSubviews { view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -80).isActive = true }
+        for view in detail.arrangedSubviews { view.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -48).isActive = true }
         detailTitle.maximumNumberOfLines = 2
-        detailMeta.textColor = JournalStyle.muted
-        detail.setCustomSpacing(12, after: detailMeta)
-        detail.setCustomSpacing(24, after: detail.arrangedSubviews[1])
+        detailMeta.textColor = StudioStyle.muted
+        detail.setCustomSpacing(4, after: detailMeta)
+        detail.setCustomSpacing(12, after: detail.arrangedSubviews[1])
+        if let meetingHeader { detail.setCustomSpacing(4, after: meetingHeader) }
         detailTabs.setContentHuggingPriority(.init(1), for: .vertical)
         versionSelector.font = .systemFont(ofSize: 11)
         versionSelector.isBordered = false
@@ -1505,19 +2024,27 @@ private extension MeetingLibraryController {
         pipeline.spacing = 12
         route.identifier = .init("meeting.processing-configuration")
         route.font = .systemFont(ofSize: 11)
-        route.textColor = JournalStyle.muted
+        route.textColor = StudioStyle.muted
         let settings = NSButton(title: localised("Settings →", "Настройки →"), target: self, action: #selector(processingSettings))
+        settings.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
+        settings.imagePosition = .imageLeading
         settings.identifier = .init("meeting.processing-settings")
         settings.isBordered = false
         settings.alignment = .left
         settings.font = .systemFont(ofSize: 11)
+        let closeDetails = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(closeInspector))
+        closeDetails.identifier = .init("meeting.inspector-close")
+        closeDetails.isBordered = false
+        closeDetails.toolTip = localised("Close meeting details", "Закрыть детали встречи")
+        closeDetails.setAccessibilityLabel(closeDetails.toolTip)
+        let inspectorHeading = NSStackView(views: [StudioStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")), NSView(), closeDetails])
         let inspector = FlippedStackView(views: [
-            JournalStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")),
-            JournalStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
+            inspectorHeading,
+            StudioStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
             calendarPicker,
-            SetupLayout.hairline(), JournalStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
-            diarizationLabel, diarizationActions, finishButton, cancelProcessingButton, processingStatus,
-            SetupLayout.hairline(), JournalStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
+            SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
+            diarizationLabel, diarizationActions, finishButton, cancelProcessingButton,
+            SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
         ])
         inspector.orientation = .vertical
         inspector.alignment = .leading
@@ -1528,7 +2055,7 @@ private extension MeetingLibraryController {
         diarizationActions.alignment = .leading
         for button in [retryDiarizationButton, skipDiarizationButton, finishButton] { button.font = .systemFont(ofSize: 11) }
         let inspectorScroll = SetupLayout.scroller(around: inspector)
-        let inspectorSurface = JournalSurface(JournalStyle.inset)
+        let inspectorSurface = JournalSurface(StudioStyle.inset)
         inspectorSurface.identifier = .init("meeting.inspector-content")
         inspectorScroll.translatesAutoresizingMaskIntoConstraints = false
         inspectorSurface.addSubview(inspectorScroll)
@@ -1558,21 +2085,21 @@ private extension MeetingLibraryController {
         journalColumns = columns
         columns.onResize = { [weak self] in self?.updateCompactLayout() }
         columns.setContentHuggingPriority(.init(1), for: .vertical)
-        importStatus.onCancel = { [weak self] in self?.onCancelImport?() }
         let undo = NSButton(title: localised("Undo", "Отменить"), target: self, action: #selector(undoDeletion))
+        undo.image = NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
+        undo.imagePosition = .imageLeading
         deletionNotice.setViews([deletionLabel, undo], in: .center)
+        deletionNotice.identifier = .init("meeting.deletion-notice")
         deletionNotice.spacing = 10
-        deletionNotice.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)
+        deletionNotice.alignment = .centerY
+        deletionLabel.lineBreakMode = .byTruncatingTail
+        deletionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        undo.bezelStyle = .inline
+        undo.controlSize = .small
         deletionNotice.isHidden = true
-        let content = NSStackView(views: [importStatus, columns, deletionNotice])
-        content.orientation = .vertical
-        content.distribution = .fill
-        content.spacing = 0
-        content.alignment = .leading
-        for view in content.arrangedSubviews { view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true }
         let container = MediaDropView()
         container.onFiles = { [weak self] in self?.onImportFiles?($0) }
-        let frame = Self.frameOwnedPane(content)
+        let frame = Self.frameOwnedPane(columns)
         frame.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(frame)
         NSLayoutConstraint.activate([
@@ -1588,6 +2115,15 @@ private extension MeetingLibraryController {
         updateCancellationControls()
     }
 
+    @objc private func dismissResultNotice() {
+        guard !processingCancellation.isCancelling else { return }
+        noticeDismissed = true
+        resultNotice.isHidden = true
+        if contentView.window === panel {
+            panel.makeFirstResponder(resultPicker.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.state == .on })
+        }
+    }
+
     private func updateCancellationControls() {
         guard !terminating else { return }
         processingCancellation.select(selected?.dir)
@@ -1596,7 +2132,7 @@ private extension MeetingLibraryController {
         cancelProcessingButton.isEnabled = processingCancellation.canCancel
         cancelProcessingButton.title = cancelling ? localised("Cancelling…", "Отменяется…")
             : localised("Cancel processing", "Отменить обработку")
-        let message: String
+        var message: String
         if cancelling { message = localised("Cancelling…", "Отменяется…") }
         else {
             switch processingCancellation.outcome {
@@ -1609,9 +2145,33 @@ private extension MeetingLibraryController {
             case nil: message = ""
             }
         }
-        processingStatus.isHidden = message.isEmpty
-        if processingStatus.stringValue != message {
-            processingStatus.stringValue = message
+        if message.isEmpty, !working, !processingCancellation.canCancel,
+           let item = selected, activeRecording?.dir != item.dir {
+            if let request = versions.last(where: \.isRequest) {
+                message = request.title
+                if case .failed(let reason) = request.state { message += ": " + reason }
+            } else if case .failed(let reason) = item.transcript {
+                message = localised("Transcription error: ", "Ошибка расшифровки: ") + reason
+            } else if case .failed(let reason) = item.summary {
+                message = localised("Summary error: ", "Ошибка сводки: ") + reason
+            } else if item.unreadableDiarization {
+                message = localised("The saved speaker analysis could not be read. See meeting details.",
+                                    "Не удалось прочитать сохранённый анализ говорящих. Откройте детали встречи.")
+            } else if let state = item.diarization, [.failed, .deferred, .partial].contains(state.status) {
+                message = Self.diarizationLine(state)
+            }
+            if !message.isEmpty, versions.contains(where: { !$0.isRequest }) || item.summary == .done {
+                message += localised(" Completed results are preserved.", " Готовые результаты сохранены.")
+            }
+        }
+        let key = (selected?.dir.path ?? "") + "\n" + message
+        if noticeKey != key { noticeKey = key; noticeDismissed = false }
+        resultNotice.isHidden = message.isEmpty || noticeDismissed
+        dismissNotice.isHidden = cancelling
+        let line = message.split(whereSeparator: \.isNewline).joined(separator: " ")
+        if processingStatus.stringValue != line || processingStatus.toolTip != message {
+            processingStatus.stringValue = line
+            processingStatus.toolTip = message
             NSAccessibility.post(element: processingStatus, notification: .valueChanged)
         }
     }
@@ -1642,7 +2202,7 @@ private extension MeetingLibraryController {
         if speakersStack.arrangedSubviews.isEmpty {
             let message = NSTextField(wrappingLabelWithString: localised("Speakers appear after transcription.", "Участники появятся после расшифровки."))
             message.font = .systemFont(ofSize: 12)
-            message.textColor = JournalStyle.muted
+            message.textColor = StudioStyle.muted
             speakersStack.addArrangedSubview(message)
             message.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
         }
@@ -1665,7 +2225,19 @@ private extension MeetingLibraryController {
 
 extension MeetingLibraryController {
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        62
+        guard items.indices.contains(row) else { return 62 }
+        measuringListTitle.stringValue = items[row].title ?? items[row].name
+        measuringListTitle.preferredMaxLayoutWidth = max(1, tableView.tableColumns[0].width - 20)
+        let titleHeight = ceil(measuringListTitle.fittingSize.height)
+        if let hit = libraryHits?[items[row].dir], hit.source != .title {
+            let snippet = MeetingListView.snippetLabel(hit)
+            snippet.preferredMaxLayoutWidth = measuringListTitle.preferredMaxLayoutWidth
+            return max(62, titleHeight + 44 + ceil(snippet.fittingSize.height))
+        }
+        return max(62, titleHeight + 40)
+    }
+    func tableViewColumnDidResize(_ notification: Notification) {
+        table.needsLayout = true
     }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         JournalMeetingRow()
@@ -1674,6 +2246,15 @@ extension MeetingLibraryController {
 
 @MainActor
 private final class MeetingSearchField: NSSearchField {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        focusRingType = .default
+        backgroundColor = StudioStyle.paper
+        textColor = StudioStyle.ink
+        font = .systemFont(ofSize: 13)
+        heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override class var cellClass: AnyClass? {
         get { Cell.self }
         set {}
@@ -1682,14 +2263,20 @@ private final class MeetingSearchField: NSSearchField {
     private final class Cell: NSSearchFieldCell {
         override func draw(withFrame frame: NSRect, in controlView: NSView) {
             // The native bezel ignores backgroundColor.
-            let bezel = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 0.5),
-                                     xRadius: frame.height / 2, yRadius: frame.height / 2)
-            JournalStyle.inset.setFill()
-            bezel.fill()
-            JournalStyle.line.setStroke()
-            bezel.lineWidth = 1
-            bezel.stroke()
+            StudioStyle.drawInputBezel(in: frame)
             super.drawInterior(withFrame: frame, in: controlView)
+        }
+    }
+}
+
+@MainActor
+private final class LibraryFilterButton: NSButton {
+    override func draw(_ dirtyRect: NSRect) {
+        StudioStyle.drawInputBezel(in: bounds)
+        super.draw(dirtyRect)
+        if state == .on {
+            StudioStyle.accent.setFill()
+            NSBezierPath(ovalIn: .init(x: bounds.maxX - 8, y: isFlipped ? 4 : bounds.maxY - 8, width: 4, height: 4)).fill()
         }
     }
 }
@@ -1701,10 +2288,10 @@ private final class JournalMeetingRow: NSTableRowView {
     override var interiorBackgroundStyle: NSView.BackgroundStyle { .normal }
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
-        if hover && !isSelected { drawHighlight(JournalStyle.selection.withAlphaComponent(0.5)) }
+        if hover && !isSelected { drawHighlight(StudioStyle.selection.withAlphaComponent(0.5)) }
     }
     override func drawSelection(in dirtyRect: NSRect) {
-        drawHighlight(JournalStyle.selection)
+        drawHighlight(StudioStyle.selection)
     }
     private func drawHighlight(_ color: NSColor) {
         color.setFill()

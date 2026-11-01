@@ -90,6 +90,8 @@ struct CalendarEventPickerTests {
         let previous = event("previous")
         picker.setSelection(previous)
         var writes = 0
+        var errors = 0
+        picker.onError = { _ in errors += 1 }
         picker.onSelect = { _ in writes += 1 }
         picker.loadEvents = { _ in throw error }
         picker.reload(); await picker.settled()
@@ -99,6 +101,7 @@ struct CalendarEventPickerTests {
         picker.choose(event("deleted")); await picker.settled()
         #expect(writes == 0)
         #expect(picker.selectedMeeting?.id == previous.id)
+        #expect(errors == 1)
     }
 
     @Test(.freshHome, arguments: ["Планирование old", "Название вручную", nil] as [String?])

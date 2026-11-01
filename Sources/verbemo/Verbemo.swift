@@ -325,7 +325,6 @@ final class AppController {
         }
         library.onRetranscribe = { [weak self] _ in self?.catchUp() }
         library.onImportFiles = { [weak self] files in self?.importFiles(files) }
-        library.onCancelImport = { [weak self] in self?.cancelImport() }
         let coordinator = transcription
         library.onResumeDiarization = { [weak self] dir, request in
             self?.processingStarted()
@@ -760,12 +759,10 @@ final class AppController {
 
     private func showImport(_ update: MediaImportCoordinator.Update) {
         window.updateImport(update)
-        recordings.updateImport(update)
     }
 
     private func finishImport(_ result: MediaImportCoordinator.Result) {
         window.finishImport(result)
-        recordings.finishImport(result)
     }
 
     /// Signals use the same AppKit confirmation and deferred cleanup as menu/Dock quit.

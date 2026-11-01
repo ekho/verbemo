@@ -1,0 +1,221 @@
+Window: "Verbemo", App: Verbemo UX69.
+0 standard window Verbemo, Secondary Actions: Raise
+  1 image
+  2 text verbemo
+  3 button ●  New recording, ID: journal.new-recording
+  4 button Import, Description: end, ID: journal.import
+  5 search text field (settable) Find a meeting
+    6 button Find a meeting
+  7 text MEETINGS
+  8 pop up button Description: Filter meetings, Value: All
+  9 scroll area
+    10 table
+      11 row (selectable)
+        12 cell
+          13 text UX69 Назначения — ошибка и неизвестный 30.10.2026 12:04 · 3 min
+      14 row (selectable)
+        15 cell
+          16 text UX69 Импорт — отложенная обработка 29.10.2026 12:03 · 1 min
+      17 row (selectable)
+        18 cell
+          19 text UX69 Импорт — ошибка обработки 29.10.2026 12:02 · 1 min
+          20 image Synthetic UX69: model unavailable
+            21 image plain text document
+            22 image Error
+      23 row (selectable)
+        24 cell
+          25 text UX69 Атлас — длинная встреча 29.10.2026 12:01 · 30 min
+      26 row (selected)
+        27 cell (selected)
+          28 text UX69 Атлас — планирование 29.10.2026 12:00 · 3 min
+  29 button Settings, Value: 0, ID: journal.settings
+  30 button Meetings, ID: journal.breadcrumb
+  31 button Copy, Description: copy, ID: meeting.copy
+  32 button Meeting actions
+  33 button Description: Show or hide meeting details, Value: 1, ID: meeting.inspector
+  34 text 29.10.2026 12:00 · 3 min · Invited: 3 UX69 Атлас — планирование
+  35 button Description: Play meeting, ID: playback.play
+  36 slider (settable, float) Description: Meeting position, Value: 0, Details: 00:00, ID: playback.timeline
+    37 value indicator (settable, float) 0
+  38 text 00:00 / 03:00
+  39 image volume high
+  40 slider (settable, float) Description: Playback volume, Value: 1
+    41 value indicator (settable, float) 1
+  42 pop up button Description: Playback speed, Value: 1×
+  43 radio button Summary, Value: 0, ID: meeting.result.summary
+  44 radio button Transcript, Value: 1, ID: meeting.result.transcript
+  45 radio button Participants, Value: 0, ID: meeting.result.participants
+  46 pop up button Value: 2 · Whisper · Oct 29, 2026 at 12:00:00 PM, ID: transcript-versions
+  47 scroll area Secondary Actions: Scroll Up, Scroll Down
+    48 table Transcript and speaker assignments
+      49 row (selectable)
+        50 cell
+          51 button 00:00, Description: Play from 00:00, ID: transcript.playFrom
+          52 text Help: Анна Тестовая, ID: speaker.name
+          53 button Description: Participant linked. Click to change., ID: speaker.link
+          54 text Реплика 1. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение.
+      55 row (selectable)
+        56 cell
+          57 button 00:10, Description: Play from 00:10, ID: transcript.playFrom
+          58 text Help: Борис Примеров, ID: speaker.name
+          59 button Description: Participant linked. Click to change., ID: speaker.link
+          60 text Реплика 2. Обсуждаем подготовку учебного проекта. Кварцевый компас нужен для проверки поиска по тексту. Нужно согласовать сроки, проверить материалы и записать решение.
+      61 row (selectable)
+        62 cell
+          63 button 00:20, Description: Play from 00:20, ID: transcript.playFrom
+          64 text Help: Speaker 3, ID: speaker.name
+          65 button Description: Participant not linked. Click to match or enter a name., ID: speaker.link
+          66 text Реплика 3. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      67 row (selectable)
+        68 cell
+          69 button 00:30, Description: Play from 00:30, ID: transcript.playFrom
+          70 text Help: Анна Тестовая, ID: speaker.name
+          71 button Description: Participant linked. Click to change., ID: speaker.link
+          72 text Реплика 4. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      73 row (selectable)
+        74 cell
+          75 button 00:40, Description: Play from 00:40, ID: transcript.playFrom
+          76 text Help: Борис Примеров, ID: speaker.name
+          77 button Description: Participant linked. Click to change., ID: speaker.link
+          78 text Реплика 5. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      79 row (selectable)
+        80 cell
+          81 button 00:50, Description: Play from 00:50, ID: transcript.playFrom
+          82 text Help: Speaker 3, ID: speaker.name
+          83 button Description: Participant not linked. Click to match or enter a name., ID: speaker.link
+          84 text Реплика 6. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      85 row (selectable)
+        86 cell
+          87 button 01:00, Description: Play from 01:00, ID: transcript.playFrom
+          88 text Help: Анна Тестовая, ID: speaker.name
+          89 button Description: Participant linked. Click to change., ID: speaker.link
+          90 text Реплика 7. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      91 row (selectable)
+        92 cell
+          93 button 01:10, Description: Play from 01:10, ID: transcript.playFrom
+          94 text Help: Борис Примеров, ID: speaker.name
+          95 button Description: Participant linked. Click to change., ID: speaker.link
+          96 text Реплика 8. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение.
+      97 row (selectable)
+        98 cell
+          99 button 01:20, Description: Play from 01:20, ID: transcript.playFrom
+          100 text Help: Speaker 3, ID: speaker.name
+          101 button Description: Participant not linked. Click to match or enter a name., ID: speaker.link
+          102 text Реплика 9. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      103 row (selectable)
+        104 cell
+          105 button 01:30, Description: Play from 01:30, ID: transcript.playFrom
+          106 text Help: Анна Тестовая, ID: speaker.name
+          107 button Description: Participant linked. Click to change., ID: speaker.link
+          108 text Реплика 10. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      109 row (selectable)
+        110 cell
+          111 button 01:40, Description: Play from 01:40, ID: transcript.playFrom
+          112 text Help: Борис Примеров, ID: speaker.name
+          113 button Description: Participant linked. Click to change., ID: speaker.link
+          114 text Реплика 11. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      115 row (selectable)
+        116 cell
+          117 button 01:50, Description: Play from 01:50, ID: transcript.playFrom
+          118 text Help: Speaker 3, ID: speaker.name
+          119 button Description: Participant not linked. Click to match or enter a name., ID: speaker.link
+          120 text Реплика 12. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      121 row (selectable)
+        122 cell
+          123 button 02:00, Description: Play from 02:00, ID: transcript.playFrom
+          124 text Help: Анна Тестовая, ID: speaker.name
+          125 button Description: Participant linked. Click to change., ID: speaker.link
+          126 text Реплика 13. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      127 row (selectable)
+        128 cell
+          129 button 02:10, Description: Play from 02:10, ID: transcript.playFrom
+          130 text Help: Борис Примеров, ID: speaker.name
+          131 button Description: Participant linked. Click to change., ID: speaker.link
+          132 text Реплика 14. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      133 row (selectable)
+        134 cell
+          135 button 02:20, Description: Play from 02:20, ID: transcript.playFrom
+          136 text Help: Speaker 3, ID: speaker.name
+          137 button Description: Participant not linked. Click to match or enter a name., ID: speaker.link
+          138 text Реплика 15. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение.
+      139 row (selectable)
+        140 cell
+          141 button 02:30, Description: Play from 02:30, ID: transcript.playFrom
+          142 text Help: Анна Тестовая, ID: speaker.name
+          143 button Description: Participant linked. Click to change., ID: speaker.link
+          144 text Реплика 16. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      145 row (selectable)
+        146 cell
+          147 button 02:40, Description: Play from 02:40, ID: transcript.playFrom
+          148 text Help: Борис Примеров, ID: speaker.name
+          149 button Description: Participant linked. Click to change., ID: speaker.link
+          150 text Реплика 17. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+      151 row (selectable)
+        152 cell
+          153 button 02:50, Description: Play from 02:50, ID: transcript.playFrom
+          154 text Help: Speaker 3, ID: speaker.name
+          155 button Description: Participant not linked. Click to match or enter a name., ID: speaker.link
+          156 text Реплика 18. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение.
+    157 scroll bar (settable, float) 0.05946935041171088
+      158 value indicator (settable, float) 0.05946935041171088
+      159 increment arrow button
+      160 decrement arrow button
+      161 increment page button
+      162 decrement page button
+  163 text working…
+  164 scroll area
+    165 text MEETING DETAILS CALENDAR
+    166 button UX69 Атлас — планирование, Help: Open calendar event, ID: calendar.open
+    167 text Синтетические данные UX69 INVITEES Анна Тестовая
+Борис Примеров
+Вера Макетная Invitees may not have attended.
+    168 button UX69 Атлас — планирование, Description: Choose calendar event, ID: calendar.choose, Help: UX69 Атлас — планирование
+
+    169 button Description: Unlink calendar event, ID: calendar.clear
+    170 text PROCESSING
+    171 image Recording saved
+      172 image microphone
+      173 image selected
+    174 text Recording saved
+    175 image Transcript ready · diarization enabled
+      176 image plain text document
+      177 image
+      178 image selected
+    179 text Transcript ready · diarization enabled
+    180 button (disabled) Description: Transcribe again, Help: Wait for processing to finish., ID: meeting.retranscribe
+    181 image Summary ready
+      182 image
+      183 image selected
+    184 text Summary ready
+    185 button (disabled) Description: Regenerate summary, Help: Wait for processing to finish., ID: meeting.generate-summary
+    186 button Cancel processing, ID: meeting.cancel-processing
+    187 text PROCESSING SETTINGS Transcription: Disabled
+Diarization: Disabled
+Summary: Disabled
+    188 button Settings →, ID: meeting.processing-settings
+  189 button Auto-record, Description: Auto-record off, ID: activity.automatic
+  190 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+  191 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+  192 button (disabled) Not recording, ID: activity.recording
+  193 button Active: 1 · Waiting: 0, Description: Running: 1. Waiting: 0. Open processing., Help: UX69 Атлас — планирование · Creating summary, ID: activity.queue
+  194 busy indicator on
+  195 button UX69 Атлас — планирование · Creating summary, ID: activity.job
+  196 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+  197 close button
+  198 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+  199 minimize button
+200 menu bar
+  201 Verbemo UX69
+  202 File
+  203 Edit
+  204 Window
+
+Selected:
+  26 row (selected)
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

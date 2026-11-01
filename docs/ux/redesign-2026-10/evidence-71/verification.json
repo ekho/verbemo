@@ -1,0 +1,202 @@
+{
+  "date": "2026-10-30",
+  "artifact_sha256": "941d44d762e9aee5604de94d239c2ebe1b738501163eb0f21e8a690c3fcfcdd7",
+  "baseline_commit": "1bdd09f",
+  "scope": "Studio selected; layout/action icons, dismissible processing notice and regeneration badges; no native implementation; direct file-picker import; shared player directly below meeting title; library filter popover next to search; full-width new-recording title and simulated calendar selection; silent-audio status icon; inline participant editing with excerpts and resizable library",
+  "state_model_checks": 9,
+  "text_contrast_pairs_checked": 42,
+  "text_contrast_minimum": 4.5,
+  "browser": "Codex in-app browser on macOS",
+  "native_mac_gui_checked": false,
+  "native_windows_gui_checked": false,
+  "user_choice": "Studio: compactness and separate speaker column",
+  "review": "self-reviewed inline participant/resizing iteration; focused tests and browser verification; no independent review",
+  "screenshots": {
+    "01-focus-reading.jpg": "3f22f975c2a4a1759e3d67c269f090f955385fe43ac89d5a1691f98eb0c88f46",
+    "02-editorial-reading.jpg": "16cf790ccae4b553fce3ee447631f84da8999188be3aed1010430b501b1a5b45",
+    "03-studio-reading.jpg": "bf525ed8c3a7e389de3f1483fdb8cc91b9b021f9770601a98f9a89bf4173e7fe",
+    "04-focus-settings.jpg": "ce138d2ba25fc7c1ed045b55d39efe871f479e0f2a2aaafae3d5aea73feff344",
+    "05-editorial-settings.jpg": "6e42cfefa066c7e2dcf990bb4d10b3b2f79f32cafd10801ba46a0ef0dbfd6b37",
+    "06-studio-settings.jpg": "175528ab9c4dcbaf99d9c9115c2fec5dd7b57de18d3089666ad936a681d39174",
+    "07-focus-recording-win-dark.jpg": "9d1174e7e2a3a199d6f72f27bd685ac3085d1ecbc36af54a9aea42a4fc12a20a",
+    "08-editorial-processing-win-dark.jpg": "dc0ab14c121f50384556883cbcbe3864b5e4790b939b1a9adde0b892c329882a",
+    "09-studio-error-win-dark.jpg": "4e47e7ca8cac2d1621e952c2b223871e3f6b69bd986f8e5837447e96801cc2c8",
+    "10-studio-text-200.jpg": "d1efc8f8f2f5b80a2ac7b0ccbb2ac18ab2b73bc4b4bdfa6737db2c73385ad7e5",
+    "11-focus-assignment-minimum.jpg": "c7d07d038c11f6daf2ee1b3e640f88058911229606b78bfa1e3d1ad542eb8171",
+    "12-settings-win-en-text-150.jpg": "6552f0bf8c53bc7447d09ab9b6c587bdb1a4245588420657fce2d85c4ae79ab3",
+    "13-focus-panel-691.jpg": "bbcd91e507125c13a0f3a523e6de21853ced0e024c26a13bb5048fd6527a8492",
+    "14-focus-local-search.jpg": "a91963c76c06a7d12683e449db1bae4eae38ad9284bc8c211b6a67a4ccc20fda",
+    "15-open-comparison.jpg": "7cf46d16ba54445f0adc8e3ed0308895cd5ee8066a1406be3c28bf7b762532ae",
+    "16-studio-refined.jpg": "76f653db9f56ead78c51bedb0d0d1634bfe23aef85b5bdab26fe84898322b2da",
+    "17-studio-search.jpg": "89435f11b262f04bf6d486f69dc0fc8516aa3ca61f5d214f5beb836f23f4e347",
+    "18-studio-narrow-dark-en.jpg": "17c50bc9aa8c78259b277c560baf288b90fc7fd16c952bfdcee9162ffbab178a",
+    "19-studio-action-icons.jpg": "a64b5a1bd4e1bdd33727d9a5531350abfb94bcf4404cf21eade9aea1dfd8d2cc",
+    "20-studio-icons-dark-large.jpg": "cc0ee8be30e0ddae9a9b8cddccaa4ca394a784f33217410a21b152e618481de6",
+    "21-notice-and-summary-refresh.png": "7c9a9ccbd0d7117193413b35f669f037f9c01dad97e564fd1d43039c0ad7e2aa",
+    "22-regenerate-icons-dark-en.png": "161d2ee3ab685146a517f024b794e48a1bf39d8eb9eafcc42ab1a5061f049dba",
+    "23-direct-file-import.png": "7fa7a9ae839c138c73c67bb3bfb91ec508303d2617f7f25ce100d33609702159",
+    "24-player-below-title.png": "d5ef40ad23a4c5d95c5984913930cc7d61f53c8a4514fe70f61842f28cd9eb6c",
+    "25-library-filter-popover.png": "8a144f94c114e56b84ad1b121668bd6810213fb6f28c380e86a5a421452cadb3",
+    "26-recording-calendar.png": "f026819268678007dd34093403da45f3bbd52f4570aaad6425ffa9b74db24ed1",
+    "27-player-silent-icon.png": "8f8fe24329ff73736b8541bf2442b93d22c0b5eccab3ea8012db8424de19da56",
+    "28-inline-participants.png": "ec50a5c03763bdffd097a9df82df44f406a9c2a42f45b5a0dff82dc8feff66b0"
+  },
+  "first_round_artifact_sha256": "e27754d093b16f3203c8b98c87b8029ee58514d9220248d705309c77bf18bfc9",
+  "presentation_logic_checks": 10,
+  "screenshot_rounds": {
+    "first_round": "01-15, before refinement",
+    "studio_refinement": "16-18, layout refinement before action icons",
+    "action_icons": "19-20, current presentation"
+  },
+  "refinement_checks": [
+    "duplicate library-search button removed; sidebar field retained",
+    "pencil next to speaker name with accessible name and title; assignment C to Vera returns focus to edit-turn-2",
+    "Studio turn padding 10px; first short turn 71px at viewport 1087x954",
+    "distinct status icons with title and accessible labels",
+    "meeting-search field always visible on meeting screen; transcript/summary/no-result/Enter/Escape/clear and Cmd-F checked",
+    "archive search restores previous version, transcript tab and scrollTop 184.5",
+    "760x600 frame dark EN Windows presentation on Mac: no horizontal app overflow",
+    "200% text: no horizontal app/workspace overflow; speaker header stacks above paragraph",
+    "browser error log empty at end of check"
+  ],
+  "studio_layout_artifact_sha256": "7b7bfbeca090d5226c6887d6a0f9d4b42cc002b5d9bd9cbdd189672a1fa3ad7a",
+  "action_icon_checks": [
+    "play/pause retain position; stop resets to zero; replay after completion",
+    "timer preserves SVG and updates title/aria-label at completion",
+    "Details opens/closes via Enter and returns focus",
+    "action icons present in assignment dialog, settings back navigation, recording/pause/resume/stop footer",
+    "viewport 1087x954 light RU; frame 760x600 dark EN Windows presentation on Mac at text200; no horizontal app/workspace overflow",
+    "no browser console errors"
+  ],
+  "action_icons_sha256": "bae464ad111126ca0fefea251ba243a3d4e74bdc7ca7766daff5c8858322cf24",
+  "action_icons_review": "ship for action-icon iteration; reviewer inspected current diff and screenshots 19-20 and reran 9 model checks, 42 contrast pairs and 3 presentation checks; did not control browser",
+  "notice_regeneration_verification": {
+    "viewport": [
+      679,
+      954
+    ],
+    "light_ru": true,
+    "dark_en": true,
+    "keyboard_dismissal": true,
+    "result_and_status_preserved": true,
+    "new_job_notice_reappears": true,
+    "no_app_horizontal_overflow": true,
+    "javascript_errors": 0,
+    "native_checked": false
+  },
+  "notice_regeneration_sha256": "341d91d0d50a7184778a78a259b3c4083dd268a056e12fd71cb0ed796ca9b082",
+  "direct_import_verification": {
+    "filechooser_opened_directly": true,
+    "intermediate_html_dialog_open": false,
+    "multiple": true,
+    "synthetic_files_selected": 2,
+    "file_content_read_by_prototype": false,
+    "empty_selection_unit_checked": true,
+    "native_picker_cancel_verified": false,
+    "javascript_errors": 0
+  },
+  "direct_import_sha256": "f711d11a46092172ebb0246f1d0423303f6033ff2a983cc3ef0529ed1ca894cf",
+  "player_placement_verification": {
+    "viewport": [
+      1148,
+      954
+    ],
+    "order": [
+      "title/details",
+      "player",
+      "version/search",
+      "tabs",
+      "content"
+    ],
+    "tabs_checked": [
+      "transcript",
+      "summary",
+      "participants"
+    ],
+    "simulated_playback_continued_across_tabs": true,
+    "stop_reset_position": true,
+    "no_app_horizontal_overflow": true,
+    "javascript_errors": 0,
+    "narrow_and_large_text_rechecked": false,
+    "native_checked": false
+  },
+  "player_placement_sha256": "4258b718b314f9b9b7391e3c0384c113c7485a0c09b5a256bbb765874b373ea8",
+  "filter_popover_verification": {
+    "viewport": [
+      1148,
+      954
+    ],
+    "light_ru": true,
+    "filter_result_counts": {
+      "all": 5,
+      "processing": 1,
+      "attention": 1
+    },
+    "selection_closes_and_returns_focus": true,
+    "active_filter_indicator": true,
+    "enter_and_escape": true,
+    "outside_click": true,
+    "no_app_horizontal_overflow": true,
+    "javascript_errors": 0,
+    "other_sizes_and_themes_rechecked": false,
+    "native_checked": false
+  },
+  "filter_popover_sha256": "1280e129d76b2a1e798e455bc6ad91e04e84c5071a73499fce9c0148ec463bf7",
+  "recording_calendar_verification": {
+    "viewport": [
+      1148,
+      954
+    ],
+    "light_ru": true,
+    "title_and_form_width_px": 428,
+    "auto_selected_current_event": true,
+    "manual_event_replaces_title": true,
+    "custom_title_after_selection_preserved_at_start": true,
+    "selected_event_visible_in_recording_details": true,
+    "access_denied_and_empty_calendar": true,
+    "cancel_checked": true,
+    "javascript_errors": 0,
+    "real_calendar_or_microphone_accessed": false,
+    "native_checked": false
+  },
+  "recording_calendar_sha256": "97aae595c6ce7c8b97cb8beced871c5e8ee9e5f38a1391cb27c80637d05a95d7",
+  "silent_icon_verification": {
+    "viewport": [
+      1148,
+      954
+    ],
+    "light_theme": true,
+    "icon_visible": true,
+    "ru_en_accessible_names_and_title": true,
+    "static_status_not_button": true,
+    "other_sizes_and_themes_rechecked": false,
+    "native_checked": false
+  },
+  "silent_icon_sha256": "bc8723258d2902b64ba80b96a0b52b495f5a72adcf74e79a73a5d4be9de706dd",
+  "participant_resize_verification": {
+    "wide_viewport": [
+      1280,
+      720
+    ],
+    "screenshot_viewport": [
+      864,
+      954
+    ],
+    "narrow_frame": [
+      760,
+      600
+    ],
+    "inline_match_and_manual_name": true,
+    "transcript_reflects_name": true,
+    "sample_seek": true,
+    "mouse_width_px": [
+      264,
+      332
+    ],
+    "keyboard_width_px": 348,
+    "width_retained_after_hide_show": true,
+    "dark_en_no_workspace_overflow": true,
+    "javascript_errors": 0,
+    "native_checked": false
+  }
+}

@@ -1,0 +1,38 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button К встречам, ID: journal.breadcrumb
+	2 text /  Настройки
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 radio button Общие, Value: 1, ID: settings.tab.general
+		9 radio button Запись, Value: 0, ID: settings.tab.recording
+		10 radio button Расшифровка, Value: 0, ID: settings.tab.transcription
+		11 radio button Сводки, Value: 0, ID: settings.tab.summary
+		12 radio button Календарь, Value: 0, ID: settings.tab.calendar
+		13 radio button Файлы и модели, Value: 0, ID: settings.tab.storage
+		14 radio button MCP, Value: 0, ID: settings.tab.mcp
+		15 radio button О Verbemo, Value: 0, ID: settings.tab.about
+	16 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	17 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	18 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	19 button (disabled) Нет записи, ID: activity.recording
+	20 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	21 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	22 close button
+	23 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	24 minimize button
+25 menu bar
+	26 Verbemo Studio Review
+	27 Файл
+	28 Правка
+	29 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

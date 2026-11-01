@@ -1,0 +1,16 @@
+{
+  "build": "670",
+  "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+  "checks": [
+    "RU/light wide1340x820 and minimum760x600; settings overview/category/back/resize, all eight pages visible",
+    "Search/Version unavailable without readable results; tooltip explains",
+    "Failure selected by mouse; main notice trailing close; dismissal retains meeting and Queue0",
+    "Ready transcript: three distinct colored, centered voice badges and compact rows",
+    "Full-width new draft; edited title read back; Cancel without starting",
+    "Import by physical toolbar click directly opened native chooser; physical Cancel returned to same meeting and Queue0",
+    "Archive2 Whisper and local query survived settings/back; hidden library at minimum preserved query",
+    "Initial scope caption frame was incomplete in immediate capture; geometry assertions and settled native15 capture confirm visible text; no product change",
+    "EN/dark: minimum overview/General/MCP, wide Summaries/Participants/inspector actions; labels fit. Native rename enters title field; Escape returns unchanged title. Sidebar248→309.5 by mouse survives hide/show, then reset248.",
+    "Final reset RU/light. Library title query selects Atlas planning; clear retains it; transcript reopened, inspector hidden, library width248. Candidate left open, no recording, Queue0."
+  ]
+}

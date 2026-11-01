@@ -1,0 +1,50 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Back to meetings, ID: journal.breadcrumb
+	2 text /  General
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button All settings, Description: Back, ID: settings.all-categories
+		9 scroll area Secondary Actions: Scroll Up, Scroll Down
+			10 switch Description: Start at login, Help: Open verbemo automatically when you log in to your Mac., Value: 0, ID: access.login.toggle
+			11 text Start at login Open verbemo automatically when you log in to your Mac.
+			12 switch Description: In the menu bar, Help: The wave, with the clock beside it while a meeting records — and the menu with everything in it., Value: 1, ID: icons.menu-bar
+			13 text In the menu bar The wave, with the clock beside it while a meeting records — and the menu with everything in it.
+			14 switch Description: In the Dock, Value: 1, ID: icons.dock, Help: Keep the icon in the Dock and ⌘-Tab when the window is minimized or closed. The icon is always shown while the window is open.
+			15 text In the Dock Keep the icon in the Dock and ⌘-Tab when the window is minimized or closed. The icon is always shown while the window is open. General Settings apply to this profile. Recording and processing options apply to future operations. Existing transcripts and summaries stay unchanged. Theme
+			16 pop up button Description: Theme, Value: Dark, ID: interface_theme
+			17 text System follows this Mac’s appearance. Language of verbemo's own windows
+			18 pop up button Description: Language of verbemo's own windows, Value: English, ID: interface_language
+			19 text System follows macOS. Meeting and summary languages are configured separately. Takes effect at the next launch. Open the window at launch
+			20 switch Description: Open the window at launch, Value: 1, ID: window
+			21 text The Dock icon opens it either way. Takes effect at the next launch.
+			22 scroll bar (settable, float) 0
+				23 value indicator (settable, float) 0
+				24 increment arrow button
+				25 decrement arrow button
+				26 increment page button
+				27 decrement page button
+	28 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	29 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	30 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+	31 button (disabled) Not recording, ID: activity.recording
+	32 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	33 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+	34 close button
+	35 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	36 minimize button
+37 menu bar
+	38 Verbemo Studio Review
+	39 File
+	40 Edit
+	41 Window
+
+The focused UI element is 8 button All settings, Description: Back, ID: settings.all-categories

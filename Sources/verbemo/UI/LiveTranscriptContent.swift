@@ -1,11 +1,10 @@
 import AppKit
 
-/// Live transcript and import progress inside the current recording page.
+/// Live transcript inside the current recording page; service messages live in the status bar.
 @MainActor
 final class LiveTranscriptContent {
     var onToggleLive: ((Bool) -> Void)?
     var onImportFiles: (([URL]) -> Void)?
-    var onCancelImport: (() -> Void)?
 
     let contentView: NSView
     /// What is wrong with the config file, when something is — see
@@ -20,7 +19,7 @@ final class LiveTranscriptContent {
     private let liveText = NSTextView()
     private let liveScroll = NSScrollView()
     private let liveSection = NSStackView()
-    private let importStatus = MediaImportStatusView()
+    var serviceViews: [NSView] { [configProblemLabel, liveStatus, liveDownload] }
 
     private var liveTextVisible = false
     private var liveRevealedAfterStop = false
@@ -32,12 +31,18 @@ final class LiveTranscriptContent {
         configProblemLabel.textColor = .systemOrange
         configProblemLabel.lineBreakMode = .byTruncatingTail
         configProblemLabel.isHidden = true
+        configProblemLabel.identifier = .init("activity.config-problem")
+        configProblemLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         liveCheckbox.target = self
         liveCheckbox.action = #selector(liveClicked)
         liveCheckbox.isEnabled = true
         liveStatus.font = .systemFont(ofSize: 11)
         liveStatus.textColor = .secondaryLabelColor
+        liveStatus.lineBreakMode = .byTruncatingTail
+        liveStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        liveStatus.isHidden = true
+        liveStatus.identifier = .init("activity.live-status")
         liveStatus.lineBreakMode = .byTruncatingTail
         liveStatus.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         liveDownload.identifier = .init("live.download")
@@ -74,7 +79,7 @@ final class LiveTranscriptContent {
         liveScroll.borderType = .bezelBorder
         liveScroll.isHidden = true
 
-        let liveHeader = NSStackView(views: [liveCheckbox, NSView(), liveStatus, liveDownload, liveReveal])
+        let liveHeader = NSStackView(views: [liveCheckbox, NSView(), liveReveal])
         liveHeader.orientation = .horizontal
         liveHeader.spacing = 8
         liveSection.setViews([liveHeader, liveScroll], in: .top)
@@ -88,9 +93,8 @@ final class LiveTranscriptContent {
         // back off — hidden instead.
         liveSection.isHidden = !Platform.supportsLocalModels
 
-        importStatus.onCancel = { [weak self] in self?.onCancelImport?() }
         let rows = NSStackView()
-        rows.setViews([configProblemLabel, liveSection, importStatus], in: .top)
+        rows.setViews([liveSection], in: .top)
         rows.orientation = .vertical
         rows.alignment = .leading
         rows.spacing = 8
@@ -108,25 +112,15 @@ final class LiveTranscriptContent {
             rows.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             rows.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             fill,
-            configProblemLabel.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -32),
-            importStatus.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -32),
             liveSection.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -32),
             liveScroll.widthAnchor.constraint(equalTo: liveSection.widthAnchor),
             liveScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
         ])
     }
 
-    func updateImport(_ update: MediaImportCoordinator.Update) {
-        importStatus.update(update)
-    }
-
-    func finishImport(_ result: MediaImportCoordinator.Result) {
-        importStatus.finish(result)
-    }
-
     /// The config file's problem in one line, or nil when it has none.
     func updateConfigProblem(_ headline: String?) {
-        configProblemLabel.stringValue = headline ?? ""
+        configProblemLabel.stringValue = headline?.split(whereSeparator: \.isNewline).joined(separator: " ") ?? ""
         configProblemLabel.toolTip = headline
         configProblemLabel.isHidden = headline == nil
     }
@@ -146,11 +140,14 @@ final class LiveTranscriptContent {
             localised("stopped — Mac couldn't keep up", "остановлена — мак не успевает")
         case .error(let message): localised("stopped — ", "остановлена — ") + message
         }
+        if !liveStatus.stringValue.isEmpty { liveStatus.stringValue = liveCheckbox.title + ": " + liveStatus.stringValue }
         liveStatus.toolTip = liveStatus.stringValue
+        liveStatus.stringValue = liveStatus.stringValue.split(whereSeparator: \.isNewline).joined(separator: " ")
+        liveStatus.isHidden = !Platform.supportsLocalModels || liveStatus.stringValue.isEmpty
         liveDownload.title = snapshot.status == .modelMissing
             ? localised("Download model", "Скачать модель") : localised("Retry", "Повторить")
         switch snapshot.status {
-        case .modelMissing, .error, .overloaded: liveDownload.isHidden = !snapshot.isRecording
+        case .modelMissing, .error, .overloaded: liveDownload.isHidden = !Platform.supportsLocalModels || !snapshot.isRecording
         default: liveDownload.isHidden = true
         }
 

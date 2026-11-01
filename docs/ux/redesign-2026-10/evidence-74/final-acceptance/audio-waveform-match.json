@@ -1,0 +1,12 @@
+[
+  {
+    "channel": 0,
+    "normalized_waveform_correlation": 0.39984020145404003,
+    "start_seconds": 37.928
+  },
+  {
+    "channel": 1,
+    "normalized_waveform_correlation": 0.6098884509934058,
+    "start_seconds": 37.5805
+  }
+]

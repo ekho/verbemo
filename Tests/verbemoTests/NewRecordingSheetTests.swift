@@ -39,7 +39,7 @@ struct NewRecordingSheetTests {
     }
 
     @Test(.freshHome, .speaking(.russian))
-    func automaticMatchAndEventChangesUpdateOnlySuggestedTitle() async throws {
+    func explicitCalendarChoiceReplacesTheDraftAndStillAllowsEditing() async throws {
         let first = meeting("first", start: -60), second = meeting("second", start: 300)
         let sheet = NewRecordingSheet(calendarEnabled: true, now: now) { _ in
             (CalendarWatcher.bestMatch(for: now, among: [first, second]), [first, second])
@@ -56,18 +56,19 @@ struct NewRecordingSheetTests {
         sheet.name.stringValue = "Моё название"
         sheet.calendarPicker.choose(first)
         await sheet.calendarPicker.settled()
-        #expect(sheet.name.stringValue == "Моё название")
+        #expect(sheet.name.stringValue == first.title)
+        sheet.name.stringValue = "Моё название после выбора"
         var submitted: (String, CalendarWatcher.Meeting?)?
         sheet.onComplete = { if case .start(let title, let event) = $0 { submitted = (title, event) } }
         try act(button("recording.start", in: sheet))
-        #expect(submitted?.0 == "Моё название")
+        #expect(submitted?.0 == "Моё название после выбора")
         #expect(submitted?.1?.id == first.id)
         #expect(submitted?.1?.participants.first?.id == "anna")
         #expect(submitted?.1?.agenda == "Повестка")
     }
 
     @Test(.freshHome)
-    func explicitNoEventClearsAssociationAndRestoresDefaultTitle() async throws {
+    func explicitNoEventClearsAssociationAndKeepsTitle() async throws {
         let event = meeting("event")
         let sheet = NewRecordingSheet(calendarEnabled: true, now: now) { _ in (event, [event]) }
         defer { sheet.panel.close() }
@@ -75,7 +76,10 @@ struct NewRecordingSheetTests {
         await sheet.settled()
         sheet.calendarPicker.clearSelection()
         #expect(sheet.selectedMeeting == nil)
-        #expect(sheet.name.stringValue.contains(MeetingPresentation.date(now)))
+        #expect(sheet.name.stringValue == event.title)
+        sheet.name.stringValue = "Свой заголовок"
+        sheet.calendarPicker.clearSelection()
+        #expect(sheet.name.stringValue == "Свой заголовок")
     }
 
     @Test(.freshHome, arguments: [false, true])

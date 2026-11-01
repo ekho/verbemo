@@ -1,0 +1,8 @@
+{
+  "source_commit": "9a66902f261dfd189c0d5d323e4c87975b697e88",
+  "command": "swift test --no-parallel --filter 'MeetingLibraryControllerTests.regenerationImagesDistinguishTheResult|JournalWorkspaceTests|SummaryProviderSheetTests|RetranscriptionTests'",
+  "result": "46 tests in4 suites passed,17.533s",
+  "log_sha256": "3a6579aff7f87bdac2985cea668b00efd5cf4fb15d4ecb310d122d5dde8c9cf1",
+  "build_log_sha256": "be60bb1f1e7c5f7001199bf438c5e1414f78e32a747b2239c7f7cb57e04624df",
+  "new_tests": "none; visual-only change, existing action and availability coverage"
+}

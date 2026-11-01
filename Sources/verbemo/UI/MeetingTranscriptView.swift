@@ -5,47 +5,131 @@ import AppKit
 final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableViewDelegate {
     var onPlayFrom: ((TimeInterval) -> Void)?
     var onAssign: ((String, CalendarParticipant?, String?) throws -> Void)?
+    var onError: ((Error) -> Void)?
+    struct ReadingPosition { let segment: Int; let offset: CGFloat }
+    private var searchRanges: [Int: [NSRange]] = [:]
+    private var focusedSearch: (segment: Int, range: NSRange)?
+    func readingPosition() -> ReadingPosition? {
+        let rows = table.rows(in: documentVisibleRect)
+        guard rows.location != NSNotFound, rows.length > 0 else { return nil }
+        return .init(segment: rows.location, offset: documentVisibleRect.minY - table.rect(ofRow: rows.location).minY)
+    }
+    func restoreReadingPosition(_ position: ReadingPosition?) {
+        guard let position, segments.indices.contains(position.segment) else { return }
+        table.layoutSubtreeIfNeeded()
+        let row = table.rect(ofRow: position.segment)
+        let y = row.minY + max(0, min(position.offset, row.height - 1))
+        contentView.scroll(to: NSPoint(x: 0, y: max(0, min(y, table.bounds.height - contentView.bounds.height))))
+        reflectScrolledClipView(contentView)
+    }
+    func setSearch(matches: [Int: [NSRange]], focusedSegment: Int? = nil, focusedRange: NSRange? = nil) {
+        let nextFocus = focusedSegment.flatMap { segment in focusedRange.map { (segment: segment, range: $0) } }
+        guard searchRanges != matches || focusedSearch?.segment != nextFocus?.segment || focusedSearch?.range != nextFocus?.range else { return }
+        let position = readingPosition()
+        searchRanges = matches
+        focusedSearch = nextFocus
+        table.reloadData()
+        restoreReadingPosition(position)
+    }
+    func revealSearchSegment(_ index: Int) {
+        guard segments.indices.contains(index) else { return }
+        table.scrollRowToVisible(index)
+    }
+    func focusSpeaker(_ speaker: String) {
+        table.layoutSubtreeIfNeeded()
+        let visible = table.rows(in: documentVisibleRect)
+        guard visible.location != NSNotFound,
+              let row = segments.indices.first(where: { NSLocationInRange($0, visible) && segments[$0].speaker == speaker }),
+              let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? SegmentCell else { return }
+        window?.makeFirstResponder(cell.edit)
+    }
     private let table = NSTableView()
+    private let measuringText = NSTextField(wrappingLabelWithString: "")
     private var segments: [Transcript.Segment] = []
+    private var speakerLabels: [String] = []
     private var names: SpeakerNames?
     private var participants: [CalendarParticipant] = []
     private var canEdit = false
     private var canPlay = false
     private var canMatchParticipants = true
+    private var resizePosition: ReadingPosition?
+    private var measuredColumnWidth: CGFloat = 0
     init() {
         super.init(frame: .zero)
         hasVerticalScroller = true
         autohidesScrollers = true
         drawsBackground = false
+        measuringText.font = .systemFont(ofSize: 15)
         table.addTableColumn(NSTableColumn(identifier: .init("utterance")))
         table.headerView = nil
+        table.style = .plain
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
-        table.intercellSpacing = NSSize(width: 0, height: 8)
+        table.intercellSpacing = NSSize(width: 0, height: 6)
+        table.gridStyleMask = []
         table.dataSource = self
         table.delegate = self
         table.setAccessibilityLabel(localised("Transcript and speaker assignments", "Расшифровка и сопоставление участников"))
         documentView = table
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func setFrameSize(_ newSize: NSSize) {
+        if abs(newSize.width - frame.width) > 0.5, resizePosition == nil { resizePosition = readingPosition() }
+        super.setFrameSize(newSize)
+    }
+    override func layout() {
+        super.layout()
+        let width = table.tableColumns[0].width
+        if abs(measuredColumnWidth - width) > 0.5 {
+            measuredColumnWidth = width
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
+            }
+        }
+        // Position cells only after their row containers have reached the new heights.
+        table.layoutSubtreeIfNeeded()
+        // Restoring inside setFrameSize re-enters Auto Layout with the previous page size.
+        let position = resizePosition
+        resizePosition = nil
+        restoreReadingPosition(position)
+        // AppKit can update row heights while retaining the cached cells' old frames.
+        table.enumerateAvailableRowViews { rowView, row in
+            guard let cell = self.table.view(atColumn: 0, row: row, makeIfNecessary: false) else { return }
+            let frame = rowView.convert(self.table.frameOfCell(atColumn: 0, row: row), from: self.table)
+            if cell.frame != frame { cell.frame = frame }
+        }
+    }
     func update(transcript: Transcript, names: SpeakerNames?, participants: [CalendarParticipant], canEdit: Bool, canPlay: Bool = false, canMatchParticipants: Bool = true) {
+        let changed = segments != transcript.segments || self.names?.speakers != names?.speakers
+            || self.participants != participants || self.canEdit != canEdit
+            || self.canPlay != canPlay || self.canMatchParticipants != canMatchParticipants
+        if segments != transcript.segments {
+            resizePosition = nil
+            speakerLabels = Self.speakerLabels(in: transcript.segments)
+        }
         segments = transcript.segments
         self.names = names
         self.participants = participants
         self.canEdit = canEdit
         self.canPlay = canPlay
         self.canMatchParticipants = canMatchParticipants
-        table.reloadData()
+        if changed { table.reloadData() }
     }
     func numberOfRows(in tableView: NSTableView) -> Int { segments.count }
     func tableViewColumnDidResize(_ notification: Notification) {
-        table.noteHeightOfRows(withIndexesChanged: IndexSet(segments.indices))
+        // A legacy scroller can change the column again while AppKit is tiling.
+        needsLayout = true
     }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        let width = max(160, tableView.tableColumns[0].width - 20)
-        let rect = (segments[row].text as NSString).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 14)])
-        return max(54, ceil(rect.height) + 36)
+        let available = tableView.tableColumns[0].width
+        let width = SegmentCell.textWidth(available)
+        // Use the same native line metrics as the visible wrapping label.
+        measuringText.stringValue = segments[row].text
+        measuringText.preferredMaxLayoutWidth = width
+        let height = ceil(measuringText.fittingSize.height)
+        return (available >= 590 ? max(52, height) : height + 60) + 24
     }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("utterance")
@@ -59,14 +143,40 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         cell.time.isEnabled = canPlay
         cell.time.toolTip = localised("Play from \(cell.time.title)", "Воспроизвести с \(cell.time.title)")
         cell.time.setAccessibilityLabel(cell.time.toolTip)
-        cell.body.stringValue = segment.text
-        cell.body.preferredMaxLayoutWidth = max(160, tableView.tableColumns[0].width - 20)
-        let editor = SpeakerAssignmentEditor(speaker: segment.speaker, title: Self.speakerTitle(segment.speaker, in: segments),
-            entry: SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker],
-            participants: canMatchParticipants || segment.speaker == "me" ? participants : [], canEdit: canEdit, inline: true)
-        let assign = onAssign
-        editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
-        cell.setEditor(editor)
+        let text = NSMutableAttributedString(string: segment.text, attributes: [.font: NSFont.systemFont(ofSize: 15), .foregroundColor: StudioStyle.ink])
+        for range in searchRanges[row] ?? [] where NSMaxRange(range) <= text.length {
+            let active = focusedSearch?.segment == row && focusedSearch?.range == range
+            text.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(active ? 0.65 : 0.25), range: range)
+        }
+        cell.body.attributedStringValue = text
+        let title = Self.speakerTitle(segment.speaker, in: segments)
+        let entry = SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker]
+        cell.name.stringValue = entry?.name ?? title
+        cell.name.toolTip = cell.name.stringValue
+        cell.color = StudioStyle.voiceSurface(colorIndex: speakerLabels.firstIndex(of: segment.speaker))
+        cell.edit.isEnabled = canEdit && !SpeakerNames.isUnknown(segment.speaker)
+        cell.edit.toolTip = localised("Change speaker: ", "Изменить говорящего: ") + cell.name.stringValue
+        cell.edit.setAccessibilityLabel(cell.edit.toolTip)
+        cell.edit.onRestoreFocus = { [weak self] in
+            guard let self, self.segments.indices.contains(row), self.segments[row] == segment else { return }
+            self.table.layoutSubtreeIfNeeded()
+            if let cell = self.table.view(atColumn: 0, row: row, makeIfNecessary: true) as? SegmentCell {
+                self.window?.makeFirstResponder(cell.edit)
+            }
+        }
+        cell.edit.makeEditor = { [weak self] in
+            guard let self else { return nil }
+            let choices = self.canMatchParticipants || segment.speaker == "me" ? self.participants : []
+            let editable = self.canEdit && !SpeakerNames.isUnknown(segment.speaker)
+            let currentEntry = SpeakerNames.isUnknown(segment.speaker) ? nil : self.names?.speakers[segment.speaker]
+            let assign = self.onAssign
+            let editor = SpeakerAssignmentPopover(speaker: segment.speaker, title: title, entry: currentEntry,
+                                                  participants: choices, canEdit: editable)
+            editor.onAssign = { participant, name in try assign?(segment.speaker, participant, name) }
+            editor.onError = self.onError
+            return editor
+        }
+        cell.updateWidth(tableView.tableColumns[0].width)
         return cell
     }
     @objc private func playFrom(_ sender: NSButton) {
@@ -76,47 +186,85 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
     static func speakerTitle(_ speaker: String, in segments: [Transcript.Segment]) -> String {
         if SpeakerNames.isUnknown(speaker) { return SpeakerNames.described(label: speaker) }
         if speaker == "me" { return SpeakerNames.described(label: speaker) }
-        var labels: [String] = []
-        for segment in segments where !SpeakerNames.isUnknown(segment.speaker) && !labels.contains(segment.speaker) { labels.append(segment.speaker) }
-        let number = (labels.firstIndex(of: speaker) ?? 0) + 1
+        let number = (speakerLabels(in: segments).firstIndex(of: speaker) ?? 0) + 1
         return localised("Speaker \(number)", "Говорящий \(number)")
     }
+    static func speakerLabels(in segments: [Transcript.Segment]) -> [String] {
+        var labels: [String] = []
+        for segment in segments where !SpeakerNames.isUnknown(segment.speaker) && !labels.contains(segment.speaker) {
+            labels.append(segment.speaker)
+        }
+        return labels
+    }
+
 }
 
 @MainActor
 private final class SegmentCell: NSTableCellView {
     let time = NSButton(title: "", target: nil, action: nil)
     let body = NSTextField(wrappingLabelWithString: "")
-    private let head = NSStackView()
-    private var editor: NSView?
+    let name = NSTextField(labelWithString: "")
+    var color = StudioStyle.paper { didSet { needsDisplay = true } }
+    let edit = SpeakerEditButton()
+    private let metadata = NSStackView()
+    private let stack = NSStackView()
+    private var metadataWidth: NSLayoutConstraint!
+    private var bodyWidth: NSLayoutConstraint!
+    static func textWidth(_ available: CGFloat) -> CGFloat { max(160, available - 24 - (available >= 590 ? 206 : 0)) }
     init() {
         super.init(frame: .zero)
         time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         time.isBordered = false
-        time.contentTintColor = JournalStyle.accent
+        time.image = NSImage(systemSymbolName: "play", accessibilityDescription: nil)
+        time.imagePosition = .imageLeading
+        time.contentTintColor = StudioStyle.muted
         time.identifier = .init("transcript.playFrom")
-        body.font = .systemFont(ofSize: 14)
+        name.font = .systemFont(ofSize: 13, weight: .semibold)
+        name.identifier = .init("transcript.speaker-name")
+        name.textColor = StudioStyle.ink
+        name.lineBreakMode = .byTruncatingTail
+        name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        body.font = .systemFont(ofSize: 15)
         body.isSelectable = true
-        head.addArrangedSubview(time)
-        head.spacing = 12
-        let stack = NSStackView(views: [head, body])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 4
+        body.identifier = .init("transcript.words")
+        let identity = NSStackView(views: [name, edit])
+        identity.spacing = 6
+        identity.alignment = .top
+        metadata.orientation = .vertical
+        metadata.setViews([identity, time], in: .top)
+        metadata.alignment = .leading
+        metadata.spacing = 4
+        identity.widthAnchor.constraint(equalTo: metadata.widthAnchor).isActive = true
+        stack.setViews([metadata, body], in: .center)
+        stack.alignment = .top
+        stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+        metadataWidth = metadata.widthAnchor.constraint(equalToConstant: 190)
+        bodyWidth = body.widthAnchor.constraint(equalTo: stack.widthAnchor)
+        bodyWidth.isActive = true
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            body.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            head.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
         ])
     }
-    func setEditor(_ view: NSView) {
-        if let editor { head.removeArrangedSubview(editor); editor.removeFromSuperview() }
-        editor = view
-        head.addArrangedSubview(view)
+    func updateWidth(_ available: CGFloat) {
+        let wide = available >= 590
+        stack.orientation = wide ? .horizontal : .vertical
+        stack.alignment = wide ? .top : .leading
+        stack.spacing = wide ? 16 : 8
+        metadataWidth.isActive = wide
+        bodyWidth.constant = wide ? -206 : 0
+        let width = Self.textWidth(available)
+        if abs(body.preferredMaxLayoutWidth - width) > 0.5 { body.preferredMaxLayoutWidth = width }
     }
+    override func layout() { updateWidth(bounds.width); super.layout() }
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        bounds.fill()
+        super.draw(dirtyRect)
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }

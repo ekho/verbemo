@@ -1,0 +1,27 @@
+{
+  "source_commit": "700b544424bb36a7a767f67bdc46fc4c160cb317",
+  "version": "0.17.2",
+  "build": "691",
+  "configuration": "Universal Release ad-hoc",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/Verbemo Studio Review.app",
+  "identity": "name.ekho.verbemo.ux74.final-qa",
+  "home": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/home",
+  "recordings": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/recordings",
+  "executable_sha256": "38b62887a68f2bcfb79e75805dd7390b29efa6e6a65a2e646f7445959a179420",
+  "architectures": [
+    "x86_64",
+    "arm64"
+  ],
+  "minimum_macos": "14.2",
+  "command": "make app SIGN_ID=-",
+  "exit_code": 0,
+  "build_log": "/tmp/ux74-final-universal-build.log",
+  "build_log_sha256": "540e00e79f963c8990ece45f5a83e6f8813b02a9d9ea3746d33a2bfeec70501b",
+  "signature_validation": "codesign --verify --deep --strict: exit0",
+  "rosetta_check": "x86_64 --help: exit0; --version unsupported (exit64)",
+  "runtime": {
+    "macos": "26.7.1",
+    "architecture": "arm64"
+  },
+  "published": false
+}

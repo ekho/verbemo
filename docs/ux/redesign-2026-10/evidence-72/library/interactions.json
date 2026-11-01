@@ -1,0 +1,15 @@
+{
+  "build": 651,
+  "source": "10335b6d4f63bf064ca5a77fc5b8144042c6bcb6",
+  "escape_closed_without_reset": true,
+  "status_images": true,
+  "filter_preserves_query": true,
+  "outside_click_keeps_filter": true,
+  "empty_search_explained": true,
+  "clear_search_restores_list": true,
+  "collapse_restore_width": true,
+  "minimum_width": true,
+  "expanded_width": true,
+  "dark_en_readable": true,
+  "final_restored": true
+}

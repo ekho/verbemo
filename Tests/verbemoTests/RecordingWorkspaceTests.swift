@@ -66,6 +66,8 @@ struct RecordingWorkspaceTests {
             status: .live))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let inspector = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        let liveView = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? LiveTranscriptView }.first)
+        #expect(library.toolbarContent.isDescendant(of: liveView), "Current-meeting commands stay inside the live meeting")
         let button = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector" } as? NSButton)
         if width == 760 {
             #expect(inspector.isHidden)
@@ -92,11 +94,14 @@ struct RecordingWorkspaceTests {
         #expect(text.window === app.panel)
     }
 
-    @Test(.freshHome) func recordingControlsFollowRuntimeAcrossDestinations() {
+    @Test(.freshHome) func recordingControlsFollowRuntimeAcrossDestinations() throws {
         let app = ApplicationWindow()
         var starts = 0
         var pauses = 0
-        app.onToggle = { starts += 1; app.update(state: .recording, elapsed: "00:01") }
+        app.onToggle = {
+            starts += 1
+            app.update(state: starts == 1 ? .recording : .idle, elapsed: "00:01")
+        }
         app.onTogglePause = { pauses += 1; app.update(state: .paused, elapsed: "00:01") }
         app.startRecording()
         app.startRecording()
@@ -111,6 +116,18 @@ struct RecordingWorkspaceTests {
         app.hide()
         #expect(starts == 1)
         #expect(app.recordingBarIsVisible)
+        app.show()
+        let toggle = try #require(app.panel.contentView?.allDescendants.first {
+            $0.identifier?.rawValue == "workspace.toggle-library"
+        } as? NSButton)
+        #expect(toggle.sendAction(toggle.action, to: toggle.target))
+        app.navigate(.calendar)
+        #expect(app.recordingBarIsVisible)
+        app.stopRecording()
+        app.stopRecording()
+        #expect(starts == 2, "Repeated Stop must not start or stop a second session")
+        #expect(!app.recordingBarIsVisible)
+        app.hide()
     }
     @Test(.freshHome) func failedStartDoesNotPresentLiveAsRecording() {
         let app = ApplicationWindow()

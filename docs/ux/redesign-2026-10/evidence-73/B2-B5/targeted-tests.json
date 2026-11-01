@@ -1,0 +1,32 @@
+[
+  {
+    "local_log": "/tmp/verbemo-ux73-b2-components-final.log",
+    "sha256": "a6f80fc27c4f9286539de6671f1311857d8377d6dc7969861d4dd0441a5807c7",
+    "scope": "settings/model/schema/MCP/setup target",
+    "summary": "✔ Test run with 161 tests in 10 suites passed after 26.346 seconds."
+  },
+  {
+    "local_log": "/tmp/verbemo-ux73-b3-unlink-green.log",
+    "sha256": "98bb3a68d52f90ce1b96c945d6b8383ad97f85b6746aac75b7b9920d25fbc282",
+    "scope": "recording/calendar target",
+    "summary": "✔ Test run with 47 tests in 5 suites passed after 7.992 seconds."
+  },
+  {
+    "local_log": "/tmp/verbemo-ux73-b4-final.log",
+    "sha256": "279f6cb413a355a85f68eb15b7ed27bea210a597eb080df5f8427843ac756d1f",
+    "scope": "results/processing target",
+    "summary": "✔ Test run with 49 tests in 7 suites passed after 9.760 seconds."
+  },
+  {
+    "local_log": "/tmp/verbemo-ux73-b5-all.log",
+    "sha256": "eb615c0763da7d94d103b468b2b23b0642a03955a54c1b533f11dca295196712",
+    "scope": "F01-F18 focused map",
+    "summary": "✔ Test run with 244 tests in 22 suites passed after 51.878 seconds."
+  },
+  {
+    "local_log": "/tmp/verbemo-ux73-pause-check.log",
+    "sha256": "84518c5cc9471443f30b5f186c9f59c14b87f109c124c887451cd0de3d9b955e",
+    "scope": "GUI findings fixes target",
+    "summary": "✔ Test run with 63 tests in 8 suites passed after 19.282 seconds."
+  }
+]

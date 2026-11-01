@@ -1,0 +1,33 @@
+Window: "Verbemo", App: Verbemo Studio Debug.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button К встречам, ID: journal.breadcrumb
+	2 text /  MCP
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button Все разделы, Description: Back, ID: settings.all-categories
+		9 scroll area
+			10 text ID: settings.heading, Value: MCP Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются. MCP
+			11 switch Description: MCP, Value: 0, ID: mcp.enabled
+	12 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	13 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	14 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	15 button (disabled) Нет записи, ID: activity.recording
+	16 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	17 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	18 close button
+	19 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	20 minimize button
+21 menu bar
+	22 Файл
+	23 Правка
+	24 Окно
+
+The focused UI element is 8 button Все разделы, Description: Back, ID: settings.all-categories

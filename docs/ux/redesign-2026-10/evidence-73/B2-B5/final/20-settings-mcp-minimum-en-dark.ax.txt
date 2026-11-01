@@ -1,0 +1,34 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Back to meetings, ID: journal.breadcrumb
+	2 text /  MCP
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button All settings, Description: Back, ID: settings.all-categories
+		9 scroll area
+			10 text ID: settings.heading, Value: MCP Settings apply to this profile. Recording and processing options apply to future operations. Existing transcripts and summaries stay unchanged. MCP
+			11 switch Description: MCP, Value: 0, ID: mcp.enabled
+	12 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	13 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	14 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+	15 button (disabled) Not recording, ID: activity.recording
+	16 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	17 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+	18 close button
+	19 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	20 minimize button
+21 menu bar
+	22 Verbemo Studio Review
+	23 File
+	24 Edit
+	25 Window
+
+The focused UI element is 8 button All settings, Description: Back, ID: settings.all-categories

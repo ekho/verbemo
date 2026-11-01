@@ -1,0 +1,23 @@
+{
+  "product_source": "bc66c20804e81c9b0e62016303cfa61aac7f108b",
+  "tests": "54 tests /4 suites passed",
+  "universal_package": "make app SIGN_ID=- exit0; build677",
+  "signature": "codesign --verify --deep --strict exit0",
+  "native_evidence": "wide light reading and user current scrolled state, two captures",
+  "native_resize_run": "not completed: CUA concurrent user-change interruptions",
+  "human_acceptance": "awaiting feedback",
+  "package_log_sha256": "8384264f53b66d7afdc831400fcd0c3eb74e9273d40009aaf5eeb2e229d893d2",
+  "files": {
+    "01-light-wide.jpg": "271a8eb3fe7a5dfd9c36b8b89cb4458a6058925dbffa72c8068e3dddef5a4fca",
+    "tests.json": "5b42fa1fa2d81b9ff7b6fa81dae5c9592a2452cadb8931fef010fa183da0054d",
+    "report.md": "63f58a6dfe183b9de489e5faf9cea1fd9751f2c85f225cb6d4a5fa55ff07fef8",
+    "01-light-wide.ax.txt": "d9b5dc37108509882f72d772e3c9eebbf013c3ab3a1b4e8e73b245c17a6d072b",
+    "02-user-handoff-state.ax.txt": "293bd127763bc12e057eda4fdf796306c9ed11178d06809c6f6df87fa9b3afd2",
+    "data-check.json": "a21b5b897367288c6eb4c47a44e134f8ea4a9fb80808a286a4fa5069ff210ce1",
+    "02-user-handoff-state.jpg": "7ac5bfb5dcf1fd02bf4a3546ad0f0c9041beab0fd787688e11739c4935324e03",
+    "00-user-reported.png": "9f3c7ab7cc9b3838b34d7a33b167e5a7636c7f2acb24cb21923ca843e870eed1",
+    "review.md": "a33e525cc9b2aff039512b86d6978de2b387888097b17aa79f62d38fb1de78e8",
+    "build.json": "1245d431a2ca83cf5363cebf670221c743f53522e17761990735d4f97d9e19fd",
+    "shots.json": "03db41313aea2338c3ac09c70da11b7131deea8b58bac20ad16a7dd586a3933f"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "baseline": ".build/ux74-acceptance/baseline-recordings",
+  "copy": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-choice/recordings",
+  "meetings": 206,
+  "synthetic_override": {
+    "file": "2026-10-29_09-00-00-ux69/meta.json",
+    "participant_id": "ux69-0",
+    "name": "Анна С Очень Длинной Фамилией Тестовая",
+    "email": "anna.with.a.very.long.address@example.invalid"
+  }
+}

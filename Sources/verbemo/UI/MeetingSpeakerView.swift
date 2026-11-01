@@ -1,20 +1,78 @@
 import AppKit
 
 @MainActor
-private final class SpeakerAssignmentChoice: NSComboBox {
+final class SpeakerAssignmentChoice: NSComboBox {
     private var dropdownWindows: [NSWindow] = []
+    private let menuButton = NSButton()
+
+    override var intrinsicContentSize: NSSize {
+        .init(width: 360, height: super.intrinsicContentSize.height)
+    }
+    private var menuButtonRect: NSRect {
+        .init(x: bounds.maxX - 24, y: bounds.minY, width: 24, height: bounds.height)
+    }
+    override func layout() {
+        super.layout()
+        menuButton.frame = menuButtonRect
+    }
+    override var isEnabled: Bool { didSet { menuButton.isEnabled = isEnabled } }
+    override func setAccessibilityLabel(_ label: String?) {
+        super.setAccessibilityLabel(label)
+        menuButton.setAccessibilityLabel(accessibilityLabel())
+    }
+    override func accessibilityPerformShowMenu() -> Bool {
+        guard isEnabled else { return false }
+        Task { @MainActor [weak self] in self?.showSelectionMenu() }
+        return true
+    }
+    func makeSelectionMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.font = font ?? .systemFont(ofSize: 12)
+        menu.minimumWidth = bounds.width
+        for (index, value) in objectValues.enumerated() {
+            let item = NSMenuItem(title: String(describing: value), action: #selector(selectFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.state = index == indexOfSelectedItem ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+    @objc func showSelectionMenu() {
+        guard isEnabled else { return }
+        delegate?.comboBoxWillPopUp?(.init(name: NSComboBox.willPopUpNotification, object: self))
+        window?.makeFirstResponder(self)
+        let menu = makeSelectionMenu()
+        let selected = indexOfSelectedItem >= 0 ? menu.item(at: indexOfSelectedItem) : nil
+        let confirmed = menu.popUp(positioning: selected, at: .init(x: bounds.minX, y: bounds.minY), in: self)
+        delegate?.comboBoxWillDismiss?(.init(name: NSComboBox.willDismissNotification, object: self,
+                                            userInfo: ["cancelled": !confirmed]))
+    }
+    @objc private func selectFromMenu(_ item: NSMenuItem) {
+        guard isEnabled else { return }
+        selectItem(at: item.tag)
+        delegate?.comboBoxSelectionDidChange?(.init(name: NSComboBox.selectionDidChangeNotification, object: self))
+    }
 
     override init(frame frameRect: NSRect) {
         let existing = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
         super.init(frame: frameRect)
-        dropdownWindows = NSApp.windows.filter {
-            !existing.contains(ObjectIdentifier($0)) && ($0.accessibilityParent() as? NSCell) === cell
-        }
+        menuButton.title = ""
+        menuButton.isBordered = false
+        menuButton.target = self
+        menuButton.action = #selector(showSelectionMenu)
+        menuButton.identifier = .init("speaker.options")
+        addSubview(menuButton)
+        // Keep the native editable AX cell and replace only its disclosure action.
+        menuButton.setAccessibilityParent(cell)
+        cell?.setAccessibilityChildren(NSAccessibility.unignoredChildren(from: [menuButton]))
+        dropdownWindows = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     isolated deinit {
-        // AppKit can keep hidden dropdown windows after releasing their unretained AX parent cell.
+        // AppKit can keep hidden dropdown windows after releasing their unretained AX parent.
         for window in dropdownWindows { window.setAccessibilityParent(nil) }
     }
 }
@@ -24,8 +82,11 @@ private final class SpeakerAssignmentChoice: NSComboBox {
 final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     let name = NSTextField(labelWithString: "")
     let link = SpeakerLinkButton()
-    let choice: NSComboBox = SpeakerAssignmentChoice()
+    let choice = SpeakerAssignmentChoice()
     var onAssign: ((CalendarParticipant?, String?) throws -> Void)?
+    var onError: ((Error) -> Void)?
+    var onSubmit: (() -> Void)?
+    var onCancel: (() -> Void)?
     private let participants: [CalendarParticipant]
     private let inline: Bool
     private var original: String
@@ -34,6 +95,8 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     private var reverting = false
     private var choosing = false
     private var selectionChanged = false
+    private var failedDraft: (text: String, participant: CalendarParticipant?, manual: String?)?
+    var isChoosing: Bool { choosing }
 
     init(speaker: String, title: String, entry: SpeakerNames.Entry?, participants: [CalendarParticipant], canEdit: Bool, inline: Bool) {
         self.participants = participants
@@ -47,7 +110,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         name.stringValue = entry?.name ?? title
         name.toolTip = name.stringValue
         name.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        name.textColor = JournalStyle.muted
+        name.textColor = StudioStyle.muted
         name.identifier = .init("speaker.name")
         name.lineBreakMode = .byTruncatingTail
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -69,9 +132,9 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         choice.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
         let linked = entry?.participantID.map { id in participants.contains { $0.id == id } } ?? false
         link.title = ""
-        link.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        link.image = NSImage(systemSymbolName: inline ? "pencil" : "link", accessibilityDescription: nil)
         link.unlinked = !linked
-        link.contentTintColor = linked ? JournalStyle.accent : .systemRed
+        link.contentTintColor = linked ? StudioStyle.accent : .systemRed
         link.isBordered = false
         link.identifier = .init("speaker.link")
         link.toolTip = linked
@@ -88,6 +151,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         choice.isHidden = inline
         link.widthAnchor.constraint(equalToConstant: 22).isActive = true
         link.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        link.isHidden = !inline
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -103,11 +167,12 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     }
     func comboBoxWillPopUp(_ notification: Notification) {
         choosing = true
+        failedDraft = nil
         selectionChanged = false
     }
     func comboBoxWillDismiss(_ notification: Notification) {
         let event = NSApp?.currentEvent
-        let cancelled = event?.type == .keyDown && event?.keyCode == 53
+        let cancelled = notification.userInfo?["cancelled"] as? Bool ?? (event?.type == .keyDown && event?.keyCode == 53)
         // Assignment can rebuild this view; AppKit must finish dismissing its list first.
         Task { @MainActor [self] in
             choosing = false
@@ -128,7 +193,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
         commitSelection()
     }
     private func commitSelection() {
-        guard !choosing, !saving, !reverting else { return }
+        guard !choosing, !saving, !reverting, failedDraft == nil else { return }
         let index = choice.indexOfSelectedItem
         guard index >= 0 else { return }
         if index > 0, participantID == participants[index - 1].id,
@@ -137,17 +202,33 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     }
     func controlTextDidEndEditing(_ notification: Notification) { commitText() }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if !choosing, commandSelector == #selector(NSResponder.moveDown(_:)) || commandSelector == #selector(NSResponder.moveUp(_:)) {
+            choice.showSelectionMenu()
+            return true
+        }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            if !choosing, let onCancel { onCancel(); return true }
             selectionChanged = false
-            choice.stringValue = original
+            failedDraft = nil
+            restoreChoice()
+            if choosing { return false }
             endEditing()
             return true
         }
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) { commitText(); return true }
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            if choosing { return false }
+            if !choosing, let onSubmit { onSubmit(); return true }
+            if let failedDraft, failedDraft.text == choice.stringValue {
+                self.failedDraft = nil
+                save(participant: failedDraft.participant, manual: failedDraft.manual)
+            } else { commitText() }
+            return true
+        }
         return false
     }
+    func controlTextDidChange(_ notification: Notification) { failedDraft = nil }
     private func commitText() {
-        guard !choosing, !saving, !reverting else { return }
+        guard !choosing, !saving, !reverting, failedDraft == nil else { return }
         guard choice.stringValue != original else { endEditing(); return }
         save(participant: nil, manual: choice.stringValue)
     }
@@ -162,13 +243,16 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
             choice.stringValue = original
             endEditing()
         } catch {
+            let draft = participant.map(Self.title) ?? manual ?? ""
+            failedDraft = (draft, participant, manual)
             reverting = true
-            choice.stringValue = original
-            // AppKit is still selecting; changing the selected index here can crash it.
+            // Let AppKit finish dismissing its dropdown before reporting an error.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                restoreChoice()
-                if let window { NSAlert(error: error).beginJournalSheetModal(for: window) }
+                let current = failedDraft?.text == draft
+                if current { choice.stringValue = draft }
+                reverting = false
+                if current { onError?(error) }
             }
         }
     }
@@ -209,15 +293,22 @@ final class SpeakerLinkButton: NSButton {
 
 @MainActor
 final class MeetingSpeakerView: NSStackView {
-    init(title: String, editor: NSView) {
+    let editor: NSView
+    init(title: String? = nil, editor: NSView) {
+        self.editor = editor
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
         spacing = 8
         edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 12, right: 0)
-        let heading = NSTextField(labelWithString: title)
-        heading.font = .systemFont(ofSize: 13, weight: .medium)
-        setViews([heading, editor, SetupLayout.hairline()], in: .center)
+        if let title {
+            let heading = NSTextField(labelWithString: title)
+            heading.font = .systemFont(ofSize: 13, weight: .medium)
+            setViews([heading, editor, SetupLayout.hairline()], in: .center)
+        } else {
+            edgeInsets = .init()
+            setViews([editor], in: .center)
+        }
         for view in arrangedSubviews { view.widthAnchor.constraint(equalTo: widthAnchor).isActive = true }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

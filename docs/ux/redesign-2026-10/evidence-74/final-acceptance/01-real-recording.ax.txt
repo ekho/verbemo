@@ -1,0 +1,121 @@
+Window: "Verbemo", App: Verbemo Speaker Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button (disabled) Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 text Библиотека
+		8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Placeholder: Название, расшифровка, сводка, ID: library.search
+			9 button Поиск в библиотеке: названия, расшифровки и сводки
+		10 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+		11 scroll area Secondary Actions: Scroll Up, Scroll Down
+			12 table (showing 0-7 of 100 items)
+				13 row (selected)
+					14 cell (selected)
+						15 text UX74 controlled speech 2026-11-01
+						16 image Description: Идёт запись, ID: meeting.list-status
+				17 row (selectable)
+					18 cell
+						19 text UX74 controlled audio 2026-11-01 · 01:01
+						20 image Description: Готово, ID: meeting.list-status
+				21 row (selectable)
+					22 cell
+						23 text UX73 synthetic silence 2026-11-01 · 00:01
+						24 image Description: Готово, ID: meeting.list-status
+				25 row (selectable)
+					26 cell
+						27 text UX69 Назначения — ошибка и неизвестный 2026-10-30 · 03:00
+						28 image Description: Готово, ID: meeting.list-status
+				29 row (selectable)
+					30 cell
+						31 text UX69 Импорт — отложенная обработка 2026-10-29 · 01:00
+						32 image Description: Готово, ID: meeting.list-status
+				33 row (selectable)
+					34 cell
+						35 text UX69 Импорт — ошибка обработки 2026-10-29 · 01:00
+						36 image Description: Synthetic UX69: model unavailable, ID: meeting.list-status
+				37 row (selectable)
+					38 cell
+						39 text UX69 Атлас — длинная встреча 2026-10-29 · 30:00
+						40 image Description: Готово, ID: meeting.list-status
+			41 scroll bar (settable, float) 0
+				42 value indicator (settable, float) 0
+				43 increment arrow button
+				44 decrement arrow button
+				45 increment page button
+				46 decrement page button
+		47 splitter (disabled, settable, float) 248
+		48 text Description: Запись активна, Value: ●
+		49 button UX74 controlled speech, Description: Открыть запись: UX74 controlled speech
+		50 text 1:22
+		51 button Приостановить запись
+		52 button Завершить, Description: Остановить и сохранить запись
+		53 text field (settable) Description: Название текущей встречи, Value: UX74 controlled speech, ID: recording-title
+		54 button Копировать, Description: copy, ID: meeting.copy
+		55 button Description: Действия со встречей, ID: meeting.actions
+		56 button Description: Показать или скрыть детали встречи, Value: 1, ID: meeting.inspector
+		57 text Предварительный текст. Полная расшифровка и сводка готовятся после встречи.
+		58 text Микрофон
+		59 level indicator Description: Микрофон, Help: Пиковый уровень захваченного звука. Шкала: от минус 60 до 0 децибел относительно максимума., Value: 0.2999550739179121, Details: Сигнал · −42 dBFS, ID: audio-level.mic
+		60 text Сигнал · −42 dBFS
+		61 text Звук компьютера
+		62 level indicator Description: Звук компьютера, Help: Пиковый уровень захваченного звука. Шкала: от минус 60 до 0 децибел относительно максимума., Value: 0, Details: Сигнал · < −60 dBFS, ID: audio-level.system
+		63 text Сигнал · < −60 dBFS
+		64 text Расшифровка в реальном времени
+		65 checkbox Расшифровка на лету, Value: 0
+		66 text выключена
+		67 text «Вы» и «Они» — источники звука, а не подтверждённые имена участников.
+		68 scroll area Secondary Actions: Scroll Up, Scroll Down
+			69 text ДЕТАЛИ ВСТРЕЧИ
+			70 button Description: Закрыть детали встречи, ID: meeting.inspector-close
+			71 text КАЛЕНДАРЬ
+			72 button (disabled) Выбрать событие…, Description: Выбрать событие календаря, ID: calendar.choose
+			73 text ОБРАБОТКА
+			74 image Идёт запись
+				75 image microphone
+			76 text Идёт запись
+			77 image Онлайн-расшифровка не запущена
+				78 image plain text document
+			79 text Онлайн-расшифровка не запущена
+			80 button (disabled) Description: Расшифровать повторно, Help: Сначала завершите запись., ID: meeting.retranscribe
+			81 image Сводка не создавалась
+				82 image
+			83 text Сводка не создавалась
+			84 button (disabled) Description: Создать сводку, Help: Сначала завершите запись., ID: meeting.generate-summary
+			85 text НАСТРОЙКИ ОБРАБОТКИ Расшифровка: Отключена
+Диаризация: Отключена
+Сводка: Отключена
+			86 button Настройки →, Description: edit, ID: meeting.processing-settings
+			87 scroll bar (settable, float) 0
+				88 value indicator (settable, float) 0
+				89 increment arrow button
+				90 decrement arrow button
+				91 increment page button
+				92 decrement page button
+	93 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	94 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	95 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	96 button ● Запись 1:22, ID: activity.recording
+	97 text Микрофон
+	98 level indicator Description: Микрофон, Help: Пиковый уровень захваченного звука. Шкала: от минус 60 до 0 децибел относительно максимума., Value: 0.2999550739179121, Details: Сигнал · −42 dBFS, ID: audio-level.status-mic
+	99 text Система
+	100 level indicator Description: Система, Help: Пиковый уровень захваченного звука. Шкала: от минус 60 до 0 децибел относительно максимума., Value: 0, Details: Сигнал · < −60 dBFS, ID: audio-level.status-system
+	101 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	102 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	103 close button
+	104 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	105 minimize button
+106 menu bar
+	107 Verbemo Speaker Review
+	108 Файл
+	109 Правка
+	110 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

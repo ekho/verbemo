@@ -1,0 +1,18 @@
+{
+  "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+  "kind": "Universal Release ad-hoc",
+  "build": "670",
+  "version": "0.17.2",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/Verbemo Studio Review.app",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/home",
+  "fixtures": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/recordings",
+  "executable_sha256": "004f1732d973f826ac344d871619062f305ac3fd688e9fc9923185d52b5901cc",
+  "packaged_binary_before_review_resign_sha256": "2c2b32f213589990eac3372ac4f1a8e9a327951fd263860c84a7b784d9a2afc5",
+  "architectures": [
+    "x86_64",
+    "arm64"
+  ],
+  "minimum_macos": "14.2",
+  "fixture_files": 433,
+  "fixture_meetings": 206
+}

@@ -4,6 +4,10 @@ enum MediaImportPresentation {
     struct Copy: Equatable {
         let label: String
         let fraction: Double?
+        var progressLabel: String {
+            guard let fraction, fraction.isFinite else { return label }
+            return label + " · \(Int(min(1, max(0, fraction)) * 100))%"
+        }
     }
 
     static func progress(_ update: MediaImportCoordinator.Update) -> Copy {
@@ -59,28 +63,42 @@ final class MediaImportStatusView: NSStackView {
     private let bar = NSProgressIndicator()
     private let cancel = NSButton(
         title: localised("Cancel", "Остановить"), target: nil, action: nil)
+    private var importing = false
+    private var cancelling = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         orientation = .horizontal
         alignment = .centerY
         spacing = 8
+        edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+        setHuggingPriority(.required, for: .vertical)
         identifier = NSUserInterfaceItemIdentifier("media-import-progress")
         isHidden = true
 
         label.font = .systemFont(ofSize: 11)
+        label.identifier = .init("media-import.message")
         label.textColor = .secondaryLabelColor
         label.lineBreakMode = .byTruncatingMiddle
+        label.maximumNumberOfLines = 1
+        label.cell?.usesSingleLineMode = true
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         bar.style = .bar
         bar.controlSize = .small
         bar.minValue = 0
         bar.maxValue = 1
-        bar.widthAnchor.constraint(equalToConstant: 86).isActive = true
+        let preferredBarWidth = bar.widthAnchor.constraint(equalToConstant: 86)
+        preferredBarWidth.priority = .init(1)
+        preferredBarWidth.isActive = true
+        bar.widthAnchor.constraint(lessThanOrEqualToConstant: 86).isActive = true
+        bar.widthAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
+        bar.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         cancel.bezelStyle = .inline
         cancel.controlSize = .small
         cancel.target = self
         cancel.action = #selector(cancelClicked)
+        cancel.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        cancel.heightAnchor.constraint(equalToConstant: 22).isActive = true
         addArrangedSubview(label)
         addArrangedSubview(bar)
         addArrangedSubview(cancel)
@@ -89,10 +107,19 @@ final class MediaImportStatusView: NSStackView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func update(_ update: MediaImportCoordinator.Update) {
+        guard !cancelling else { return }
         let copy = MediaImportPresentation.progress(update)
+        importing = true
         isHidden = false
-        label.stringValue = copy.label
+        label.stringValue = copy.progressLabel.split(whereSeparator: \.isNewline).joined(separator: " ")
+        label.toolTip = copy.progressLabel
         cancel.isHidden = false
+        cancel.identifier = .init("media-import.cancel")
+        cancel.title = ""
+        cancel.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+        cancel.imagePosition = .imageOnly
+        cancel.toolTip = localised("Cancel import", "Отменить импорт")
+        cancel.setAccessibilityLabel(cancel.toolTip)
         bar.isHidden = false
         if let fraction = copy.fraction {
             bar.isIndeterminate = false
@@ -106,19 +133,34 @@ final class MediaImportStatusView: NSStackView {
 
     func finish(_ result: MediaImportCoordinator.Result) {
         let copy = MediaImportPresentation.finished(result)
+        importing = false
+        cancelling = false
         isHidden = false
-        label.stringValue = copy.label
-        cancel.isHidden = true
+        label.stringValue = copy.label.split(whereSeparator: \.isNewline).joined(separator: " ")
+        label.toolTip = copy.label
+        cancel.isHidden = false
+        cancel.isEnabled = true
+        cancel.identifier = .init("media-import.dismiss")
+        cancel.title = ""
+        cancel.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+        cancel.imagePosition = .imageOnly
+        cancel.toolTip = localised("Dismiss notice", "Скрыть уведомление")
+        cancel.setAccessibilityLabel(cancel.toolTip)
         bar.stopAnimation(nil)
-        if let fraction = copy.fraction {
-            bar.isIndeterminate = false
-            bar.doubleValue = fraction
-        } else {
-            bar.isHidden = true
-        }
+        bar.isHidden = true
     }
 
-    @objc private func cancelClicked() { onCancel?() }
+    @objc private func cancelClicked() {
+        if importing {
+            cancelling = true
+            cancel.isEnabled = false
+            label.stringValue = localised("Cancelling import…", "Отмена импорта…")
+            label.toolTip = label.stringValue
+            bar.isIndeterminate = true
+            bar.startAnimation(nil)
+            onCancel?()
+        } else { isHidden = true }
+    }
 }
 
 /// A normal content container that additionally accepts Finder file drops.

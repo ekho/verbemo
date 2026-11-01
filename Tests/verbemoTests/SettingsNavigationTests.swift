@@ -73,6 +73,15 @@ struct SettingsNavigationTests {
         machineChecks = 0
         app.navigate(.summary)
         #expect(machineChecks == 1)
+        app.navigate(.allMeetings)
+        machineChecks = 0
+        app.settings.setup.loginItemStatus = { machineChecks += 1; return .notRegistered }
+        app.navigate(.about)
+        app.navigate(.general)
+        #expect(machineChecks == 1)
+        #expect((app.settings.content(for: .general).allDescendants.first {
+            $0.identifier?.rawValue == "access.login.toggle"
+        } as? NSSwitch)?.state == .off)
         app.hide()
         machineChecks = 0
         app.navigate(.summary)
@@ -151,33 +160,38 @@ struct SettingsNavigationTests {
     }
 
     @Test(.freshHome, .speaking(.russian))
-    func settingsSelectorNavigatesAtBothWindowWidths() throws {
+    func settingsCategoriesMoveFromSidebarToNarrowOverview() throws {
         let app = ApplicationWindow()
         defer { app.hide() }
+        app.show()
         app.navigate(.general)
         app.panel.setContentSize(NSSize(width: 1340, height: 820))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let views = try #require(app.panel.contentView).allDescendants
-        let tabs = try #require(views.first { $0.identifier?.rawValue == "settings.tabs" } as? NSStackView)
-        let compact = try #require(views.first { $0.identifier?.rawValue == "settings.sections" } as? NSPopUpButton)
-        #expect(!tabs.isHiddenOrHasHiddenAncestor)
-        #expect(compact.isHiddenOrHasHiddenAncestor)
-        let tabButtons = tabs.arrangedSubviews.compactMap { $0 as? NSButton }
-        #expect(tabButtons.count == 7)
+        let categories = try #require(views.first { $0.identifier?.rawValue == "settings.categories" } as? NSStackView)
+        let sidebar = try #require(views.first { $0 is SidebarView })
+        #expect(categories.isDescendant(of: sidebar))
+        let tabButtons = categories.arrangedSubviews.compactMap { $0 as? NSButton }
+        #expect(tabButtons.count == 8)
         #expect(tabButtons.allSatisfy { $0.image != nil && !$0.isBordered })
         #expect(tabButtons[0].state == .on)
         let transcription = tabButtons[2]
         _ = NSApplication.shared.sendAction(try #require(transcription.action), to: transcription.target, from: transcription)
         #expect(app.navigation.destination == .transcription)
-        #expect(compact.indexOfSelectedItem == 2)
+        #expect(tabButtons[2].state == .on)
 
         app.panel.setContentSize(NSSize(width: 760, height: 680))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         #expect(app.panel.contentLayoutRect.width <= 762)
-        #expect(tabs.isHiddenOrHasHiddenAncestor)
-        #expect(!compact.isHiddenOrHasHiddenAncestor)
-        compact.selectItem(at: 4)
-        _ = NSApplication.shared.sendAction(try #require(compact.action), to: compact.target, from: compact)
+        let allCategories = try #require(app.panel.contentView?.allDescendants.first {
+            $0.identifier?.rawValue == "settings.all-categories"
+        } as? NSButton)
+        #expect(!allCategories.isHiddenOrHasHiddenAncestor)
+        #expect(allCategories.sendAction(allCategories.action, to: allCategories.target))
+        #expect(categories.window === app.panel && !categories.isHiddenOrHasHiddenAncestor)
+        #expect(!categories.isDescendant(of: sidebar))
+        let calendar = tabButtons[4]
+        #expect(calendar.sendAction(calendar.action, to: calendar.target))
         #expect(app.navigation.destination == .calendar)
         #expect(tabButtons[4].state == .on)
         #expect(tabButtons.filter { $0.state == .on }.count == 1)
@@ -192,6 +206,68 @@ struct SettingsNavigationTests {
         let buttons = general.compactMap { ($0 as? NSButton)?.title }
         #expect(!buttons.contains("← К встречам"))
         #expect(!buttons.contains("Показать файл настроек"))
+    }
+
+    @Test(.freshHome)
+    func settingsReturnRestoresHiddenLibraryAndWidth() async throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(.init(width: 1340, height: 600))
+        app.show()
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let split = try #require(app.panel.contentView?.allDescendants.first { $0 is WorkspaceSplitView } as? NSSplitView)
+        split.setPosition(400, ofDividerAt: 0)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let toggle = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "workspace.toggle-library" } as? NSButton)
+        #expect(toggle.sendAction(toggle.action, to: toggle.target))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let sidebar = try #require(app.panel.contentView?.allDescendants.first { $0 is SidebarView })
+        #expect(sidebar.isHiddenOrHasHiddenAncestor)
+        app.navigate(.general)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(!sidebar.isHiddenOrHasHiddenAncestor)
+        #expect(sidebar.allDescendants.contains { $0.identifier?.rawValue == "settings.categories" })
+        let back = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "journal.breadcrumb" } as? NSButton)
+        #expect(back.image != nil)
+        #expect(back.sendAction(back.action, to: back.target))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(app.navigation.destination == .allMeetings)
+        #expect(sidebar.isHiddenOrHasHiddenAncestor)
+        #expect(toggle.sendAction(toggle.action, to: toggle.target))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(abs(sidebar.frame.width - 400) <= 2)
+        app.navigate(.general)
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        #expect(back.sendAction(back.action, to: back.target))
+        await library.settled()
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(app.panel.contentLayoutRect.width <= 762)
+        #expect(sidebar.frame.width <= 340)
+    }
+
+    @Test(.freshHome)
+    func narrowSettingsStartsWithCategoriesAndKeepsDirectLinks() throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.show()
+        let settings = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "journal.settings" } as? NSButton)
+        #expect(settings.sendAction(settings.action, to: settings.target))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let categories = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "settings.categories" })
+        #expect(!categories.isHiddenOrHasHiddenAncestor)
+        app.navigate(.mcp)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(app.navigation.destination == .mcp)
+        #expect(app.panel.contentView?.allDescendants.contains { $0.identifier?.rawValue == "mcp.enabled" && !$0.isHiddenOrHasHiddenAncestor } == true)
+        #expect(app.primaryActionsAreVisible)
+        app.navigate(.general)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(app.panel.contentView?.allDescendants.contains {
+            $0.identifier?.rawValue == "window" && !$0.isHiddenOrHasHiddenAncestor
+        } == true, "A direct General link opens its page, while the global Settings button opens the overview")
     }
 
     @Test(.freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet"}}"#),
@@ -240,6 +316,43 @@ struct SettingsNavigationTests {
         _ = NSApplication.shared.sendAction(try #require(options.action), to: options.target, from: options)
         #expect(rare.isHiddenOrHasHiddenAncestor)
         #expect((try? Data(contentsOf: Config.path)) == before)
+    }
+
+    @Test(.freshHome, .speaking(.russian))
+    func studioSettingsExplainScopeAndKeepSimpleRowsCompact() throws {
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination(); app.hide() }
+        app.show()
+        for width: CGFloat in [1340, 760] {
+            app.panel.setContentSize(.init(width: width, height: 600))
+            for destination in ApplicationNavigationState.Destination.allCases
+                where !destination.isMeetings && destination != .about {
+                app.navigate(destination)
+                // Direct category entry remains available at narrow widths.
+                let page = app.settings.content(for: destination)
+                app.panel.contentView?.layoutSubtreeIfNeeded()
+                let scope = try #require(page.allDescendants.first {
+                    $0.identifier?.rawValue == "settings.scope"
+                } as? NSTextField)
+                #expect(scope.stringValue.contains("Готовые расшифровки и сводки не меняются"))
+                #expect(scope.maximumNumberOfLines == 0)
+                let heading = try #require(page.allDescendants.first {
+                    $0.identifier?.rawValue == "settings.heading"
+                } as? NSTextField)
+                #expect(heading.font?.pointSize == 20)
+            }
+            app.navigate(.general)
+            let page = app.settings.content(for: .general)
+            app.panel.contentView?.layoutSubtreeIfNeeded()
+            let toggle = try #require(page.allDescendants.first {
+                $0.identifier?.rawValue == "window"
+            } as? NSSwitch)
+            let line = try #require(toggle.superview as? NSStackView)
+            let label = try #require(line.arrangedSubviews.first as? NSTextField)
+            #expect(abs(label.frame.midY - toggle.frame.midY) < 2)
+            #expect(line.frame.height < 40)
+            #expect(label.frame.width > 140)
+        }
     }
 
     @Test(.freshHome) func schemaHasExactlyOneEditorAndPagesAreSeparate() throws {

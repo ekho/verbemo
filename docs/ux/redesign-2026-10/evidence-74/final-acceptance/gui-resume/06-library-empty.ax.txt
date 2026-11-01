@@ -1,0 +1,45 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 text Библиотека
+		8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Value: нет такого совпадения 73, Placeholder: Название, расшифровка, сводка, ID: library.search
+			9 button Поиск в библиотеке: названия, расшифровки и сводки
+			10 button cancel
+		11 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+		12 text Value: По вашему запросу встреч не найдено., ID: meeting-list.empty
+		13 button Сбросить поиск и фильтр, Description: close, ID: library.reset
+		14 splitter (disabled, settable, float) 248
+		15 text Value: Совпадений не найдено, ID: meeting.title
+		16 scroll area
+			17 text ДЕТАЛИ ВСТРЕЧИ
+			18 button Description: Закрыть детали встречи, ID: meeting.inspector-close
+			19 text КАЛЕНДАРЬ ОБРАБОТКА НАСТРОЙКИ ОБРАБОТКИ Расшифровка: Отключена
+Диаризация: Отключена
+Сводка: Отключена
+			20 button Настройки →, Description: edit, ID: meeting.processing-settings
+	21 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	22 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	23 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	24 button (disabled) Нет записи, ID: activity.recording
+	25 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	26 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	27 close button
+	28 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	29 minimize button
+30 menu bar
+	31 Verbemo Final Review
+	32 Файл
+	33 Правка
+	34 Окно
+
+The focused UI element is 8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Value: нет такого совпадения 73, Placeholder: Название, расшифровка, сводка, ID: library.search

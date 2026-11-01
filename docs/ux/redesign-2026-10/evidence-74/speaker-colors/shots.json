@@ -1,0 +1,51 @@
+[
+  {
+    "file": "01-light-wide.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "30c4451e802d38ef74efc9790f5f52042c4b5b9470b8b1c0ccaefa73ec3f4ab3",
+    "ax_sha256": "d9b5dc37108509882f72d772e3c9eebbf013c3ab3a1b4e8e73b245c17a6d072b"
+  },
+  {
+    "file": "02-search-light.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "44860dd026923cea7971c80535f8e0f2ed2287f129317e58f2a66cf561709aa4",
+    "ax_sha256": "26690b97c20a14ecb9db4b530136bfbb2a72716c949c5d0f103cd0aeed3c0395"
+  },
+  {
+    "file": "03-renamed-light.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "7de76630b624b5e69af4e4c1c770a8d0a3569348b1d74224b09346c57f25179e",
+    "ax_sha256": "02eb7f0ae94fb0dda4418653d4d6425f618a3ccdb1a1ae14aaa51b374b96cd5f"
+  },
+  {
+    "file": "04-dark-wide.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "0033ebee352795054325b8229edda1218761733a4c52192eb1cb3dd44ffbfd1e",
+    "ax_sha256": "7cacb20cea1b86b65476b61d15ad4a3cde89739f639598484acba8cc8d18efd7"
+  },
+  {
+    "file": "05-dark-narrow.jpg",
+    "width": 1520,
+    "height": 1696,
+    "sha256": "b21cb1cd535ab4acef2ebfacbedff6fdcc835da9094d10d136bed8fe9aa645b3",
+    "ax_sha256": "02eb7f0ae94fb0dda4418653d4d6425f618a3ccdb1a1ae14aaa51b374b96cd5f"
+  },
+  {
+    "file": "06-light-narrow.jpg",
+    "width": 1520,
+    "height": 1256,
+    "sha256": "2ba75d8e0d102f9c16d64605369553377bc9b0e4a010211202d2509b249f7e6b",
+    "ax_sha256": "ec3e7098f31d5c51807ae2dd85deaa5d588075ae2c52fb66a9e4955b4fa9eaa1"
+  },
+  {
+    "file": "07-handoff-light-wide.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "edd76efaaf7ea26840bdf5f60f7b04d1288c697adf8443bf4c629f5bfa6e3efb",
+    "ax_sha256": "d9b5dc37108509882f72d772e3c9eebbf013c3ab3a1b4e8e73b245c17a6d072b"
+  }
+]

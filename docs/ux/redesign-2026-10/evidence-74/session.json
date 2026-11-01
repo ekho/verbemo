@@ -1,0 +1,158 @@
+{
+  "status": "participant field width and full options fixed in DebugReview689; awaiting human acceptance",
+  "started_at": "2026-11-01T15:02:31.891166+03:00",
+  "source_commit": "71e6284b9637fcd33471b9131eb6b986d1fb23f7",
+  "version": "0.17.2",
+  "build": "689",
+  "executable_sha256": "d7a3da859ac54d3e760e3d30e18d331f12bed43402b9fdbdeede3506348df9ac",
+  "sdk_at_build": "27.0",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-choice/home",
+  "fixture_meetings": 206,
+  "baseline_files": 433,
+  "human_results": [
+    {
+      "scenario": "reading transcript",
+      "date": "2026-11-01",
+      "candidate_build": "670",
+      "speaker_distinction": {
+        "result": "needs revision",
+        "verbatim": "относительно. Визуально отличается только цвет иконки. Возможно иконка вовсе не нужна, а цветом нужно подсвечивать всю реплику?"
+      },
+      "resize_and_library_visibility": {
+        "result": "no complaints in this run",
+        "verbatim": "нареканий нет"
+      },
+      "spacing_wrapping_density": {
+        "result": "no complaints in this run",
+        "verbatim": "нареканий нет"
+      },
+      "decision": "reading priority remains open; row tint and badge removal are a suggestion, not an approved implementation"
+    },
+    {
+      "scenario": "row tint follow-up on Review675",
+      "date": "2026-11-01",
+      "candidate_build": "675",
+      "result": "needs fix",
+      "feedback": [
+        "missing left inner padding",
+        "background fails to fit after narrowing",
+        "small gap requested between backgrounds"
+      ],
+      "evidence": "speaker-insets/00-user-reported.png"
+    },
+    {
+      "scenario": "meeting action placement",
+      "date": "2026-11-01",
+      "candidate_build": "677",
+      "feedback": "Move meeting-related controls from global toolbar into the meeting near its title",
+      "evidence": "meeting-actions/00-user-request.png",
+      "result": "change requested; implemented679, repeat feedback pending"
+    },
+    {
+      "scenario": "input control styling",
+      "date": "2026-11-01",
+      "candidate_build": "679",
+      "feedback": [
+        "filter button and search same height",
+        "version picker needs border and background",
+        "use library search appearance for meeting search, with previous meeting field height"
+      ],
+      "evidence": "input-controls/00-user-request.png",
+      "result": "implemented682; repeat feedback pending"
+    },
+    {
+      "scenario": "processing action icons",
+      "date": "2026-11-01",
+      "candidate_build": "682",
+      "feedback": "Оставь только иконки и сделай их кликабельными. Проверь что пропорции нормальные будут",
+      "evidence": "processing-icons/00-user-request.png",
+      "result": "implemented684; repeat feedback pending"
+    },
+    {
+      "scenario": "participant field and option width",
+      "date": "2026-11-01",
+      "candidate_build": "684",
+      "feedback": [
+        "field width jumps with different selected values",
+        "option list must show full identities independently of field width"
+      ],
+      "evidence": "speaker-choice/00-user-request-1.png",
+      "result": "implemented689; repeat user feedback pending"
+    }
+  ],
+  "pending_scenario": "user acceptance of stable participant field width and full option menu; initial transcript draw and universal Release remain open",
+  "runtime": {
+    "macos": "26.7.1",
+    "architecture": "arm64",
+    "sdk_at_build": "27.0"
+  },
+  "metadata_verified": true,
+  "initial_screen": {
+    "meeting": "UX69 Атлас — планирование",
+    "tab": "transcript",
+    "version": "2 · Whisper",
+    "recording": false,
+    "queue": 0
+  },
+  "initial_evidence": {
+    "01-start-reading-ru-light.jpg": "f66034ac5c00fa81ec2826c3b9eab0ab6f1c3deca64571177696cbc3d482f945",
+    "01-start-reading-ru-light.ax.txt": "3b6bc1a2f1a5b92d3d7e0a3bea48269e311356390ed2a357d9951a82b90aa3ef"
+  },
+  "initial_candidate": {
+    "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+    "version": "0.17.2",
+    "build": "670",
+    "executable_sha256": "004f1732d973f826ac344d871619062f305ac3fd688e9fc9923185d52b5901cc",
+    "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/home"
+  },
+  "approved_change": "2026-11-01: user approved full utterance tint without letter badge and instructed implementation",
+  "handoff_screen": {
+    "meeting": "UX69 Атлас — планирование",
+    "tab": "participants",
+    "version": "2 · Whisper",
+    "theme": "light",
+    "library": "visible",
+    "inspector": "visible",
+    "recording": false,
+    "queue": 0,
+    "profile": "separate synthetic copy with long identity fixture; prior acceptance profile preserved"
+  },
+  "previous_candidates": [
+    {
+      "source_commit": "fcf75673a74c85f1354109fa4b5613629ef65157",
+      "version": "0.17.2",
+      "build": "675",
+      "executable_sha256": "991b1edcdca5191fe09a57109be6e6b1d0df6e41b69d6dda3c87c5b834e0605d",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-colors/home"
+    },
+    {
+      "source_commit": "bc66c20804e81c9b0e62016303cfa61aac7f108b",
+      "version": "0.17.2",
+      "build": "677",
+      "executable_sha256": "a184a5ab496792aaf0c2ca1c917ed329de8e9bf8c7cf8b44b6458a1432e62459",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-insets/home"
+    },
+    {
+      "source_commit": "2dc140937789f49dd132996b2395822715fcab91",
+      "version": "0.17.2",
+      "build": "679",
+      "executable_sha256": "c86031b88a5ce27a49c4dceb8d8a8553ffe4d595c56d6d9a3ebf97a8a4e7e4de",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-meeting-actions/home"
+    },
+    {
+      "source_commit": "d288a8b1a9320446891c9983cb530740c10853cd",
+      "version": "0.17.2",
+      "build": "682",
+      "executable_sha256": "578358c2067646fdbe31c8d0b250ee47144c5701122363bcbb8284f50b685673",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home"
+    },
+    {
+      "source_commit": "9a66902f261dfd189c0d5d323e4c87975b697e88",
+      "version": "0.17.2",
+      "build": "684",
+      "executable_sha256": "f1516490545398050f54fae4e6fb35e0a586f94823b68c917b455cd2a705e9b1",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home"
+    }
+  ],
+  "candidate_kind": "arm64 Debug/ad-hoc; existing packaged assets/helpers"
+}

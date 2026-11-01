@@ -1,0 +1,30 @@
+➜ Suite CalendarAcceptanceTests skipped.
+➜ Test interactiveJournal() skipped.
+➜ Suite DiarizationEvaluationTests skipped.
+➜ Test "Annotated corpus: thresholds, repeats, alignment and private numeric report" skipped.
+➜ Test "Explicit pinned model download verifies every asset" skipped.
+➜ Suite DiarizationNativeSelectionTests skipped.
+➜ Test "Opt-in pinned native model produces valid speaker turns on public audio" skipped.
+➜ Test "The published GigaAM GGUF transcribes real Russian audio" skipped.
+➜ Test "The downloaded model runs both shared live streams end to end" skipped.
+➜ Test "CI has the echo canceller the release ships" skipped.
+➜ Test "Downloaded Nemotron recognizes a real audio fixture with native word times" skipped.
+➜ Suite OfflineEchoEvaluation skipped.
+➜ Test "Private stereo input completes the production decoder, AEC and AAC path" skipped.
+➜ Test "Pinned Whisper model emits real timed words on a permitted AMI clip" skipped.
+➜ Suite WindowShots skipped.
+➜ Test "Summary provider form in both appearances, without calling a provider" skipped.
+➜ Test "New recording with and without a calendar event, in both appearances" skipped.
+➜ Test "First-run permissions inside Journal, in both appearances and at minimum width" skipped.
+➜ Test "Every settings page in Journal, in both appearances and at minimum width" skipped.
+➜ Test "Calendar selection with synthetic calendars, at narrow and wide widths" skipped.
+➜ Test "Cloud-only transcription explains unavailable local speaker separation" skipped.
+➜ Test "A long speaker-model error on the narrow transcription page" skipped.
+➜ Test "Local and speaker download progress on the narrow transcription page" skipped.
+➜ Test "About inside Journal, in both appearances" skipped.
+➜ Test "Every view on Journal's transcription page with its frame and control state" skipped.
+➜ Suite WindowGallery skipped.
+➜ Test "Journal's empty library and live transcript, in both appearances" skipped.
+➜ Test "Meeting summary, transcript and speaker processing states inside Journal" skipped.
+➜ Test "Transcript versions at Journal's minimum width, in both appearances" skipped.
+✔ Test run with 1378 tests in 186 suites passed after 287.104 seconds.

@@ -1,0 +1,12 @@
+{
+  "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+  "command": "swift test --no-parallel",
+  "passed": 1378,
+  "suites": 186,
+  "skipped_tests": 23,
+  "skipped_suites": 6,
+  "raw_log": "/tmp/verbemo-ux73-final-full.log",
+  "raw_log_sha256": "3d1ddb68f33d004d445d2424559e3fe1039a9f242fce9138c914198933e7ee36",
+  "summary_sha256": "f187c75a1a55221ddee215b6b97bdbf8a93169479e962d551d892ec8bb2fdc0b",
+  "exit_code": 0
+}

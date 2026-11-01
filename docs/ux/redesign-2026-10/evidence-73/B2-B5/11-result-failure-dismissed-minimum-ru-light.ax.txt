@@ -1,0 +1,55 @@
+Window: "Verbemo", App: Verbemo Studio Debug.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Показать список встреч, Value: 0, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Копировать, Description: copy, ID: meeting.copy
+	4 button Действия со встречей
+	5 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+	6 button Новая запись, ID: journal.new-recording
+	7 button Импорт, ID: journal.import
+	8 button Настройки, ID: journal.settings
+	9 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		10 splitter (disabled, settable, float) -1
+		11 text Импортировано: 1
+		12 progress indicator 1
+		13 text 29.10.2026 12:02 · 1 мин
+		14 text Help: UX69 Импорт — ошибка обработки, ID: meeting.title
+		15 button Description: Воспроизвести встречу, ID: playback.play
+		16 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		17 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+			18 value indicator (settable, float) 0
+		19 text 00:00 / 01:00
+		20 image volume high
+		21 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			22 value indicator (settable, float) 1
+		23 pop up button Description: Скорость воспроизведения, Value: 1×
+		24 container meeting.studio-header
+			25 text Версия
+			26 pop up button Description: Версия расшифровки, ID: transcript-versions
+			27 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Placeholder: Найти в этой встрече, ID: meeting.search
+				28 button Search
+			29 radio button Сводка, Value: 1, ID: meeting.result.summary
+			30 radio button Расшифровка, Description: comment lines, Value: 0, ID: meeting.result.transcript
+			31 radio button Участники, Value: 0, ID: meeting.result.participants
+		32 scroll area
+			33 text entry area Создание сводки выключено.
+	34 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	35 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	36 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	37 button (disabled) Нет записи, ID: activity.recording
+	38 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	39 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	40 close button
+	41 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	42 minimize button
+43 menu bar
+	44 Файл
+	45 Правка
+	46 Окно
+
+The focused UI element is 29 radio button Сводка, Value: 1, ID: meeting.result.summary

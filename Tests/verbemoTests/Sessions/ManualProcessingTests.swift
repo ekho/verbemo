@@ -198,13 +198,18 @@ struct ManualProcessingTests {
             }
             await library.settled()
             let button = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }.first { $0.action == NSSelectorFromString("finishClicked") })
+            let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+            let status = try #require(bar.allDescendants.compactMap { $0 as? NSTextField }.first {
+                $0.identifier?.rawValue == "meeting.operation-error"
+            })
             #expect(button.isEnabled)
             #expect(button.sendAction(button.action, to: button.target))
-            for _ in 0..<200 where library.isProcessing || app.panel.attachedSheet == nil {
+            for _ in 0..<200 where library.isProcessing || status.stringValue.isEmpty {
                 try await Task.sleep(for: .milliseconds(10))
             }
-            let sheet = try #require(app.panel.attachedSheet)
-            let text = sheet.contentView?.allDescendants.compactMap { ($0 as? NSTextField)?.stringValue }.joined(separator: " ") ?? ""
+            #expect(app.panel.attachedSheet == nil)
+            #expect(!status.isHiddenOrHasHiddenAncestor)
+            let text = status.toolTip ?? status.stringValue
             #expect(text.lowercased().contains(outcome))
             if outcome == "completed" {
                 #expect(PostProcessor.hasCurrentSummary(session))

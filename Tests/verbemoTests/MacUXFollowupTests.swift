@@ -73,12 +73,14 @@ struct MacUXFollowupTests {
         let table = try #require(scroll.documentView as? NSTableView)
         let row = try #require(SessionFixture.meeting.firstIndex { $0.speaker == speaker })
         let cell = try #require(scroll.tableView(table, viewFor: table.tableColumns[0], row: row))
-        let other = try #require(cell.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        let pencil = try #require(cell.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        let draft = try #require(pencil.makeEditor?())
+        let other = draft.editor
         #expect(other.choice.indexOfSelectedItem == 1)
-        #expect(other.link.sendAction(other.link.action, to: other.link.target))
-        #expect(!other.choice.isHiddenOrHasHiddenAncestor)
         other.choice.selectItem(at: 0)
         other.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
+        #expect(SpeakerNames.read(from: dir)?.speakers[speaker]?.participantID == "anna", "Editing a draft must not unlink before Apply")
+        #expect(draft.apply())
         #expect(SpeakerNames.read(from: dir)?.speakers[speaker]?.participantID == nil)
         #expect(try String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8).contains("Anna") == false)
     }

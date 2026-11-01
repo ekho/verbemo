@@ -1,0 +1,26 @@
+{
+  "source_commit": "f7281ead7f69222d56113f9fae7361206445a867",
+  "version": "0.17.2",
+  "build": "697",
+  "configuration": "Universal Release ad-hoc",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-gui-flow/Verbemo Import693.app",
+  "identity": "name.ekho.verbemo.ux74.import693",
+  "home": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-gui-flow/home",
+  "recordings": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-final-acceptance/recordings",
+  "executable_sha256": "ccf1885ecb5d812f6c949cbbeced21c7abd7c4bbc60ff9367fa588c2254fe3f1",
+  "architectures": [
+    "x86_64",
+    "arm64"
+  ],
+  "minimum_macos": "14.2",
+  "command": "make app SIGN_ID=-",
+  "exit_code": 0,
+  "build_log": "/tmp/ux74-build697.log",
+  "build_log_sha256": "2a5b2735fb0f8ef43dcf71780671ed8bcef7a1b9254e670fb042042102febaba",
+  "signature_validation": "codesign --verify --deep --strict: exit0",
+  "runtime": {
+    "macos": "26.7.1",
+    "architecture": "arm64"
+  },
+  "published": false
+}

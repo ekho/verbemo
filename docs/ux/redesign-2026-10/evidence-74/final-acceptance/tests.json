@@ -1,0 +1,131 @@
+[
+  {
+    "purpose": "regression-before-fix",
+    "log": "/tmp/ux74-row-frames-red4.log",
+    "sha256": "664316de4c48ac1f9b22ec08b0ad86e3e81bb194278568375a8f28600b91c4b2",
+    "exit_code": 1,
+    "summary": "✘ Test run with 1 test in 1 suite failed after 0.692 seconds with 1 issue.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "parallel-run-interrupted-after-unrelated-failures",
+    "log": "/tmp/ux74-full-tests.log",
+    "sha256": "034b9b3d0535912bb8c284d82e4222f693b3a7ddd3f139a37a8c60654e4cbb5a",
+    "exit_code": 130,
+    "summary": null,
+    "skipped_tests": 23,
+    "skipped_suites": 6
+  },
+  {
+    "purpose": "full-serial",
+    "log": "/tmp/ux74-full-serial-tests.log",
+    "sha256": "ca00c584147418c3120ffaa19e2ad5301f3a432c94127f4ad367dd83acb734d7",
+    "exit_code": 0,
+    "summary": "✔ Test run with 1385 tests in 186 suites passed after 323.125 seconds.",
+    "skipped_tests": 23,
+    "skipped_suites": 6
+  },
+  {
+    "purpose": "focused-after-final-assertions",
+    "log": "/tmp/ux74-final-focused-tests.log",
+    "sha256": "6ae237daedae246a80ea7fff2a367f056d6404f43420c88cfd277856147014fe",
+    "exit_code": 0,
+    "summary": "✔ Test run with 33 tests in 2 suites passed after 12.173 seconds.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "compact-import-error-regression-red",
+    "log": "/tmp/ux74-import-error-red.log",
+    "sha256": "1ea073343789424330ea40a526977ab3a9c3ad25e06615e584b071bfde5fe1b2",
+    "exit_code": 1,
+    "summary": "✘ Test run with 2 tests in 2 suites failed after 0.297 seconds with 5 issues.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "compact-import-error-focused",
+    "log": "/tmp/ux74-import-error-green2.log",
+    "sha256": "48dde4684e1165ed8dabf4249c4bfbe34a5796a12f569d91c8fa165507670560",
+    "exit_code": 0,
+    "summary": "✔ Test run with 38 tests in 6 suites passed after 9.726 seconds.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "full-serial-source-8ed784c",
+    "log": "/tmp/ux74-import-full-tests.log",
+    "sha256": "4ff27a76eb7bd3b0b87d353c8a4a0ff21a7848f10ccfcc629964c4231eb48d9b",
+    "exit_code": 0,
+    "summary": "✔ Test run with 1387 tests in 186 suites passed after 314.934 seconds.",
+    "skipped_tests": 31,
+    "skipped_suites": 6
+  },
+  {
+    "purpose": "bottom-status-full",
+    "log": "/tmp/ux74-bottom-status-verified-full.log",
+    "sha256": "ee21f54414f920b65967b28db5f409b33553069d15a142f99e24831896e964d2",
+    "exit_code": 0,
+    "summary": "✔ Test run with 1390 tests in 186 suites passed after 325.118 seconds.",
+    "skipped_tests": 31,
+    "skipped_suites": 6
+  },
+  {
+    "purpose": "bottom-status-final-focused",
+    "log": "/tmp/ux74-bottom-status-final-focused.log",
+    "sha256": "ec29248101b7a59146f339057dc811ea099d7e3aeefe9aecc06583390dae37fe",
+    "exit_code": 0,
+    "summary": "✔ Test run with 47 tests in 5 suites passed after 8.382 seconds.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "concurrent-status-width-regression-red",
+    "log": "/tmp/ux74-status-width-red.log",
+    "sha256": "7f15c7d461c5ddcfb4deb9635f043d9210ca169f10477e0954bc6682218f138f",
+    "exit_code": 1,
+    "summary": "✘ Test run with 1 test in 1 suite failed after 1.284 seconds with 2 issues.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "concurrent-status-progress-regression-red",
+    "log": "/tmp/ux74-status-progress-width-red.log",
+    "sha256": "88c086733253b1c035c19c287de434035f7184306b8f649ecf7b2051a9428997",
+    "exit_code": 1,
+    "summary": "✘ Test run with 1 test in 1 suite failed after 0.721 seconds with 1 issue.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "concurrent-status-width-final-source-3790ece",
+    "log": "/tmp/ux74-status-width-final3-green.log",
+    "sha256": "ca8439c1cdc9b870896231494e2728a3484231ea197593cf8bc4373b15a97cb3",
+    "exit_code": 0,
+    "summary": "✔ Test run with 49 tests in 6 suites passed after 14.328 seconds.",
+    "skipped_tests": 0,
+    "skipped_suites": 0
+  },
+  {
+    "purpose": "compact-import-height-full",
+    "log": "/tmp/ux74-final-height-full-tests.log",
+    "sha256": "a7b0b8f7b430656f2e909b030269e10be8d4e96de20882352d0e91f692778b5a",
+    "exit_code": 0,
+    "summary": "✔ Test run with 1388 tests in 186 suites passed after 326.559 seconds."
+  },
+  {
+    "purpose": "playback-search-footer-regression-red",
+    "log": "/tmp/ux74-playback-footer-red.log",
+    "sha256": "155bf8af6f4c472ef65ff367d0a003cfce02e816b8b08e8ba0b37c62bc9e466c",
+    "exit_code": 1,
+    "summary": "✘ Test run with 1 test in 1 suite failed after 0.534 seconds with 4 issues."
+  },
+  {
+    "purpose": "playback-search-footer-final-source-f7281ea",
+    "log": "/tmp/ux74-playback-footer-final-green.log",
+    "sha256": "dc90d4291fa9fe2df432c283b3e21d0d345736ff017fe0eb184e701ccdd5b961",
+    "exit_code": 0,
+    "summary": "✔ Test run with 46 tests in 6 suites passed after 22.829 seconds."
+  }
+]

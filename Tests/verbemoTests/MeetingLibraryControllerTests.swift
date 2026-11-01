@@ -10,6 +10,230 @@ import Testing
 @Suite(.serialized, .freshHome)
 @MainActor
 struct MeetingLibraryControllerTests {
+    @Test func firstTranscriptOpeningHasVisibleRowBackgrounds() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try JSONEncoder().encode(Transcript(engine: "test", model: "test", created_at: "test", segments: (0..<18).map {
+            .init(speaker: "them A", start_ms: $0 * 1000, end_ms: ($0 + 1) * 1000,
+                  text: "Реплика \($0). " + String(repeating: "Нужно согласовать сроки, проверить материалы и записать решение. ", count: $0 == 0 ? 4 : 1))
+        })).write(to: dir.appendingPathComponent("transcript.json"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        defer { _ = library.stopForTermination() }
+        app.libraryProvider = { library }
+        app.show()
+        app.panel.setContentSize(.init(width: 1340, height: 628))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let button = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.result.transcript" })
+        #expect(button.sendAction(button.action, to: button.target))
+        for _ in 0..<4 { app.panel.displayIfNeeded(); await Task.yield() }
+        let view = try #require(library.contentView.allDescendants.first { $0 is MeetingTranscriptView } as? MeetingTranscriptView)
+        let table = try #require(view.documentView as? NSTableView)
+        let visible = table.rows(in: view.documentVisibleRect)
+        #expect(visible.length >= 3, "Opening the transcript must draw every visible row without resizing: \(table.rect(ofRow: 0)), column \(table.tableColumns[0].width)")
+        for row in 0..<min(3, visible.length) {
+            let cell = try #require(table.view(atColumn: 0, row: row, makeIfNecessary: false))
+            #expect(abs(cell.bounds.height + table.intercellSpacing.height - table.rect(ofRow: row).height) <= 1,
+                    "The initial background must fill its row: \(cell.frame), \(table.rect(ofRow: row))")
+        }
+    }
+    @Test("Result errors can be dismissed without changing artifacts, and changed errors return")
+    func resultNoticeDismissalIsPresentationOnly() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        try Data("Ready summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        try TranscriptVersions.Request(engine: "whisper", diarization: nil).write(to: dir)
+        try SessionState.amend(dir, with: [SessionState.Key.transcriptionFailed: "Synthetic first failure"])
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let before = try Self.fileSnapshot(dir)
+        let notice = try #require(app.panel.contentView?.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.result-notice"
+        })
+        let close = try #require(notice.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.dismiss-notice"
+        } as? NSButton)
+        let status = try #require(notice.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.processing-status"
+        } as? NSTextField)
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(status.stringValue.contains("Synthetic first failure"))
+        #expect(close.image != nil && close.title.isEmpty && close.toolTip != nil)
+        let closeFrame = close.convert(close.bounds, to: notice)
+        #expect(abs(notice.bounds.maxX - closeFrame.maxX - 6) < 2,
+                "The notice close button belongs at the trailing edge even when the message is short")
+        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        #expect(bar.allDescendants.contains { $0 === notice })
+        #expect(!library.contentView.allDescendants.contains { $0 === notice })
+        #expect(close.sendAction(close.action, to: close.target))
+        library.refresh(); await library.settled()
+        #expect(notice.isHiddenOrHasHiddenAncestor)
+        #expect(try Self.fileSnapshot(dir) == before)
+        #expect(library.currentActions.hasPendingTranscript)
+        try SessionState.amend(dir, with: [SessionState.Key.transcriptionFailed: "Synthetic different failure"])
+        library.refresh(); await library.settled()
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(status.stringValue.contains("Synthetic different failure"))
+        for task in library.stopForTermination() { await task.value }
+    }
+
+    @Test("A short result notice keeps its close control at the right edge")
+    func shortResultNoticeKeepsTrailingClose() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try SessionState.amend(dir, with: [SessionState.Key.transcriptionFailed: "Synthetic"])
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        defer { _ = library.stopForTermination(); app.hide() }
+        app.show()
+        app.panel.setContentSize(.init(width: 1340, height: 600))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let notice = try #require(app.panel.contentView?.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.result-notice"
+        })
+        let close = try #require(notice.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.dismiss-notice"
+        })
+        #expect(abs(notice.bounds.maxX - close.convert(close.bounds, to: notice).maxX - 6) < 2)
+    }
+
+    @Test("Local search requires readable result text and explains an unavailable state")
+    func meetingSearchIsDisabledWithoutReadableResults() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        defer { _ = library.stopForTermination(); app.hide() }
+        app.show()
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let search = try #require(library.contentView.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.search"
+        } as? NSSearchField)
+        let versions = try #require(library.contentView.allDescendants.first {
+            $0.identifier?.rawValue == "transcript-versions"
+        } as? NSPopUpButton)
+        #expect(!versions.isEnabled, "SwiftUI must preserve the unavailable empty version selector")
+        #expect(!search.isEnabled)
+        #expect(search.toolTip?.isEmpty == false)
+        #expect(!library.focusMeetingSearch())
+        try Data("Readable summary only".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        library.refresh(); await library.settled()
+        #expect(search.isEnabled, "A readable legacy summary stays searchable without transcript JSON")
+        #expect(search.toolTip == nil)
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("summary.md"))
+        try Data("invalid JSON".utf8).write(to: dir.appendingPathComponent("transcript.json"))
+        library.refresh(); await library.settled()
+        #expect(!search.isEnabled, "An error message is not searchable meeting content")
+    }
+
+    @Test("Pending, deferred and failed requests keep the previous ready result",
+          arguments: ["pending", "deferred", "failed"])
+    func requestNoticeKeepsTheReadyVersion(state: String) throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        Config.update(path: ["transcription", "enabled"], value: true)
+        try TranscriptVersions.Request(engine: "whisper", diarization: nil).write(to: dir)
+        try SessionState.amend(dir, with: [
+            SessionState.Key.transcriptionDeferred: state == "deferred" ? true : nil,
+            SessionState.Key.transcriptionFailed: state == "failed" ? "Synthetic failure" : nil,
+        ])
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        defer { _ = library.stopForTermination(); app.hide() }
+        app.libraryProvider = { library }
+        let notice = try #require(app.panel.contentView?.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.result-notice"
+        })
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(library.currentActions.transcriptReady)
+        #expect(library.currentActions.hasPendingTranscript)
+        #expect(library.currentActions.reason(for: .regenerateSummary) != nil)
+        #expect(PostProcessor.readTranscript(dir)?.segments.first?.text == "Hello.")
+    }
+
+    @Test("Regeneration actions show distinct content images with refresh badges")
+    func regenerationImagesDistinguishTheResult() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        defer { _ = library.stopForTermination(); app.hide() }
+        let buttons = library.contentView.allDescendants.compactMap { $0 as? NSButton }
+        let transcript = try #require(buttons.first { $0.identifier?.rawValue == "meeting.retranscribe" }?.image)
+        let summary = try #require(buttons.first { $0.identifier?.rawValue == "meeting.generate-summary" }?.image)
+        #expect(transcript.size.width >= 24 && summary.size.width >= 24)
+        #expect(transcript.isTemplate && summary.isTemplate)
+        #expect(transcript.tiffRepresentation != summary.tiffRepresentation)
+    }
+
+    @Test("Assignment restores the new transcript pencil after asynchronous read-back")
+    func assignmentFocusFollowsReadBack() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        tabs.selectTabViewItem(withIdentifier: "transcript")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let old = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        app.panel.makeFirstResponder(old)
+        try library.assignSpeaker("me", participant: nil, name: "New name", session: dir, version: dir)
+        for _ in 0..<4 { await Task.yield() }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let pencil = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        #expect(app.panel.firstResponder === pencil)
+    }
+    @Test("Starting summary work immediately disables speaker editors and cancellation restores them")
+    func summaryWorkUpdatesSpeakerAvailability() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        try Data("Summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        let before = try Self.fileSnapshot(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        tabs.selectTabViewItem(withIdentifier: "participants")
+        let start = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.generate-summary" })
+        #expect(start.sendAction(start.action, to: start.target))
+        let editor = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        #expect(!editor.choice.isEnabled)
+        let sheet = try #require(app.panel.attachedSheet)
+        let cancel = try #require(sheet.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.title == "Cancel" })
+        #expect(cancel.sendAction(cancel.action, to: cancel.target))
+        await library.settled()
+        let restored = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        #expect(restored.choice.isEnabled)
+        #expect(try Self.fileSnapshot(dir) == before)
+    }
     @Test("Diarization details distinguish confirmed speakers, unknown speech and retained retry audio")
     func diarizationDetails() {
         var state = DiarizationState(
@@ -104,6 +328,210 @@ struct MeetingLibraryControllerTests {
         }
     }
 
+    private static func fileSnapshot(_ directory: URL) throws -> [String: Data] {
+        var files: [String: Data] = [:]
+        let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey])!
+        for case let url as URL in enumerator where try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+            files[url.path] = try Data(contentsOf: url)
+        }
+        return files
+    }
+
+    @Test("Speaker assignment rejects a stale version and unknown voices")
+    func speakerAssignmentChecksCurrentVersion() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let archive = try #require(try TranscriptVersions.archiveCurrent(dir))
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-10-31T10:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "New version")]).write(to: dir)
+        let before = try Self.fileSnapshot(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(throws: (any Error).self) {
+            try library.assignSpeaker("me", participant: nil, name: "Stale", session: dir, version: archive)
+        }
+        #expect(throws: (any Error).self) {
+            try library.assignSpeaker("them ?", participant: nil, name: "Unknown", session: dir, version: dir)
+        }
+        #expect(try Self.fileSnapshot(dir) == before)
+        let selector = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }
+            .first { $0.identifier?.rawValue == "transcript-versions" })
+        selector.selectItem(at: 0)
+        _ = NSApp.sendAction(try #require(selector.action), to: selector.target, from: selector)
+        #expect(throws: (any Error).self) {
+            try library.assignSpeaker("me", participant: nil, name: "Old transcript", session: dir, version: archive, expectedTranscript: Data())
+        }
+        try library.assignSpeaker("me", participant: nil, name: "Archive name", session: dir, version: archive)
+        #expect(SpeakerNames.read(from: archive)?.speakers["me"]?.name == "Archive name")
+        #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.name != "Archive name")
+    }
+
+    @Test("Meeting search follows the selected version and restores the result tab")
+    func searchSelectedVersion() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-search", in: root)
+        try Self.transcribe(dir)
+        try Data("# Archive\n\nOld **beacon**.".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        try TranscriptVersions.archiveCurrent(dir)
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-10-30T10:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Current compass")]).write(to: dir)
+        try Data("New summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        let before = try Self.fileSnapshot(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let versions = try #require(library.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }
+            .first { $0.identifier?.rawValue == "transcript-versions" })
+        library.setMeetingSearchQuery("compass")
+        #expect(library.meetingSearchHits.count == 1)
+        versions.selectItem(at: 0)
+        _ = NSApp.sendAction(try #require(versions.action), to: versions.target, from: versions)
+        #expect(library.meetingSearchQuery.isEmpty)
+        library.setMeetingSearchQuery("compass")
+        #expect(library.meetingSearchHits.isEmpty)
+        library.setMeetingSearchQuery("")
+        let transcriptTab = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.result.transcript" })
+        _ = NSApp.sendAction(try #require(transcriptTab.action), to: transcriptTab.target, from: transcriptTab)
+        library.setMeetingSearchQuery("beacon")
+        #expect(library.meetingSearchHits.count == 1)
+        library.moveMeetingSearch(forward: true)
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "summary")
+        library.setMeetingSearchQuery("")
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript")
+        #expect(try Self.fileSnapshot(dir) == before, "Search must leave all current and archived artifacts unchanged")
+    }
+
+    @Test("Search wraps, ignores unreadable summaries and clears on meeting change")
+    func searchNavigationAndMeetingChange() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-search", in: root)
+        try Transcript(engine: "whisper", model: "test", created_at: "2026-10-30T10:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Needle needle")]).write(to: dir)
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("summary.md"), withIntermediateDirectories: true)
+        try Self.session("2026-09-28-090000-empty", in: root)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        library.setMeetingSearchQuery("needle")
+        #expect(library.meetingSearchHits.count == 2)
+        library.moveMeetingSearch(forward: false)
+        #expect(library.meetingSearchIndex == 1)
+        library.moveMeetingSearch(forward: true)
+        #expect(library.meetingSearchIndex == 0)
+        library.moveMeetingSearch(forward: true)
+        #expect(library.meetingSearchIndex == 1)
+        library.refresh()
+        await library.settled()
+        #expect(library.meetingSearchQuery == "needle")
+        #expect(library.meetingSearchIndex == 1, "Unchanged background reload preserves the selected match")
+        library.setMeetingSearchQuery("need")
+        #expect(library.meetingSearchIndex == nil)
+        library.setMeetingSearchQuery("")
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "summary", "Editing query must retain the first origin")
+        library.setMeetingSearchQuery("needle")
+        library.moveMeetingSearch(forward: true)
+        let list = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? MeetingTableView)
+        list.selectRowIndexes([list.selectedRow == 0 ? 1 : 0], byExtendingSelection: false)
+        #expect(library.meetingSearchQuery.isEmpty)
+        #expect(library.meetingSearchHits.isEmpty)
+        library.setMeetingSearchQuery("")
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript", "Clear cannot restore another meeting's tab")
+        library.setMeetingSearchQuery("No summary")
+        #expect(library.meetingSearchHits.isEmpty, "Placeholders are not meeting content")
+    }
+
+    @Test("A new transcript generation in the same directory invalidates search origin")
+    func searchDoesNotRestoreAnEarlierTranscriptGeneration() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        library.setMeetingSearchQuery("Hello")
+        library.moveMeetingSearch(forward: true)
+        #expect(library.meetingSearchIndex == 0)
+        try Transcript(engine: "whisper", model: "new", created_at: "2026-10-31T12:00:00Z",
+                       segments: [.init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Hello, new generation")]).write(to: dir)
+        library.refresh()
+        await library.settled()
+        #expect(library.meetingSearchQuery.isEmpty)
+        #expect(library.meetingSearchHits.isEmpty)
+        #expect(library.meetingSearchIndex == nil)
+        library.setMeetingSearchQuery("")
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        #expect(tabs.selectedTabViewItem?.identifier as? String == "transcript")
+    }
+
+    @Test("An unchanged refresh preserves the participant's unsaved input")
+    func participantDraftSurvivesUnchangedRefresh() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let tabs = try #require(library.contentView.allDescendants.first { $0 is NSTabView } as? NSTabView)
+        tabs.selectTabViewItem(withIdentifier: "participants")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let editor = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        editor.choice.stringValue = "Unsaved draft"
+        library.refresh()
+        await library.settled()
+        let current = try #require(library.contentView.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        #expect(current === editor)
+        #expect(current.choice.stringValue == "Unsaved draft")
+        #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.name == nil)
+    }
+
+    @Test("Background refresh preserves selected text in an active search result")
+    func selectionInSearchResultSurvivesRefresh() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        library.setMeetingSearchQuery("Hello")
+        library.moveMeetingSearch(forward: true)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let transcript = try #require(library.contentView.allDescendants.first { $0 is MeetingTranscriptView } as? MeetingTranscriptView)
+        let table = try #require(transcript.documentView as? NSTableView)
+        let row = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        let words = try #require(row.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "transcript.words" })
+        words.selectText(nil)
+        let editor = try #require(words.currentEditor() as? NSTextView)
+        editor.setSelectedRange(NSRange(location: 0, length: 5))
+        library.refresh()
+        await library.settled()
+        #expect(words.currentEditor() === editor)
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 5))
+        #expect(library.meetingSearchIndex == 0)
+    }
+
     @Test("Selecting another recording replaces both previews, including missing files")
     func previewsFollowSelection() throws {
         let root = try Self.folder()
@@ -116,6 +544,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let views = window.contentView.allDescendants
@@ -181,6 +610,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let columns = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.columns" })
@@ -294,6 +724,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         app.show()
@@ -317,6 +748,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         defer { withExtendedLifetime(window) {} }
@@ -341,6 +773,7 @@ struct MeetingLibraryControllerTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: first, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         defer { withExtendedLifetime(window) {} }

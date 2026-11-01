@@ -4,6 +4,17 @@ import AppKit
 /// breaks to display its block and inline presentation intents in NSTextView.
 @MainActor
 enum MarkdownPreview {
+    nonisolated static func searchableText(_ markdown: String) -> String {
+        guard let parsed = try? AttributedString(markdown: markdown) else { return markdown }
+        var text = "", previousBlock: Int?
+        for run in parsed.runs {
+            let block = run.presentationIntent?.components.first?.identity
+            if block != previousBlock, !text.isEmpty { text += "\n" }
+            text += String(parsed[run.range].characters)
+            previousBlock = block
+        }
+        return text
+    }
     static func render(_ markdown: String, fontSize: CGFloat = 13) -> NSAttributedString {
         let baseFont = NSFont.systemFont(ofSize: fontSize)
         guard let parsed = try? AttributedString(markdown: markdown) else {

@@ -1,0 +1,21 @@
+{
+  "source_commit": "bc66c20804e81c9b0e62016303cfa61aac7f108b",
+  "command": "swift test --no-parallel --filter 'StudioDensityTests|MeetingTranscriptReadingTests|SpeakerAssignmentTests|MeetingLibraryControllerTests'",
+  "result": "54 tests in 4 suites passed",
+  "duration_seconds": 16.036,
+  "red_result": "new resize regression failed with104 issues on Review675 implementation",
+  "root_cause": "row height updated but cached cell retained old size; e.g. after850pt resize, expected cell100pt but actual81pt in intermediate padding diagnostic",
+  "coverage": [
+    "nine successive widths with overlay/legacy scrollers",
+    "cell size agrees with native frameOfCell after resize",
+    "all text alignment rectangles inside12pt insets",
+    "six point gap between surfaces",
+    "existing reading position, text selection, search and assignment tests",
+    "palette contrast in both themes"
+  ],
+  "logs_sha256": {
+    "red": "d083a019a0b2ec17fbf5b5a50ad0ea163550f1f1c555fdc8a1667a8ec2520a45",
+    "diagnostic": "83cc194ec185fb382887d1d47a3220c07180f8dccc83f98ffac866b9d2cf4c44",
+    "green": "77d21ff757e24570a7f1ce2ecdabeafb3eeaac15b7a720ecac8503ee12714261"
+  }
+}

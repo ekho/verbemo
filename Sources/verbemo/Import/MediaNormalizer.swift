@@ -20,11 +20,25 @@ struct MediaNormalizer: MediaNormalizing, Sendable {
         let sourceBytes: Int64
     }
 
-    enum NormalizationError: Error, CustomStringConvertible {
+    enum NormalizationError: LocalizedError, CustomStringConvertible {
         case noAudioTrack(URL)
         case invalidDuration(URL)
         case unreadable(URL, Error?)
         case unwritable(URL, Error?)
+
+        var errorDescription: String? {
+            switch self {
+            case .noAudioTrack:
+                return localised("The file has no audio track.", "В файле нет звуковой дорожки.")
+            case .invalidDuration:
+                return localised("The file has no playable audio.", "В файле нет звука, который можно воспроизвести.")
+            case .unreadable:
+                return localised("Could not open this audio file.", "Не удалось открыть аудиофайл.")
+            case .unwritable:
+                return localised("Could not save imported audio. Check the recordings folder and free disk space.",
+                                 "Не удалось сохранить звук. Проверьте папку записей и свободное место на диске.")
+            }
+        }
 
         var description: String {
             switch self {

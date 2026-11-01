@@ -1,0 +1,12 @@
+{
+  "targeted_command": "swift test --no-parallel --filter 'StudioMeetingHeaderTests|MeetingLibraryControllerTests|JournalWorkspaceTests'",
+  "targeted_result": "47 tests in3 suites passed,17.242s; source49a1af8",
+  "final_padding_command": "swift test --no-parallel --filter StudioMeetingHeaderTests",
+  "final_padding_result": "4 tests in1 suite passed,3.319s; final product code",
+  "log_sha256": {
+    "targeted": "fb39fa883f1812a082ee2a58d032b67d378f24dceed04fc2c496b9930d834608",
+    "padding_header": "ef8fe3e05f649ddcb2a932a885f29283a36d0bafc4c6ba11b3cc96440191cd16",
+    "build": "a8b49cf0957bdb166c69377b0ea025dcbf2a4ca897a85fe7097c8ddc91ec8d71"
+  },
+  "new_tests": "none; reversible visual-only change"
+}

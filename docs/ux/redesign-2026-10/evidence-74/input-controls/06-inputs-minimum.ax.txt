@@ -1,0 +1,93 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 text Библиотека
+		8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Placeholder: Название, расшифровка, сводка, ID: library.search
+			9 button Поиск в библиотеке: названия, расшифровки и сводки
+		10 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+		11 scroll area Secondary Actions: Scroll Up, Scroll Down
+			12 table (showing 0-6 of 100 items)
+				13 row (selectable)
+					14 cell
+						15 text UX73 synthetic silence 2026-11-01 · 00:01
+						16 image Description: Готово, ID: meeting.list-status
+				17 row (selectable)
+					18 cell
+						19 text UX69 Назначения — ошибка и неизвестный 2026-10-30 · 03:00
+						20 image Description: Готово, ID: meeting.list-status
+				21 row (selectable)
+					22 cell
+						23 text UX69 Импорт — отложенная обработка 2026-10-29 · 01:00
+						24 image Description: Готово, ID: meeting.list-status
+				25 row (selectable)
+					26 cell
+						27 text UX69 Импорт — ошибка обработки 2026-10-29 · 01:00
+						28 image Description: Synthetic UX69: model unavailable, ID: meeting.list-status
+				29 row (selectable)
+					30 cell
+						31 text UX69 Атлас — длинная встреча 2026-10-29 · 30:00
+						32 image Description: Готово, ID: meeting.list-status
+				33 row (selected)
+					34 cell (selected)
+						35 text UX69 Атлас — планирование 2026-10-29 · 03:00
+						36 image Description: Готово, ID: meeting.list-status
+			37 scroll bar (settable, float) 0
+				38 value indicator (settable, float) 0
+				39 increment arrow button
+				40 decrement arrow button
+				41 increment page button
+				42 decrement page button
+		43 splitter (disabled, settable, float) 248
+		44 text 29.10.2026 12:00 · 3 мин · Приглашены: 3
+		45 text Help: UX69 Атлас — планирование, ID: meeting.title
+		46 button Копировать, Description: copy, ID: meeting.copy
+		47 button Description: Действия со встречей, ID: meeting.actions
+		48 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+		49 button Description: Воспроизвести встречу, ID: playback.play
+		50 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		51 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+			52 value indicator (settable, float) 0
+		53 text 00:00 / 03:00
+		54 image volume high
+		55 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			56 value indicator (settable, float) 1
+		57 pop up button Description: Скорость воспроизведения, Value: 1×
+		58 container meeting.studio-header
+			59 text Версия
+			60 pop up button Description: Версия расшифровки, Value: 2 · Whisper · 29 окт. 2026 г., 12:00:00, ID: transcript-versions
+			61 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Placeholder: Найти в этой встрече, ID: meeting.search
+				62 button Поиск в выбранной версии расшифровки и сводки
+			63 radio button Сводка, Value: 1, ID: meeting.result.summary
+			64 radio button Расшифровка, Description: comment lines, Value: 0, ID: meeting.result.transcript
+			65 radio button Участники, Value: 0, ID: meeting.result.participants
+		66 scroll area
+			67 text entry area ID: meeting-words, Value: **Решения учебной встречи**
+• Сапфировый маяк — уникальная фраза только в сводке.
+• Анна готовит материалы.
+• Борис проверяет сроки.
+	68 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	69 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	70 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	71 button (disabled) Нет записи, ID: activity.recording
+	72 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	73 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	74 close button
+	75 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	76 minimize button
+77 menu bar
+	78 Verbemo Studio Review
+	79 Файл
+	80 Правка
+	81 Окно
+
+The focused UI element is 10 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter

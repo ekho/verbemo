@@ -1,0 +1,67 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 text /  Нужны действия
+	4 button Новая запись, ID: journal.new-recording
+	5 button Импорт, ID: journal.import
+	6 button Настройки, ID: journal.settings
+	7 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		8 text Библиотека
+		9 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Placeholder: Название, расшифровка, сводка, ID: library.search
+			10 button Поиск в библиотеке: названия, расшифровки и сводки
+		11 toggle button Description: Фильтр встреч: Нужны действия, Value: on, ID: library.filter
+		12 scroll area
+			13 table
+				14 row (selected)
+					15 cell (selected)
+						16 text UX69 Импорт — ошибка обработки 2026-10-29 · 01:00
+						17 image Description: Synthetic UX69: model unavailable, ID: meeting.list-status
+		18 splitter (disabled, settable, float) 248
+		19 text 29.10.2026 12:02 · 1 мин
+		20 text Help: UX69 Импорт — ошибка обработки, ID: meeting.title
+		21 button Копировать, Description: copy, ID: meeting.copy
+		22 button Description: Действия со встречей, ID: meeting.actions
+		23 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+		24 button Description: Воспроизвести встречу, ID: playback.play
+		25 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		26 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+			27 value indicator (settable, float) 0
+		28 text 00:00 / 01:00
+		29 image volume high
+		30 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			31 value indicator (settable, float) 1
+		32 pop up button Description: Скорость воспроизведения, Value: 1×
+		33 container meeting.studio-header
+			34 text Версия
+			35 pop up button (disabled) Description: Версия расшифровки, ID: transcript-versions
+			36 search text field (disabled) Description: Поиск в выбранной версии расшифровки и сводки, Help: Поиск появится, когда будет готова расшифровка или сводка., Placeholder: Найти в этой встрече, ID: meeting.search
+				37 button (disabled) Поиск в выбранной версии расшифровки и сводки
+			38 radio button Сводка, Value: 0, ID: meeting.result.summary
+			39 radio button Расшифровка, Value: 1, ID: meeting.result.transcript
+			40 radio button Участники, Value: 0, ID: meeting.result.participants
+		41 text Value: Ошибка расшифровки: Synthetic UX69: model unavailable, ID: meeting.processing-status
+		42 button Description: Скрыть уведомление, ID: meeting.dismiss-notice
+		43 scroll area
+			44 text entry area Расшифровки пока нет.
+	45 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	46 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	47 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	48 button (disabled) Нет записи, ID: activity.recording
+	49 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	50 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	51 close button
+	52 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	53 minimize button
+54 menu bar
+	55 Verbemo Final Review
+	56 Файл
+	57 Правка
+	58 Окно
+
+The focused UI element is 11 toggle button Description: Фильтр встреч: Нужны действия, Value: on, ID: library.filter

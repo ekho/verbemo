@@ -1,0 +1,9 @@
+{
+  "files": 433,
+  "all_hashes_match_before": true,
+  "native_rename_reset_regenerated_markdown": [
+    "2026-10-29_09-00-00-ux69/transcript.md"
+  ],
+  "original_review670_untouched": true,
+  "note": "Rename visibly applied; original assignment returned on disk; regenerated Markdown restored after app quit. UI dropdown actions were not assumed successful without readback."
+}

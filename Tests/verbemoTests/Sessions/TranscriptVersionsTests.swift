@@ -88,6 +88,7 @@ struct TranscriptVersionsTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: recordings.root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let selector = try #require(window.contentView.allDescendants.compactMap { $0 as? NSPopUpButton }.first { $0.identifier?.rawValue == "transcript-versions" })
@@ -137,6 +138,7 @@ struct TranscriptVersionsTests {
         let app = ApplicationWindow()
         let window = MeetingLibraryController(root: recordings.root, hostWindow: app.panel)
         app.libraryProvider = { window }
+        app.panel.contentView?.layoutSubtreeIfNeeded()
         app.navigate(.allMeetings)
         defer { withExtendedLifetime(app) {} }
         let views = window.contentView.allDescendants

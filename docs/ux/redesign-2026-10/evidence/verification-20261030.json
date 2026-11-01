@@ -1,0 +1,207 @@
+{
+  "date": "2026-10-30",
+  "checkout_before_audit": "5545cc452546148516b6bad5669dcf5a1d88814f",
+  "product_revision": "740776e4d44b23f6f2e28778f048129467218270",
+  "source_changes": false,
+  "fixture_sha256_before": {
+    "2026-10-29_09-00-00-ux69/speakers.json": "e048f2c65beb7ea543aa530dddc0eb0ad4efdac6ada423751be3563e4858f875",
+    "2026-10-29_09-00-00-ux69/summary.md": "6421d070936614aeb7d69e932b66c70ebc2f1b5ab58e3645f186890686d55c5f",
+    "2026-10-29_09-00-00-ux69/transcript.md": "97dc97eecd5bb2b91dff481c7e87258bf3cea22420f1f93e20601e496003454d",
+    "2026-10-29_09-00-00-ux69/transcript.json": "9f1b52656428a1a99680da783aa7b57f768a80cf899e339f124bbd1fe561fe68",
+    "2026-10-29_09-00-00-ux69/audio.wav": "1325721de4cfd86d3952320054dac50d25b45d79789e53a89d563dc4d676e210",
+    "2026-10-29_09-00-00-ux69/meta.json": "1cb1d9cc662c0eb265ee89dabfd5bd8f67e0c63787ec23398e202c3ed1c5c25a",
+    "2026-10-29_09-01-00-ux69/speakers.json": "ec64faa4d59d58a1a93d01751f681a2973ece7164554f578aecd85c7d22890a1",
+    "2026-10-29_09-01-00-ux69/summary.md": "6421d070936614aeb7d69e932b66c70ebc2f1b5ab58e3645f186890686d55c5f",
+    "2026-10-29_09-01-00-ux69/transcript.md": "ee53deaa232af8d1269faeb58f28d6505cd4de3f3765a3b1a7d4d3407ece4a87",
+    "2026-10-29_09-01-00-ux69/transcript.json": "1db9260c01388da306c6f8732fd08bbe23625db3481cae59d73ef04dc9483a89",
+    "2026-10-29_09-01-00-ux69/audio.wav": "3e7b7f6fcc3aa383cf9a539343ac3deafa1e02b4444c8145cbefebb519fc6ed4",
+    "2026-10-29_09-01-00-ux69/meta.json": "d5fafb9d894662ba3385a45acbbcd2130264cf9a612afb572c0f46fdba7bee81",
+    "2026-10-29_09-03-00-ux69/audio.wav": "3f257e52584f47ddc010e44d9602511a4900e970d4046cd92f171f03f597cf1b",
+    "2026-10-29_09-03-00-ux69/meta.json": "835a44a2aec7c93a031bf63a8cdf7f0788824f212fecef3662ccb10bc849d539",
+    "2026-10-29_09-02-00-ux69/audio.wav": "3f257e52584f47ddc010e44d9602511a4900e970d4046cd92f171f03f597cf1b",
+    "2026-10-29_09-02-00-ux69/meta.json": "2a73e28538f0fa3f51f8c3d55ce2ef7f20a921bbe36f60d9ced45dbc43d54a57",
+    "2026-10-30_09-04-00-ux69/speakers.json": "1aa6f4cc2049e028390593f928f3c948ed0738e6582a4cfd5bedde0b379a4b0b",
+    "2026-10-30_09-04-00-ux69/summary.md": "6421d070936614aeb7d69e932b66c70ebc2f1b5ab58e3645f186890686d55c5f",
+    "2026-10-30_09-04-00-ux69/transcript.md": "97dc97eecd5bb2b91dff481c7e87258bf3cea22420f1f93e20601e496003454d",
+    "2026-10-30_09-04-00-ux69/transcript.json": "a0d116cde54453ee4157312881143f72efef4eeff84434f4a73e78bd9c8eb44e",
+    "2026-10-30_09-04-00-ux69/audio.wav": "1325721de4cfd86d3952320054dac50d25b45d79789e53a89d563dc4d676e210",
+    "2026-10-30_09-04-00-ux69/meta.json": "9f16914aced347606c1d06452646263792984fde37e0171503b1807a836acbba",
+    "2026-10-30_09-04-00-ux69/transcripts/synthetic-previous/transcript.md": "ace2a35e8eeb29f34424e63ae125ee38e524b2c86837376049eba9b214a09b22",
+    "2026-10-30_09-04-00-ux69/transcripts/synthetic-previous/transcript.json": "b348f96e322d3d872b3c214fa30101f03eb0bb81eca4b3692fe0b59e7ea91de0",
+    "2026-10-30_09-04-00-ux69/transcripts/synthetic-previous/meta.json": "f102bacb49ed908219beda240796222762e3a48049b3606886303aee6ad1b5b3",
+    "2026-10-29_09-00-00-ux69/transcripts/synthetic-previous/transcript.md": "ace2a35e8eeb29f34424e63ae125ee38e524b2c86837376049eba9b214a09b22",
+    "2026-10-29_09-00-00-ux69/transcripts/synthetic-previous/transcript.json": "b348f96e322d3d872b3c214fa30101f03eb0bb81eca4b3692fe0b59e7ea91de0",
+    "2026-10-29_09-00-00-ux69/transcripts/synthetic-previous/meta.json": "f102bacb49ed908219beda240796222762e3a48049b3606886303aee6ad1b5b3"
+  },
+  "fixture_sha256_after": {
+    "2026-10-29_09-00-00-ux69/audio.wav": "1325721de4cfd86d3952320054dac50d25b45d79789e53a89d563dc4d676e210",
+    "2026-10-29_09-00-00-ux69/meta.json": "93d4a7a9f9d161278abf0e00bca43752a0ad97591ee6e2904d7e9032930c33f8",
+    "2026-10-29_09-00-00-ux69/speakers.json": "e048f2c65beb7ea543aa530dddc0eb0ad4efdac6ada423751be3563e4858f875",
+    "2026-10-29_09-00-00-ux69/summary.md": "e18dcabe4c0d54286758f69bd0f823390bb184f8a6fa5cdede5149ab8c3be082",
+    "2026-10-29_09-00-00-ux69/transcribe.log": "aa42f398e79904682d56bb59cc7b588f6adbfabe31ad0d238b8ae7e7ad0e94aa",
+    "2026-10-29_09-00-00-ux69/transcript.json": "9f1b52656428a1a99680da783aa7b57f768a80cf899e339f124bbd1fe561fe68",
+    "2026-10-29_09-00-00-ux69/transcript.md": "97dc97eecd5bb2b91dff481c7e87258bf3cea22420f1f93e20601e496003454d",
+    "2026-10-29_09-00-00-ux69/transcripts/synthetic-previous/meta.json": "f102bacb49ed908219beda240796222762e3a48049b3606886303aee6ad1b5b3",
+    "2026-10-29_09-00-00-ux69/transcripts/synthetic-previous/transcript.json": "b348f96e322d3d872b3c214fa30101f03eb0bb81eca4b3692fe0b59e7ea91de0",
+    "2026-10-29_09-00-00-ux69/transcripts/synthetic-previous/transcript.md": "ace2a35e8eeb29f34424e63ae125ee38e524b2c86837376049eba9b214a09b22",
+    "2026-10-29_09-01-00-ux69/audio.wav": "3e7b7f6fcc3aa383cf9a539343ac3deafa1e02b4444c8145cbefebb519fc6ed4",
+    "2026-10-29_09-01-00-ux69/meta.json": "d5fafb9d894662ba3385a45acbbcd2130264cf9a612afb572c0f46fdba7bee81",
+    "2026-10-29_09-01-00-ux69/speakers.json": "ec64faa4d59d58a1a93d01751f681a2973ece7164554f578aecd85c7d22890a1",
+    "2026-10-29_09-01-00-ux69/summary.md": "6421d070936614aeb7d69e932b66c70ebc2f1b5ab58e3645f186890686d55c5f",
+    "2026-10-29_09-01-00-ux69/transcript.json": "1db9260c01388da306c6f8732fd08bbe23625db3481cae59d73ef04dc9483a89",
+    "2026-10-29_09-01-00-ux69/transcript.md": "ee53deaa232af8d1269faeb58f28d6505cd4de3f3765a3b1a7d4d3407ece4a87",
+    "2026-10-29_09-02-00-ux69/audio.wav": "3f257e52584f47ddc010e44d9602511a4900e970d4046cd92f171f03f597cf1b",
+    "2026-10-29_09-02-00-ux69/meta.json": "2a73e28538f0fa3f51f8c3d55ce2ef7f20a921bbe36f60d9ced45dbc43d54a57",
+    "2026-10-29_09-03-00-ux69/audio.wav": "3f257e52584f47ddc010e44d9602511a4900e970d4046cd92f171f03f597cf1b",
+    "2026-10-29_09-03-00-ux69/meta.json": "835a44a2aec7c93a031bf63a8cdf7f0788824f212fecef3662ccb10bc849d539",
+    "2026-10-30_09-04-00-ux69/audio.wav": "1325721de4cfd86d3952320054dac50d25b45d79789e53a89d563dc4d676e210",
+    "2026-10-30_09-04-00-ux69/meta.json": "9f16914aced347606c1d06452646263792984fde37e0171503b1807a836acbba",
+    "2026-10-30_09-04-00-ux69/speakers.json": "aa6985e7a3e9f7c2d41f58ff43d5e1e617291a3b476d62a07f7c7beffb636330",
+    "2026-10-30_09-04-00-ux69/summary.md": "6421d070936614aeb7d69e932b66c70ebc2f1b5ab58e3645f186890686d55c5f",
+    "2026-10-30_09-04-00-ux69/transcript.json": "a0d116cde54453ee4157312881143f72efef4eeff84434f4a73e78bd9c8eb44e",
+    "2026-10-30_09-04-00-ux69/transcript.md": "5f77031c8efc69d1ffeab7af921649a0349c8fc7a85192f4542b1e274e0db067",
+    "2026-10-30_09-04-00-ux69/transcripts/synthetic-previous/meta.json": "f102bacb49ed908219beda240796222762e3a48049b3606886303aee6ad1b5b3",
+    "2026-10-30_09-04-00-ux69/transcripts/synthetic-previous/transcript.json": "b348f96e322d3d872b3c214fa30101f03eb0bb81eca4b3692fe0b59e7ea91de0",
+    "2026-10-30_09-04-00-ux69/transcripts/synthetic-previous/transcript.md": "ace2a35e8eeb29f34424e63ae125ee38e524b2c86837376049eba9b214a09b22"
+  },
+  "changed": [
+    "2026-10-29_09-00-00-ux69/meta.json",
+    "2026-10-29_09-00-00-ux69/summary.md",
+    "2026-10-30_09-04-00-ux69/speakers.json",
+    "2026-10-30_09-04-00-ux69/transcript.md"
+  ],
+  "added": [
+    "2026-10-29_09-00-00-ux69/transcribe.log"
+  ],
+  "removed": [],
+  "original_wav_transcript_json_archives_unchanged": true,
+  "old_summary_preserved_after_cancel_and_error_sha256": "6421d070936614aeb7d69e932b66c70ebc2f1b5ab58e3645f186890686d55c5f",
+  "playback": "Listen started at 00:20; timeline advanced; pause stopped; transcript 00:50 sought and started playback. Silent WAV only.",
+  "summary": "Real app operation via 127.0.0.1:18969 mock: hold/cancel, HTTP500/error, HTTP200/retry success. No inference.",
+  "assignment": "Wrong C -> Boris corrected to Vera; Escape restored value; Not matched removed name/participantID; manual name saved without participantID; unknown remained disabled; inline Q01 unresolved.",
+  "deletion": "Confirmation Cancel and Delete -> immediate Undo passed; no Trash transfer/recovery tested.",
+  "fixture_self_check": "All 28 baseline hashes reproduced; existing destination refused.",
+  "mock_self_check": "GET tags, POST success and invalid request HTTP400 passed.",
+  "human_baseline": "not measured",
+  "windows_gui": "skipped at explicit user request on 2026-10-30; not accepted",
+  "qa_config_restored": true,
+  "mock_server_stopped": true,
+  "screenshots": {
+    "20-en-light-minimum.jpg": {
+      "sha256": "87f8337473207978276e2f921e417ac03730a4550ea95dba99e89cd56b1455ec",
+      "width": 1520,
+      "height": 1256,
+      "ax_sha256": "d24b705d24536863a154d2b12c71c2cca4c5bac5d05886170be8b9b3e54eb404"
+    },
+    "21-inline-assignment-unresolved.jpg": {
+      "sha256": "c8ec44ac2b553a86bd6a3314886bef33a88460ef4ad458054dae5e6d38e03c4c",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "7d8b50b1a34ecf37b0948a335d676031a4f1e038c7655ef2dad5acfe75f8648e"
+    },
+    "22-corrected-participant.jpg": {
+      "sha256": "8cdfdad8866e83486976dd8147c2e6437643abc4ce24fb4b232de55df473dbe2",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "eb327b780051a9fdfb1d2b13ff4e86882f37a5e63d36eefd279b38ef543a2abb"
+    },
+    "23-unlinked-participant.jpg": {
+      "sha256": "06f213f9673e7d4f015b6971d5277651580aba1d1167ac19445b3e44e545dea3",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "289b33dbb3ade7c9ddeb792d6d35f3a91377761d3e8844e6571d1040bc30f254"
+    },
+    "24-playback-running.jpg": {
+      "sha256": "9e8f2d7152deaa34bbcdaeee24bf6b04886d8aea8013b2489680b093e2288e1c",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "0ae0632245dc47d3f1b03f36cced3d158e14aec25fed97448ab9f212a86cc466"
+    },
+    "25-seek-and-unknown.jpg": {
+      "sha256": "823f2a4758f34bd126f41206cc62bf118436d56ee0ecd04db052bf418c2efc09",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "91d88dfeb6dd4d4888f44bfdbe7c0de49a43d79a623fd57bbf1707cbfd35db74"
+    },
+    "26-delete-confirmation.jpg": {
+      "sha256": "fa19ed6bc57fe908e7a06f646aad0626b7f938f58d9975a802ea63ef5208fb51",
+      "width": 1000,
+      "height": 376,
+      "ax_sha256": "b838728d6259ff9d0da9779efda142f42e50ace6e18c9655255d0d8c4c8c8730"
+    },
+    "27-delete-pending.jpg": {
+      "sha256": "292525b24a9cbb9a897949f73513e848a3c32fc7fa3f049c16b1aad05d7dc9b4",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "775b6d34482229b9be404dd482ae61d40b0682f12548860c539259032ed8d7fc"
+    },
+    "28-delete-undone.jpg": {
+      "sha256": "727063ee55e8c17bf374988ae3d0441915e0fcbb44f8c6417879016575a44b22",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "344d4a86b9f53d321b444c17526ccc0bcaad0d68f043930c5275251268539876"
+    },
+    "29-summary-destination.jpg": {
+      "sha256": "a0c8245143524a3f41f41129f591ed2e0486a9253c3f0cdd6a6a65c443948ce4",
+      "width": 960,
+      "height": 422,
+      "ax_sha256": "94716871c7421858fdc4445c5406dbf02ea856c5ccca34cc9c83cf5de7806985"
+    },
+    "30-summary-running.jpg": {
+      "sha256": "15f04439cf0a8557c73cad1d10ce466b2f14d70ad8bca4f081b795ae1be5f7ef",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "326cfdd6ff149881afc5802d3b730aa752b8e45db1fb0d15d4767e955e3db47c"
+    },
+    "31-summary-cancelled.jpg": {
+      "sha256": "f8a0b66e548735bb70d939eec461adfd2cbed455649d317aadc94d51b9049ea4",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "076167435c306eb7bb8ee92ba3b1415b89100db0f88a23a4c6956a58d04d0bfb"
+    },
+    "32-summary-failed.jpg": {
+      "sha256": "11dc6d91838ef204b8e2e63e2a6aa87662c43d8066a00e6b66652025dd06cb33",
+      "width": 1000,
+      "height": 328,
+      "ax_sha256": "866238bc321ec1d0978d2764ccce62021b940d0d95c5cf2168aced40421eb701"
+    },
+    "33-summary-completed.jpg": {
+      "sha256": "4ac4e6f250cfd9cb17f0dba8b07acd0ced4742203a1d67156e4f85828d022ef9",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "b2d4c87af072588accd663cb3ebc70791f8202752858f77a3d4bbbc4dd16ad60"
+    },
+    "34-settings-language-processing.jpg": {
+      "sha256": "e544c31379a2d67b166d77297bc5a150bc7c2f9e432c6e65b113f512b47c485e",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "2daf3f10187a3e2bc72d8c5c3b11a74d62c5e12ca94f5b648d847563229a26a1"
+    },
+    "35-settings-storage.jpg": {
+      "sha256": "5295115b078d975e15dba2219753852e865b72513b02921c486f55b3f2a2a1e4",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "9d3566ad962cf9361fc27006ea1aea7d43dde09e45d69722db2c277658ffe6b8"
+    },
+    "36-settings-en-dark-normal.jpg": {
+      "sha256": "e71357739b3dfa66f7296f02a1f1c9d03330ca5d25fc872b3855cbb071d4fef3",
+      "width": 2680,
+      "height": 1696,
+      "ax_sha256": "061ccf8e14da41894cafcd1eba2b72bcb713516b2c8c8dd9988d8795f64f8b7c"
+    },
+    "37-empty-library-ru-dark.jpg": {
+      "sha256": "cfd2c459dabe8039d993eb9bffbdcbb3d625408aea94f550fa0d37016fafd612",
+      "width": 2680,
+      "height": 1256,
+      "ax_sha256": "07bf5b1344d7e2b9403d7023dba1284116167df125e1c7a3f2ba7925d8fc7cea"
+    },
+    "38-settings-ru-light-minimum.jpg": {
+      "sha256": "6665a103ae844f7b377a07033b31c6cc86fd6b2e1c7646a4629bfc4a8464fc85",
+      "width": 1520,
+      "height": 1256,
+      "ax_sha256": "4d60749098d1fdb30646d5bdeccf3f962aa6abb002882dbe860300c3b84df130"
+    }
+  },
+  "ax_normalization": "Tabs expanded to two spaces; trailing whitespace removed; text and structure preserved.",
+  "qa_app_stopped": true
+}

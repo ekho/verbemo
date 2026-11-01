@@ -1,0 +1,36 @@
+Window: "Verbemo", App: Verbemo Import693.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button New recording, ID: journal.new-recording
+	4 button Import, ID: journal.import
+	5 button Settings, ID: journal.settings
+	6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		7 text Library
+		8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Placeholder: Title, transcript, summary, ID: library.search
+			9 button Search the library: titles, transcripts and summaries
+		10 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		11 text Value: No meetings yet. Start a recording or import an audio file., ID: meeting-list.empty
+		12 splitter (disabled, settable, float) 248
+		13 text Imported 0 · 1 failed · UX74-invalid.wav: Could not open this audio file.
+		14 text Value: No recordings yet, ID: meeting.title
+	15 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	16 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	17 button Access: ✓, ID: activity.access, Description: Access: ✓
+Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone allowed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	18 button (disabled) Not recording, ID: activity.recording
+	19 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	20 close button
+	21 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	22 minimize button
+23 menu bar
+	24 Verbemo Import693
+	25 File
+	26 Edit
+	27 Window
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

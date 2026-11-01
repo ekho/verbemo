@@ -1,0 +1,94 @@
+Window: "Verbemo", App: Verbemo Review697.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 text Библиотека
+		8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Placeholder: Название, расшифровка, сводка, ID: library.search
+			9 button Поиск в библиотеке: названия, расшифровки и сводки
+		10 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+		11 scroll area Secondary Actions: Scroll Up, Scroll Down
+			12 table (showing 0-7 of 100 items)
+				13 row (selected)
+					14 cell (selected)
+						15 text UX74 footer audio failure Без даты
+						16 image Description: Готово, ID: meeting.list-status
+				17 row (selectable)
+					18 cell
+						19 text UX74 controlled speech 2026-11-01 · 01:23
+						20 image Description: Готово, ID: meeting.list-status
+				21 row (selectable)
+					22 cell
+						23 text UX74 controlled audio 2026-11-01 · 01:01
+						24 image Description: Готово, ID: meeting.list-status
+				25 row (selectable)
+					26 cell
+						27 text UX73 synthetic silence 2026-11-01 · 00:01
+						28 image Description: Готово, ID: meeting.list-status
+				29 row (selectable)
+					30 cell
+						31 text UX69 Назначения — ошибка и неизвестный 2026-10-30 · 03:00
+						32 image Description: Готово, ID: meeting.list-status
+				33 row (selectable)
+					34 cell
+						35 text UX69 Импорт — отложенная обработка 2026-10-29 · 01:00
+						36 image Description: Готово, ID: meeting.list-status
+				37 row (selectable)
+					38 cell
+						39 text UX69 Импорт — ошибка обработки 2026-10-29 · 01:00
+						40 image Description: Synthetic UX69: model unavailable, ID: meeting.list-status
+			41 scroll bar (settable, float) 0
+				42 value indicator (settable, float) 0
+				43 increment arrow button
+				44 decrement arrow button
+				45 increment page button
+				46 decrement page button
+		47 splitter (disabled, settable, float) 248
+		48 text Help: UX74 footer audio failure, ID: meeting.title
+		49 button Копировать, Description: copy, ID: meeting.copy
+		50 button Description: Действия со встречей, ID: meeting.actions
+		51 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+		52 button (disabled) Description: Воспроизвести встречу, ID: playback.play
+		53 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		54 slider (disabled) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline, Secondary Actions: Increment, Decrement
+			55 value indicator 0
+		56 text 00:00 / 00:00
+		57 image volume high
+		58 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			59 value indicator (settable, float) 1
+		60 pop up button Description: Скорость воспроизведения, Value: 1×
+		61 container meeting.studio-header
+			62 text Версия
+			63 pop up button Description: Версия расшифровки, Value: 1 · Whisper · 2 нояб. 2026 г., 05:00:00, ID: transcript-versions
+			64 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Placeholder: Найти в этой встрече, ID: meeting.search
+				65 button Поиск в выбранной версии расшифровки и сводки
+			66 radio button Сводка, Value: 1, ID: meeting.result.summary
+			67 radio button Расшифровка, Description: comment lines, Value: 0, ID: meeting.result.transcript
+			68 radio button Участники, Value: 0, ID: meeting.result.participants
+		69 scroll area
+			70 text entry area Создание сводки выключено.
+	71 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	72 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	73 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы: недавняя проверка звуком пройдена
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы: недавняя проверка звуком пройдена
+Разрешения не подтверждают, что звук поступает.
+	74 button (disabled) Нет записи, ID: activity.recording
+	75 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	76 text Help: The operation could not be completed, Value: Не удалось воспроизвести аудио встречи., ID: playback.message
+	77 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	78 close button
+	79 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	80 minimize button
+81 menu bar
+	82 Verbemo Review697
+	83 Файл
+	84 Правка
+	85 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

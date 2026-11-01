@@ -25,11 +25,15 @@ final class EmailAddressesEditor: NSControl {
         input.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let add = NSButton(title: localised("Add", "Добавить"), target: self, action: #selector(addAddress))
         add.identifier = .init("user_email.add")
+        add.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)
+        add.imagePosition = .imageLeading
         let inputRow = NSStackView(views: [input, add])
         inputRow.spacing = 8
         lookup.target = self
         lookup.action = #selector(findAddresses)
         lookup.identifier = .init("user_email.lookup")
+        lookup.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
+        lookup.imagePosition = .imageLeading
         message.font = .systemFont(ofSize: 11)
         message.isHidden = true
         message.identifier = .init("user_email.message")

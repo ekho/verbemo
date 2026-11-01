@@ -1,0 +1,41 @@
+Window: "Verbemo", App: Verbemo Studio Debug.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 text /  В обработке
+	4 button Копировать, Description: copy, ID: meeting.copy
+	5 button (disabled) Действия со встречей
+	6 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+	7 button Новая запись, ID: journal.new-recording
+	8 button Импорт, ID: journal.import
+	9 button Настройки, ID: journal.settings
+	10 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		11 text Библиотека
+		12 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Value: Кварцевый компас, Placeholder: Название, расшифровка, сводка, ID: library.search
+			13 button Поиск в библиотеке: названия, расшифровки и сводки
+			14 button cancel
+		15 toggle button Description: Фильтр встреч: В обработке, Value: on, ID: library.filter
+		16 text Value: По вашему запросу встреч не найдено., ID: meeting-list.empty
+		17 button Сбросить поиск и фильтр, ID: library.reset
+		18 splitter (disabled, settable, float) 220
+		19 text Help: UX69 Назначения — ошибка и неизвестный, Value: Совпадений не найдено, ID: meeting.title
+	20 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	21 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	22 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы: недавняя проверка звуком пройдена
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы: недавняя проверка звуком пройдена
+Разрешения не подтверждают, что звук поступает.
+	23 button (disabled) Нет записи, ID: activity.recording
+	24 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	25 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	26 close button
+	27 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	28 minimize button
+29 menu bar
+	30 Файл
+	31 Правка
+	32 Окно
+
+The focused UI element is 15 toggle button Description: Фильтр встреч: В обработке, Value: on, ID: library.filter

@@ -1,0 +1,44 @@
+Window: "Verbemo", App: Verbemo Import693.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide settings categories, Value: 1, ID: workspace.toggle-library
+	2 button Back to meetings, ID: journal.breadcrumb
+	3 text /  About Verbemo
+	4 button New recording, ID: journal.new-recording
+	5 button Import, ID: journal.import
+	6 button Settings, ID: journal.settings
+	7 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		8 radio button General, Value: 0, ID: settings.tab.general
+		9 radio button Recording, Value: 0, ID: settings.tab.recording
+		10 radio button Transcription, Value: 0, ID: settings.tab.transcription
+		11 radio button Summaries, Value: 0, ID: settings.tab.summary
+		12 radio button Calendar, Value: 0, ID: settings.tab.calendar
+		13 radio button Files & models, Value: 0, ID: settings.tab.storage
+		14 radio button MCP, Value: 0, ID: settings.tab.mcp
+		15 radio button About Verbemo, Value: 1, ID: settings.tab.about
+		16 splitter (disabled, settable, float) 248
+		17 scroll area
+			18 image Verbemo
+			19 text Verbemo Version 0.17.2 (694) Records microphone and call audio, transcribes live and after meetings, separates speakers, and creates summaries with decisions and tasks. Keeps recordings and results on your computer, with a choice of local models or cloud services.
+			20 button Source code on GitHub ↗, ID: https://github.com/ekho/verbemo
+			21 button Support ↗, ID: https://github.com/ekho/verbemo/issues
+			22 button Origin and licenses ↗, ID: https://github.com/ekho/verbemo/blob/master/docs/origin.md
+	23 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	24 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	25 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	26 button (disabled) Not recording, ID: activity.recording
+	27 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	28 close button
+	29 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	30 minimize button
+31 menu bar
+	32 Verbemo Import693
+	33 File
+	34 Edit
+	35 Window
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

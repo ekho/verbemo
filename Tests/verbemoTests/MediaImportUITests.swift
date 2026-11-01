@@ -5,7 +5,45 @@ import Testing
 @testable import verbemo
 
 struct MediaImportUITests {
-    @Test("The sidebar and status menu use the same Import command", .freshHome)
+    @Test("An import result keeps a compact height in an empty library", .freshHome)
+    @MainActor
+    func finishedMessageDoesNotStretchWorkspace() throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        app.finishImport(.init())
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let progress = try #require(app.panel.contentView?.allDescendants.first { $0 is MediaImportStatusView })
+        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        #expect(bar.allDescendants.contains { $0 === progress })
+        #expect(progress.frame.height <= 44)
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(progress.frame.height <= 44)
+    }
+
+    @Test("A finished import message stays inside a narrow row and has no progress bar", .freshHome)
+    @MainActor
+    func finishedMessageFitsNarrowRow() throws {
+        let view = MediaImportStatusView(frame: .init(x: 0, y: 0, width: 350, height: 50))
+        var result = MediaImportCoordinator.Result()
+        result.failures = [.init(source: URL(fileURLWithPath: "/tmp/long-meeting-name.wav"),
+                                 message: String(repeating: "Could not open this audio file.\n", count: 8))]
+        view.finish(result)
+        view.layoutSubtreeIfNeeded()
+        let label = try #require(view.arrangedSubviews.compactMap { $0 as? NSTextField }.first)
+        let bar = try #require(view.arrangedSubviews.compactMap { $0 as? NSProgressIndicator }.first)
+        #expect(label.frame.height <= 22)
+        #expect(label.frame.minX >= 0 && label.frame.maxX <= view.bounds.width)
+        #expect(!label.stringValue.contains("\n"))
+        #expect(label.toolTip?.contains(result.failures[0].message) == true)
+        #expect(bar.isHidden)
+    }
+    @Test("The header and status menu use the same Import command", .freshHome)
     @MainActor
     func importEntryPoints() throws {
         let app = ApplicationWindow()
@@ -21,7 +59,7 @@ struct MediaImportUITests {
         #expect(requests == 2)
     }
 
-    @Test("Live import progress finishes in the main window and hides cancellation", .freshHome)
+    @Test("Live import progress finishes in the status row with a dismiss action", .freshHome)
     @MainActor
     func importProgressCompletesInPlace() throws {
         let app = ApplicationWindow()
@@ -39,11 +77,19 @@ struct MediaImportUITests {
         app.onCancelImport = { requests += 1 }
         cancel.performClick(nil)
         #expect(requests == 1)
+        #expect(!cancel.isEnabled)
+        app.updateImport(.init(source: URL(fileURLWithPath: "/tmp/interview.mov"),
+            index: 1, total: 1, stage: .normalizing, fraction: 0.5))
+        #expect(progress.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Cancelling import…" })
         app.finishImport(.init())
-        #expect(cancel.isHidden)
+        #expect(cancel.isEnabled)
+        #expect(!cancel.isHidden && cancel.image != nil && cancel.title.isEmpty)
         #expect(progress.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Imported 0" })
         #expect(progress.window === panel)
         #expect(!panel.isVisible, "Progress must not reopen the window")
+        cancel.performClick(nil)
+        #expect(progress.isHidden)
+        #expect(requests == 1, "Dismissal must not cancel another import")
     }
 
     @Test("Import progress names the file and its place in a multi-file queue")
@@ -56,6 +102,7 @@ struct MediaImportUITests {
         #expect(copy.label.contains("2 of 4"))
         #expect(copy.label.contains("interview.mov"))
         #expect(copy.fraction == 0.375)
+        #expect(copy.progressLabel.hasSuffix("37%"))
     }
 
     @Test("Import completion distinguishes successes, duplicates and failures")

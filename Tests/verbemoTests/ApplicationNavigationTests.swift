@@ -25,6 +25,112 @@ struct ApplicationNavigationTests {
 @Suite(.serialized)
 @MainActor
 struct ApplicationWindowTests {
+    @Test(.freshHome(config: #"{"calendar":false}"#), arguments: [760, 1340])
+    func meetingCommandsBelongToTheMeetingAndDetailsCanBeClosed(width: Int) async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: SessionFixture.make(meta: ["title": String(repeating: "Длинное название учебной встречи ", count: 4)]), to: root.appendingPathComponent("fixture"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(.init(width: width, height: 600))
+        app.show()
+        let content = try #require(app.panel.contentView)
+        for _ in 0..<4 { content.layoutSubtreeIfNeeded(); await Task.yield() }
+        let document = try #require(content.allDescendants.first { $0.identifier?.rawValue == "meeting.document" })
+        let title = try #require(document.allDescendants.first { $0.identifier?.rawValue == "meeting.title" })
+        let titleRect = title.convert(title.bounds, to: document)
+        let commands = library.toolbarContent.allDescendants.compactMap { $0 as? NSButton }
+        #expect(commands.count == 3)
+        for button in commands {
+            #expect(button.isDescendant(of: document), "Meeting commands must stay in the meeting, not the global toolbar")
+            let rect = button.convert(button.bounds, to: document)
+            #expect(rect.minX >= 0 && rect.maxX <= document.bounds.maxX + 1)
+            #expect(titleRect.width > 100 && titleRect.maxX <= rect.minX - 6, "Long meeting names must not collide with commands")
+            #expect(button.bounds.width >= button.fittingSize.width - 1)
+        }
+        let toggle = try #require(commands.first { $0.identifier?.rawValue == "meeting.inspector" })
+        let inspector = try #require(content.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        if inspector.isHidden { #expect(NSApp.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)) }
+        content.layoutSubtreeIfNeeded()
+        let close = try #require(inspector.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.inspector-close" })
+        #expect(!close.isHiddenOrHasHiddenAncestor)
+        #expect(NSApp.sendAction(try #require(close.action), to: close.target, from: close))
+        content.layoutSubtreeIfNeeded()
+        #expect(inspector.isHidden)
+        #expect(!toggle.isHiddenOrHasHiddenAncestor)
+        #expect(app.panel.firstResponder === toggle)
+        app.navigate(.general)
+        #expect(library.toolbarContent.window == nil)
+        #expect(app.primaryActionsAreVisible)
+        app.navigate(.allMeetings)
+        content.layoutSubtreeIfNeeded()
+        #expect(library.toolbarContent.isDescendant(of: document))
+    }
+
+    @Test(.freshHome(config: #"{"calendar":false}"#), .speaking(.russian), arguments: [760, 1340])
+    func primaryActionsStayAboveBothPanesWithLibraryShownOrHidden(width: Int) async throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: Home.current.url.appendingPathComponent("meetings"), hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(.init(width: width, height: 600))
+        app.show()
+        let root = try #require(app.panel.contentView)
+        let split = try #require(root.allDescendants.first { $0.identifier?.rawValue == "workspace.library-split" } as? NSSplitView)
+        let toggle = try #require(root.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "workspace.toggle-library" })
+        for destination in [ApplicationNavigationState.Destination.allMeetings, .general, .mcp, .about] {
+            app.navigate(destination)
+            for collapsed in [false, true, false] {
+                if split.arrangedSubviews[0].isHidden != collapsed {
+                    #expect(NSApp.sendAction(try #require(toggle.action), to: toggle.target, from: toggle))
+                }
+                for _ in 0..<4 { root.layoutSubtreeIfNeeded(); await Task.yield() }
+                let splitRect = split.convert(split.bounds, to: root)
+                for id in ["journal.new-recording", "journal.import", "journal.settings"] {
+                    let buttons = root.allDescendants.compactMap { $0 as? NSButton }.filter { $0.identifier?.rawValue == id && !$0.isHiddenOrHasHiddenAncestor }
+                    #expect(buttons.count == 1, "One visible command: \(id), \(destination), collapsed \(collapsed)")
+                    let button = try #require(buttons.first)
+                    let rect = button.convert(button.bounds, to: root)
+                    #expect(rect.minY >= splitRect.maxY - 1, "\(id) belongs to the common header above both panes")
+                    #expect(rect.minX >= 0 && rect.maxX <= root.bounds.maxX + 1)
+                    #expect(button.bounds.width >= button.fittingSize.width - 1, "The action label must remain readable at width \(width)")
+                }
+            }
+        }
+    }
+
+    @Test(.freshHome(config: #"{"calendar":false}"#))
+    func headerCommandsKeepTheirActionsAndRecordingGuard() throws {
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        func command(_ id: String) throws -> NSButton {
+            try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == id && !$0.isHiddenOrHasHiddenAncestor })
+        }
+        func act(_ button: NSButton) throws {
+            #expect(NSApp.sendAction(try #require(button.action), to: button.target, from: button))
+        }
+        var imports = 0, recordings = 0
+        app.onChooseImport = { imports += 1 }
+        app.onStartRecording = { _, _ in recordings += 1 }
+        try act(command("journal.import"))
+        #expect(imports == 1)
+        try act(command("journal.settings"))
+        #expect(app.navigation.destination == .general)
+        try act(command("journal.new-recording"))
+        let sheet = try #require(app.recordingSheet)
+        #expect(sheet.panel.sheetParent === app.panel)
+        sheet.cancel()
+        #expect(app.recordingSheet == nil && recordings == 0)
+        app.update(state: .recording, elapsed: "00:01")
+        #expect(try !command("journal.new-recording").isEnabled)
+        app.update(state: .paused, elapsed: "00:01")
+        #expect(try !command("journal.new-recording").isEnabled)
+        app.update(state: .idle, elapsed: nil)
+        #expect(try command("journal.new-recording").isEnabled)
+    }
+
     @Test(.freshHome, .speaking(.russian)) func changingPagesKeepsNarrowWindowSize() async {
         let app = ApplicationWindow()
         defer { app.hide() }
@@ -120,13 +226,13 @@ struct ApplicationWindowTests {
         }
     }
 
-    @Test(.freshHome) func destinationsShareOneWindowAndAboutHasNoToolbar() {
+    @Test(.freshHome) func destinationsShareOneWindowAndKeepGlobalActions() {
         let app = ApplicationWindow()
         let panel = app.panel
         for destination in ApplicationNavigationState.Destination.allCases {
             app.navigate(destination)
             #expect(app.panel === panel)
-            #expect(app.toolbarIsHidden == (destination == .about))
+            #expect(!app.toolbarIsHidden)
             #expect(app.primaryActionsAreVisible)
         }
         app.update(state: .recording, elapsed: "04:32")

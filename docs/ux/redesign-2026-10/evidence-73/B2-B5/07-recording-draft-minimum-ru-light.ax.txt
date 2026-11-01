@@ -1,0 +1,17 @@
+Window: "Новая запись", App: Verbemo Studio Debug.
+0 sheet Secondary Actions: Raise
+	1 text Новая запись Во время записи можно закрыть окно. Источники звука определяются настройками записи.
+	2 text field (settable) Description: Название встречи, Value: Запись 01.11.2026 12:41, ID: recording.new-title
+	3 button Начать, Description: Screen Recording, ID: recording.start
+	4 button Отмена, Description: Close, ID: recording.cancel
+	5 button Description: Настройки записи, ID: recording.settings
+6 menu bar
+	7 Файл
+	8 Правка
+	9 Окно
+
+Selected text: ```
+Запись 01.11.2026 12:41
+```
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

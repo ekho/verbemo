@@ -160,7 +160,7 @@ struct ConfigFileTests {
         }
     }
 
-    @Test("The menu and live transcript page say it in one line", .freshHome(config: broken))
+    @Test("The menu and bottom status row say it in one line", .freshHome(config: broken))
     @MainActor
     func menuAndLivePageSaySo() throws {
         let headline = try #require(Config.problems().first?.headline)
@@ -171,9 +171,11 @@ struct ConfigFileTests {
         menuBar.updateConfigProblem(nil)
         #expect(!menuBar.offeredItemTitles.contains { $0.contains(headline) })
 
-        let window = LiveTranscriptContent()
+        let window = ApplicationWindow()
+        defer { _ = window.stopForTermination() }
         window.updateConfigProblem(headline)
-        let shown = window.contentView.allDescendants
+        let bar = try #require(window.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        let shown = bar.allDescendants
             .compactMap { $0 as? NSTextField }
             .filter { !$0.isHiddenOrHasHiddenAncestor }
             .map(\.stringValue)

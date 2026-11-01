@@ -1,0 +1,187 @@
+{
+  "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+  "build": "660",
+  "version": "0.17.2",
+  "status": "B1 verified; Mac73 B2-B5 still pending",
+  "full_tests": {
+    "command": "swift test --no-parallel",
+    "passed": 1370,
+    "suites": 186,
+    "seconds": 268.607,
+    "skipped_tests": 23,
+    "skipped_suites": 6,
+    "raw_log_sha256": "6d92bdea7b18e64208829389c963c881148fcc89d608c51be83db4f228c3441d",
+    "summary_sha256": "96419c247aab0b168e2c6132afc0d2a8d8ed38aba80100daaea21f9b43732ffd"
+  },
+  "source_files": {
+    "Sources/verbemo/UI/MarkdownPreview.swift": "7565d8a4b0291b1d022b55e4c40eddbb4ddabac71ac8b9acb07e2e7353e1e712",
+    "Sources/verbemo/UI/MeetingLibraryController.swift": "b49662d24ecd8f355487b00e25a8b8c683847057916d57ecb2b687e47a940d7b",
+    "Sources/verbemo/UI/MeetingLibrarySearch.swift": "882e958511a18af4066ffef41cef5d91a39c736b22ec6d119641c3ebf4762a6d",
+    "Sources/verbemo/UI/MeetingListView.swift": "cb13c0093727a38476f6cf2ca76501489b4e7be7a8e431d70615bd8ce28c3997",
+    "Tests/verbemoTests/LibrarySearchIntegrationTests.swift": "7db84c0b9d60a7fef5b1e1109e0a6492cceb4d3d1cf8af34a3cf01c5f0ae95a4",
+    "Tests/verbemoTests/MeetingLibrarySearchTests.swift": "070585002744be72ca640f6751193aa92a30bcaeb705d5b9d44b3ec6ef64260c"
+  },
+  "gui": {
+    "meetings": 205,
+    "files": 430,
+    "artifact_contents_unchanged": true,
+    "artifact_hashes_sha256": "6238dce4ccff2577fa3e3eea36d9901c24a13e512cf6cd4d4e402e4e5d1ed33c",
+    "checks_sha256": "9d6d89031034ad2bad8cbb939009c2ae683e3fc2fa2c91e235fe27fa5785fa1c",
+    "host_macos": "26.7.1",
+    "debug_and_universal_source_identical": true,
+    "images": [
+      {
+        "file": "02-debug-ru-light-results.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          2680,
+          1696
+        ],
+        "sha256": "9c49038b6479dd996fd7b08f8c62aa506a6bc01f45fd82f4793554a6dd25f9fa",
+        "accessibility_sha256": "54f491ee6d7ccbed4feca697e5dd79db16f1dc7c8da311e2b06ff9c5285deb58"
+      },
+      {
+        "file": "03-debug-transcript-hit.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          2680,
+          1696
+        ],
+        "sha256": "220db1a58f5925a9e95c90206aeee5e3f06f39869ca7409e98da21a08207f18a",
+        "accessibility_sha256": "3060d716dc32abd4cb264a7635468cc163af6c2852dd50dfb3457fae2ee0638d"
+      },
+      {
+        "file": "04-debug-summary-hit.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          2680,
+          1696
+        ],
+        "sha256": "0917b2cd9cd3d07d7ea0092235c97d96d0ca5f51e405b6c288fe7dc5453a425c",
+        "accessibility_sha256": "9bb625f3786439bf4858d760cd408ade82eccb604d60b6413041c2cf7a43feb7"
+      },
+      {
+        "file": "05-debug-wide-sidebar220.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          2680,
+          1256
+        ],
+        "sha256": "314c3c67a5183e505191aef58a85df5cef45319209939efd61a3a522d390517a",
+        "accessibility_sha256": "34081116e413618c7d1364e98a431a62fc38b63d58ea9119337f0edb6eb89b26"
+      },
+      {
+        "file": "06-debug-minimum-summary.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          1520,
+          1256
+        ],
+        "sha256": "5a0605dcf49762d462da413fd8d493dc374e83973a458ce859a453d058717bc9",
+        "accessibility_sha256": "34081116e413618c7d1364e98a431a62fc38b63d58ea9119337f0edb6eb89b26"
+      },
+      {
+        "file": "07-debug-no-matches.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          1520,
+          1256
+        ],
+        "sha256": "2cd5c525e11e28f4f887072c69a6038912ef25115a6cf18b273064c8fb3a847d",
+        "accessibility_sha256": "cd8cf296921357f8b2623f9e8e935375596f353599c1ba43985d01029bf8ee76"
+      },
+      {
+        "file": "08-debug-query-filter-empty.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          1520,
+          1256
+        ],
+        "sha256": "1607ea7d5ba1edd0d6c71cbdfd26558385a025a8636aa50b7187cc0bab9141f0",
+        "accessibility_sha256": "455d122dbe2c3f176a4afac9c84189fc71fde3baaecc2c3be028509472998540"
+      },
+      {
+        "file": "09-debug-current-hit-after-archive.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          1520,
+          1256
+        ],
+        "sha256": "917df9900b6aa644546036ff80b18c80f473838b3bc384840073e2aa150c0be2",
+        "accessibility_sha256": "d9a0078a37751718dd5ddcf2623d56a6881fd36f7881c2cf572dbff9f54e2c45"
+      },
+      {
+        "file": "10-debug-ru-dark-minimum.jpg",
+        "kind": "debug arm64 candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          1520,
+          1256
+        ],
+        "sha256": "a98fd50ebab9b60985ba50a14937363ca1fd81217f7f528f500ce8452f2130f6",
+        "accessibility_sha256": "d9a0078a37751718dd5ddcf2623d56a6881fd36f7881c2cf572dbff9f54e2c45"
+      },
+      {
+        "file": "11-release-en-dark-transcript.jpg",
+        "kind": "universal release candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          2680,
+          1256
+        ],
+        "sha256": "3f94087e4b64d7b15579561196c83922737ef4dbf471d269d4ef3a536f5f7547",
+        "accessibility_sha256": "156a72ccb3826c1bb28ae2eeda9d7d7d132991e4094548981bb5df00de80a23c"
+      },
+      {
+        "file": "12-release-en-dark-summary-minimum.jpg",
+        "kind": "universal release candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          1520,
+          1256
+        ],
+        "sha256": "662f37f7c0f13fdacc7d13910dbcd15b8cca1ec2dee2037658a647ed276ef9a0",
+        "accessibility_sha256": "dde348a76bfd2a28435e184c95388ba8f94af1ba54b66a41e0a6eb0d646cda25"
+      },
+      {
+        "file": "13-release-en-no-matches.jpg",
+        "kind": "universal release candidate",
+        "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+        "pixels": [
+          1520,
+          1256
+        ],
+        "sha256": "a3405429b6402884668141d55c6087d62478f70ea401daed8c40821ae3bde10d",
+        "accessibility_sha256": "9666af352afe7ae470f66fc250306b6563bc30ad7d60f5431a23a4fb62efb943"
+      }
+    ]
+  },
+  "runtime_unverified": [
+    "Windows75-77",
+    "macOS14.2 runtime",
+    "Intel runtime",
+    "VoiceOver and full keyboard-only workflow",
+    "system text150/200percent",
+    "system contrast and ReduceMotion",
+    "physical audio capture/playback",
+    "real provider/model inference",
+    "installer/update/release"
+  ],
+  "packaging": {
+    "architectures": [
+      "x86_64",
+      "arm64"
+    ],
+    "minimum_macos": "14.2",
+    "ad_hoc_signature_verified": true,
+    "build_log_sha256": "51039b7205edbb8da5b2382df04833cc86aab29fcd28dc25573d74c5b36831da"
+  }
+}

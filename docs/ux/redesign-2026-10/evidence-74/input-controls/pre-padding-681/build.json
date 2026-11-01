@@ -1,0 +1,15 @@
+{
+  "source_commit": "49a1af82a959fefe90a28ea31f93ef755dad41f5",
+  "version": "0.17.2",
+  "build": "681",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/Verbemo Studio Review.app",
+  "bundle_id": "name.ekho.verbemo.ux74.inputs",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home",
+  "recordings": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/recordings",
+  "executable_sha256": "bd543ed68a2f0d9c5eb2e5477a54845908be1a065a42d7911ef68363e29547e5",
+  "architectures": [
+    "arm64"
+  ],
+  "kind": "arm64 Debug ad-hoc UI review; existing packaged assets/helpers",
+  "runtime": "macOS26.7.1/arm64"
+}

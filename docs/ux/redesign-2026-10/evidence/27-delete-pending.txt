@@ -1,0 +1,89 @@
+Window: "Verbemo", App: Verbemo UX69.
+0 standard window Verbemo, Secondary Actions: Raise
+  1 image
+  2 text verbemo
+  3 button ●  New recording, ID: journal.new-recording
+  4 button Import, Description: end, ID: journal.import
+  5 search text field (settable) Find a meeting
+    6 button Find a meeting
+  7 text MEETINGS
+  8 pop up button Description: Filter meetings, Value: All
+  9 scroll area
+    10 table
+      11 row (selected)
+        12 cell (selected)
+          13 text UX69 Импорт — отложенная обработка 29.10.2026 12:03 · 1 min
+      14 row (selectable)
+        15 cell
+          16 text UX69 Импорт — ошибка обработки 29.10.2026 12:02 · 1 min
+          17 image Synthetic UX69: model unavailable
+            18 image plain text document
+            19 image Error
+      20 row (selectable)
+        21 cell
+          22 text UX69 Атлас — длинная встреча 29.10.2026 12:01 · 30 min
+      23 row (selectable)
+        24 cell
+          25 text UX69 Атлас — планирование 29.10.2026 12:00 · 3 min
+  26 button Settings, Value: 0, ID: journal.settings
+  27 button Meetings, ID: journal.breadcrumb
+  28 button Copy, Description: copy, ID: meeting.copy
+  29 button Meeting actions
+  30 button Description: Show or hide meeting details, Value: 1, ID: meeting.inspector
+  31 text 29.10.2026 12:03 · 1 min UX69 Импорт — отложенная обработка
+  32 button Description: Play meeting, ID: playback.play
+  33 slider (settable, float) Description: Meeting position, Value: 0, Details: 00:00, ID: playback.timeline
+    34 value indicator (settable, float) 0
+  35 text 00:00 / 01:00
+  36 image volume high
+  37 slider (settable, float) Description: Playback volume, Value: 1
+    38 value indicator (settable, float) 1
+  39 pop up button Description: Playback speed, Value: 1×
+  40 radio button Summary, Value: 0, ID: meeting.result.summary
+  41 radio button Transcript, Value: 1, ID: meeting.result.transcript
+  42 radio button Participants, Value: 0, ID: meeting.result.participants
+  43 scroll area
+    44 text entry area No transcript yet.
+  45 scroll area
+    46 text MEETING DETAILS CALENDAR
+    47 button Choose event…, Description: Choose calendar event, ID: calendar.choose
+    48 text PROCESSING
+    49 image Recording saved
+      50 image microphone
+      51 image selected
+    52 text Recording saved
+    53 image Summary was not created
+      54 image plain text document
+    55 text Summary was not created
+    56 button (disabled) Description: Transcribe again, Help: Enable transcription in settings., ID: meeting.retranscribe
+    57 image Summary was not created
+      58 image
+    59 text Summary was not created
+    60 button (disabled) Description: Generate summary, Help: A finished transcript is required., ID: meeting.generate-summary
+    61 text PROCESSING SETTINGS Transcription: Disabled
+Diarization: Disabled
+Summary: Disabled
+    62 button Settings →, ID: meeting.processing-settings
+  63 text Meeting deleted
+  64 button Undo
+  65 button Auto-record, Description: Auto-record off, ID: activity.automatic
+  66 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+  67 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+  68 button (disabled) Not recording, ID: activity.recording
+  69 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+  70 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+  71 close button
+  72 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+  73 minimize button
+74 menu bar
+  75 Verbemo UX69
+  76 File
+  77 Edit
+  78 Window
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

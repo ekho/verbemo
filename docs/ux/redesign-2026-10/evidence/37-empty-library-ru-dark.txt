@@ -1,0 +1,42 @@
+Window: "Verbemo", App: Verbemo UX69.
+0 standard window Verbemo, Secondary Actions: Raise
+  1 image
+  2 text verbemo
+  3 button ●  Новая запись, ID: journal.new-recording
+  4 button Импортировать, Description: end, ID: journal.import
+  5 search text field (settable) Найти встречу
+    6 button Найти встречу
+  7 text ВСТРЕЧИ
+  8 pop up button Description: Фильтр встреч, Value: Все
+  9 text Value: Встреч пока нет. Начните запись или импортируйте аудиофайл., ID: meeting-list.empty
+  10 button Настройки, Value: 0, ID: journal.settings
+  11 button Встречи, ID: journal.breadcrumb
+  12 button Копировать, Description: copy, ID: meeting.copy
+  13 button (disabled) Действия со встречей
+  14 button Description: Показать или скрыть детали встречи, Value: 1, ID: meeting.inspector
+  15 text Записей пока нет
+  16 scroll area
+    17 text ДЕТАЛИ ВСТРЕЧИ КАЛЕНДАРЬ ОБРАБОТКА НАСТРОЙКИ ОБРАБОТКИ Расшифровка: Отключена
+Диаризация: Отключена
+Сводка: Отключена
+    18 button Настройки →, ID: meeting.processing-settings
+  19 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+  20 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+  21 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+  22 button (disabled) Нет записи, ID: activity.recording
+  23 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+  24 close button
+  25 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+  26 minimize button
+27 menu bar
+  28 Verbemo UX69
+  29 Файл
+  30 Правка
+  31 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

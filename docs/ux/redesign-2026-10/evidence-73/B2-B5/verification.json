@@ -1,0 +1,201 @@
+{
+  "status": "macOS #73 implementation verified; final user/platform acceptance74 pending",
+  "product_source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+  "latest_targeted_verification": "44 tests /5 suites passed after About review fix",
+  "gui_preflight_source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+  "gui_preflight_build": "667",
+  "full_suite_on_current_source": true,
+  "universal_build_on_current_source": true,
+  "fresh_final_review": true,
+  "screenshots": [
+    {
+      "image": "01-settings-general-wide-ru-light.jpg",
+      "sha256": "f2469c36442c934ce588e068b2e81dfb2a6de6577172d1860850eb4fbafdbb72",
+      "width": 2680,
+      "height": 1696,
+      "ax": "01-settings-general-wide-ru-light.ax.txt",
+      "ax_sha256": "853b7c3837ff709a5b573061217c322697c8d9fc100eca7b4e53d5657b8ecfa9",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "02-settings-recording-wide-ru-light.jpg",
+      "sha256": "5d9cb7772464ea724092508345290c0a3538f1681c0f84e39776ef7065e5d50d",
+      "width": 2680,
+      "height": 1696,
+      "ax": "02-settings-recording-wide-ru-light.ax.txt",
+      "ax_sha256": "b36623281d55147b8f3349272144bbdbd804472ae672c1207d3d8ba77863a2ee",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "02-settings-summary-wide-ru-light.jpg",
+      "sha256": "e3056a2adecc7e3fa1b91633a56e3a2ec0f1ae1cf0f368a04100177d867f5cbe",
+      "width": 2680,
+      "height": 1696,
+      "ax": "02-settings-summary-wide-ru-light.ax.txt",
+      "ax_sha256": "cef62ceb5cea5e1c1e907bd7a37f15d9f856b690740256a0664979b7cec8f2a7",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "02-settings-transcription-wide-ru-light.jpg",
+      "sha256": "18f2d1002a8487192de8d1c94d2a204c6c5c3a303da7d09fcea992ffade366db",
+      "width": 2680,
+      "height": 1696,
+      "ax": "02-settings-transcription-wide-ru-light.ax.txt",
+      "ax_sha256": "4b646d16566f955adc78004ea571fe71ad828c61e892e19715f7453ccdd81941",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "03-settings-about-wide-ru-light.jpg",
+      "sha256": "ed29a6a3c267672718a5c0c113a368d86174d43a531110cf66d4e7363d9f913d",
+      "width": 2680,
+      "height": 1696,
+      "ax": "03-settings-about-wide-ru-light.ax.txt",
+      "ax_sha256": "138cb0cb0c76276aa86010bb2ae87d8594c658fc81d4684e729ddd33ee731ad7",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "03-settings-calendar-wide-ru-light.jpg",
+      "sha256": "72ed4d74401bfb7d1882e91a814214085e55bc0cd66bd257b8a5b8e10a4467d9",
+      "width": 2680,
+      "height": 1696,
+      "ax": "03-settings-calendar-wide-ru-light.ax.txt",
+      "ax_sha256": "6a1a89f29ded914b7297d8033dcde5c5e843b0462d6b41f9d6d0c40e885be246",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "03-settings-mcp-wide-ru-light.jpg",
+      "sha256": "a26256912ada337fdd59479b34f5ab2a90970d374860b42f9f3b8f6a20f0d1a8",
+      "width": 2680,
+      "height": 1696,
+      "ax": "03-settings-mcp-wide-ru-light.ax.txt",
+      "ax_sha256": "a3eddf1d321bc4ac053a70df6044f439a776d2c43b89be3e4c3331b64db48ca3",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "03-settings-storage-wide-ru-light.jpg",
+      "sha256": "575004d8b905497ddff1ae5c05826278e3c856cb45c492a196a1513c2b41ba51",
+      "width": 2680,
+      "height": 1696,
+      "ax": "03-settings-storage-wide-ru-light.ax.txt",
+      "ax_sha256": "cfe092c346f443af8a6d102a4039997bedcf51f371e72e6739bb39a9372c1985",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "04-settings-overview-minimum-ru-light.jpg",
+      "sha256": "98ceaac75b8c3c91aef897bd9bdbcc0fd9afb3b925d87b51fb0336d0613018c6",
+      "width": 1520,
+      "height": 1256,
+      "ax": "04-settings-overview-minimum-ru-light.ax.txt",
+      "ax_sha256": "3972856fad87052f05add8e1335465836255a2316d458211c796bc7e198ed0ee",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "05-settings-mcp-minimum-ru-light.jpg",
+      "sha256": "c635cc5b95c32aaadf373ba54a2ef6397f6cc42e9ee0e9b4eb7c6e22543600d7",
+      "width": 1520,
+      "height": 1256,
+      "ax": "05-settings-mcp-minimum-ru-light.ax.txt",
+      "ax_sha256": "303827749347b4a667fff18f1ed7b2e98e54a8b7ffc22c6c385db358eef15d89",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "06-settings-general-minimum-ru-light.jpg",
+      "sha256": "aff376c31dc84544ee3cdd2bdf23c36de0e7df5105a8e2810dbc415e276ae1e8",
+      "width": 1520,
+      "height": 1256,
+      "ax": "06-settings-general-minimum-ru-light.ax.txt",
+      "ax_sha256": "44b55e5493193c31693dfd5a869eb48e308de17424e972dbbe2b4f53b1b37831",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "07-recording-draft-minimum-ru-light.jpg",
+      "sha256": "431e8ae4d5c1b919c4219d2a889ff8b76942c78d6538e1f05305b56c7171dc61",
+      "width": 1120,
+      "height": 444,
+      "ax": "07-recording-draft-minimum-ru-light.ax.txt",
+      "ax_sha256": "06519bd772eabeb6431c08c6a65cb1e1360db7d5f3fac815717d6dcfa431c99a",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "08-edited-draft-before-cancel.jpg",
+      "sha256": "f6a33373e221a58ba19117417ac7583acbf078f383af0095b5a3a34c6c17a509",
+      "width": 1120,
+      "height": 444,
+      "ax": "08-edited-draft-before-cancel.ax.txt",
+      "ax_sha256": "4086c85fb92e79363f825369939078f9cf5147810c818808c6f5ccf79d908bb6",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "09-synthetic-import-complete-minimum-ru-light.jpg",
+      "sha256": "6af2cf63439e496010f5b53384bd446be6957806af5a97e03fe2824900c6c9ff",
+      "width": 1520,
+      "height": 1256,
+      "ax": "09-synthetic-import-complete-minimum-ru-light.ax.txt",
+      "ax_sha256": "ea69936dec008f7587016c8606badef8d18c4f111c8d95a794c14531058f2608",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "10-result-failure-visible-minimum-ru-light.jpg",
+      "sha256": "ac01645733953079a36e88f81bdd9c1808760f03c777ef2b755790ae7208e6e8",
+      "width": 1520,
+      "height": 1256,
+      "ax": "10-result-failure-visible-minimum-ru-light.ax.txt",
+      "ax_sha256": "e6b05c5227afa168d2c843ce0bbd12886fe9caf3278ce46320b509200d50d669",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    },
+    {
+      "image": "11-result-failure-dismissed-minimum-ru-light.jpg",
+      "sha256": "f19c2ce6b624f2eb80167d2cd1be961ad8263d5eb767844f3b35f8254395cc9e",
+      "width": 1520,
+      "height": 1256,
+      "ax": "11-result-failure-dismissed-minimum-ru-light.ax.txt",
+      "ax_sha256": "ef58ad0262817bcf765fddb42e6e225a7e07534a0ada1ce9b448cb54fcea1ab1",
+      "source_commit": "a8d4d75d09478d88d5891f276e3059510f4df38f",
+      "build": "667",
+      "kind": "Debug arm64 preflight, before GUI fixes"
+    }
+  ],
+  "artifacts": {
+    "original_files": 430,
+    "unchanged_original_files": 430,
+    "changed_or_missing_original_files": [],
+    "added_synthetic_import_files": [
+      "2026.11.01-1245 UX73 synthetic silence/meta.json",
+      "2026.11.01-1245 UX73 synthetic silence/source.m4a",
+      "2026.11.01-1245 UX73 synthetic silence/transcribe.log"
+    ],
+    "current_files": 433,
+    "current_meetings": 206
+  },
+  "final_checkpoint": "final/verification.json"
+}

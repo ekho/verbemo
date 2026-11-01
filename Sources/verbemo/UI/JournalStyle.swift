@@ -3,24 +3,16 @@ import AppKit
 @MainActor
 enum JournalStyle {
     static let sidebarWidth: CGFloat = 248
-    static let paper = color("paper", light: 0xfffefa, dark: 0x242a25)
-    static let sidebar = color("sidebar", light: 0xeeeee7, dark: 0x1d241e)
-    static let inset = color("inset", light: 0xf5f4ee, dark: 0x202620)
-    static let ink = color("ink", light: 0x272e27, dark: 0xeeeede)
-    static let muted = color("muted", light: 0x59665c, dark: 0xa8b1a3)
-    static let accent = color("accent", light: 0x285846, dark: 0xaad2ad)
-    static let selection = color("selection", light: 0xdfe9df, dark: 0x354739)
-    static let line = color("line", light: 0xdedfd5, dark: 0x414a40)
+    static let paper = StudioStyle.paper
+    static let sidebar = StudioStyle.sidebar
+    static let inset = StudioStyle.inset
+    static let ink = StudioStyle.ink
+    static let muted = StudioStyle.muted
+    static let accent = StudioStyle.accent
+    static let selection = StudioStyle.selection
+    static let line = StudioStyle.line
     static func titleFont(_ size: CGFloat = 34) -> NSFont {
         .systemFont(ofSize: size, weight: .bold)
-    }
-    private static func color(_ name: String, light: UInt32, dark: UInt32) -> NSColor {
-        NSColor(name: NSColor.Name("journal.\(name)")) { appearance in
-            let rgb = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-            return NSColor(srgbRed: CGFloat((rgb >> 16) & 255) / 255,
-                           green: CGFloat((rgb >> 8) & 255) / 255,
-                           blue: CGFloat(rgb & 255) / 255, alpha: 1)
-        }
     }
     static func caption(_ text: String) -> NSTextField {
         let field = NSTextField(labelWithString: text)
@@ -32,6 +24,9 @@ enum JournalStyle {
 
 @MainActor
 final class JournalTabButton: NSButton {
+    var selectedTint = JournalStyle.ink
+    var unselectedTint = JournalStyle.muted
+    var markerTint = JournalStyle.accent
     init(title: String, symbol: String, target: AnyObject?, action: Selector?) {
         super.init(frame: .zero)
         self.title = title
@@ -53,13 +48,13 @@ final class JournalTabButton: NSButton {
     func select(_ selected: Bool) {
         state = selected ? .on : .off
         font = .systemFont(ofSize: 13, weight: selected ? .semibold : .regular)
-        contentTintColor = selected ? JournalStyle.ink : JournalStyle.muted
+        contentTintColor = selected ? selectedTint : unselectedTint
         needsDisplay = true
     }
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         if state == .on {
-            JournalStyle.accent.setFill()
+            markerTint.setFill()
             NSBezierPath(roundedRect: NSRect(x: 0, y: isFlipped ? bounds.height - 3 : 0,
                                             width: bounds.width, height: 3), xRadius: 1.5, yRadius: 1.5).fill()
         }

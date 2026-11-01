@@ -1,0 +1,42 @@
+Window: "Verbemo", App: Verbemo Final Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть разделы настроек, Value: 1, ID: workspace.toggle-library
+	2 button К встречам, ID: journal.breadcrumb
+	3 text /  MCP
+	4 button Новая запись, ID: journal.new-recording
+	5 button Импорт, ID: journal.import
+	6 button Настройки, ID: journal.settings
+	7 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		8 radio button Общие, Value: 0, ID: settings.tab.general
+		9 radio button Запись, Value: 0, ID: settings.tab.recording
+		10 radio button Расшифровка, Value: 0, ID: settings.tab.transcription
+		11 radio button Сводки, Value: 0, ID: settings.tab.summary
+		12 radio button Календарь, Value: 0, ID: settings.tab.calendar
+		13 radio button Файлы и модели, Value: 0, ID: settings.tab.storage
+		14 radio button MCP, Value: 1, ID: settings.tab.mcp
+		15 radio button О Verbemo, Value: 0, ID: settings.tab.about
+		16 splitter (disabled, settable, float) 248
+		17 scroll area
+			18 text ID: settings.heading, Value: MCP Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются. MCP
+			19 switch Description: MCP, Value: 0, ID: mcp.enabled
+	20 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	21 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	22 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	23 button (disabled) Нет записи, ID: activity.recording
+	24 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	25 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	26 close button
+	27 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	28 minimize button
+29 menu bar
+	30 Verbemo Final Review
+	31 Файл
+	32 Правка
+	33 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise
