@@ -206,6 +206,70 @@ struct LibrarySearchIntegrationTests {
         #expect(table.numberOfRows == 0)
     }
 
+    @Test func refreshPreservesContentSelectionVersionAndLocalSearch() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        for name in ["one", "two"] {
+            let dir = try session(root, name: name, text: "Archived beacon", summary: "")
+            try Transcript(engine: "whisper", model: "old", created_at: "2026-10-31T10:00:00Z", segments: (0..<80).map {
+                .init(speaker: "me", start_ms: $0 * 1000, end_ms: ($0 + 1) * 1000, text: "Archived beacon \($0)")
+            }).write(to: dir)
+            try TranscriptVersions.archiveCurrent(dir)
+            try Transcript(engine: "whisper", model: "test", created_at: "2026-11-01T10:00:00Z", segments: [
+                .init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Current compass"),
+            ]).write(to: dir)
+        }
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        try await search("compass", in: library)
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        table.selectRowIndexes([1], byExtendingSelection: false)
+        let versions = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "transcript-versions" } as? NSPopUpButton)
+        versions.selectItem(at: 0)
+        #expect(versions.sendAction(versions.action, to: versions.target))
+        library.setMeetingSearchQuery("beacon")
+        for _ in 0..<26 { library.moveMeetingSearch(forward: true) }
+        let transcript = try #require(library.contentView.allDescendants.first { $0 is MeetingTranscriptView } as? MeetingTranscriptView)
+        let reading = try #require(transcript.readingPosition())
+        let title = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.title" } as? NSTextField)
+        let before = title.stringValue
+        library.refresh()
+        await library.settled()
+        #expect(title.stringValue == before)
+        #expect(table.selectedRow == 1)
+        #expect(versions.indexOfSelectedItem == 0)
+        #expect(library.meetingSearchQuery == "beacon")
+        #expect(library.meetingSearchIndex == 25)
+        #expect(transcript.readingPosition()?.segment == reading.segment)
+        #expect(abs((transcript.readingPosition()?.offset ?? -1000) - reading.offset) < 1)
+        try await search("compass", in: library)
+        #expect(title.stringValue == before)
+        #expect(versions.indexOfSelectedItem == 0)
+        #expect(library.meetingSearchQuery == "beacon")
+    }
+
+    @Test func newlyCommittedTranscriptInvalidatesAnEarlierSummaryHit() async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        let dir = try session(root, name: "one", text: "Original", summary: "Old beacon")
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        try await search("beacon", in: library)
+        try TranscriptVersions.commit(.init(engine: "whisper", model: "test", created_at: "2026-11-01T10:00:00Z", segments: [
+            .init(speaker: "me", start_ms: 0, end_ms: 1000, text: "Replacement"),
+        ]), to: dir)
+        #expect(!PostProcessor.hasCurrentSummary(dir))
+        let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        #expect(table.sendAction(table.action, to: table.target))
+        await library.settled()
+        #expect(table.numberOfRows == 0)
+        #expect(library.meetingSearchIndex == nil)
+    }
+
     private func search(_ query: String, in library: MeetingLibraryController) async throws {
         let field = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.search" } as? NSSearchField)
         field.stringValue = query

@@ -81,4 +81,19 @@ import Testing
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
     }
+
+    @Test func excludesPreviousGenerationSummaryAndReportsUnreadableMetadata() throws {
+        let dir = try SessionFixture.make()
+        try Data("Previous beacon".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        let input = MeetingLibrarySearch.Input(dir: dir, title: "Meeting", metadata: [])
+        let hit = try #require(MeetingLibrarySearch.search([input], query: "beacon").hits[dir])
+        try TranscriptVersions.commit(.init(engine: "whisper", model: "test", created_at: "2026-11-01T10:00:00Z", segments: []), to: dir)
+        #expect(!PostProcessor.hasCurrentSummary(dir))
+        #expect(try MeetingLibrarySearch.search([input], query: "beacon").hits.isEmpty)
+        #expect(!MeetingLibrarySearch.isCurrent(hit, in: dir))
+        try Data("{".utf8).write(to: dir.appendingPathComponent("meta.json"))
+        let invalid = try MeetingLibrarySearch.search([input], query: "beacon")
+        #expect(invalid.hits.isEmpty)
+        #expect(invalid.unreadable == 1)
+    }
 }

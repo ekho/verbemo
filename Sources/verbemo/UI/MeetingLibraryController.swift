@@ -180,6 +180,34 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let plainTranscript: NSPoint
         let transcript: MeetingTranscriptView.ReadingPosition?
     }
+    private struct LibraryReadingPosition {
+        let dir: URL
+        let version: String?
+        let context: MeetingSearchContext?
+        let position: MeetingReadingPosition
+        let query: String
+        let index: Int?
+        let origin: MeetingReadingPosition?
+    }
+    private var libraryReadingPosition: LibraryReadingPosition?
+    private func saveLibraryReadingPosition() {
+        guard meetingSelectionActive, let selected else { return }
+        libraryReadingPosition = .init(dir: selected.dir, version: versionKey, context: currentSearchContext,
+            position: captureMeetingReadingPosition(), query: meetingSearchQuery, index: meetingSearchIndex, origin: searchOrigin)
+    }
+    private func applyLibraryResults() {
+        if selected?.dir == libraryReadingPosition?.dir,
+           currentSearchContext == libraryReadingPosition?.context { saveLibraryReadingPosition() }
+        let saved = libraryReadingPosition
+        libraryReadingPosition = nil
+        if let saved { versionSession = saved.dir; versionKey = saved.version }
+        show(allItems, preferredSelection: saved?.dir)
+        guard let saved, selected?.dir == saved.dir, currentSearchContext == saved.context else { return }
+        setMeetingSearchQuery(saved.query)
+        if let index = saved.index, meetingSearchHits.indices.contains(index) { revealMeetingSearchHit(at: index) }
+        searchOrigin = saved.origin
+        restoreMeetingReadingPosition(saved.position)
+    }
     private(set) var meetingSearchQuery = ""
     private(set) var meetingSearchHits: [MeetingSearchHit] = []
     private(set) var meetingSearchIndex: Int?
@@ -894,6 +922,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     func setRoot(_ folder: URL) {
         root = folder
         libraryNavigationFailed = false
+        libraryReadingPosition = nil
         table.deselectAll(nil)
         show([])
         reload()
@@ -956,6 +985,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     private func invalidateLibrarySearch() {
+        if libraryReadingPosition == nil, !libraryQuery.isEmpty { saveLibraryReadingPosition() }
         librarySearchGeneration += 1
         librarySearchTask?.cancel()
         librarySearchTask = nil
@@ -967,6 +997,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
 
     private func restartLibrarySearch() {
         invalidateLibrarySearch()
+        if libraryQuery.isEmpty { applyLibraryResults(); return }
         show(allItems)
         guard !terminating, !libraryQuery.isEmpty, scan == nil else { return }
         let generation = librarySearchGeneration, query = libraryQuery, root = self.root
@@ -993,7 +1024,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                 self.libraryHits = outcome.hits
                 self.libraryUnreadable = outcome.unreadable
                 self.librarySearchPending = false
-                self.show(self.allItems)
+                self.applyLibraryResults()
             } catch { /* Cancelled searches never replace the current query. */ }
         }
         librarySearchTask = task
@@ -1033,10 +1064,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         return true
     }
 
-    private func show(_ found: [SessionInventory.Item], refreshDetail: Bool = true) {
+    private func show(_ found: [SessionInventory.Item], refreshDetail: Bool = true, preferredSelection: URL? = nil) {
         reloadingList = true
         defer { reloadingList = false }
-        let previous = selected?.dir ?? rememberedMeeting
+        let previous = preferredSelection ?? selected?.dir ?? rememberedMeeting
         allItems = found.filter { $0.dir != activeRecording?.dir }
         activityTitles = Dictionary(allItems.map { ($0.dir.standardizedFileURL.resolvingSymlinksInPath(), $0.title ?? $0.name) }, uniquingKeysWith: { first, _ in first })
         let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
@@ -1801,6 +1832,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
         }
         showDetail()
         revealLibraryHit()
+        if librarySearchPending { saveLibraryReadingPosition() }
         onSelectMeeting?()
     }
 }

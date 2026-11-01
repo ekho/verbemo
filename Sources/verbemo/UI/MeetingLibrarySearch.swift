@@ -20,6 +20,7 @@ enum MeetingLibrarySearch {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
     static func isCurrent(_ hit: Hit, in dir: URL) -> Bool {
+        if hit.source == .summary, (try? currentSummary(in: dir)) != true { return false }
         let file = hit.source == .summary ? "summary.md" : hit.segment == nil ? "transcript.md" : "transcript.json"
         guard let data = try? read(dir.appendingPathComponent(file)) else { return false }
         return revision(data) == hit.revision
@@ -65,7 +66,7 @@ enum MeetingLibrarySearch {
             if hit == nil {
                 try Task.checkCancellation()
                 do {
-                    if let data = try read(input.dir.appendingPathComponent("summary.md")) {
+                    if try currentSummary(in: input.dir), let data = try read(input.dir.appendingPathComponent("summary.md")) {
                         guard let text = String(data: data, encoding: .utf8) else { throw CocoaError(.fileReadInapplicableStringEncoding) }
                         hit = match(MarkdownPreview.searchableText(text), source: .summary, revision: revision(data))
                     }
@@ -75,6 +76,17 @@ enum MeetingLibrarySearch {
             if unreadable { outcome.unreadable += 1 }
         }
         return outcome
+    }
+    private static func currentSummary(in dir: URL) throws -> Bool {
+        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("summary.md").path) else { return false }
+        var metadata: [String: Any] = [:]
+        if let data = try read(dir.appendingPathComponent("meta.json")) {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw CocoaError(.coderReadCorrupt)
+            }
+            metadata = decoded
+        }
+        return PostProcessor.hasCurrentSummary(dir, meta: metadata)
     }
     private static func read(_ url: URL) throws -> Data? {
         let attributes: [FileAttributeKey: Any]
