@@ -1,0 +1,51 @@
+{
+  "source_commit": "700b544424bb36a7a767f67bdc46fc4c160cb317",
+  "build": "691",
+  "interface": "CLI process; native GUI route not verified",
+  "backend": "local whisper",
+  "model": "large-v3-turbo-q5_0",
+  "model_sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+  "network_or_paid_provider_used": false,
+  "capture_excerpt": {
+    "expected_phrase_match": false,
+    "transcript_sha256": "7e8b319442d6da915c26958c8994cb4ad2e76e0135c214cc94eec83728abd67e",
+    "raw_transcript_included": false,
+    "note": "Selected captured excerpt produced different text; intelligibility of the saved recording is not accepted."
+  },
+  "pure_source": {
+    "expected_phrase_match": true,
+    "segments": [
+      {
+        "end_ms": 1980,
+        "speaker": "them",
+        "start_ms": 0,
+        "text": "Verbimo Audio Acceptance Test."
+      },
+      {
+        "end_ms": 3020,
+        "speaker": "them",
+        "start_ms": 2400,
+        "text": "Blue Compass."
+      },
+      {
+        "end_ms": 4880,
+        "speaker": "them",
+        "start_ms": 3480,
+        "text": "1, 2, 3."
+      },
+      {
+        "end_ms": 9260,
+        "speaker": "them",
+        "start_ms": 5300,
+        "text": "This synthetic speech was generated locally for a short recording check."
+      }
+    ],
+    "transcript_sha256": "aab902f7b00ea7467b6d910d35b4525d903dc52b357481a6287c64fb6ee7bd78",
+    "input_sha256": "24d87a21b9f8e1264b40d15b9e0049702826143f4f875f32e847bcf94844c13a",
+    "log": "/tmp/ux74-real-local-asr-source.log",
+    "log_sha256": "7a0ad0e4c997adcca2adacd21be7936f64ec3a7a8c2c56530ff47ef4e62dadba",
+    "exit_code": 0,
+    "note": "Brand name recognized as Verbimo; this is a short smoke check, not an ASR quality benchmark."
+  },
+  "raw_audio_uploaded": false
+}

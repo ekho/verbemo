@@ -1,0 +1,19 @@
+{
+  "source_duration_seconds": 9.34575,
+  "capture_duration_seconds": 83.666,
+  "capture_sha256": "980b7ffd2f4753bac7e09f8314b642fbed4290debd6801cafe57f6f81291436c",
+  "channels": [
+    {
+      "index": 0,
+      "rms_dbfs": -40.00030984055656,
+      "speech_envelope_correlation": 0.5124074612418221,
+      "speech_start_seconds": 37.94
+    },
+    {
+      "index": 1,
+      "rms_dbfs": -15.836515624002008,
+      "speech_envelope_correlation": 0.6648030770471658,
+      "speech_start_seconds": 37.58
+    }
+  ]
+}

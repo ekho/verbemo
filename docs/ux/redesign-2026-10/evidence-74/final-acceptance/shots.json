@@ -1,0 +1,22 @@
+[
+  {
+    "file": "01-real-recording.jpg",
+    "sha256": "06f44549672d93a897749dc1e4d245e95408aa1ac543d7edb5627dc00a10acbf",
+    "surface": "isolated arm64 Debug candidate, before final universal assembly"
+  },
+  {
+    "file": "02-before-first-open.jpg",
+    "sha256": "c64d81ebe0fb45ef1bae0822414c2bfe64598e559705e99529cc2af04480c2bb",
+    "surface": "isolated arm64 Debug candidate, before final universal assembly"
+  },
+  {
+    "file": "03-layout-only-still-incomplete.jpg",
+    "sha256": "c73d8abcabc2187aa897395fa8620f927fc7c20852ebe183768d8cdaf22da2cf",
+    "surface": "isolated arm64 Debug candidate, before final universal assembly"
+  },
+  {
+    "file": "04-fixed-first-open.jpg",
+    "sha256": "4dd2ba2c3156031e96ff539cd980fee6becddb03ae62d525cc681337f9251e2e",
+    "surface": "isolated arm64 Debug candidate, before final universal assembly"
+  }
+]
