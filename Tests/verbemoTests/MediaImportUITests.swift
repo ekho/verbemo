@@ -5,6 +5,23 @@ import Testing
 @testable import verbemo
 
 struct MediaImportUITests {
+    @Test("A finished import message stays inside a narrow row and has no progress bar", .freshHome)
+    @MainActor
+    func finishedMessageFitsNarrowRow() throws {
+        let view = MediaImportStatusView(frame: .init(x: 0, y: 0, width: 350, height: 50))
+        var result = MediaImportCoordinator.Result()
+        result.failures = [.init(source: URL(fileURLWithPath: "/tmp/long-meeting-name.wav"),
+                                 message: String(repeating: "Could not open this audio file.\n", count: 8))]
+        view.finish(result)
+        view.layoutSubtreeIfNeeded()
+        let label = try #require(view.arrangedSubviews.compactMap { $0 as? NSTextField }.first)
+        let bar = try #require(view.arrangedSubviews.compactMap { $0 as? NSProgressIndicator }.first)
+        #expect(label.frame.height <= 20)
+        #expect(label.frame.minX >= 12 && label.frame.maxX <= view.bounds.width - 12)
+        #expect(!label.stringValue.contains("\n"))
+        #expect(label.toolTip?.contains(result.failures[0].message) == true)
+        #expect(bar.isHidden)
+    }
     @Test("The header and status menu use the same Import command", .freshHome)
     @MainActor
     func importEntryPoints() throws {

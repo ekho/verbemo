@@ -5,6 +5,20 @@ import Testing
 @testable import verbemo
 
 struct MediaImportTests {
+    @Test("An unreadable import reports a useful message without framework internals", .freshHome)
+    func unreadableFileHasUserFacingFailure() async throws {
+        let root = try Self.temporaryDirectory("unreadable")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("broken.wav")
+        let original = Data("Not an audio file".utf8)
+        try original.write(to: source)
+        let result = await MediaImportCoordinator(root: root).importFiles([source])
+        let failure = try #require(result.failures.first)
+        #expect(failure.message == "Could not open this audio file.")
+        #expect(result.imported.isEmpty)
+        #expect(SessionInventory.scan(root: root).isEmpty)
+        #expect(try Data(contentsOf: source) == original)
+    }
     @Test("A real audio file is normalized to a readable M4A")
     func normalizesAudio() async throws {
         let root = try Self.temporaryDirectory("normalize")

@@ -65,12 +65,15 @@ final class MediaImportStatusView: NSStackView {
         orientation = .horizontal
         alignment = .centerY
         spacing = 8
+        edgeInsets = NSEdgeInsets(top: 8, left: 24, bottom: 8, right: 24)
         identifier = NSUserInterfaceItemIdentifier("media-import-progress")
         isHidden = true
 
         label.font = .systemFont(ofSize: 11)
         label.textColor = .secondaryLabelColor
         label.lineBreakMode = .byTruncatingMiddle
+        label.maximumNumberOfLines = 1
+        label.cell?.usesSingleLineMode = true
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         bar.style = .bar
         bar.controlSize = .small
@@ -91,7 +94,8 @@ final class MediaImportStatusView: NSStackView {
     func update(_ update: MediaImportCoordinator.Update) {
         let copy = MediaImportPresentation.progress(update)
         isHidden = false
-        label.stringValue = copy.label
+        label.stringValue = copy.label.split(whereSeparator: \.isNewline).joined(separator: " ")
+        label.toolTip = copy.label
         cancel.isHidden = false
         bar.isHidden = false
         if let fraction = copy.fraction {
@@ -107,15 +111,11 @@ final class MediaImportStatusView: NSStackView {
     func finish(_ result: MediaImportCoordinator.Result) {
         let copy = MediaImportPresentation.finished(result)
         isHidden = false
-        label.stringValue = copy.label
+        label.stringValue = copy.label.split(whereSeparator: \.isNewline).joined(separator: " ")
+        label.toolTip = copy.label
         cancel.isHidden = true
         bar.stopAnimation(nil)
-        if let fraction = copy.fraction {
-            bar.isIndeterminate = false
-            bar.doubleValue = fraction
-        } else {
-            bar.isHidden = true
-        }
+        bar.isHidden = true
     }
 
     @objc private func cancelClicked() { onCancel?() }
