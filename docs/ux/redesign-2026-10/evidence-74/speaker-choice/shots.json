@@ -1,0 +1,172 @@
+[
+  {
+    "file": "01-about.jpg",
+    "build": "689",
+    "width": 1340,
+    "height": 628,
+    "sha256": "a0f10cd456bf49f55294fa82eb50f402ab72fe748321a8621254abf36018b949",
+    "ax_sha256": "485f07f731953372202316ad4f1fa4e23dd68d4fb36162b31f9ef38971345a85",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "02-fixed-fields.jpg",
+    "build": "689",
+    "width": 1340,
+    "height": 628,
+    "sha256": "d4a0deb6bbedd54f8d40247695b2e92740d1ce32e7bcc25acd0e7b1d299756d1",
+    "ax_sha256": "986573a690b5a8562411b40d13cbce2c72a3ccb1861c992e4a44feb23d966055",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "03-full-menu-wide.jpg",
+    "build": "689",
+    "width": 1340,
+    "height": 628,
+    "sha256": "c321b0fbcae1753b7849be1bfbb6ca2df3b712bc91cf3693e6bde51ed04dea65",
+    "ax_sha256": "890a6cef32cbfb2de45611935520a21833835ba792c096b8013d0f97564563f4",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "04-raised-window.jpg",
+    "build": "689",
+    "width": 1340,
+    "height": 628,
+    "sha256": "2b4f364ad4fe1d53b506bdd3a1bcca0b2d95a73d0df4d68fb90307b12e753692",
+    "ax_sha256": "890a6cef32cbfb2de45611935520a21833835ba792c096b8013d0f97564563f4",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "05-fields-narrow.jpg",
+    "build": "689",
+    "width": 865,
+    "height": 628,
+    "sha256": "6574df1b1b5511be0acf5b0fd137bb89d556c0994f56cb92559ec038597134d6",
+    "ax_sha256": "fc94faa6ea1a4815823d8f8a186fb0d7918293273956a9d3e6a8388511cd912a",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "06-full-menu-narrow.jpg",
+    "build": "689",
+    "width": 865,
+    "height": 628,
+    "sha256": "bdb587b642b24447030b451c31ec85d3424e52996ba640783080717e37c29149",
+    "ax_sha256": "1db1932fb8f24e7ea8e5b6703e5085d7207dd4f5e9b8133235541d24048f54e0",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "07-full-menu-narrow-keyboard.jpg",
+    "build": "689",
+    "width": 865,
+    "height": 628,
+    "sha256": "9fbf110b03d4abd3bb1c9a3e117958834193c4f4f73ed107aeb7b05afd6d8455",
+    "ax_sha256": "f05911093e66b035512a9f32cb3f17b699f7a55f8df667ab5ade75a75cfc9b0d",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "08-physical-menu-narrow.jpg",
+    "build": "689",
+    "width": 865,
+    "height": 628,
+    "sha256": "25ffa2b343687e1a1ff6ab9f1489ddbca547319020a4313b45ad04e6980c8c99",
+    "ax_sha256": "0b853988606bab54154f75b130ce54f415429ef0a6bd00b0e8ded60e733c863d",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "09-fields-dark.jpg",
+    "build": "689",
+    "width": 1340,
+    "height": 628,
+    "sha256": "03642e7099223e176dbd86398d1fb356a42ff0134fe0fedaf919f5564cb54c2c",
+    "ax_sha256": "2d8ff488dda1bb76eca12c0fae4e85114e1d23b55425d87e5cf9cecb4d66b38e",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "10-handoff-light.jpg",
+    "build": "689",
+    "width": 1340,
+    "height": 628,
+    "sha256": "ac50deb25545d48fd2292f89d63cf7a3ced021f9dd40a4821f87312091694ef2",
+    "ax_sha256": "2d8ff488dda1bb76eca12c0fae4e85114e1d23b55425d87e5cf9cecb4d66b38e",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "intermediate-686/01-about.jpg",
+    "build": "686",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "642eef6dee371c924774c93361b0f77614a5a3d699ed98e63300b49eca063162",
+    "ax_sha256": "d5bb4f1472098951423ab4aec3e0d83dd6c0206bb3b10f1711ee352f606e12c2",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "intermediate-687/01-about.jpg",
+    "build": "687",
+    "width": 1340,
+    "height": 628,
+    "sha256": "c5be4417adb5830b543f60c84d0aa3bc1eac586d44e608580e298fd1ffc318de",
+    "ax_sha256": "aefb5dabd667d084144a6fd455c0d085edba6001f77515925038cd2ee0315c17",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "intermediate-687/02-full-menu-wide.jpg",
+    "build": "687",
+    "width": 1340,
+    "height": 628,
+    "sha256": "c76fa925c106baa0f2c39365a714722650afe4f69a599b83c2352309b8d61364",
+    "ax_sha256": "61f0e910a64cf93fb63f13d2a624a0561ab4d8e0b6e2690d93e4f625b2554963",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "intermediate-688/01-about.jpg",
+    "build": "688",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "b22ff8ad90be3df04c79327a7f7384f298263060df9a6c9769afc644aca4a3f4",
+    "ax_sha256": "b0e211923b1cda92328d0d18340d5b5d899e57ccca43635399af2147eff57d80",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "intermediate-688/02-short-selection.jpg",
+    "build": "688",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "50d058c94510642b4eda7c85f5e383e559c5d66937997d92348b29da15aebecb",
+    "ax_sha256": "b8542cbfcf2be9677c281b65774124f2e734180430637d4d51b027a1600ba7f9",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "intermediate-688/03-short-manual.jpg",
+    "build": "688",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "5c565f9021b61b9900be0d2d0e8ddd1318613c10073e21adda53cfbb0800a81c",
+    "ax_sha256": "7e81f3e24093c842674c86eb42fc9ed4d6e760b0cee1c1ec26663190d1458893",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": false
+  },
+  {
+    "file": "intermediate-688/04-full-menu-keyboard.jpg",
+    "build": "688",
+    "width": 2680,
+    "height": 1256,
+    "sha256": "e5473918b26bfbeae92873efa555b1595452b27a01b912e33bdba48c0eb5ae7d",
+    "ax_sha256": "e7f4e382c56511f43f0bac60f91660e341fece4dd408515bc3a65b8263ea3721",
+    "menu_in_ax": true,
+    "full_popup_visually_confirmed": true
+  }
+]

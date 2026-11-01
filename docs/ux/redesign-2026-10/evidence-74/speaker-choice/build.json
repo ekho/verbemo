@@ -1,0 +1,15 @@
+{
+  "source_commit": "71e6284b9637fcd33471b9131eb6b986d1fb23f7",
+  "version": "0.17.2",
+  "build": "689",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-choice/Verbemo Studio Review.app",
+  "bundle_id": "name.ekho.verbemo.ux74.speaker-choice",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-choice/home",
+  "recordings": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-choice/recordings",
+  "executable_sha256": "d7a3da859ac54d3e760e3d30e18d331f12bed43402b9fdbdeede3506348df9ac",
+  "architectures": [
+    "arm64"
+  ],
+  "kind": "arm64 Debug/ad-hoc; existing packaged assets/helpers",
+  "runtime": "macOS26.7.1/arm64"
+}

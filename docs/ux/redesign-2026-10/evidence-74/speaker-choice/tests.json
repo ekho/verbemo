@@ -1,0 +1,15 @@
+{
+  "red_command": "swift test --no-parallel --filter SpeakerAssignmentTests.choiceWidthDoesNotFollowItsValue",
+  "red_result": "1 test /2 width cases failed with3 issues; up to240pt difference",
+  "targeted_command": "swift test --no-parallel --filter 'SpeakerAssignmentTests|MacUXFollowupTests|MeetingTranscriptReadingTests'",
+  "targeted_result": "35 tests in3 suites passed,10.639s; native disclosure implementation before unignored AX child refinement",
+  "final_command": "swift test --no-parallel --filter SpeakerAssignmentTests",
+  "final_result": "18 tests in1 suite passed,3.165s; final code including native AX child",
+  "new_coverage": "Equal empty/manual/linked field widths at180/500pt; full menu title and width from120pt field; selection deferred until close; cancel, native AX value, disabled disclosure",
+  "log_sha256": {
+    "red": "d70e769305da318cdc679905f850893a1cba6a2816443429b4aef3db7a0906de",
+    "targeted": "1ba87cf15ab2543947673b9037bdfa0bda2f0e5da39a8da87162758b8f112242",
+    "final": "960588469bc189dbb2c982a28607ce6c1af0489f02df5d64a1aa628a2834a639",
+    "build": "ae1b0519cacc83b6c5e29e27e576cc1f1dbfcf57891af96cc064a689b7fc6069"
+  }
+}

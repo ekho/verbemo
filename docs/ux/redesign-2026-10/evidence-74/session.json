@@ -1,12 +1,12 @@
 {
-  "status": "processing action icons simplified in DebugReview684; ongoing human acceptance; initial transcript redraw issue open",
+  "status": "participant field width and full options fixed in DebugReview689; awaiting human acceptance",
   "started_at": "2026-11-01T15:02:31.891166+03:00",
-  "source_commit": "9a66902f261dfd189c0d5d323e4c87975b697e88",
+  "source_commit": "71e6284b9637fcd33471b9131eb6b986d1fb23f7",
   "version": "0.17.2",
-  "build": "684",
-  "executable_sha256": "f1516490545398050f54fae4e6fb35e0a586f94823b68c917b455cd2a705e9b1",
+  "build": "689",
+  "executable_sha256": "d7a3da859ac54d3e760e3d30e18d331f12bed43402b9fdbdeede3506348df9ac",
   "sdk_at_build": "27.0",
-  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-choice/home",
   "fixture_meetings": 206,
   "baseline_files": 433,
   "human_results": [
@@ -67,9 +67,20 @@
       "feedback": "Оставь только иконки и сделай их кликабельными. Проверь что пропорции нормальные будут",
       "evidence": "processing-icons/00-user-request.png",
       "result": "implemented684; repeat feedback pending"
+    },
+    {
+      "scenario": "participant field and option width",
+      "date": "2026-11-01",
+      "candidate_build": "684",
+      "feedback": [
+        "field width jumps with different selected values",
+        "option list must show full identities independently of field width"
+      ],
+      "evidence": "speaker-choice/00-user-request-1.png",
+      "result": "implemented689; repeat user feedback pending"
     }
   ],
-  "pending_scenario": "user feedback on borderless processing icons; native click and dark follow-up; initial transcript draw and final universal build",
+  "pending_scenario": "user acceptance of stable participant field width and full option menu; initial transcript draw and universal Release remain open",
   "runtime": {
     "macos": "26.7.1",
     "architecture": "arm64",
@@ -96,13 +107,15 @@
   },
   "approved_change": "2026-11-01: user approved full utterance tint without letter badge and instructed implementation",
   "handoff_screen": {
-    "state": "left as observed; user acceptance in progress",
-    "observed_tab": "participants",
-    "theme": "light",
     "meeting": "UX69 Атлас — планирование",
+    "tab": "participants",
+    "version": "2 · Whisper",
+    "theme": "light",
+    "library": "visible",
     "inspector": "visible",
     "recording": false,
-    "queue": 0
+    "queue": 0,
+    "profile": "separate synthetic copy with long identity fixture; prior acceptance profile preserved"
   },
   "previous_candidates": [
     {
@@ -132,7 +145,14 @@
       "build": "682",
       "executable_sha256": "578358c2067646fdbe31c8d0b250ee47144c5701122363bcbb8284f50b685673",
       "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home"
+    },
+    {
+      "source_commit": "9a66902f261dfd189c0d5d323e4c87975b697e88",
+      "version": "0.17.2",
+      "build": "684",
+      "executable_sha256": "f1516490545398050f54fae4e6fb35e0a586f94823b68c917b455cd2a705e9b1",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home"
     }
   ],
-  "candidate_kind": "arm64 Debug ad-hoc UI review; existing packaged assets/helpers"
+  "candidate_kind": "arm64 Debug/ad-hoc; existing packaged assets/helpers"
 }
