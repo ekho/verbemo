@@ -1,10 +1,10 @@
 {
-  "status": "input controls unified in DebugReview682; awaiting user acceptance; initial transcript redraw issue open",
+  "status": "processing action icons simplified in DebugReview684; ongoing human acceptance; initial transcript redraw issue open",
   "started_at": "2026-11-01T15:02:31.891166+03:00",
-  "source_commit": "d288a8b1a9320446891c9983cb530740c10853cd",
+  "source_commit": "9a66902f261dfd189c0d5d323e4c87975b697e88",
   "version": "0.17.2",
-  "build": "682",
-  "executable_sha256": "578358c2067646fdbe31c8d0b250ee47144c5701122363bcbb8284f50b685673",
+  "build": "684",
+  "executable_sha256": "f1516490545398050f54fae4e6fb35e0a586f94823b68c917b455cd2a705e9b1",
   "sdk_at_build": "27.0",
   "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home",
   "fixture_meetings": 206,
@@ -59,9 +59,17 @@
       ],
       "evidence": "input-controls/00-user-request.png",
       "result": "implemented682; repeat feedback pending"
+    },
+    {
+      "scenario": "processing action icons",
+      "date": "2026-11-01",
+      "candidate_build": "682",
+      "feedback": "Оставь только иконки и сделай их кликабельными. Проверь что пропорции нормальные будут",
+      "evidence": "processing-icons/00-user-request.png",
+      "result": "implemented684; repeat feedback pending"
     }
   ],
-  "pending_scenario": "human acceptance of input controls; investigate initial incomplete transcript draw; final universal build on latest source",
+  "pending_scenario": "user feedback on borderless processing icons; native click and dark follow-up; initial transcript draw and final universal build",
   "runtime": {
     "macos": "26.7.1",
     "architecture": "arm64",
@@ -88,16 +96,13 @@
   },
   "approved_change": "2026-11-01: user approved full utterance tint without letter badge and instructed implementation",
   "handoff_screen": {
-    "meeting": "UX69 Атлас — планирование",
-    "version": "2 · Whisper",
-    "tab": "summary",
+    "state": "left as observed; user acceptance in progress",
+    "observed_tab": "participants",
     "theme": "light",
-    "library": "visible",
+    "meeting": "UX69 Атлас — планирование",
     "inspector": "visible",
     "recording": false,
-    "queue": 0,
-    "meeting_actions": "beside meeting title",
-    "window_width_pt": 1340
+    "queue": 0
   },
   "previous_candidates": [
     {
@@ -120,6 +125,13 @@
       "build": "679",
       "executable_sha256": "c86031b88a5ce27a49c4dceb8d8a8553ffe4d595c56d6d9a3ebf97a8a4e7e4de",
       "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-meeting-actions/home"
+    },
+    {
+      "source_commit": "d288a8b1a9320446891c9983cb530740c10853cd",
+      "version": "0.17.2",
+      "build": "682",
+      "executable_sha256": "578358c2067646fdbe31c8d0b250ee47144c5701122363bcbb8284f50b685673",
+      "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-input-style/home"
     }
   ],
   "candidate_kind": "arm64 Debug ad-hoc UI review; existing packaged assets/helpers"
