@@ -39,7 +39,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let measuringListTitle = MeetingListView.titleLabel("")
     private let resultPicker = NSStackView()
     let meetingHeaderState = StudioMeetingHeaderState()
-    private let meetingSearch = NSSearchField()
+    private let meetingSearch = MeetingSearchField()
     private var meetingHeader: NSHostingView<StudioMeetingHeader>?
     func focusMeetingSearch() -> Bool {
         guard !contentView.isHiddenOrHasHiddenAncestor, meetingSearch.isEnabled, panel.attachedSheet == nil else { return false }
@@ -1913,22 +1913,18 @@ private extension MeetingLibraryController {
         search.action = #selector(searchChanged)
         search.sendsSearchStringImmediately = true
         search.sendsWholeSearchString = false
-        search.focusRingType = .default
-        search.backgroundColor = StudioStyle.paper
-        search.textColor = StudioStyle.ink
-        search.font = .systemFont(ofSize: 13)
-        search.heightAnchor.constraint(equalToConstant: 32).isActive = true
         search.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         filterButton.identifier = .init("library.filter")
         filterButton.title = ""
         filterButton.bezelStyle = .rounded
+        filterButton.isBordered = false
         filterButton.setButtonType(.toggle)
         filterButton.image = NSImage(systemSymbolName: "line.3.horizontal.decrease", accessibilityDescription: nil)
         filterButton.imagePosition = .imageOnly
         filterButton.target = self
         filterButton.action = #selector(showLibraryFilter)
-        filterButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
-        filterButton.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        filterButton.widthAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+        filterButton.heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
         let filterHeading = NSTextField(labelWithString: localised("Filter meetings", "Фильтр встреч"))
         filterHeading.font = .systemFont(ofSize: 13, weight: .semibold)
         for (index, filter) in [ApplicationNavigationState.Destination.allMeetings, .processing, .attention].enumerated() {
@@ -2241,6 +2237,15 @@ extension MeetingLibraryController {
 
 @MainActor
 private final class MeetingSearchField: NSSearchField {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        focusRingType = .default
+        backgroundColor = StudioStyle.paper
+        textColor = StudioStyle.ink
+        font = .systemFont(ofSize: 13)
+        heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override class var cellClass: AnyClass? {
         get { Cell.self }
         set {}
@@ -2249,13 +2254,7 @@ private final class MeetingSearchField: NSSearchField {
     private final class Cell: NSSearchFieldCell {
         override func draw(withFrame frame: NSRect, in controlView: NSView) {
             // The native bezel ignores backgroundColor.
-            let bezel = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 0.5),
-                                     xRadius: 4, yRadius: 4)
-            StudioStyle.paper.setFill()
-            bezel.fill()
-            StudioStyle.line.setStroke()
-            bezel.lineWidth = 1
-            bezel.stroke()
+            StudioStyle.drawInputBezel(in: frame)
             super.drawInterior(withFrame: frame, in: controlView)
         }
     }
@@ -2264,6 +2263,7 @@ private final class MeetingSearchField: NSSearchField {
 @MainActor
 private final class LibraryFilterButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
+        StudioStyle.drawInputBezel(in: bounds)
         super.draw(dirtyRect)
         if state == .on {
             StudioStyle.accent.setFill()

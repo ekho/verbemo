@@ -32,6 +32,9 @@ struct StudioMeetingHeader: View {
                 HStack(spacing: 8) {
                     Text(localised("Version", "Версия")).font(.callout)
                     StudioHeaderControl(control: versions).disabled(!state.versionsEnabled)
+                        .frame(height: StudioStyle.inputHeight)
+                        .background(Color(nsColor: StudioStyle.paper), in: RoundedRectangle(cornerRadius: 4))
+                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color(nsColor: StudioStyle.line), lineWidth: 1).allowsHitTesting(false))
                 }.frame(width: 220)
                 HStack(spacing: 6) {
                     StudioHeaderControl(control: search).disabled(!state.searchEnabled).frame(minWidth: 140)
@@ -75,6 +78,6 @@ private struct StudioHeaderControl<Control: NSView>: NSViewRepresentable {
     func makeNSView(context: Context) -> Control { control }
     func updateNSView(_ view: Control, context: Context) {}
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: Control, context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? nsView.fittingSize.width, height: max(26, nsView.fittingSize.height))
+        CGSize(width: proposal.width ?? nsView.fittingSize.width, height: max(StudioStyle.inputHeight, nsView.fittingSize.height))
     }
 }

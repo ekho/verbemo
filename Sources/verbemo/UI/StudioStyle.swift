@@ -11,6 +11,15 @@ enum StudioStyle {
     static let accent = color("accent", light: 0x294d9b, dark: 0x9bbcf5)
     static let selection = color("selection", light: 0xdbe4f4, dark: 0x2f405c)
     static let line = color("line", light: 0xc3ced7, dark: 0x405169)
+    static let inputHeight: CGFloat = 26
+    static func drawInputBezel(in frame: NSRect) {
+        let bezel = NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+        paper.setFill()
+        bezel.fill()
+        line.setStroke()
+        bezel.lineWidth = 1
+        bezel.stroke()
+    }
     static func titleFont() -> NSFont { .systemFont(ofSize: 20, weight: .bold) }
     static func regenerationImage(symbol: String) -> NSImage {
         let content = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
