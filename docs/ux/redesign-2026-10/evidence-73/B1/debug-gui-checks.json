@@ -1,0 +1,42 @@
+[
+  {
+    "check": "transcript-only query and click",
+    "result": "pass",
+    "details": "Three transcript-source rows; planning click opens current Whisper transcript and local match1/1, visible highlight."
+  },
+  {
+    "check": "summary-only query and click",
+    "result": "pass",
+    "details": "Summary-source snippets; planning click selects Summary and visible local match1/1."
+  },
+  {
+    "check": "zero results",
+    "result": "pass",
+    "details": "Both panes show no matches, not no recordings; reset offered."
+  },
+  {
+    "check": "query + processing filter + reset",
+    "result": "pass",
+    "details": "Query retained in Processing empty state; Reset clears query and returns filterAll."
+  },
+  {
+    "check": "long library + hide/show",
+    "result": "pass",
+    "details": "Last synthetic meeting000 found in205-meeting corpus; field query and selection survive library hide/show."
+  },
+  {
+    "check": "current hit after archive",
+    "result": "pass",
+    "details": "Planning archive Parakeet selected; clicking current content result switches to Whisper and highlighted transcript query."
+  },
+  {
+    "check": "minimum and narrow sidebar",
+    "result": "pass",
+    "details": "760x600 content, sidebar220; query visible in two native lines and current transcript highlighted."
+  },
+  {
+    "check": "RU dark theme",
+    "result": "pass",
+    "details": "Native setting applies immediately; current transcript and source snippets remain legible at760x600."
+  }
+]

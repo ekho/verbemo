@@ -1,0 +1,7 @@
+{
+  "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+  "kind": "debug arm64 candidate",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-b1/Verbemo Studio Debug.app",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-b1/home",
+  "executable_sha256": "619b896b86ec0cd2f38b46f9889639a3ce02aa98f7abdcc78e0906b243573e26"
+}

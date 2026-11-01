@@ -1,0 +1,96 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+	3 button Copy, Description: copy, ID: meeting.copy
+	4 button Meeting actions
+	5 button Description: Show or hide meeting details, Value: 0, ID: meeting.inspector
+	6 button New recording, ID: journal.new-recording
+	7 button Import, ID: journal.import
+	8 button Settings, ID: journal.settings
+	9 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		10 text Library
+		11 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: Сапфировый маяк, Placeholder: Title, transcript, summary, ID: library.search
+			12 button Search the library: titles, transcripts and summaries
+			13 button cancel
+		14 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+		15 scroll area
+			16 table
+				17 row (selectable)
+					18 cell
+						19 text UX69 Назначения — ошибка и неизвестный 2026-10-30 · 03:00
+						20 image Description: Ready, ID: meeting.list-status
+						21 text ID: meeting.list-snippet, Description: Summary · …ной встречи
+Сапфировый маяк — уникальная фраза только в сводке.
+Анна готовит материалы.
+Борис проверяет сроки.
+				22 row (selectable)
+					23 cell
+						24 text UX69 Атлас — длинная встреча 2026-10-29 · 30:00
+						25 image Description: Ready, ID: meeting.list-status
+						26 text ID: meeting.list-snippet, Description: Summary · …ной встречи
+Сапфировый маяк — уникальная фраза только в сводке.
+Анна готовит материалы.
+Борис проверяет сроки.
+				27 row (selected)
+					28 cell (selected)
+						29 text UX69 Атлас — планирование 2026-10-29 · 03:00
+						30 image Description: Ready, ID: meeting.list-status
+						31 text ID: meeting.list-snippet, Description: Summary · …ной встречи
+Сапфировый маяк — уникальная фраза только в сводке.
+Анна готовит материалы.
+Борис проверяет сроки.
+		32 splitter (disabled, settable, float) 248
+		33 text 29.10.2026 12:00 · 3 min · Invited: 3
+		34 text Help: UX69 Атлас — планирование, ID: meeting.title
+		35 button Description: Play meeting, ID: playback.play
+		36 button (disabled) Description: Stop and return to the beginning, ID: playback.stop
+		37 slider (settable, float) Description: Meeting position, Value: 0, Details: 00:00, ID: playback.timeline
+			38 value indicator (settable, float) 0
+		39 text 00:00 / 03:00
+		40 image volume high
+		41 slider (settable, float) Description: Playback volume, Value: 1
+			42 value indicator (settable, float) 1
+		43 pop up button Description: Playback speed, Value: 1×
+		44 container meeting.studio-header
+			45 text Version
+			46 pop up button Description: Transcript version, Value: 2 · Whisper · Oct 29, 2026 at 12:00:00 PM, ID: transcript-versions
+			47 search text field (settable) Description: Search selected transcript and summary version, Value: Сапфировый маяк, Placeholder: Find in this meeting, ID: meeting.search
+				48 button Search
+				49 button cancel
+			50 text Search matches
+			51 button Description: Previous match, Help: Previous match · Shift+Enter
+			52 button Description: Next match, Help: Next match · Enter
+			53 button Description: Clear meeting search, Help: Clear search · Escape
+			54 radio button Summary, Value: 1, ID: meeting.result.summary
+			55 radio button Transcript, Description: comment lines, Value: 0, ID: meeting.result.transcript
+			56 radio button Participants, Value: 0, ID: meeting.result.participants
+		57 scroll area
+			58 text entry area ID: meeting-words, Value: **Решения учебной встречи**
+• Сапфировый маяк — уникальная фраза только в сводке.
+• Анна готовит материалы.
+• Борис проверяет сроки.
+	59 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	60 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	61 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio: recent sound test passed
+Permissions do not confirm that audio is being captured.
+	62 button (disabled) Not recording, ID: activity.recording
+	63 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	64 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+	65 close button
+	66 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	67 minimize button
+68 menu bar
+	69 Verbemo Studio Review
+	70 File
+	71 Edit
+	72 Window
+
+Selected:
+	27 row (selected)
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

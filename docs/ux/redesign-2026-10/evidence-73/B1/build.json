@@ -1,0 +1,9 @@
+{
+  "source_commit": "d738306edd2897536b6c0b9c6258393c5347c852",
+  "build": "660",
+  "version": "0.17.2",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-b1/Verbemo Studio Review.app",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-b1/home",
+  "fixtures": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-b1/recordings",
+  "executable_sha256": "65d4ac7b979822ac06fb36e4113045290293029395a1b5ca4e09b4161e282a73"
+}
