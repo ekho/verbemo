@@ -1,0 +1,16 @@
+[
+  {
+    "file": "01-light-wide.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "271a8eb3fe7a5dfd9c36b8b89cb4458a6058925dbffa72c8068e3dddef5a4fca",
+    "ax_sha256": "d9b5dc37108509882f72d772e3c9eebbf013c3ab3a1b4e8e73b245c17a6d072b"
+  },
+  {
+    "file": "02-user-handoff-state.jpg",
+    "width": 3156,
+    "height": 1684,
+    "sha256": "7ac5bfb5dcf1fd02bf4a3546ad0f0c9041beab0fd787688e11739c4935324e03",
+    "ax_sha256": "293bd127763bc12e057eda4fdf796306c9ed11178d06809c6f6df87fa9b3afd2"
+  }
+]

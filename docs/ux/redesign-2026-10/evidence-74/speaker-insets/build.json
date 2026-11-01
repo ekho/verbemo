@@ -1,0 +1,16 @@
+{
+  "source_commit": "bc66c20804e81c9b0e62016303cfa61aac7f108b",
+  "version": "0.17.2",
+  "build": "677",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-insets/Verbemo Studio Review.app",
+  "bundle_id": "name.ekho.verbemo.ux74.insets",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-insets/home",
+  "recordings": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-insets/recordings",
+  "executable_sha256": "a184a5ab496792aaf0c2ca1c917ed329de8e9bf8c7cf8b44b6458a1432e62459",
+  "architectures": [
+    "x86_64",
+    "arm64"
+  ],
+  "kind": "Universal Release ad-hoc",
+  "runtime": "macOS26.7.1/arm64"
+}
