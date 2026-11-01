@@ -1,8 +1,75 @@
 import AppKit
 
 @MainActor
-private final class SpeakerAssignmentChoice: NSComboBox {
+final class SpeakerAssignmentChoice: NSComboBox {
     private var dropdownWindows: [NSWindow] = []
+    private lazy var menuButton = MenuButton(owner: self)
+
+    override var intrinsicContentSize: NSSize {
+        .init(width: 360, height: super.intrinsicContentSize.height)
+    }
+    private var menuButtonRect: NSRect {
+        .init(x: bounds.maxX - 24, y: bounds.minY, width: 24, height: bounds.height)
+    }
+    override func mouseDown(with event: NSEvent) {
+        if menuButtonRect.contains(convert(event.locationInWindow, from: nil)) { showSelectionMenu() }
+        else { super.mouseDown(with: event) }
+    }
+    override func accessibilityChildren() -> [Any]? {
+        menuButton.setAccessibilityFrameInParentSpace(menuButtonRect)
+        menuButton.setAccessibilityLabel(accessibilityLabel())
+        menuButton.setAccessibilityEnabled(isEnabled)
+        return [menuButton]
+    }
+    override func accessibilityPerformShowMenu() -> Bool {
+        guard isEnabled else { return false }
+        showSelectionMenu()
+        return true
+    }
+    func makeSelectionMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.font = font ?? .systemFont(ofSize: 12)
+        menu.minimumWidth = bounds.width
+        for (index, value) in objectValues.enumerated() {
+            let item = NSMenuItem(title: String(describing: value), action: #selector(selectFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.state = index == indexOfSelectedItem ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+    func showSelectionMenu() {
+        guard isEnabled else { return }
+        delegate?.comboBoxWillPopUp?(.init(name: NSComboBox.willPopUpNotification, object: self))
+        window?.makeFirstResponder(self)
+        let menu = makeSelectionMenu()
+        let selected = indexOfSelectedItem >= 0 ? menu.item(at: indexOfSelectedItem) : nil
+        let confirmed = menu.popUp(positioning: selected, at: .init(x: bounds.minX, y: bounds.minY), in: self)
+        delegate?.comboBoxWillDismiss?(.init(name: NSComboBox.willDismissNotification, object: self,
+                                            userInfo: ["cancelled": !confirmed]))
+    }
+    @objc private func selectFromMenu(_ item: NSMenuItem) {
+        guard isEnabled else { return }
+        selectItem(at: item.tag)
+        delegate?.comboBoxSelectionDidChange?(.init(name: NSComboBox.selectionDidChangeNotification, object: self))
+    }
+
+    private final class MenuButton: NSAccessibilityElement {
+        weak var owner: SpeakerAssignmentChoice?
+        init(owner: SpeakerAssignmentChoice) {
+            self.owner = owner
+            super.init()
+            setAccessibilityParent(owner)
+            setAccessibilityRole(.button)
+            setAccessibilityIdentifier("speaker.options")
+        }
+        override func accessibilityPerformPress() -> Bool {
+            let owner = owner
+            return MainActor.assumeIsolated { owner?.accessibilityPerformShowMenu() ?? false }
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         let existing = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
@@ -24,7 +91,7 @@ private final class SpeakerAssignmentChoice: NSComboBox {
 final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     let name = NSTextField(labelWithString: "")
     let link = SpeakerLinkButton()
-    let choice: NSComboBox = SpeakerAssignmentChoice()
+    let choice = SpeakerAssignmentChoice()
     var onAssign: ((CalendarParticipant?, String?) throws -> Void)?
     var onSubmit: (() -> Void)?
     var onCancel: (() -> Void)?
@@ -113,7 +180,7 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     }
     func comboBoxWillDismiss(_ notification: Notification) {
         let event = NSApp?.currentEvent
-        let cancelled = event?.type == .keyDown && event?.keyCode == 53
+        let cancelled = notification.userInfo?["cancelled"] as? Bool ?? (event?.type == .keyDown && event?.keyCode == 53)
         // Assignment can rebuild this view; AppKit must finish dismissing its list first.
         Task { @MainActor [self] in
             choosing = false
@@ -143,6 +210,10 @@ final class SpeakerAssignmentEditor: NSStackView, NSComboBoxDelegate {
     }
     func controlTextDidEndEditing(_ notification: Notification) { commitText() }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if !choosing, commandSelector == #selector(NSResponder.moveDown(_:)) || commandSelector == #selector(NSResponder.moveUp(_:)) {
+            choice.showSelectionMenu()
+            return true
+        }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             if !choosing, let onCancel { onCancel(); return true }
             selectionChanged = false

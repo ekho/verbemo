@@ -4,6 +4,60 @@ import Testing
 
 @Suite(.serialized, .freshHome) @MainActor
 struct SpeakerAssignmentTests {
+    @Test("Participant fields keep their width when their value changes", arguments: [180.0, 500.0])
+    func choiceWidthDoesNotFollowItsValue(width: Double) throws {
+        let participant = CalendarParticipant(id: "anna", name: "Anna", email: "anna@example.test")
+        let entries: [SpeakerNames.Entry?] = [nil, .init(name: "A", source: .manual),
+            .init(name: "Anna", source: .manual, participantID: "anna")]
+        let editors = entries.map { SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1", entry: $0,
+            participants: [participant], canEdit: true, inline: false) }
+        let rows = editors.map { NSStackView(views: [$0, NSView()]) }
+        let stack = NSStackView(views: rows)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: width, height: 160), styleMask: [], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.orderOut(nil) }
+        let host = try #require(window.contentView)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(stack)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: host.trailingAnchor), stack.topAnchor.constraint(equalTo: host.topAnchor)])
+        for row in rows { row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        host.layoutSubtreeIfNeeded()
+        let initial = editors[0].choice.frame.width
+        for editor in editors {
+            #expect(abs(editor.choice.frame.width - initial) < 1, "empty, manual and linked fields must have the same width")
+            #expect(editor.choice.frame.width <= width)
+        }
+    }
+
+    @Test("Participant options fit their full titles independently of the field width")
+    func optionsFitFullIdentitiesAndKeepSelection() async throws {
+        let participant = CalendarParticipant(id: "anna", name: "Анна С Очень Длинным Именем",
+            email: "anna.very.long.address@example.invalid")
+        let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1", entry: nil,
+            participants: [participant], canEdit: true, inline: false)
+        editor.choice.frame.size.width = 120
+        var assigned: String?
+        editor.onAssign = { participant, _ in assigned = participant?.id }
+        let menu = editor.choice.makeSelectionMenu()
+        let title = participant.name + " · " + (participant.email ?? participant.id)
+        #expect(menu.items[1].title == title)
+        let textWidth = (title as NSString).size(withAttributes: [.font: try #require(menu.font)]).width
+        #expect(menu.size.width >= textWidth)
+        #expect(menu.size.width > editor.choice.bounds.width)
+        editor.comboBoxWillPopUp(.init(name: NSComboBox.willPopUpNotification))
+        menu.performActionForItem(at: 1)
+        #expect(assigned == nil, "Do not rebuild the editor while its menu is still open")
+        editor.comboBoxWillDismiss(.init(name: NSComboBox.willDismissNotification, userInfo: ["cancelled": false]))
+        for _ in 0..<4 { await Task.yield() }
+        #expect(assigned == "anna")
+        #expect(editor.choice.stringValue == title)
+        #expect(editor.choice.makeSelectionMenu().items[1].state == .on)
+        #expect(editor.choice.bounds.width == 120)
+    }
+
     @Test("Retiring a speaker editor clears its dropdown window's accessibility parent", arguments: [false, true])
     func retiredDropdownHasNoAccessibilityParent(inline: Bool) throws {
         let app = NSApplication.shared
@@ -66,8 +120,8 @@ struct SpeakerAssignmentTests {
         #expect(updated?.choice.stringValue == "Anna · anna")
     }
 
-    @Test("Escape discards a participant highlighted in the open dropdown")
-    func cancelledDropdownDoesNotAssign() async throws {
+    @Test("Escape discards a participant highlighted in the open dropdown", arguments: [false, true])
+    func cancelledDropdownDoesNotAssign(menuCancelled: Bool) async throws {
         let editor = SpeakerAssignmentEditor(speaker: "them A", title: "Speaker 1", entry: nil,
             participants: [.init(id: "anna", name: "Anna")], canEdit: true, inline: false)
         var assignments = 0
@@ -75,8 +129,11 @@ struct SpeakerAssignmentTests {
         editor.comboBoxWillPopUp(Notification(name: NSComboBox.willPopUpNotification))
         editor.choice.selectItem(at: 1)
         editor.comboBoxSelectionDidChange(Notification(name: NSComboBox.selectionDidChangeNotification))
-        #expect(!editor.control(editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
-        editor.comboBoxWillDismiss(Notification(name: NSComboBox.willDismissNotification))
+        if !menuCancelled {
+            #expect(!editor.control(editor.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        }
+        editor.comboBoxWillDismiss(Notification(name: NSComboBox.willDismissNotification,
+            userInfo: menuCancelled ? ["cancelled": true] : nil))
         try await Task.sleep(for: .milliseconds(50))
         #expect(assignments == 0)
         #expect(editor.choice.stringValue.isEmpty)
