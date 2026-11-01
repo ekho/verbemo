@@ -1,0 +1,30 @@
+{
+  "product_source": "fcf75673a74c85f1354109fa4b5613629ef65157",
+  "local_tests": "53 tests in 4 suites passed",
+  "universal_package": "make app SIGN_ID=- exit0, build675",
+  "signature": "codesign --verify --deep --strict exit0",
+  "native_check": "light/dark, wide/narrow, search and rename observed",
+  "human_acceptance": "awaiting repeat feedback",
+  "package_log_sha256": "b16e9f70ba37160dbaf8523d365b8046e11478380ede8391c8b965288441e56f",
+  "files": {
+    "04-dark-wide.jpg": "0033ebee352795054325b8229edda1218761733a4c52192eb1cb3dd44ffbfd1e",
+    "07-handoff-light-wide.jpg": "edd76efaaf7ea26840bdf5f60f7b04d1288c697adf8443bf4c629f5bfa6e3efb",
+    "05-dark-narrow.jpg": "b21cb1cd535ab4acef2ebfacbedff6fdcc835da9094d10d136bed8fe9aa645b3",
+    "01-light-wide.jpg": "30c4451e802d38ef74efc9790f5f52042c4b5b9470b8b1c0ccaefa73ec3f4ab3",
+    "03-renamed-light.jpg": "7de76630b624b5e69af4e4c1c770a8d0a3569348b1d74224b09346c57f25179e",
+    "tests.json": "939b0de7e5c86317218353b04b02e3d7627e70ad786e04d5b9c1d6a5f21697af",
+    "07-handoff-light-wide.ax.txt": "d9b5dc37108509882f72d772e3c9eebbf013c3ab3a1b4e8e73b245c17a6d072b",
+    "02-search-light.ax.txt": "26690b97c20a14ecb9db4b530136bfbb2a72716c949c5d0f103cd0aeed3c0395",
+    "02-search-light.jpg": "44860dd026923cea7971c80535f8e0f2ed2287f129317e58f2a66cf561709aa4",
+    "05-dark-narrow.ax.txt": "02eb7f0ae94fb0dda4418653d4d6425f618a3ccdb1a1ae14aaa51b374b96cd5f",
+    "01-light-wide.ax.txt": "d9b5dc37108509882f72d772e3c9eebbf013c3ab3a1b4e8e73b245c17a6d072b",
+    "06-light-narrow.jpg": "2ba75d8e0d102f9c16d64605369553377bc9b0e4a010211202d2509b249f7e6b",
+    "03-renamed-light.ax.txt": "02eb7f0ae94fb0dda4418653d4d6425f618a3ccdb1a1ae14aaa51b374b96cd5f",
+    "data-check.json": "808867f83122f531f3828b21ac239a735eed7f38c332980b01169520e7dcd42a",
+    "06-light-narrow.ax.txt": "ec3e7098f31d5c51807ae2dd85deaa5d588075ae2c52fb66a9e4955b4fa9eaa1",
+    "review.md": "443a5c65c3e8e575e14d64f65d3ae4d1aaef509ddc132f587baf184ef662185c",
+    "04-dark-wide.ax.txt": "7cacb20cea1b86b65476b61d15ad4a3cde89739f639598484acba8cc8d18efd7",
+    "build.json": "e66d397738449bb4ef25135de76c059f276846182b6929200e730e8c5842a2d6",
+    "shots.json": "65b57bbcf076419cf43dd8007eb74251556411dc2fe3fc6c9a58d8665ba3f7ca"
+  }
+}

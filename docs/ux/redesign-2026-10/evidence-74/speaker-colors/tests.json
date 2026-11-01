@@ -1,0 +1,20 @@
+{
+  "source_commit": "fcf75673a74c85f1354109fa4b5613629ef65157",
+  "command": "swift test --no-parallel --filter 'StudioDensityTests|MeetingTranscriptReadingTests|SpeakerAssignmentTests|MeetingLibraryControllerTests'",
+  "result": "53 tests in 4 suites passed",
+  "duration_seconds": 12.858,
+  "coverage": [
+    "whole-row rendered tint in light/dark",
+    "same speaker after search reload",
+    "both unknown speaker labels neutral",
+    "same cells repaint on theme change",
+    "ink and secondary text contrast >=4.5:1 on nine surfaces and neutral",
+    "density and long/legacy-scrollbar wrapping",
+    "reading position, text selection, library and assignment regressions"
+  ],
+  "red_result": "original badge/clear-row implementation failed 6 tests with 36 issues",
+  "log_sha256": {
+    "red": "650ff3c2437b4b7be5a64d3e1178efdef945530e9494e5f9985bb1b8325f0177",
+    "green": "06b84437341162f8c4d04eed1331f66ed371742337e28e8432d151911d6f185d"
+  }
+}

@@ -30,5 +30,5 @@ Repeated/unknown speakers and cell reuse must not inherit another speaker's tint
 - [x] Update density assertions to locate the speaker name; add rendered background/reuse and contrast checks. Observe failure on current code.
 - [x] Add dynamic row surface colors; remove the transcript badge; fill the entire reusable cell.
 - [x] Run focused density/reading/assignment/library checks and inspect the diff.
-- [ ] Build a separately identified Review candidate, verify isolated profile/signature, inspect light/dark wide/narrow reading, search and editor behavior.
-- [ ] Record evidence and commit/push to epic branch; hand back for repeat human acceptance.
+- [x] Build a separately identified Review candidate, verify isolated profile/signature, inspect light/dark wide/narrow reading, search and editor behavior.
+- [x] Record evidence and commit/push to epic branch; hand back for repeat human acceptance.

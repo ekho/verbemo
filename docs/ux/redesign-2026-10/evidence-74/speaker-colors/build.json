@@ -1,0 +1,17 @@
+{
+  "source_commit": "fcf75673a74c85f1354109fa4b5613629ef65157",
+  "version": "0.17.2",
+  "build": "675",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-colors/Verbemo Studio Review.app",
+  "bundle_id": "name.ekho.verbemo.ux74.speakers",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-colors/home",
+  "recordings": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-colors/recordings",
+  "executable_sha256": "991b1edcdca5191fe09a57109be6e6b1d0df6e41b69d6dda3c87c5b834e0605d",
+  "architectures": [
+    "x86_64",
+    "arm64"
+  ],
+  "kind": "Universal Release ad-hoc",
+  "runtime": "macOS26.7.1/arm64",
+  "previous_review_preserved": true
+}

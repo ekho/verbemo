@@ -1,12 +1,12 @@
 {
-  "status": "in progress; speaker distinction needs revision",
+  "status": "refinement implemented; awaiting human repeat of speaker distinction",
   "started_at": "2026-11-01T15:02:31.891166+03:00",
-  "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+  "source_commit": "fcf75673a74c85f1354109fa4b5613629ef65157",
   "version": "0.17.2",
-  "build": "670",
-  "executable_sha256": "004f1732d973f826ac344d871619062f305ac3fd688e9fc9923185d52b5901cc",
+  "build": "675",
+  "executable_sha256": "991b1edcdca5191fe09a57109be6e6b1d0df6e41b69d6dda3c87c5b834e0605d",
   "sdk_at_build": "27.0",
-  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/home",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-speaker-colors/home",
   "fixture_meetings": 206,
   "baseline_files": 433,
   "human_results": [
@@ -29,7 +29,7 @@
       "decision": "reading priority remains open; row tint and badge removal are a suggestion, not an approved implementation"
     }
   ],
-  "pending_scenario": "agree speaker differentiation treatment; repeat reading after change",
+  "pending_scenario": "repeat human reading/speaker distinction on Review675; no human acceptance result yet for changed design",
   "runtime": {
     "macos": "26.7.1",
     "architecture": "arm64",
@@ -46,5 +46,25 @@
   "initial_evidence": {
     "01-start-reading-ru-light.jpg": "f66034ac5c00fa81ec2826c3b9eab0ab6f1c3deca64571177696cbc3d482f945",
     "01-start-reading-ru-light.ax.txt": "3b6bc1a2f1a5b92d3d7e0a3bea48269e311356390ed2a357d9951a82b90aa3ef"
+  },
+  "initial_candidate": {
+    "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+    "version": "0.17.2",
+    "build": "670",
+    "executable_sha256": "004f1732d973f826ac344d871619062f305ac3fd688e9fc9923185d52b5901cc",
+    "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/home"
+  },
+  "approved_change": "2026-11-01: user approved full utterance tint without letter badge and instructed implementation",
+  "handoff_screen": {
+    "meeting": "UX69 Атлас — планирование",
+    "version": "2 · Whisper",
+    "tab": "transcript",
+    "theme": "light",
+    "library": "visible",
+    "inspector": "hidden",
+    "searches": "empty",
+    "recording": false,
+    "queue": 0,
+    "original_names": true
   }
 }
