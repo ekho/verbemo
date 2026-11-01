@@ -252,8 +252,10 @@ enum SetupLayout {
         return stack
     }
 
-    static func actionButton(_ title: String, target: AnyObject, action: Selector) -> NSButton {
+    static func actionButton(_ title: String, symbol: String, target: AnyObject, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: target, action: action)
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        button.imagePosition = .imageLeading
         button.bezelStyle = .rounded
         button.controlSize = .small
         return button

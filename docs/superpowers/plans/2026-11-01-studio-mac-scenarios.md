@@ -55,10 +55,10 @@
 
 ### Task 5: B5 remaining entries and function map
 **Files:** existing import/setup/models/MCP/about/menu/action UI only for confirmed gaps; focused tests and coverage/evidence docs.
-- [ ] Audit all F01–F18 against actual native entry points. Direct Import opens native file selection; Cancel has no import side effect.
-- [ ] Verify storage/models, access/setup, MCP, menu/tray, About/version and rename/folder/editor/delete/undo through isolated synthetic tests and native UI where applicable. Do not execute external editors, update/install, real model deletion/download or grant access merely for a visual check.
-- [ ] Fix confirmed scope gaps using existing controls, guards and action images; no speculative redesign.
-- [ ] GREEN relevant existing suites; commit bounded fixes only if needed, then update the map with precise checks/limits.
+- [x] Audit all F01–F18 against actual native entry points. Direct Import opens native file selection; Cancel has no import side effect.
+- [x] Verify storage/models, access/setup, MCP, menu/tray, About/version and rename/folder/editor/delete/undo through isolated synthetic tests and native UI where applicable. Do not execute external editors, update/install, real model deletion/download or grant access merely for a visual check.
+- [x] Fix confirmed scope gaps using existing controls, guards and action images; no speculative redesign.
+- [x] GREEN relevant existing suites; commit bounded fixes only if needed, then update the map with precise checks/limits.
 
 ### Task 6: whole-map verification and delivery
 **Files:** evidence-73/B2–B5 and final coverage report, issue73/74 updates; product changes only for reproduced material review findings.

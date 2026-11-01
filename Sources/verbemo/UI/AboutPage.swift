@@ -48,6 +48,8 @@ final class AboutPage: NSObject {
         ]
         updates.title = localised("Check for updates…", "Проверить обновления…")
         updates.bezelStyle = .rounded
+        updates.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
+        updates.imagePosition = .imageLeading
         updates.target = self
         updates.action = #selector(checkForUpdatesClicked)
         updates.identifier = .init("about.checkUpdates")

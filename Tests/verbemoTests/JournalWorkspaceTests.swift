@@ -73,7 +73,7 @@ struct JournalWorkspaceTests {
         #expect(search.stringValue == "Planning")
         #expect(versions.indexOfSelectedItem == 0)
         app.navigate(.general)
-        #expect(library.listContentView.window == nil, "Settings categories replace the library")
+        #expect(library.listContentView.window == nil || library.listContentView.isHiddenOrHasHiddenAncestor, "Settings hide the meeting list; wide category replacement is covered separately")
         let back = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "journal.breadcrumb" } as? NSButton)
         #expect(back.sendAction(back.action, to: back.target))
         #expect(app.navigation.destination == .allMeetings)

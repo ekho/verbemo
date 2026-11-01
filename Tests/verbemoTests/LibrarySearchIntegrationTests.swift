@@ -63,6 +63,7 @@ struct LibrarySearchIntegrationTests {
         try await search("no matching phrase", in: library)
         let title = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.title" } as? NSTextField)
         #expect(title.stringValue == "No matching meetings")
+        #expect(title.toolTip == nil, "An empty result must not describe the previously selected meeting")
         try await search("", in: library)
         library.applyFilter(.processing)
         #expect(title.stringValue != "No recordings yet")

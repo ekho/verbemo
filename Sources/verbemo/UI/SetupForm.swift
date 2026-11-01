@@ -447,6 +447,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let localCards = localChoices.map { id, title, detail in
             let download = SetupLayout.actionButton(
                 localised("Download…", "Скачать…"),
+                symbol: "arrow.down.circle",
                 target: self,
                 action: #selector(downloadLocalClicked(_:)))
             download.identifier = NSUserInterfaceItemIdentifier("transcription.download.\(id)")
@@ -639,7 +640,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         diarizationSwitch.action = #selector(diarizationToggled)
         let cards = DiarizationModel.allCases.map { model in
             let download = SetupLayout.actionButton(
-                localised("Download…", "Скачать…"), target: self,
+                localised("Download…", "Скачать…"), symbol: "arrow.down.circle", target: self,
                 action: #selector(downloadDiarizationClicked(_:)))
             download.identifier = .init("transcription.diarization.download.\(model.rawValue)")
             diarizationDownloadButtons[model] = download
@@ -812,8 +813,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             detail: folderDetail,
             trailing: (mode == .settings ? [SetupLayout.actionButton(
                 localised("Open folder", "Открыть папку"),
+                symbol: "folder",
                 target: self, action: #selector(openRecordingsFolder))] : []) + [SetupLayout.actionButton(
                 localised("Choose…", "Выбрать…"),
+                symbol: "folder.badge.plus",
                 target: self, action: #selector(chooseFolder))])
     }
 
@@ -2112,6 +2115,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             return (cached.button, cached.view)
         }
         let button = NSButton(title: localised("Download", "Скачать"), target: self, action: #selector(storageDownloadClicked(_:)))
+        button.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
+        button.imagePosition = .imageLeading
         button.identifier = .init(model.directory.path)
         button.bezelStyle = .rounded
         button.controlSize = .small

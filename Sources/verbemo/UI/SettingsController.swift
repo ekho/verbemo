@@ -282,6 +282,8 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             action = NSButton(title: localised("Delete", "Удалить"), target: self,
                               action: #selector(deleteModelClicked(_:)))
             action.bezelStyle = .rounded
+            action.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
+            action.imagePosition = .imageLeading
             action.controlSize = .small
             action.tag = tag
             let deletionReason = modelDeletionReason(model)

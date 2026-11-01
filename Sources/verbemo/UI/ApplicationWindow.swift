@@ -369,9 +369,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             return
         } else if !destination.isMeetings {
             if enteringSettings && isVisible { settings.reload() }
-            let about = NSButton(title: localised("About", "О приложении"), target: self, action: #selector(showAbout))
-            about.isBordered = false
-            actions.setViews([about], in: .center)
+            actions.setViews([], in: .center)
             displaySettings()
             return
         } else {
@@ -549,7 +547,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             } else { panel.makeFirstResponder(primarySettings) }
         }
     }
-    @objc private func showAbout() { navigate(.about) }
     func newRecording() {
         guard !stopping else { return }
         guard !recordingBarIsVisible, panel.attachedSheet == nil else { return }

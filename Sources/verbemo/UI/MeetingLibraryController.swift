@@ -462,15 +462,17 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         diarizationLabel.lineBreakMode = .byWordWrapping
         diarizationLabel.maximumNumberOfLines = 3
         diarizationLabel.identifier = .init("diarization.status")
-        for (button, title, action) in [
+        for (button, title, symbol, action) in [
             (retryDiarizationButton, localised("Retry diarization", "Повторить диаризацию"),
-             #selector(retryDiarizationClicked)),
+             "arrow.clockwise", #selector(retryDiarizationClicked)),
             (skipDiarizationButton, localised("Skip diarization", "Пропустить диаризацию"),
-             #selector(skipDiarizationClicked)),
-            (finishButton, localised("Finish processing", "Доделать"), #selector(finishClicked)),
-            (cancelProcessingButton, localised("Cancel processing", "Отменить обработку"), #selector(cancelProcessingClicked)),
-        ] as [(NSButton, String, Selector)] {
+             "forward.end", #selector(skipDiarizationClicked)),
+            (finishButton, localised("Finish processing", "Доделать"), "play", #selector(finishClicked)),
+            (cancelProcessingButton, localised("Cancel processing", "Отменить обработку"), "xmark", #selector(cancelProcessingClicked)),
+        ] as [(NSButton, String, String, Selector)] {
             button.title = title
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            button.imagePosition = .imageLeading
             button.bezelStyle = .rounded
             button.target = self
             button.action = action
@@ -1165,6 +1167,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         if let activeRecording, selected?.dir == activeRecording.dir {
             showCalendar(for: selected)
             detailTitle.stringValue = activeRecording.title
+            detailTitle.toolTip = activeRecording.title
             moreButton.isEnabled = true
             versions = []
             versionSelector.removeAllItems()
@@ -1204,6 +1207,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         versionKey = selectedVersion.map(key)
 
         guard let item = selected else {
+            detailTitle.toolTip = nil
             detailTitle.stringValue = !items.isEmpty ? localised("Select a recording", "Выберите запись")
                 : librarySearchPending ? localised("Searching…", "Поиск…")
                 : libraryUnreadable > 0 ? localised("Search incomplete", "Поиск выполнен не полностью")
@@ -1932,6 +1936,8 @@ private extension MeetingLibraryController {
         emptyLabel.font = .systemFont(ofSize: 12)
         emptyLabel.textColor = StudioStyle.muted
         clearSearch.title = localised("Reset search and filter", "Сбросить поиск и фильтр")
+        clearSearch.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+        clearSearch.imagePosition = .imageLeading
         clearSearch.identifier = .init("library.reset")
         clearSearch.target = self
         clearSearch.action = #selector(clearSearchClicked)
@@ -1989,6 +1995,8 @@ private extension MeetingLibraryController {
         route.font = .systemFont(ofSize: 11)
         route.textColor = StudioStyle.muted
         let settings = NSButton(title: localised("Settings →", "Настройки →"), target: self, action: #selector(processingSettings))
+        settings.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
+        settings.imagePosition = .imageLeading
         settings.identifier = .init("meeting.processing-settings")
         settings.isBordered = false
         settings.alignment = .left
@@ -2042,6 +2050,8 @@ private extension MeetingLibraryController {
         columns.setContentHuggingPriority(.init(1), for: .vertical)
         importStatus.onCancel = { [weak self] in self?.onCancelImport?() }
         let undo = NSButton(title: localised("Undo", "Отменить"), target: self, action: #selector(undoDeletion))
+        undo.image = NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
+        undo.imagePosition = .imageLeading
         deletionNotice.setViews([deletionLabel, undo], in: .center)
         deletionNotice.spacing = 10
         deletionNotice.edgeInsets = NSEdgeInsets(top: 10, left: 24, bottom: 10, right: 24)

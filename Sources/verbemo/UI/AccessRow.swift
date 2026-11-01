@@ -45,6 +45,8 @@ final class AccessRow: NSView, LayerTinted {
         self.detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         button.bezelStyle = .rounded
+        button.image = NSImage(systemSymbolName: "arrow.up.forward", accessibilityDescription: nil)
+        button.imagePosition = .imageLeading
         button.controlSize = .small
         button.target = self
         button.action = #selector(act)
