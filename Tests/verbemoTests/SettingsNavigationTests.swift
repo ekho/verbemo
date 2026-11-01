@@ -73,6 +73,15 @@ struct SettingsNavigationTests {
         machineChecks = 0
         app.navigate(.summary)
         #expect(machineChecks == 1)
+        app.navigate(.allMeetings)
+        machineChecks = 0
+        app.settings.setup.loginItemStatus = { machineChecks += 1; return .notRegistered }
+        app.navigate(.about)
+        app.navigate(.general)
+        #expect(machineChecks == 1)
+        #expect((app.settings.content(for: .general).allDescendants.first {
+            $0.identifier?.rawValue == "access.login.toggle"
+        } as? NSSwitch)?.state == .off)
         app.hide()
         machineChecks = 0
         app.navigate(.summary)

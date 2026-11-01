@@ -368,7 +368,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             displaySettings()
             return
         } else if !destination.isMeetings {
-            if enteringSettings && isVisible { settings.reload() }
+            if (enteringSettings || previous == .about) && isVisible { settings.reload() }
             actions.setViews([], in: .center)
             displaySettings()
             return
