@@ -112,11 +112,22 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 form.spacing = SetupLayout.sectionGap
                 form.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 24, right: 24)
             }
+            form.spacing = 16
             let heading = NSTextField(labelWithString: destination.title)
-            heading.font = JournalStyle.titleFont(30)
+            heading.identifier = .init("settings.heading")
+            heading.font = StudioStyle.titleFont()
             heading.textColor = JournalStyle.ink
             form.insertArrangedSubview(heading, at: 0)
             heading.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
+            let scope = NSTextField(wrappingLabelWithString: localised(
+                "Settings apply to this profile. Recording and processing options apply to future operations. Existing transcripts and summaries stay unchanged.",
+                "Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются."))
+            scope.identifier = .init("settings.scope")
+            scope.font = SetupLayout.detailFont
+            scope.textColor = StudioStyle.muted
+            scope.maximumNumberOfLines = 0
+            form.insertArrangedSubview(scope, at: 1)
+            scope.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             let notice = NSTextField(wrappingLabelWithString: "")
             notice.textColor = .systemOrange
             notice.font = .systemFont(ofSize: 12)
@@ -489,10 +500,17 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         label.maximumNumberOfLines = 2
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let line = NSStackView(views: [label, control])
-        line.orientation = .vertical
-        line.alignment = .leading
+        let compact: Bool = switch entry.kind {
+        case .toggle, .choice, .number: true
+        default: false
+        }
+        let line = NSStackView(views: compact ? [label, SetupLayout.spacer(), control] : [label, control])
+        line.orientation = compact ? .horizontal : .vertical
+        line.alignment = compact ? .centerY : .leading
         line.spacing = 10
+        if let toggle = control as? NSSwitch {
+            label.addGestureRecognizer(NSClickGestureRecognizer(target: toggle, action: #selector(NSSwitch.toggleFromItsLabel)))
+        }
 
         // A toggle is a small thing on the right of a wide label; a text field
         // wants room. Both keep the same column so the window reads as a form.

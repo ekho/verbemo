@@ -1,6 +1,6 @@
 import AppKit
 
-/// Studio tokens apply only to the meeting workspace; settings keep their existing palette.
+/// Shared Studio colors for the workspace, settings and setup surfaces.
 @MainActor
 enum StudioStyle {
     static let paper = color("paper", light: 0xffffff, dark: 0x1c2532)

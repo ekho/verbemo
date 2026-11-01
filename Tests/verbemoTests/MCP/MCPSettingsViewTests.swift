@@ -490,7 +490,9 @@ struct MCPSettingsViewTests {
                     #expect(app.panel.contentLayoutRect.width <= 762)
                     let prompt: NSTextField = try control(page, "mcp.prompt.text")
                     #expect(prompt.bounds.width > 100)
-                    #expect(prompt.bounds.width <= 520)
+                    let frame = prompt.convert(prompt.bounds, to: app.panel.contentView)
+                    #expect(frame.minX >= 24)
+                    #expect(frame.maxX <= app.panel.contentLayoutRect.width - 24)
                     #expect(prompt.bounds.height > 100)
                     #expect(app.panel.attachedSheet == nil)
                 }

@@ -254,6 +254,11 @@ struct SettingsNavigationTests {
         #expect(app.navigation.destination == .mcp)
         #expect(app.panel.contentView?.allDescendants.contains { $0.identifier?.rawValue == "mcp.enabled" && !$0.isHiddenOrHasHiddenAncestor } == true)
         #expect(app.primaryActionsAreVisible)
+        app.navigate(.general)
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(app.panel.contentView?.allDescendants.contains {
+            $0.identifier?.rawValue == "window" && !$0.isHiddenOrHasHiddenAncestor
+        } == true, "A direct General link opens its page, while the global Settings button opens the overview")
     }
 
     @Test(.freshHome(config: #"{"transcription":{"enabled":true,"engine":"parakeet"}}"#),
@@ -302,6 +307,43 @@ struct SettingsNavigationTests {
         _ = NSApplication.shared.sendAction(try #require(options.action), to: options.target, from: options)
         #expect(rare.isHiddenOrHasHiddenAncestor)
         #expect((try? Data(contentsOf: Config.path)) == before)
+    }
+
+    @Test(.freshHome, .speaking(.russian))
+    func studioSettingsExplainScopeAndKeepSimpleRowsCompact() throws {
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination(); app.hide() }
+        app.show()
+        for width: CGFloat in [1340, 760] {
+            app.panel.setContentSize(.init(width: width, height: 600))
+            for destination in ApplicationNavigationState.Destination.allCases
+                where !destination.isMeetings && destination != .about {
+                app.navigate(destination)
+                // Direct category entry remains available at narrow widths.
+                let page = app.settings.content(for: destination)
+                app.panel.contentView?.layoutSubtreeIfNeeded()
+                let scope = try #require(page.allDescendants.first {
+                    $0.identifier?.rawValue == "settings.scope"
+                } as? NSTextField)
+                #expect(scope.stringValue.contains("Готовые расшифровки и сводки не меняются"))
+                #expect(scope.maximumNumberOfLines == 0)
+                let heading = try #require(page.allDescendants.first {
+                    $0.identifier?.rawValue == "settings.heading"
+                } as? NSTextField)
+                #expect(heading.font?.pointSize == 20)
+            }
+            app.navigate(.general)
+            let page = app.settings.content(for: .general)
+            app.panel.contentView?.layoutSubtreeIfNeeded()
+            let toggle = try #require(page.allDescendants.first {
+                $0.identifier?.rawValue == "window"
+            } as? NSSwitch)
+            let line = try #require(toggle.superview as? NSStackView)
+            let label = try #require(line.arrangedSubviews.first as? NSTextField)
+            #expect(abs(label.frame.midY - toggle.frame.midY) < 2)
+            #expect(line.frame.height < 40)
+            #expect(label.frame.width > 140)
+        }
     }
 
     @Test(.freshHome) func schemaHasExactlyOneEditorAndPagesAreSeparate() throws {

@@ -228,8 +228,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     @objc private func primaryRecordClicked() { newRecording() }
     @objc private func primaryImportClicked() { onChooseImport?() }
     @objc private func primarySettingsClicked() {
-        settingsOverview = compactSettings
         navigate(.general)
+        if compactSettings { settingsOverview = true; displaySettings() }
         settingsReturnFocus = primarySettings
     }
     @objc private func showSettingsCategories() {
@@ -283,7 +283,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         workspaceSplit.splitView.setPosition(width, ofDividerAt: 0)
         workspaceSplit.libraryItem.collapseBehavior = behavior
     }
-    private func displaySettings() {
+    private func displaySettings(refreshContent: Bool = true) {
         settingsWasCompact = compactSettings
         settingsNavigation.isHidden = false
         settingsNavigation.presentOverview(compactSettings && settingsOverview)
@@ -303,8 +303,13 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             sidebar.mount(settingsNavigation)
             workspaceSplit.libraryItem.isCollapsed = false
         }
-        let content = navigation.destination == .about
-            ? SetupLayout.scroller(around: about.contentView) : settings.content(for: navigation.destination)
+        let content: NSView
+        if !refreshContent, let current = contentHost.subviews.first, current !== settingsNavigation {
+            content = current
+        } else {
+            content = navigation.destination == .about
+                ? SetupLayout.scroller(around: about.contentView) : settings.content(for: navigation.destination)
+        }
         mount(content)
         updateHeading()
         updateLibraryToggle()
@@ -312,7 +317,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         guard !stopping, !navigation.destination.isMeetings, presentedSetup == nil,
               settingsWasCompact != compactSettings else { return }
-        displaySettings()
+        displaySettings(refreshContent: false)
     }
     private func connectLibrary() {
         guard let library = libraryProvider?() else { return }
@@ -344,8 +349,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             settingsLibraryCollapsed = workspaceSplit.libraryItem.isCollapsed
             if !settingsLibraryCollapsed { settingsLibraryWidth = sidebar.frame.width }
             settingsReturnFocus = (panel.firstResponder as? NSTextView)?.delegate as? NSView ?? panel.firstResponder as? NSView
-            settingsOverview = destination == .general && compactSettings
-        } else if destination != .general { settingsOverview = false }
+        }
+        settingsOverview = false
         showingLive = false
         navigation.navigate(destination)
         libraryProvider?()?.setMeetingSelectionActive(destination.isMeetings)

@@ -34,10 +34,10 @@
 ### Task 2: B2 settings style and scope
 **Files:** JournalStyle.swift, StudioStyle.swift, SettingsController.swift, SetupLayout.swift where needed; focused settings/schema/model/MCP tests.
 **Consumes:** existing SettingsPage, SettingsSchema, SettingsApplier and SetupForm coverage.
-- [ ] Audit represented paths against schema before changes; every existing path stays covered once.
-- [ ] Reuse Studio colors across native surfaces, readable headings and compact rows; keep controls usable at760. Place a clear profile/future-operation scope statement on settings pages; ready meeting artifacts are unchanged by those settings.
-- [ ] Verify masked secrets, restart/failed-save notices, model/storage reachability, selected/active values. No searches or new fields.
-- [ ] GREEN appropriate settings/coverage/layout suites; commit feat(ui): apply Studio settings components.
+- [x] Audit represented paths against schema before changes; every existing path stays covered once.
+- [x] Reuse Studio colors across native surfaces, readable headings and compact rows; keep controls usable at760. Place a clear profile/future-operation scope statement on settings pages; ready meeting artifacts are unchanged by those settings.
+- [x] Verify masked secrets, restart/failed-save notices, model/storage reachability, selected/active values. No searches or new fields.
+- [x] GREEN appropriate settings/coverage/layout suites; commit feat(ui): apply Studio settings components.
 
 ### Task 3: B3 new and current recording
 **Files:** NewRecordingSheet.swift, ApplicationWindow.swift/RecordingBar.swift only if gaps remain; NewRecordingSheetTests.swift, RecordingWorkspaceTests.swift.
