@@ -1,0 +1,15 @@
+{
+  "source_commit": "2dc140937789f49dd132996b2395822715fcab91",
+  "version": "0.17.2",
+  "build": "679",
+  "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-meeting-actions/Verbemo Studio Review.app",
+  "bundle_id": "name.ekho.verbemo.ux74.meeting-actions",
+  "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-meeting-actions/home",
+  "recordings": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux74-meeting-actions/recordings",
+  "executable_sha256": "c86031b88a5ce27a49c4dceb8d8a8553ffe4d595c56d6d9a3ebf97a8a4e7e4de",
+  "architectures": [
+    "arm64"
+  ],
+  "kind": "arm64 Debug ad-hoc UI review; assets/helpers from Review677",
+  "runtime": "macOS26.7.1/arm64"
+}

@@ -1,0 +1,31 @@
+{
+  "product_source": "2dc140937789f49dd132996b2395822715fcab91",
+  "tests": "79 tests/8 suites pass; additional long-title test with2 widths pass",
+  "build_kind": "arm64 Debug ad-hoc UI review; assets/helpers from Review677",
+  "native_check": "meeting actions local; compact details open/close; focus restored; four native captures",
+  "known_issue": "initial Debug transcript draw incomplete until resize, open",
+  "not_checked": [
+    "universal Release on latest source",
+    "real active capture/live",
+    "VoiceOver",
+    "Windows"
+  ],
+  "human_acceptance": "pending",
+  "files": {
+    "00-user-request.png": "cae6608f66251a1f1300ee6d1293897f8a92cdc79e62c1e2cff458d650081740",
+    "tests.json": "161fc9bcd5e1bc0cbe44bfab9c3e17ff7de767efbc1d2a6941f76faa581f525f",
+    "02-local-actions-narrow.jpg": "ac12e64077382f7640093d9193af0bc3acd9a60f3fa26e016c32ef1c1778f874",
+    "03-compact-details-close.jpg": "df0053c95a372bb464f51190b3ef52e46173b41edc9f9e13c1288ae3687bdb7b",
+    "03-compact-details-close.ax.txt": "d6aaa848c837503b63b822448ae3de3539cee54e9666e817d93ee180aabe4ef2",
+    "report.md": "0b3fc474b6035e4c10b3051a5503564a126eac3609a03905ab018176b7499ba9",
+    "01-local-actions-wide.ax.txt": "5b51fbfbeb4605da9d4fb31cd3430833ce361b4a1b8dc738f59d5f0f343d17ad",
+    "01-local-actions-wide.jpg": "b5db01d3b6173ac767735f77a42a4bfa69ca5deea73f3ac57dd94056b72fbc54",
+    "data-check.json": "799adb3e1d6be6314a2c273474bec28b27c708c56b3a10ba72795ae56708ea54",
+    "02-local-actions-narrow.ax.txt": "7ba46298e1d3a6a7e404c476dd41e1959a529f64232a70ec2cce0db6d169570c",
+    "04-handoff-wide.ax.txt": "d6da357cdf29627e0a209b491cb50a4c0bee3772f9352ea7b5b2cf628ebbb708",
+    "review.md": "0d8b66651e2c3ed2928c1f43194ed1ce7c69c2cd8babb758ad502a3fb9a75dac",
+    "04-handoff-wide.jpg": "fe753436d56de7a2a0dcaaeccaa21eb93d86760553421d99c08aed1e031277bf",
+    "build.json": "632f7bb29965a4a5e8b68bad06b6bdebd5cef5d31a3d382312f4919c519517c8",
+    "shots.json": "a13e0bcc94250335c486744d979c86653cd26d760e1d713c4343fcfe598fc498"
+  }
+}

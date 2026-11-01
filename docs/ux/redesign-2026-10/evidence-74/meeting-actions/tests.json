@@ -1,0 +1,14 @@
+{
+  "source_commit": "2dc140937789f49dd132996b2395822715fcab91",
+  "targeted_command": "swift test --no-parallel --filter 'ApplicationWindowTests|RecordingWorkspaceTests|StudioMeetingHeaderTests|RecordingsCopySummaryTests|SettingsNavigationTests|JournalWorkspaceTests|LiveTranscriptTests'",
+  "targeted_result": "79 tests in8 suites passed,33.458s",
+  "additional_long_title_command": "swift test --no-parallel --filter ApplicationWindowTests.meetingCommandsBelongToTheMeetingAndDetailsCanBeClosed",
+  "additional_long_title_result": "1 test /2 width variants passed,2.304s; same product code, strengthened title input after targeted run",
+  "red_result": "2 tests /2 suites failed with10 issues before move",
+  "log_sha256": {
+    "red": "85a67b4edff192256fe77c67c6427cb18421db19d659e9445a139c688b94790d",
+    "targeted": "df420bfe694e891d10bfb9179ddc3c159fd79889d3a9346c766320dd96d211cb",
+    "long_title": "8986ec2974a6eafc4e2db4f813a3259c35da39c21b952a1ac57dd5c9928612cb",
+    "build": "745581e5754489296ad4b2ba9b8e789a1b390305c3d8361d5848f441241ab9e0"
+  }
+}

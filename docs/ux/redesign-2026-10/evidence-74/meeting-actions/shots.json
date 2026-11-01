@@ -1,0 +1,30 @@
+[
+  {
+    "file": "01-local-actions-wide.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "b5db01d3b6173ac767735f77a42a4bfa69ca5deea73f3ac57dd94056b72fbc54",
+    "ax_sha256": "5b51fbfbeb4605da9d4fb31cd3430833ce361b4a1b8dc738f59d5f0f343d17ad"
+  },
+  {
+    "file": "02-local-actions-narrow.jpg",
+    "width": 1960,
+    "height": 1696,
+    "sha256": "ac12e64077382f7640093d9193af0bc3acd9a60f3fa26e016c32ef1c1778f874",
+    "ax_sha256": "7ba46298e1d3a6a7e404c476dd41e1959a529f64232a70ec2cce0db6d169570c"
+  },
+  {
+    "file": "03-compact-details-close.jpg",
+    "width": 1960,
+    "height": 1696,
+    "sha256": "df0053c95a372bb464f51190b3ef52e46173b41edc9f9e13c1288ae3687bdb7b",
+    "ax_sha256": "d6aaa848c837503b63b822448ae3de3539cee54e9666e817d93ee180aabe4ef2"
+  },
+  {
+    "file": "04-handoff-wide.jpg",
+    "width": 2680,
+    "height": 1696,
+    "sha256": "fe753436d56de7a2a0dcaaeccaa21eb93d86760553421d99c08aed1e031277bf",
+    "ax_sha256": "d6da357cdf29627e0a209b491cb50a4c0bee3772f9352ea7b5b2cf628ebbb708"
+  }
+]
