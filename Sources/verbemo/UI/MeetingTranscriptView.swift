@@ -141,8 +141,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         let entry = SpeakerNames.isUnknown(segment.speaker) ? nil : names?.speakers[segment.speaker]
         cell.name.stringValue = entry?.name ?? title
         cell.name.toolTip = cell.name.stringValue
-        StudioStyle.configureVoiceBadge(cell.voice, text: StudioStyle.voiceLabel(segment.speaker),
-                                        colorIndex: speakerLabels.firstIndex(of: segment.speaker))
+        cell.color = StudioStyle.voiceSurface(colorIndex: speakerLabels.firstIndex(of: segment.speaker))
         cell.edit.isEnabled = canEdit && !SpeakerNames.isUnknown(segment.speaker)
         cell.edit.toolTip = localised("Change speaker: ", "Изменить говорящего: ") + cell.name.stringValue
         cell.edit.setAccessibilityLabel(cell.edit.toolTip)
@@ -192,7 +191,7 @@ private final class SegmentCell: NSTableCellView {
     let time = NSButton(title: "", target: nil, action: nil)
     let body = NSTextField(wrappingLabelWithString: "")
     let name = NSTextField(labelWithString: "")
-    let voice = StudioStyle.voiceBadge("")
+    var color = StudioStyle.paper { didSet { needsDisplay = true } }
     let edit = SpeakerEditButton()
     private let metadata = NSStackView()
     private let stack = NSStackView()
@@ -208,14 +207,16 @@ private final class SegmentCell: NSTableCellView {
         time.contentTintColor = StudioStyle.muted
         time.identifier = .init("transcript.playFrom")
         name.font = .systemFont(ofSize: 13, weight: .semibold)
+        name.identifier = .init("transcript.speaker-name")
         name.textColor = StudioStyle.ink
         name.lineBreakMode = .byTruncatingTail
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         body.font = .systemFont(ofSize: 15)
         body.isSelectable = true
         body.identifier = .init("transcript.words")
-        let identity = NSStackView(views: [voice, name, edit])
+        let identity = NSStackView(views: [name, edit])
         identity.spacing = 6
+        identity.alignment = .top
         metadata.orientation = .vertical
         metadata.setViews([identity, time], in: .top)
         metadata.alignment = .leading
@@ -252,5 +253,11 @@ private final class SegmentCell: NSTableCellView {
         if abs(body.preferredMaxLayoutWidth - width) > 0.5 { body.preferredMaxLayoutWidth = width }
     }
     override func layout() { updateWidth(bounds.width); super.layout() }
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        bounds.fill()
+        super.draw(dirtyRect)
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }

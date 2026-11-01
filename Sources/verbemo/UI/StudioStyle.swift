@@ -33,11 +33,17 @@ enum StudioStyle {
     static func voiceLabel(_ speaker: String) -> String {
         speaker == "me" ? localised("Me", "Я") : speaker.replacingOccurrences(of: "them ", with: "")
     }
-    private static let voicePalette: [(background: UInt32, ink: UInt32)] = [
-        (0xe2eef0, 0x23565c), (0xeee4f0, 0x684374), (0xeee6d8, 0x765321),
-        (0xdfe9f4, 0x385e83), (0xeee0df, 0x794744), (0xe0eadc, 0x46673b),
-        (0xe6e1f3, 0x59467b), (0xdcece6, 0x2d6553), (0xe7e9db, 0x606737),
+    private static let voicePalette: [(background: UInt32, ink: UInt32, transcriptDark: UInt32)] = [
+        (0xe2eef0, 0x23565c, 0x20353d), (0xeee4f0, 0x684374, 0x332c40), (0xeee6d8, 0x765321, 0x383226),
+        (0xdfe9f4, 0x385e83, 0x263345), (0xeee0df, 0x794744, 0x3a2b31), (0xe0eadc, 0x46673b, 0x293829),
+        (0xe6e1f3, 0x59467b, 0x302d44), (0xdcece6, 0x2d6553, 0x233b36), (0xe7e9db, 0x606737, 0x343a27),
     ]
+    static func voiceSurface(colorIndex: Int?) -> NSColor {
+        guard let colorIndex, colorIndex >= 0 else { return paper }
+        let index = colorIndex % voicePalette.count
+        let pair = voicePalette[index]
+        return color("voice-\(index)-surface", light: pair.background, dark: pair.transcriptDark)
+    }
     static func voiceBadge(_ text: String, colorIndex: Int? = nil) -> NSTextField {
         let badge = CenteredVoiceBadge(labelWithString: text)
         badge.cell = CenteredVoiceCell(textCell: text)

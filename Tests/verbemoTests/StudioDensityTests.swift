@@ -37,13 +37,13 @@ struct StudioDensityTests {
             }
             let currentCell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
             currentCell.layoutSubtreeIfNeeded()
-            let currentBadge = try #require(currentCell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.frame.width == 26 })
-            let badgeRect = currentBadge.convert(currentBadge.bounds, to: document)
+            let currentName = try #require(currentCell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "transcript.speaker-name" })
+            let nameRect = currentName.convert(currentName.bounds, to: document)
             let tabsRect = tab.convert(tab.bounds, to: document)
-            #expect(badgeRect.minX <= 25, "One page gutter, without a second inset around the transcript")
-            #expect(abs(badgeRect.minX - title.convert(title.bounds, to: document).minX) <= 2)
+            #expect(nameRect.minX <= 25, "One page gutter, without a second inset around the transcript")
+            #expect(abs(nameRect.minX - title.convert(title.bounds, to: document).minX) <= 2)
             #expect(abs(transcript.bounds.width - (document.bounds.width - 48)) <= 1)
-            #expect((0...16).contains(tabsRect.minY - badgeRect.maxY), "Text starts directly below the tab strip at width \(width), library hidden \(hideLibrary)")
+            #expect((0...16).contains(tabsRect.minY - nameRect.maxY), "Text starts directly below the tab strip at width \(width), library hidden \(hideLibrary)")
         }
     }
 
@@ -86,42 +86,70 @@ struct StudioDensityTests {
         let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
         cell.layoutSubtreeIfNeeded()
         let fields = cell.allDescendants.compactMap { $0 as? NSTextField }
-        let badge = try #require(fields.first { $0.frame.width == 26 })
+        let name = try #require(fields.first { $0.identifier?.rawValue == "transcript.speaker-name" })
         let body = try #require(fields.first { $0.identifier?.rawValue == "transcript.words" })
-        let badgeRect = badge.convert(badge.bounds, to: cell), bodyRect = body.convert(body.bounds, to: cell)
+        let nameRect = name.convert(name.bounds, to: cell), bodyRect = body.convert(body.bounds, to: cell)
         let needed = try #require(body.cell).cellSize(forBounds: .init(x: 0, y: 0, width: body.bounds.width, height: 10000)).height
-        #expect(abs(badgeRect.maxY - bodyRect.maxY) <= 2)
+        #expect(abs(nameRect.maxY - bodyRect.maxY) <= 5)
         #expect(body.bounds.height >= needed - 1)
         #expect(bodyRect.minY >= 9)
     }
 
-    @Test func differentVoicesHaveDistinctBadgesAndReuseKeepsTheirColor() throws {
+    @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func wholeUtteranceDistinguishesSpeakersAfterSearchReload(appearance: NSAppearance.Name) throws {
         _ = NSApplication.shared
         let view = MeetingTranscriptView()
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = view
+        window.appearance = NSAppearance(named: appearance)
         defer { window.orderOut(nil) }
-        let segments: [Transcript.Segment] = ["me", "them A", "them B"].enumerated().map { index, speaker in
+        let segments: [Transcript.Segment] = ["them A", "them B", "them A", "them ?", "speaker ?"].enumerated().map { index, speaker in
             .init(speaker: speaker, start_ms: index * 1000, end_ms: (index + 1) * 1000, text: "Short utterance")
         }
         let transcript = Transcript(engine: "test", model: "test", created_at: "test", segments: segments)
-        view.update(transcript: transcript, names: nil, participants: [], canEdit: false)
+        view.update(transcript: transcript, names: nil, participants: [], canEdit: true)
         view.layoutSubtreeIfNeeded()
         let table = try #require(view.documentView as? NSTableView)
         func color(_ row: Int) throws -> NSColor {
             let cell = try #require(table.view(atColumn: 0, row: row, makeIfNecessary: true))
-            let badge = try #require(cell.allDescendants.compactMap { $0 as? NSTextField }.first { $0.frame.width == 26 })
-            var resolved: NSColor?
-            NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
-                resolved = badge.backgroundColor?.usingColorSpace(.sRGB)
-            }
-            return try #require(resolved)
+            cell.layoutSubtreeIfNeeded()
+            #expect(!cell.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.frame.width == 26 }, "The transcript identifies speakers by name, without letter badges")
+            let bitmap = try #require(cell.bitmapImageRepForCachingDisplay(in: cell.bounds))
+            cell.cacheDisplay(in: cell.bounds, to: bitmap)
+            let left = try #require(bitmap.colorAt(x: 1, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+            let right = try #require(bitmap.colorAt(x: bitmap.pixelsWide - 2, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+            #expect(left.alphaComponent > 0.99 && left == right, "Background covers the name, time and text columns")
+            return left
         }
-        let colors = try (0..<3).map(color)
-        #expect(colors[0] != colors[1] && colors[1] != colors[2] && colors[0] != colors[2])
+        let colors = try (0..<5).map(color)
+        #expect(colors[0] != colors[1] && colors[0] == colors[2] && colors[3] != colors[0] && colors[3] != colors[1] && colors[3] == colors[4], "Uncertain speaker labels share a neutral background")
         view.setSearch(matches: [1: [.init(location: 0, length: 5)]])
         view.layoutSubtreeIfNeeded()
-        #expect(try (0..<3).map(color) == colors)
+        #expect(try (0..<5).map(color) == colors)
+        window.appearance = NSAppearance(named: appearance == .aqua ? .darkAqua : .aqua)
+        view.layoutSubtreeIfNeeded()
+        let switched = try (0..<5).map(color)
+        #expect(switched[0] != colors[0] && switched[0] == switched[2])
+    }
+    @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func utteranceSurfacesKeepTextReadable(appearance: NSAppearance.Name) throws {
+        func luminance(_ c: NSColor) -> Double {
+            func linear(_ v: CGFloat) -> Double { let n = Double(v); return n <= 0.04045 ? n / 12.92 : pow((n + 0.055) / 1.055, 2.4) }
+            return 0.2126 * linear(c.redComponent) + 0.7152 * linear(c.greenComponent) + 0.0722 * linear(c.blueComponent)
+        }
+        let theme = try #require(NSAppearance(named: appearance))
+        for index in [nil] + (0..<9).map({ Optional($0) }) {
+            var background: NSColor?, inks: [NSColor] = []
+            theme.performAsCurrentDrawingAppearance {
+                background = StudioStyle.voiceSurface(colorIndex: index).usingColorSpace(.sRGB)
+                inks = [StudioStyle.ink, StudioStyle.muted].compactMap { $0.usingColorSpace(.sRGB) }
+            }
+            let b = luminance(try #require(background))
+            for ink in inks {
+                let a = luminance(ink)
+                #expect((max(a, b) + 0.05) / (min(a, b) + 0.05) >= 4.5)
+            }
+        }
     }
     @Test func legacyScrollbarDoesNotClipTheLastLine() async throws {
         _ = NSApplication.shared
