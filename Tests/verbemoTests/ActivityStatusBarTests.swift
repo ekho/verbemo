@@ -4,6 +4,21 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct ActivityStatusBarTests {
+    @Test("Playback and library search messages belong to the bottom row", .freshHome)
+    func playbackAndSearchMessagesUseStatusRow() throws {
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination() }
+        let library = MeetingLibraryController(root: Home.current.defaultRecordings, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.navigate(.allMeetings)
+        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
+        for id in ["playback.message", "library.search-status"] {
+            #expect(bar.allDescendants.contains { $0.identifier?.rawValue == id })
+            #expect(!library.contentView.allDescendants.contains { $0.identifier?.rawValue == id })
+            #expect(!library.listContentView.allDescendants.contains { $0.identifier?.rawValue == id })
+        }
+    }
+
     @Test("Settings and import notices share the bottom row without expanding a narrow window", .freshHome)
     func simultaneousServiceNoticesFit() throws {
         try FileManager.default.createDirectory(at: Home.current.configDirectory, withIntermediateDirectories: true)

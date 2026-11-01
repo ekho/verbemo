@@ -167,7 +167,7 @@ struct LibrarySearchIntegrationTests {
         try await search("absent", in: library)
         let title = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.title" } as? NSTextField)
         #expect(title.stringValue == "Search incomplete")
-        let status = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.search-status" } as? NSTextField)
+        let status = try #require(library.serviceViews.first { $0.identifier?.rawValue == "library.search-status" } as? NSTextField)
         #expect(!status.isHidden)
         #expect(status.stringValue.contains("could not be searched"))
         let reset = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.reset" } as? NSButton)
@@ -192,7 +192,7 @@ struct LibrarySearchIntegrationTests {
         #expect(table.sendAction(table.action, to: table.target))
         await library.settled()
         #expect(library.meetingSearchIndex == nil)
-        let status = try #require(library.listContentView.allDescendants.first { $0.identifier?.rawValue == "library.search-status" } as? NSTextField)
+        let status = try #require(library.serviceViews.first { $0.identifier?.rawValue == "library.search-status" } as? NSTextField)
         #expect(status.stringValue.contains("could not be opened"))
     }
 

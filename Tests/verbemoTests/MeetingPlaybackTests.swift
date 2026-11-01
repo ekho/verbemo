@@ -111,7 +111,7 @@ struct MeetingPlaybackTests {
         view.setMeeting(dir)
         await view.settled()
         #expect(view.player.currentItem == nil)
-        let message = try #require(view.allDescendants.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "playback.message" })
+        let message = try #require(view.serviceViews.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "playback.message" })
         #expect(!message.isHiddenOrHasHiddenAncestor)
         #expect(message.stringValue == "Не удалось воспроизвести аудио встречи.")
     }

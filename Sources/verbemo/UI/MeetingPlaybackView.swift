@@ -14,7 +14,8 @@ final class MeetingPlaybackView: JournalSurface {
     private let time = NSTextField(labelWithString: "00:00 / 00:00")
     private let volume = NSSlider(value: 1, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let speed = NSPopUpButton()
-    private let message = NSTextField(wrappingLabelWithString: "")
+    private let message = NSTextField(labelWithString: "")
+    var serviceViews: [NSView] { [message] }
     private let rates: [Float] = [0.75, 1, 1.25, 1.5, 2]
     private var sources: [Source] = []
     private var duration: Double = 0
@@ -69,19 +70,14 @@ final class MeetingPlaybackView: JournalSurface {
         message.font = .systemFont(ofSize: 11)
         message.textColor = StudioStyle.muted
         message.identifier = .init("playback.message")
-        let stack = NSStackView(views: [row, message])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 4
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        message.lineBreakMode = .byTruncatingTail
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-            row.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            message.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            row.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
         ])
         message.isHidden = true
         refreshControls()
@@ -145,6 +141,7 @@ final class MeetingPlaybackView: JournalSurface {
         timeline.doubleValue = 0
         message.isHidden = next.isEmpty
         message.stringValue = localised("Loading audio…", "Загрузка аудио…")
+        message.toolTip = message.stringValue
         refreshControls()
         guard !next.isEmpty else { return }
         loading = Task { [weak self] in

@@ -100,7 +100,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var allItems: [SessionInventory.Item] = []
     private var meetingFilter: ApplicationNavigationState.Destination = .allMeetings
     private let search = MeetingSearchField()
-    private let librarySearchStatus = NSTextField(wrappingLabelWithString: "")
+    private let librarySearchStatus = NSTextField(labelWithString: "")
     private var librarySearchTask: Task<Void, Never>?
     private var librarySearchTasks: [Int: Task<Void, Never>] = [:]
     private var librarySearchGeneration = 0
@@ -361,7 +361,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     var mcpPendingDeletion: Set<String> { Set(allItems.filter { deletion.isPending($0.dir) }.map { $0.dir.lastPathComponent }) }
     private let deletionNotice = NSStackView()
     private let deletionLabel = NSTextField(labelWithString: "")
-    var serviceViews: [NSView] { [detailError, resultNotice, deletionNotice, busyLabel] }
+    var serviceViews: [NSView] { [detailError, resultNotice, deletionNotice, busyLabel, librarySearchStatus] + audioPlayer.serviceViews }
     private var undoDeletionID: UUID?
     var isProcessing: Bool { working || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
@@ -1141,8 +1141,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             : libraryUnreadable > 0 ? localised("Some materials could not be searched. Try refreshing the library.", "Не удалось проверить часть материалов. Попробуйте обновить библиотеку.")
             : libraryNavigationFailed ? localised("The current result could not be opened. Refresh the library or check the meeting details.", "Не удалось открыть текущий результат. Обновите библиотеку или проверьте детали встречи.") : ""
         librarySearchStatus.isHidden = librarySearchStatus.stringValue.isEmpty
-        emptyLabel.stringValue = !librarySearchStatus.isHidden ? librarySearchStatus.stringValue
-            : !libraryQuery.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
+        librarySearchStatus.toolTip = librarySearchStatus.stringValue
+        emptyLabel.isHidden = !librarySearchStatus.isHidden
+        emptyLabel.stringValue = !libraryQuery.isEmpty ? localised("No meetings match your search.", "По вашему запросу встреч не найдено.")
             : meetingFilter == .processing ? localised("Nothing is being processed right now.", "Сейчас ничего не обрабатывается.")
             : meetingFilter == .attention ? localised("No meetings need your attention.", "Нет встреч, требующих действий.")
             : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
@@ -1977,10 +1978,11 @@ private extension MeetingLibraryController {
         scroll.autohidesScrollers = true
         scroll.setContentHuggingPriority(.init(1), for: .vertical)
         librarySearchStatus.identifier = .init("library.search-status")
-        librarySearchStatus.font = .systemFont(ofSize: 12)
+        librarySearchStatus.font = .systemFont(ofSize: 11)
         librarySearchStatus.textColor = StudioStyle.muted
+        librarySearchStatus.lineBreakMode = .byTruncatingTail
         librarySearchStatus.isHidden = true
-        let list = NSStackView(views: [listHeading, searchRow, librarySearchStatus, scroll, emptyView])
+        let list = NSStackView(views: [listHeading, searchRow, scroll, emptyView])
         list.orientation = .vertical
         list.distribution = .fill
         list.alignment = .leading
