@@ -529,7 +529,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             button.title = ""
             button.image = StudioStyle.regenerationImage(symbol: button === repeatButton ? "text.bubble" : "checklist")
             button.imagePosition = .imageOnly
-            button.bezelStyle = .rounded
+            button.isBordered = false
+            button.imageScaling = .scaleProportionallyDown
             button.target = self
             button.action = action
             button.widthAnchor.constraint(equalToConstant: 32).isActive = true

@@ -25,10 +25,17 @@ enum StudioStyle {
         let content = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         let refresh = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
         let image = NSImage(size: .init(width: 24, height: 24), flipped: false) { _ in
-            content?.draw(in: .init(x: 0, y: 3, width: 18, height: 21))
+            func draw(_ symbol: NSImage?, in box: NSRect) {
+                guard let symbol else { return }
+                let scale = min(box.width / symbol.size.width, box.height / symbol.size.height)
+                let size = NSSize(width: symbol.size.width * scale, height: symbol.size.height * scale)
+                symbol.draw(in: .init(x: box.midX - size.width / 2, y: box.midY - size.height / 2,
+                                     width: size.width, height: size.height))
+            }
+            draw(content, in: .init(x: 0, y: 3, width: 18, height: 21))
             NSColor.clear.setFill()
             NSRect(x: 11, y: 0, width: 13, height: 13).fill(using: .copy)
-            refresh?.draw(in: .init(x: 12, y: 1, width: 11, height: 11))
+            draw(refresh, in: .init(x: 12, y: 1, width: 11, height: 11))
             return true
         }
         image.isTemplate = true
