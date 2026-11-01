@@ -66,6 +66,8 @@ struct RecordingWorkspaceTests {
             status: .live))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let inspector = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        let liveView = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? LiveTranscriptView }.first)
+        #expect(library.toolbarContent.isDescendant(of: liveView), "Current-meeting commands stay inside the live meeting")
         let button = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector" } as? NSButton)
         if width == 760 {
             #expect(inspector.isHidden)

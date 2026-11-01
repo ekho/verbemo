@@ -25,6 +25,50 @@ struct ApplicationNavigationTests {
 @Suite(.serialized)
 @MainActor
 struct ApplicationWindowTests {
+    @Test(.freshHome(config: #"{"calendar":false}"#), arguments: [760, 1340])
+    func meetingCommandsBelongToTheMeetingAndDetailsCanBeClosed(width: Int) async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: SessionFixture.make(meta: ["title": String(repeating: "Длинное название учебной встречи ", count: 4)]), to: root.appendingPathComponent("fixture"))
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(.init(width: width, height: 600))
+        app.show()
+        let content = try #require(app.panel.contentView)
+        for _ in 0..<4 { content.layoutSubtreeIfNeeded(); await Task.yield() }
+        let document = try #require(content.allDescendants.first { $0.identifier?.rawValue == "meeting.document" })
+        let title = try #require(document.allDescendants.first { $0.identifier?.rawValue == "meeting.title" })
+        let titleRect = title.convert(title.bounds, to: document)
+        let commands = library.toolbarContent.allDescendants.compactMap { $0 as? NSButton }
+        #expect(commands.count == 3)
+        for button in commands {
+            #expect(button.isDescendant(of: document), "Meeting commands must stay in the meeting, not the global toolbar")
+            let rect = button.convert(button.bounds, to: document)
+            #expect(rect.minX >= 0 && rect.maxX <= document.bounds.maxX + 1)
+            #expect(titleRect.width > 100 && titleRect.maxX <= rect.minX - 6, "Long meeting names must not collide with commands")
+            #expect(button.bounds.width >= button.fittingSize.width - 1)
+        }
+        let toggle = try #require(commands.first { $0.identifier?.rawValue == "meeting.inspector" })
+        let inspector = try #require(content.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
+        if inspector.isHidden { #expect(NSApp.sendAction(try #require(toggle.action), to: toggle.target, from: toggle)) }
+        content.layoutSubtreeIfNeeded()
+        let close = try #require(inspector.allDescendants.compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "meeting.inspector-close" })
+        #expect(!close.isHiddenOrHasHiddenAncestor)
+        #expect(NSApp.sendAction(try #require(close.action), to: close.target, from: close))
+        content.layoutSubtreeIfNeeded()
+        #expect(inspector.isHidden)
+        #expect(!toggle.isHiddenOrHasHiddenAncestor)
+        #expect(app.panel.firstResponder === toggle)
+        app.navigate(.general)
+        #expect(library.toolbarContent.window == nil)
+        #expect(app.primaryActionsAreVisible)
+        app.navigate(.allMeetings)
+        content.layoutSubtreeIfNeeded()
+        #expect(library.toolbarContent.isDescendant(of: document))
+    }
+
     @Test(.freshHome(config: #"{"calendar":false}"#), .speaking(.russian), arguments: [760, 1340])
     func primaryActionsStayAboveBothPanesWithLibraryShownOrHidden(width: Int) async throws {
         let app = ApplicationWindow()

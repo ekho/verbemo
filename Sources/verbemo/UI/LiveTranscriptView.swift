@@ -8,6 +8,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
     private var levelTimer: Timer?
     var onRename: ((String) throws -> Void)?
     private let name = NSTextField()
+    let meetingActionsHost = NSStackView()
     private var savedTitle = ""
     var title: String {
         get { savedTitle }
@@ -41,7 +42,12 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         ])
         sources.distribution = .fillEqually
         sources.spacing = 24
-        let stack = NSStackView(views: [name, note, sources, heading, content, sourceNote])
+        name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        meetingActionsHost.setContentHuggingPriority(.required, for: .horizontal)
+        meetingActionsHost.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let titleRow = NSStackView(views: [name, meetingActionsHost])
+        titleRow.spacing = 12
+        let stack = NSStackView(views: [titleRow, note, sources, heading, content, sourceNote])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
@@ -52,7 +58,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 40),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -40),
-            name.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            titleRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sources.widthAnchor.constraint(equalTo: stack.widthAnchor),
             note.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sourceNote.widthAnchor.constraint(equalTo: stack.widthAnchor),

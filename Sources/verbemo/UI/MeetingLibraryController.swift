@@ -29,6 +29,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private(set) var contentView = NSView()
     private(set) var listContentView = NSView()
     let toolbarContent = NSStackView()
+    private let titleActions = NSStackView()
     var onSelectMeeting: (() -> Void)?
     var onNavigateSettings: ((ApplicationNavigationState.Destination) -> Void)?
     var currentFilter: ApplicationNavigationState.Destination { meetingFilter }
@@ -564,7 +565,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         moreButton.isBordered = false
         moreButton.target = self
         moreButton.action = #selector(moreClicked(_:))
-        let titleRow = NSStackView(views: [detailTitle])
+        let titleSpacer = NSView()
+        titleSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let titleRow = NSStackView(views: [detailTitle, titleSpacer, titleActions])
+        titleActions.setContentHuggingPriority(.required, for: .horizontal)
+        titleActions.setContentCompressionResistancePriority(.required, for: .horizontal)
         detailTitle.identifier = .init("meeting.title")
         detailTitle.delegate = self
         detailTitle.target = self
@@ -742,6 +747,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         guard let columns = journalColumns else { return }
         inspectorRequested = columns.arrangedSubviews[2].isHidden
         updateCompactLayout()
+    }
+    @objc private func closeInspector() {
+        inspectorRequested = false
+        updateCompactLayout()
+        panel.makeFirstResponder(inspectorButton)
     }
     @objc private func resultSelected(_ sender: NSButton) {
         for case let button as JournalTabButton in resultPicker.arrangedSubviews { button.select(button === sender) }
@@ -1167,6 +1177,13 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             finishSearchReload(previousPosition: previousPosition)
         }
         let live = activeRecording.map { selected?.dir == $0.dir } ?? false
+        let actionsHost = live ? activeRecordingView?.meetingActionsHost ?? titleActions : titleActions
+        if toolbarContent.superview !== actionsHost {
+            (toolbarContent.superview as? NSStackView)?.removeArrangedSubview(toolbarContent)
+            toolbarContent.removeFromSuperview()
+            actionsHost.addArrangedSubview(toolbarContent)
+        }
+        toolbarContent.isHidden = selected == nil
         meetingDocument?.isHidden = live && activeRecordingView != nil
         activeRecordingView?.isHidden = !live
         openActiveButton.isHidden = true
@@ -1983,7 +2000,8 @@ private extension MeetingLibraryController {
         inspectorButton.target = self
         inspectorButton.action = #selector(toggleInspector)
         toolbarContent.setViews([copy, moreButton, inspectorButton], in: .center)
-        toolbarContent.spacing = 20
+        toolbarContent.spacing = 12
+        moreButton.identifier = .init("meeting.actions")
         detail.edgeInsets = NSEdgeInsets(top: 16, left: 24, bottom: 12, right: 24)
         // The document's arranged views fill its readable column, without setting a window minimum.
         for constraint in detail.constraints where constraint.firstAttribute == .width { constraint.isActive = false }
@@ -2011,8 +2029,14 @@ private extension MeetingLibraryController {
         settings.isBordered = false
         settings.alignment = .left
         settings.font = .systemFont(ofSize: 11)
+        let closeDetails = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(closeInspector))
+        closeDetails.identifier = .init("meeting.inspector-close")
+        closeDetails.isBordered = false
+        closeDetails.toolTip = localised("Close meeting details", "Закрыть детали встречи")
+        closeDetails.setAccessibilityLabel(closeDetails.toolTip)
+        let inspectorHeading = NSStackView(views: [StudioStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")), NSView(), closeDetails])
         let inspector = FlippedStackView(views: [
-            StudioStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")),
+            inspectorHeading,
             StudioStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
             calendarPicker,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,

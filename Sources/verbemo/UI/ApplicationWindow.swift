@@ -17,7 +17,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private let toolbar = NSStackView()
     private let title = NSButton()
     private let heading = NSTextField(labelWithString: "")
-    private let actions = NSStackView()
     private let contentHost = NSView()
     private let settingsNavigation = JournalSettingsNavigation()
     private let allSettings = NSButton()
@@ -166,7 +165,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         primaryRecord.bezelColor = StudioStyle.accent
         primaryRecord.contentTintColor = StudioStyle.paper
         primaryActions.spacing = 8
-        toolbar.setViews([libraryToggle, title, heading, spacer, actions, primaryActions], in: .center)
+        toolbar.setViews([libraryToggle, title, heading, spacer, primaryActions], in: .center)
         toolbar.spacing = 8
         toolbar.edgeInsets = NSEdgeInsets(top: 8, left: 24, bottom: 8, right: 24)
         toolbar.heightAnchor.constraint(equalToConstant: 48).isActive = true
@@ -333,7 +332,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             self.toolbar.isHidden = false
             self.settingsNavigation.isHidden = true
             self.updateHeading()
-            self.actions.setViews([library.toolbarContent], in: .center)
             library.updateCompactLayout()
             self.mount(library.contentView)
             if returning { self.restoreLibrarySidebar() }
@@ -356,20 +354,16 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         libraryProvider?()?.setMeetingSelectionActive(destination.isMeetings)
         toolbar.isHidden = false
         updateHeading()
-        actions.isHidden = false
         let content: NSView
         if destination.isMeetings, let library = libraryProvider?() {
             library.refresh()
             library.applyFilter(destination, clearSearch: clearSearch)
-            actions.setViews([library.toolbarContent], in: .center)
             content = library.contentView
         } else if destination == .about {
-            actions.setViews([], in: .center)
             displaySettings()
             return
         } else if !destination.isMeetings {
             if (enteringSettings || previous == .about) && isVisible { settings.reload() }
-            actions.setViews([], in: .center)
             displaySettings()
             return
         } else {
@@ -428,7 +422,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         settingsNavigation.isHidden = true
         settingsBackRow.isHidden = true
         if !navigation.destination.isMeetings { sidebar.mount(libraryProvider?()?.listContentView ?? NSView()) }
-        actions.isHidden = true
         mount(setup.contentView)
         presentedSetup = setup
         setup.prepare()
@@ -444,14 +437,11 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         navigation.resultTab = "transcript"
         toolbar.isHidden = false
         updateHeading()
-        actions.isHidden = false
         settingsNavigation.isHidden = true
         if let library = libraryProvider?(), library.selectActiveRecording() {
-            actions.setViews([library.toolbarContent], in: .center)
             mount(library.contentView)
             library.updateCompactLayout()
         } else {
-            actions.setViews([], in: .center)
             mount(liveView)
         }
         if returning { restoreLibrarySidebar() }
