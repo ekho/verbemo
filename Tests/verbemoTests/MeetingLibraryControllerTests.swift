@@ -10,6 +10,89 @@ import Testing
 @Suite(.serialized, .freshHome)
 @MainActor
 struct MeetingLibraryControllerTests {
+    @Test("Result errors can be dismissed without changing artifacts, and changed errors return")
+    func resultNoticeDismissalIsPresentationOnly() async throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        try Data("Ready summary".utf8).write(to: dir.appendingPathComponent("summary.md"))
+        try TranscriptVersions.Request(engine: "whisper", diarization: nil).write(to: dir)
+        try SessionState.amend(dir, with: [SessionState.Key.transcriptionFailed: "Synthetic first failure"])
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        let before = try Self.fileSnapshot(dir)
+        let notice = try #require(library.contentView.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.result-notice"
+        })
+        let close = try #require(notice.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.dismiss-notice"
+        } as? NSButton)
+        let status = try #require(notice.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.processing-status"
+        } as? NSTextField)
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(status.stringValue.contains("Synthetic first failure"))
+        #expect(close.image != nil && close.title.isEmpty && close.toolTip != nil)
+        #expect(notice.superview?.allDescendants.contains { $0.identifier?.rawValue == "meeting.result-tabs" } == true)
+        #expect(close.sendAction(close.action, to: close.target))
+        library.refresh(); await library.settled()
+        #expect(notice.isHiddenOrHasHiddenAncestor)
+        #expect(try Self.fileSnapshot(dir) == before)
+        #expect(library.currentActions.hasPendingTranscript)
+        try SessionState.amend(dir, with: [SessionState.Key.transcriptionFailed: "Synthetic different failure"])
+        library.refresh(); await library.settled()
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(status.stringValue.contains("Synthetic different failure"))
+        for task in library.stopForTermination() { await task.value }
+    }
+
+    @Test("Pending, deferred and failed requests keep the previous ready result",
+          arguments: ["pending", "deferred", "failed"])
+    func requestNoticeKeepsTheReadyVersion(state: String) throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        Config.update(path: ["transcription", "enabled"], value: true)
+        try TranscriptVersions.Request(engine: "whisper", diarization: nil).write(to: dir)
+        try SessionState.amend(dir, with: [
+            SessionState.Key.transcriptionDeferred: state == "deferred" ? true : nil,
+            SessionState.Key.transcriptionFailed: state == "failed" ? "Synthetic failure" : nil,
+        ])
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        defer { _ = library.stopForTermination(); app.hide() }
+        let notice = try #require(library.contentView.allDescendants.first {
+            $0.identifier?.rawValue == "meeting.result-notice"
+        })
+        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(library.currentActions.transcriptReady)
+        #expect(library.currentActions.hasPendingTranscript)
+        #expect(library.currentActions.reason(for: .regenerateSummary) != nil)
+        #expect(PostProcessor.readTranscript(dir)?.segments.first?.text == "Hello.")
+    }
+
+    @Test("Regeneration actions show distinct content images with refresh badges")
+    func regenerationImagesDistinguishTheResult() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        defer { _ = library.stopForTermination(); app.hide() }
+        let buttons = library.contentView.allDescendants.compactMap { $0 as? NSButton }
+        let transcript = try #require(buttons.first { $0.identifier?.rawValue == "meeting.retranscribe" }?.image)
+        let summary = try #require(buttons.first { $0.identifier?.rawValue == "meeting.generate-summary" }?.image)
+        #expect(transcript.size.width >= 24 && summary.size.width >= 24)
+        #expect(transcript.isTemplate && summary.isTemplate)
+        #expect(transcript.tiffRepresentation != summary.tiffRepresentation)
+    }
+
     @Test("Assignment restores the new transcript pencil after asynchronous read-back")
     func assignmentFocusFollowsReadBack() async throws {
         let root = try Self.folder()

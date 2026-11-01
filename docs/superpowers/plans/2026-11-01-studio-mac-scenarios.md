@@ -48,10 +48,10 @@
 
 ### Task 4: B4 results and processing
 **Files:** MeetingLibraryController.swift, shared native action-image helper only if needed; relevant meeting/action/cancellation tests.
-- [ ] RED dismissible result notices and composite transcript/summary regeneration icons; content/state changes re-show relevant notices.
-- [ ] Reuse #72 result/participant/player components. Dismiss only presentation; keep busy/stale/cancel/retry guards, old ready results and selected artifact.
-- [ ] Verify ready/pending/deferred/failed/cancelled states with existing synthetic fixtures and operations; avoid provider jobs.
-- [ ] GREEN result/controller/action/cancellation tests; commit feat(ui): refine Studio result actions and notices.
+- [x] RED dismissible result notices and composite transcript/summary regeneration icons; content/state changes re-show relevant notices.
+- [x] Reuse #72 result/participant/player components. Dismiss only presentation; keep busy/stale/cancel/retry guards, old ready results and selected artifact.
+- [x] Verify ready/pending/deferred/failed/cancelled states with existing synthetic fixtures and operations; avoid provider jobs.
+- [x] GREEN result/controller/action/cancellation tests; commit feat(ui): refine Studio result actions and notices.
 
 ### Task 5: B5 remaining entries and function map
 **Files:** existing import/setup/models/MCP/about/menu/action UI only for confirmed gaps; focused tests and coverage/evidence docs.

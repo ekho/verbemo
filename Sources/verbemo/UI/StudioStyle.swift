@@ -12,6 +12,19 @@ enum StudioStyle {
     static let selection = color("selection", light: 0xdbe4f4, dark: 0x2f405c)
     static let line = color("line", light: 0xc3ced7, dark: 0x405169)
     static func titleFont() -> NSFont { .systemFont(ofSize: 20, weight: .bold) }
+    static func regenerationImage(symbol: String) -> NSImage {
+        let content = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        let refresh = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        let image = NSImage(size: .init(width: 24, height: 24), flipped: false) { _ in
+            content?.draw(in: .init(x: 0, y: 3, width: 18, height: 21))
+            NSColor.clear.setFill()
+            NSRect(x: 11, y: 0, width: 13, height: 13).fill(using: .copy)
+            refresh?.draw(in: .init(x: 12, y: 1, width: 11, height: 11))
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
     static func caption(_ text: String) -> NSTextField {
         let field = JournalStyle.caption(text)
         field.textColor = muted

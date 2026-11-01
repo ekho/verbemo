@@ -65,6 +65,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let route = NSTextField(wrappingLabelWithString: "")
     private let cancelProcessingButton = NSButton()
     private let processingStatus = NSTextField(wrappingLabelWithString: "")
+    private let resultNotice = JournalSurface(StudioStyle.inset)
+    private let dismissNotice = NSButton()
+    private var noticeKey = ""
+    private var noticeDismissed = false
     private let processingCancellation: MeetingProcessingCancellation
     private var processingMonitor: Task<Void, Never>?
     private var terminating = false
@@ -475,6 +479,32 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         processingStatus.identifier = .init("meeting.processing-status")
         processingStatus.font = .systemFont(ofSize: 11)
         processingStatus.textColor = StudioStyle.muted
+        resultNotice.identifier = .init("meeting.result-notice")
+        resultNotice.isHidden = true
+        dismissNotice.identifier = .init("meeting.dismiss-notice")
+        dismissNotice.title = ""
+        dismissNotice.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+        dismissNotice.imagePosition = .imageOnly
+        dismissNotice.isBordered = false
+        dismissNotice.toolTip = localised("Dismiss notice", "Скрыть уведомление")
+        dismissNotice.setAccessibilityLabel(dismissNotice.toolTip)
+        dismissNotice.target = self
+        dismissNotice.action = #selector(dismissResultNotice)
+        dismissNotice.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        dismissNotice.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        let noticeRow = NSStackView(views: [processingStatus, dismissNotice])
+        noticeRow.alignment = .top
+        noticeRow.spacing = 8
+        processingStatus.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        processingStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        noticeRow.translatesAutoresizingMaskIntoConstraints = false
+        resultNotice.addSubview(noticeRow)
+        NSLayoutConstraint.activate([
+            noticeRow.leadingAnchor.constraint(equalTo: resultNotice.leadingAnchor, constant: 10),
+            noticeRow.trailingAnchor.constraint(equalTo: resultNotice.trailingAnchor, constant: -6),
+            noticeRow.topAnchor.constraint(equalTo: resultNotice.topAnchor, constant: 8),
+            noticeRow.bottomAnchor.constraint(equalTo: resultNotice.bottomAnchor, constant: -8),
+        ])
         retryDiarizationButton.identifier = .init("diarization.retry")
         skipDiarizationButton.identifier = .init("diarization.skip")
 
@@ -484,13 +514,13 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         ] {
             button.identifier = .init(id)
             button.title = ""
-            button.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+            button.image = StudioStyle.regenerationImage(symbol: button === repeatButton ? "text.bubble" : "checklist")
             button.imagePosition = .imageOnly
             button.bezelStyle = .rounded
             button.target = self
             button.action = action
-            button.widthAnchor.constraint(equalToConstant: 28).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         }
 
         speakersStack.orientation = .vertical
@@ -573,7 +603,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         header.sizingOptions = [.intrinsicContentSize]
         header.identifier = .init("meeting.studio-header")
         meetingHeader = header
-        let detail = NSStackView(views: [detailMeta, titleRow, detailError, openActiveButton, audioPlayer, header, detailTabs, busyLabel])
+        let detail = NSStackView(views: [detailMeta, titleRow, detailError, openActiveButton, audioPlayer, header, resultNotice, detailTabs, busyLabel])
         detail.orientation = .vertical
         detail.distribution = .fill
         detail.alignment = .leading
@@ -1968,7 +1998,7 @@ private extension MeetingLibraryController {
             StudioStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
             calendarPicker,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
-            diarizationLabel, diarizationActions, finishButton, cancelProcessingButton, processingStatus,
+            diarizationLabel, diarizationActions, finishButton, cancelProcessingButton,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
         ])
         inspector.orientation = .vertical
@@ -2040,6 +2070,13 @@ private extension MeetingLibraryController {
         updateCancellationControls()
     }
 
+    @objc private func dismissResultNotice() {
+        guard !processingCancellation.isCancelling else { return }
+        noticeDismissed = true
+        resultNotice.isHidden = true
+        panel.makeFirstResponder(resultPicker.arrangedSubviews.compactMap { $0 as? NSButton }.first { $0.state == .on })
+    }
+
     private func updateCancellationControls() {
         guard !terminating else { return }
         processingCancellation.select(selected?.dir)
@@ -2048,7 +2085,7 @@ private extension MeetingLibraryController {
         cancelProcessingButton.isEnabled = processingCancellation.canCancel
         cancelProcessingButton.title = cancelling ? localised("Cancelling…", "Отменяется…")
             : localised("Cancel processing", "Отменить обработку")
-        let message: String
+        var message: String
         if cancelling { message = localised("Cancelling…", "Отменяется…") }
         else {
             switch processingCancellation.outcome {
@@ -2061,7 +2098,29 @@ private extension MeetingLibraryController {
             case nil: message = ""
             }
         }
-        processingStatus.isHidden = message.isEmpty
+        if message.isEmpty, !working, !processingCancellation.canCancel,
+           let item = selected, activeRecording?.dir != item.dir {
+            if let request = versions.last(where: \.isRequest) {
+                message = request.title
+                if case .failed(let reason) = request.state { message += ": " + reason }
+            } else if case .failed(let reason) = item.transcript {
+                message = localised("Transcription error: ", "Ошибка расшифровки: ") + reason
+            } else if case .failed(let reason) = item.summary {
+                message = localised("Summary error: ", "Ошибка сводки: ") + reason
+            } else if item.unreadableDiarization {
+                message = localised("The saved speaker analysis could not be read. See meeting details.",
+                                    "Не удалось прочитать сохранённый анализ говорящих. Откройте детали встречи.")
+            } else if let state = item.diarization, [.failed, .deferred, .partial].contains(state.status) {
+                message = Self.diarizationLine(state)
+            }
+            if !message.isEmpty, versions.contains(where: { !$0.isRequest }) || item.summary == .done {
+                message += localised(" Completed results are preserved.", " Готовые результаты сохранены.")
+            }
+        }
+        let key = (selected?.dir.path ?? "") + "\n" + message
+        if noticeKey != key { noticeKey = key; noticeDismissed = false }
+        resultNotice.isHidden = message.isEmpty || noticeDismissed
+        dismissNotice.isHidden = cancelling
         if processingStatus.stringValue != message {
             processingStatus.stringValue = message
             NSAccessibility.post(element: processingStatus, notification: .valueChanged)

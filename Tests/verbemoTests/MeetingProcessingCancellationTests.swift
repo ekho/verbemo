@@ -264,12 +264,18 @@ struct JournalProcessingCancellationTests {
         await cancelled.pass()
         #expect(!cancel.isEnabled)
         #expect(status.stringValue == "Cancelling…")
+        let close = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.dismiss-notice" })
+        #expect(close.isHidden, "An active cancellation stays visible until cleanup finishes")
         #expect(SessionClaim.isHeld(a))
         app.panel.orderOut(nil)
         release.open(); await finished.pass()
         _ = try? await task.value
         #expect(!SessionClaim.isHeld(a))
         #expect(status.stringValue.contains("cancelled"))
+        #expect(!close.isHidden)
+        #expect(close.sendAction(close.action, to: close.target))
+        #expect(status.isHiddenOrHasHiddenAncestor)
         #expect(operations.isAccepting)
         for task in library.stopForTermination() { await task.value }
         withExtendedLifetime(app) {}
