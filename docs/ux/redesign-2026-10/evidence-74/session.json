@@ -1,5 +1,5 @@
 {
-  "status": "started; awaiting first human reading result",
+  "status": "in progress; speaker distinction needs revision",
   "started_at": "2026-11-01T15:02:31.891166+03:00",
   "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
   "version": "0.17.2",
@@ -9,8 +9,27 @@
   "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/home",
   "fixture_meetings": 206,
   "baseline_files": 433,
-  "human_results": [],
-  "pending_scenario": "reading transcript and distinguishing speakers in wide/narrow windows",
+  "human_results": [
+    {
+      "scenario": "reading transcript",
+      "date": "2026-11-01",
+      "candidate_build": "670",
+      "speaker_distinction": {
+        "result": "needs revision",
+        "verbatim": "относительно. Визуально отличается только цвет иконки. Возможно иконка вовсе не нужна, а цветом нужно подсвечивать всю реплику?"
+      },
+      "resize_and_library_visibility": {
+        "result": "no complaints in this run",
+        "verbatim": "нареканий нет"
+      },
+      "spacing_wrapping_density": {
+        "result": "no complaints in this run",
+        "verbatim": "нареканий нет"
+      },
+      "decision": "reading priority remains open; row tint and badge removal are a suggestion, not an approved implementation"
+    }
+  ],
+  "pending_scenario": "agree speaker differentiation treatment; repeat reading after change",
   "runtime": {
     "macos": "26.7.1",
     "architecture": "arm64",
