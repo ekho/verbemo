@@ -66,6 +66,7 @@ final class MediaImportStatusView: NSStackView {
         alignment = .centerY
         spacing = 8
         edgeInsets = NSEdgeInsets(top: 8, left: 24, bottom: 8, right: 24)
+        setHuggingPriority(.required, for: .vertical)
         identifier = NSUserInterfaceItemIdentifier("media-import-progress")
         isHidden = true
 

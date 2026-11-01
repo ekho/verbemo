@@ -5,6 +5,25 @@ import Testing
 @testable import verbemo
 
 struct MediaImportUITests {
+    @Test("An import result keeps a compact height in an empty library", .freshHome)
+    @MainActor
+    func finishedMessageDoesNotStretchWorkspace() throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let app = ApplicationWindow()
+        defer { app.hide() }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        library.finishImport(.init())
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        let progress = try #require(app.panel.contentView?.allDescendants.first { $0 is MediaImportStatusView })
+        #expect(progress.frame.height <= 44)
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(progress.frame.height <= 44)
+    }
+
     @Test("A finished import message stays inside a narrow row and has no progress bar", .freshHome)
     @MainActor
     func finishedMessageFitsNarrowRow() throws {
