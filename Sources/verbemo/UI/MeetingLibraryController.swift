@@ -196,6 +196,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             position: captureMeetingReadingPosition(), query: meetingSearchQuery, index: meetingSearchIndex, origin: searchOrigin)
     }
     private func applyLibraryResults() {
+        guard meetingSelectionActive else { show(allItems); return }
         if selected?.dir == libraryReadingPosition?.dir,
            currentSearchContext == libraryReadingPosition?.context { saveLibraryReadingPosition() }
         let saved = libraryReadingPosition
@@ -665,9 +666,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
     func setMeetingSelectionActive(_ active: Bool) {
         guard meetingSelectionActive != active else { return }
+        if !active { saveLibraryReadingPosition() }
         rememberedMeeting = selected?.dir ?? rememberedMeeting
         meetingSelectionActive = active
-        show(allItems)
+        if active { applyLibraryResults() }
+        else { show(allItems) }
     }
     @discardableResult
     func selectActiveRecording() -> Bool {
@@ -1107,6 +1110,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     @objc private func versionSelected(_ sender: NSPopUpButton) {
         versionKey = selectedVersion.map(key)
         showDetail()
+        if librarySearchPending { saveLibraryReadingPosition() }
     }
 
     private func showDetail() {
@@ -1829,6 +1833,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
         if table.selectedRow >= 0 {
             meetingSelectionActive = true
             rememberedMeeting = nil
+            libraryReadingPosition = nil
         }
         showDetail()
         revealLibraryHit()
