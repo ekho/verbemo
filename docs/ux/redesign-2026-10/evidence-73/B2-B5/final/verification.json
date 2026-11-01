@@ -1,0 +1,71 @@
+{
+  "status": "macOS implementation verified; user/platform acceptance remains #74",
+  "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+  "tests": {
+    "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+    "command": "swift test --no-parallel",
+    "passed": 1378,
+    "suites": 186,
+    "skipped_tests": 23,
+    "skipped_suites": 6,
+    "raw_log": "/tmp/verbemo-ux73-final-full.log",
+    "raw_log_sha256": "3d1ddb68f33d004d445d2424559e3fe1039a9f242fce9138c914198933e7ee36",
+    "summary_sha256": "f187c75a1a55221ddee215b6b97bdbf8a93169479e962d551d892ec8bb2fdc0b",
+    "exit_code": 0
+  },
+  "build": {
+    "source_commit": "48efd34b5835cb57d982ee3a72dbd807ad661965",
+    "kind": "Universal Release ad-hoc",
+    "build": "670",
+    "version": "0.17.2",
+    "bundle": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/Verbemo Studio Review.app",
+    "profile": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/home",
+    "fixtures": "/Users/ekho/.codex/worktrees/8d75/verbemo/.build/ux73-delivery/recordings",
+    "executable_sha256": "004f1732d973f826ac344d871619062f305ac3fd688e9fc9923185d52b5901cc",
+    "packaged_binary_before_review_resign_sha256": "2c2b32f213589990eac3372ac4f1a8e9a327951fd263860c84a7b784d9a2afc5",
+    "architectures": [
+      "x86_64",
+      "arm64"
+    ],
+    "minimum_macos": "14.2",
+    "fixture_files": 433,
+    "fixture_meetings": 206
+  },
+  "build_command": "make app SIGN_ID=-",
+  "build_exit_code": 0,
+  "raw_build_log": "/tmp/verbemo-ux73-final-package.log",
+  "raw_build_log_sha256": "521bc56ee0239fe217d0616f8f6ce3504ed1d855cb0bb6c9c247665f3e86a0f9",
+  "gui": {
+    "checks_file": "gui-checks.json",
+    "checks_sha256": "f191278c8bfb923c1ba8747f5d9c12e695f0e7124078489f104f2b8cf21bca5e",
+    "screenshots_file": "shots.json",
+    "screenshots_sha256": "c514890cb07d6cc92897be202c2ce18a1eb05d54e07f6c19536c27a85440dd06",
+    "image_count": 30,
+    "artifact_hashes_file": "artifact-hashes.json",
+    "artifact_hashes_sha256": "f31b7d6bb2d9e59cbdfec62905553aa5c02ba2fefba611a80f521705de408793",
+    "meetings": 206,
+    "unchanged_files": 433
+  },
+  "review": {
+    "file": "../review.md",
+    "sha256": "fab25d2700caf334419382a22dcba6d99fdc96ab97b6b47adb0b5f3d4eaaa290",
+    "reviewed_head": "efd66e7b3bed7f9cfb70ba3f825794b92a69fd7b",
+    "critical": 0,
+    "important": 1,
+    "minor": 0,
+    "fixed_important": "About settings reload; RED1/2 issues, GREEN44/5; subsequent full1378/186",
+    "regression_file": "about-regression.json"
+  },
+  "runtime": {
+    "macos": "26.7.1",
+    "architecture": "arm64",
+    "sdk": "27.0"
+  },
+  "unverified": [
+    "Windows75-77",
+    "user acceptance74",
+    "full keyboard-only/VoiceOver/system text150-200/high contrast/Reduce Motion",
+    "macOS14.2/Intel runtime",
+    "real capture/calendar/inference/models/update/install"
+  ]
+}

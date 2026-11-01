@@ -1,0 +1,45 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Hide settings categories, Value: 1, ID: workspace.toggle-library
+	2 button Back to meetings, ID: journal.breadcrumb
+	3 text /  Summary and participants
+	4 button New recording, ID: journal.new-recording
+	5 button Import, ID: journal.import
+	6 button Settings, ID: journal.settings
+	7 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+		8 radio button General, Value: 0, ID: settings.tab.general
+		9 radio button Recording, Value: 0, ID: settings.tab.recording
+		10 radio button Transcription, Value: 0, ID: settings.tab.transcription
+		11 radio button Summaries, Value: 1, ID: settings.tab.summary
+		12 radio button Calendar, Value: 0, ID: settings.tab.calendar
+		13 radio button Files & models, Value: 0, ID: settings.tab.storage
+		14 radio button MCP, Value: 0, ID: settings.tab.mcp
+		15 radio button About Verbemo, Value: 0, ID: settings.tab.about
+		16 splitter (disabled, settable, float) 248
+		17 scroll area
+			18 switch Description: Summary, Value: 0, ID: summary.enabled
+			19 text Summary Summary and participants Settings apply to this profile. Recording and processing options apply to future operations. Existing transcripts and summaries stay unchanged. Put names to speakers
+			20 switch Description: Put names to speakers, Value: 0, ID: speaker_names.enabled
+			21 text Works out who "them A" was from the invitees and from people addressing each other, and applies it only when the transcript proves it.
+			22 disclosure triangle More options, Description: Show more options, Value: 0, ID: options.summary
+	23 button Auto-record, Description: Auto-record off, ID: activity.automatic
+	24 switch Description: Automatic meeting recording, Help: Auto-record off, Value: 0, ID: navigation.auto-record
+	25 button Access: ?, ID: activity.access, Description: Access: ?
+Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured., Help: Microphone access needed
+System audio needs a sound test; macOS does not expose its permission state
+Permissions do not confirm that audio is being captured.
+	26 button (disabled) Not recording, ID: activity.recording
+	27 button Queue: 0, Description: Running: 0. Waiting: 0. Open processing., ID: activity.queue
+	28 button ⚠ 1, Description: 1 need attention, ID: activity.warning
+	29 close button
+	30 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	31 minimize button
+32 menu bar
+	33 Verbemo Studio Review
+	34 File
+	35 Edit
+	36 Window
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

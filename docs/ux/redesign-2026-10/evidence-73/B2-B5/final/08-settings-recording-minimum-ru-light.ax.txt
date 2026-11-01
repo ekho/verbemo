@@ -1,0 +1,43 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button К встречам, ID: journal.breadcrumb
+	2 text /  Запись
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button Все разделы, Description: Back, ID: settings.all-categories
+		9 scroll area
+			10 image требует внимания
+			11 text Микрофон Ваша сторона разговора.
+			12 button Разрешить, Description: Разрешить — Микрофон, ID: access.microphone.action
+			13 image не спрашивали
+			14 text Звук системы
+			15 button Разрешить и проверить, Description: Разрешить и проверить — Звук системы, ID: access.system-audio.action
+			16 switch Description: Начинать запись, когда приложение звонка берёт микрофон, Help: И заканчивать, когда отпустит. Звонок короче 45 секунд выбрасывается., Value: 0, ID: auto-record
+			17 text Начинать запись, когда приложение звонка берёт микрофон И заканчивать, когда отпустит. Звонок короче 45 секунд выбрасывается. Запись Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются. Записывать звук системы
+			18 pop up button Description: Записывать звук системы, Value: Приложение звонка, ID: system_audio
+			19 text Можно записывать только звук звонка или весь звук Mac, включая музыку и уведомления.
+			20 disclosure triangle Дополнительные параметры, Description: Показать дополнительные параметры, Value: 0, ID: options.recording
+	21 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	22 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	23 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	24 button (disabled) Нет записи, ID: activity.recording
+	25 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	26 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	27 close button
+	28 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	29 minimize button
+30 menu bar
+	31 Verbemo Studio Review
+	32 Файл
+	33 Правка
+	34 Окно
+
+The focused UI element is 8 button Все разделы, Description: Back, ID: settings.all-categories

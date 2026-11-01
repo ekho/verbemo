@@ -1,0 +1,18 @@
+{
+  "red": {
+    "log": "/tmp/verbemo-ux73-about-red.log",
+    "sha256": "0b7c62783af84c5f88f60895803e0297bc7d5b44f7b3f675d8e4df710b286d81",
+    "summary": [
+      "✘ Test returningToSettingsAndReopeningTheWindowRefreshMachineState() recorded an issue at SettingsNavigationTests.swift:81:9: Expectation failed: machineChecks == 1",
+      "✘ Test returningToSettingsAndReopeningTheWindowRefreshMachineState() recorded an issue at SettingsNavigationTests.swift:82:9: Expectation failed: (app.settings.content(for: .general).allDescendants.first {",
+      "✘ Test run with 1 test in 1 suite failed after 0.957 seconds with 2 issues."
+    ]
+  },
+  "green": {
+    "log": "/tmp/verbemo-ux73-about-green.log",
+    "sha256": "d1d940cf81d863247d22964ab3b78926fe9efd8a47229311b72ac982d8cb1d17",
+    "summary": [
+      "✔ Test run with 44 tests in 5 suites passed after 22.542 seconds."
+    ]
+  }
+}

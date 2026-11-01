@@ -1,0 +1,50 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button К встречам, ID: journal.breadcrumb
+	2 text /  Общие
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button Все разделы, Description: Back, ID: settings.all-categories
+		9 scroll area Secondary Actions: Scroll Up, Scroll Down
+			10 switch Description: Запуск при входе, Help: Открывать verbemo автоматически при входе в систему., Value: 0, ID: access.login.toggle
+			11 text Запуск при входе Открывать verbemo автоматически при входе в систему.
+			12 switch Description: В строке меню, Help: Волна, во время встречи рядом с ней часы, и меню со всем остальным., Value: 1, ID: icons.menu-bar
+			13 text В строке меню Волна, во время встречи рядом с ней часы, и меню со всем остальным.
+			14 switch Description: В доке, Value: 1, ID: icons.dock, Help: Оставлять значок в доке и ⌘-Tab, когда окно свёрнуто или закрыто. При открытом окне значок виден всегда.
+			15 text В доке Оставлять значок в доке и ⌘-Tab, когда окно свёрнуто или закрыто. При открытом окне значок виден всегда. Общие Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются. Тема
+			16 pop up button Description: Тема, Value: Светлая, ID: interface_theme
+			17 text Системная тема следует настройке macOS. Язык окон verbemo
+			18 pop up button Description: Язык окон verbemo, Value: Русский, ID: interface_language
+			19 text Системный язык следует настройке macOS. Язык встреч и сводки настраивается отдельно. Подействует при следующем запуске. Открывать окно при запуске
+			20 switch Description: Открывать окно при запуске, Value: 1, ID: window
+			21 text Значок в доке открывает его в любом случае. Подействует при следующем запуске.
+			22 scroll bar (settable, float) 0
+				23 value indicator (settable, float) 0
+				24 increment arrow button
+				25 decrement arrow button
+				26 increment page button
+				27 decrement page button
+	28 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	29 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	30 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	31 button (disabled) Нет записи, ID: activity.recording
+	32 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	33 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	34 close button
+	35 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	36 minimize button
+37 menu bar
+	38 Verbemo Studio Review
+	39 Файл
+	40 Правка
+	41 Окно
+
+The focused UI element is 8 button Все разделы, Description: Back, ID: settings.all-categories

@@ -1,0 +1,219 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+	2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+	3 button Копировать, Description: copy, ID: meeting.copy
+	4 button Действия со встречей
+	5 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+	6 button Новая запись, ID: journal.new-recording
+	7 button Импорт, ID: journal.import
+	8 button Настройки, ID: journal.settings
+	9 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		10 text Библиотека
+		11 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Placeholder: Название, расшифровка, сводка, ID: library.search
+			12 button Поиск в библиотеке: названия, расшифровки и сводки
+		13 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+		14 scroll area Secondary Actions: Scroll Up, Scroll Down
+			15 table (showing 0-9 of 100 items)
+				16 row (selectable)
+					17 cell
+						18 text UX73 synthetic silence 2026-11-01 · 00:01
+						19 image Description: Готово, ID: meeting.list-status
+				20 row (selectable)
+					21 cell
+						22 text UX69 Назначения — ошибка и неизвестный 2026-10-30 · 03:00
+						23 image Description: Готово, ID: meeting.list-status
+				24 row (selectable)
+					25 cell
+						26 text UX69 Импорт — отложенная обработка 2026-10-29 · 01:00
+						27 image Description: Готово, ID: meeting.list-status
+				28 row (selectable)
+					29 cell
+						30 text UX69 Импорт — ошибка обработки 2026-10-29 · 01:00
+						31 image Description: Synthetic UX69: model unavailable, ID: meeting.list-status
+				32 row (selectable)
+					33 cell
+						34 text UX69 Атлас — длинная встреча 2026-10-29 · 30:00
+						35 image Description: Готово, ID: meeting.list-status
+				36 row (selected)
+					37 cell (selected)
+						38 text UX69 Атлас — планирование 2026-10-29 · 03:00
+						39 image Description: Готово, ID: meeting.list-status
+				40 row (selectable)
+					41 cell
+						42 text Учебный архив 199 2026-10-29 · 03:00
+						43 image Description: Готово, ID: meeting.list-status
+				44 row (selectable)
+					45 cell
+						46 text Учебный архив 198 2026-10-29 · 03:00
+						47 image Description: Готово, ID: meeting.list-status
+				48 row (selectable)
+					49 cell
+						50 text Учебный архив 197 2026-10-29 · 03:00
+						51 image Description: Готово, ID: meeting.list-status
+			52 scroll bar (settable, float) 0
+				53 value indicator (settable, float) 0
+				54 increment arrow button
+				55 decrement arrow button
+				56 increment page button
+				57 decrement page button
+		58 splitter (disabled, settable, float) 248
+		59 text 29.10.2026 12:00 · 3 мин · Приглашены: 3
+		60 text Help: UX69 Атлас — планирование, ID: meeting.title
+		61 button Description: Воспроизвести встречу, ID: playback.play
+		62 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+		63 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+			64 value indicator (settable, float) 0
+		65 text 00:00 / 03:00
+		66 image volume high
+		67 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+			68 value indicator (settable, float) 1
+		69 pop up button Description: Скорость воспроизведения, Value: 1×
+		70 container meeting.studio-header
+			71 text Версия
+			72 pop up button Description: Версия расшифровки, Value: 2 · Whisper · 29 окт. 2026 г., 12:00:00, ID: transcript-versions
+			73 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Placeholder: Найти в этой встрече, ID: meeting.search
+				74 button Search
+			75 radio button Сводка, Value: 0, ID: meeting.result.summary
+			76 radio button Расшифровка, Value: 1, ID: meeting.result.transcript
+			77 radio button Участники, Value: 0, ID: meeting.result.participants
+		78 scroll area Secondary Actions: Scroll Up, Scroll Down
+			79 table Расшифровка и сопоставление участников
+				80 row (selectable)
+					81 cell
+						82 text Description: Голос A, Value: A Анна Тестовая
+						83 button Description: Изменить говорящего: Анна Тестовая, ID: speaker.edit
+						84 button 00:00, Description: Воспроизвести с 00:00, ID: transcript.playFrom
+						85 text ID: transcript.words, Value: Реплика 1. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. 
+				86 row (selectable)
+					87 cell
+						88 text Description: Голос B, Value: B Борис Примеров
+						89 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						90 button 00:10, Description: Воспроизвести с 00:10, ID: transcript.playFrom
+						91 text ID: transcript.words, Value: Реплика 2. Обсуждаем подготовку учебного проекта. Кварцевый компас нужен для проверки поиска по тексту. Нужно согласовать сроки, проверить материалы и записать решение. 
+				92 row (selectable)
+					93 cell
+						94 text Description: Голос C, Value: C Вера Макетная
+						95 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						96 button 00:20, Description: Воспроизвести с 00:20, ID: transcript.playFrom
+						97 text ID: transcript.words, Value: Реплика 3. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				98 row (selectable)
+					99 cell
+						100 text Description: Голос A, Value: A Анна Тестовая
+						101 button Description: Изменить говорящего: Анна Тестовая, ID: speaker.edit
+						102 button 00:30, Description: Воспроизвести с 00:30, ID: transcript.playFrom
+						103 text ID: transcript.words, Value: Реплика 4. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				104 row (selectable)
+					105 cell
+						106 text Description: Голос B, Value: B Борис Примеров
+						107 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						108 button 00:40, Description: Воспроизвести с 00:40, ID: transcript.playFrom
+						109 text ID: transcript.words, Value: Реплика 5. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				110 row (selectable)
+					111 cell
+						112 text Description: Голос C, Value: C Вера Макетная
+						113 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						114 button 00:50, Description: Воспроизвести с 00:50, ID: transcript.playFrom
+						115 text ID: transcript.words, Value: Реплика 6. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				116 row (selectable)
+					117 cell
+						118 text Description: Голос A, Value: A Анна Тестовая
+						119 button Description: Изменить говорящего: Анна Тестовая, ID: speaker.edit
+						120 button 01:00, Description: Воспроизвести с 01:00, ID: transcript.playFrom
+						121 text ID: transcript.words, Value: Реплика 7. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				122 row (selectable)
+					123 cell
+						124 text Description: Голос B, Value: B Борис Примеров
+						125 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						126 button 01:10, Description: Воспроизвести с 01:10, ID: transcript.playFrom
+						127 text ID: transcript.words, Value: Реплика 8. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. 
+				128 row (selectable)
+					129 cell
+						130 text Description: Голос C, Value: C Вера Макетная
+						131 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						132 button 01:20, Description: Воспроизвести с 01:20, ID: transcript.playFrom
+						133 text ID: transcript.words, Value: Реплика 9. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				134 row (selectable)
+					135 cell
+						136 text Description: Голос A, Value: A Анна Тестовая
+						137 button Description: Изменить говорящего: Анна Тестовая, ID: speaker.edit
+						138 button 01:30, Description: Воспроизвести с 01:30, ID: transcript.playFrom
+						139 text ID: transcript.words, Value: Реплика 10. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				140 row (selectable)
+					141 cell
+						142 text Description: Голос B, Value: B Борис Примеров
+						143 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						144 button 01:40, Description: Воспроизвести с 01:40, ID: transcript.playFrom
+						145 text ID: transcript.words, Value: Реплика 11. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				146 row (selectable)
+					147 cell
+						148 text Description: Голос C, Value: C Вера Макетная
+						149 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						150 button 01:50, Description: Воспроизвести с 01:50, ID: transcript.playFrom
+						151 text ID: transcript.words, Value: Реплика 12. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				152 row (selectable)
+					153 cell
+						154 text Description: Голос A, Value: A Анна Тестовая
+						155 button Description: Изменить говорящего: Анна Тестовая, ID: speaker.edit
+						156 button 02:00, Description: Воспроизвести с 02:00, ID: transcript.playFrom
+						157 text ID: transcript.words, Value: Реплика 13. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				158 row (selectable)
+					159 cell
+						160 text Description: Голос B, Value: B Борис Примеров
+						161 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						162 button 02:10, Description: Воспроизвести с 02:10, ID: transcript.playFrom
+						163 text ID: transcript.words, Value: Реплика 14. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				164 row (selectable)
+					165 cell
+						166 text Description: Голос C, Value: C Вера Макетная
+						167 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						168 button 02:20, Description: Воспроизвести с 02:20, ID: transcript.playFrom
+						169 text ID: transcript.words, Value: Реплика 15. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. Нужно согласовать сроки, проверить материалы и записать решение. 
+				170 row (selectable)
+					171 cell
+						172 text Description: Голос A, Value: A Анна Тестовая
+						173 button Description: Изменить говорящего: Анна Тестовая, ID: speaker.edit
+						174 button 02:30, Description: Воспроизвести с 02:30, ID: transcript.playFrom
+						175 text ID: transcript.words, Value: Реплика 16. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				176 row (selectable)
+					177 cell
+						178 text Description: Голос B, Value: B Борис Примеров
+						179 button Description: Изменить говорящего: Борис Примеров, ID: speaker.edit
+						180 button 02:40, Description: Воспроизвести с 02:40, ID: transcript.playFrom
+						181 text ID: transcript.words, Value: Реплика 17. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+				182 row (selectable)
+					183 cell
+						184 text Description: Голос C, Value: C Вера Макетная
+						185 button Description: Изменить говорящего: Вера Макетная, ID: speaker.edit
+						186 button 02:50, Description: Воспроизвести с 02:50, ID: transcript.playFrom
+						187 text ID: transcript.words, Value: Реплика 18. Обсуждаем подготовку учебного проекта. Нужно согласовать сроки, проверить материалы и записать решение. 
+			188 scroll bar (settable, float) 0
+				189 value indicator (settable, float) 0
+				190 increment arrow button
+				191 decrement arrow button
+				192 increment page button
+				193 decrement page button
+	194 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	195 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	196 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	197 button (disabled) Нет записи, ID: activity.recording
+	198 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	199 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	200 zoom button
+	201 minimize button
+	202 sheet Secondary Actions: Raise
+		203 text Новая запись Во время записи можно закрыть окно. Источники звука определяются настройками записи.
+		204 text field (settable) Description: Название встречи, Value: Запись 01.11.2026 14:10, ID: recording.new-title
+		205 button Начать, Description: Screen Recording, ID: recording.start
+		206 button Отмена, Description: Close, ID: recording.cancel
+		207 button Description: Настройки записи, ID: recording.settings
+208 menu bar
+	209 Verbemo Studio Review
+	210 Файл
+	211 Правка
+	212 Окно

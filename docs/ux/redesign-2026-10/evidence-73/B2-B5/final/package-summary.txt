@@ -1,0 +1,5 @@
+.build/Verbemo.app: valid on disk
+.build/Verbemo.app: satisfies its Designated Requirement
+.build/Verbemo.app is compatible with macOS 14.2
+Nemotron helper verified: 7 Mach-O files, 0 objects, arm64 macOS 14.2, relative dependency closure
+built → .build/Verbemo.app (0.17.2 build 670) · x86_64 arm64

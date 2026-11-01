@@ -1,0 +1,37 @@
+Window: "Verbemo", App: Verbemo Studio Review.
+0 standard window Verbemo, Secondary Actions: Raise
+	1 button К встречам, ID: journal.breadcrumb
+	2 text /  О Verbemo
+	3 button Новая запись, ID: journal.new-recording
+	4 button Импорт, ID: journal.import
+	5 button Настройки, ID: journal.settings
+	6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+		7 splitter (disabled, settable, float) -1
+		8 button Все разделы, Description: Back, ID: settings.all-categories
+		9 scroll area
+			10 image Verbemo
+			11 text Verbemo Версия 0.17.2 (670) Записывает звук с микрофона и из приложений звонков, расшифровывает речь в реальном времени и после встречи. Выполняет диаризацию и готовит сводку с решениями и задачами. Хранит записи и результаты на компьютере. Для обработки можно выбрать локальные модели или облачные сервисы.
+			12 button Исходный код на GitHub ↗, ID: https://github.com/ekho/verbemo
+			13 button Поддержка ↗, ID: https://github.com/ekho/verbemo/issues
+			14 button Происхождение и лицензии ↗, ID: https://github.com/ekho/verbemo/blob/master/docs/origin.md
+	15 button Автозапись, Description: Автозапись выключена, ID: activity.automatic
+	16 switch Description: Автозапись встреч, Help: Автозапись выключена, Value: 0, ID: navigation.auto-record
+	17 button Доступ: ?, ID: activity.access, Description: Доступ: ?
+Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает., Help: Нужен доступ к микрофону
+Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения
+Разрешения не подтверждают, что звук поступает.
+	18 button (disabled) Нет записи, ID: activity.recording
+	19 button Очередь: 0, Description: Выполняется: 0. Ожидают: 0. Открыть обработку., ID: activity.queue
+	20 button ⚠ 1, Description: Требуют внимания: 1, ID: activity.warning
+	21 close button
+	22 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	23 minimize button
+24 menu bar
+	25 Verbemo Studio Review
+	26 Файл
+	27 Правка
+	28 Окно
+
+The focused UI element is 0 standard window Verbemo, Secondary Actions: Raise

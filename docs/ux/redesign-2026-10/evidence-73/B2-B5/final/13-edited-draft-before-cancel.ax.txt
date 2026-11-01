@@ -1,0 +1,14 @@
+Window: "Новая запись", App: Verbemo Studio Review.
+0 sheet Secondary Actions: Raise
+	1 text Новая запись Во время записи можно закрыть окно. Источники звука определяются настройками записи.
+	2 text field (settable) Description: Название встречи, Value: UX73 cancel-only draft, ID: recording.new-title
+	3 button Начать, Description: Screen Recording, ID: recording.start
+	4 button Отмена, Description: Close, ID: recording.cancel
+	5 button Description: Настройки записи, ID: recording.settings
+6 menu bar
+	7 Verbemo Studio Review
+	8 Файл
+	9 Правка
+	10 Окно
+
+The focused UI element is 2 text field (settable) Description: Название встречи, Value: UX73 cancel-only draft, ID: recording.new-title
