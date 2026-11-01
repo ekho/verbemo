@@ -18,6 +18,9 @@ struct ActivityStatusBarTests {
         app.finishImport(result)
         let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
         let notice = try #require(bar.allDescendants.first { $0.identifier?.rawValue == "settings.notice" } as? NSTextField)
+        let messages = bar.allDescendants.compactMap { $0 as? NSTextField }.filter {
+            ["settings.notice", "activity.config-problem", "media-import.message"].contains($0.identifier?.rawValue ?? "")
+        }
         #expect(!notice.isHidden)
         #expect(notice.toolTip?.contains("synthetic_status_fixture") == true)
         #expect(!app.settings.content(for: .general).allDescendants.contains { $0 === notice })
@@ -27,6 +30,12 @@ struct ActivityStatusBarTests {
             #expect(bar.frame.height == 36)
             #expect(abs(bar.frame.width - width) < 1)
             #expect(notice.frame.width > 0)
+            #expect(messages.allSatisfy { $0.frame.width >= 40 }, "Every visible message keeps readable text, not just its close button")
+            app.updateImport(.init(source: URL(fileURLWithPath: "/tmp/fixture.wav"),
+                                   index: 1, total: 1, stage: .normalizing, fraction: 0.5))
+            app.panel.contentView?.layoutSubtreeIfNeeded()
+            #expect(messages.allSatisfy { $0.frame.width >= 40 }, "Progress must leave room for message text too")
+            app.finishImport(result)
             let frame = notice.convert(notice.bounds, to: bar)
             #expect(frame.minX >= 0 && frame.maxX <= bar.bounds.width)
         }

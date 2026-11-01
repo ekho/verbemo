@@ -150,6 +150,8 @@ final class ActivityStatusBar: NSStackView {
         recording.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         serviceContent.orientation = .horizontal
         serviceContent.alignment = .centerY
+        serviceContent.distribution = .fillEqually
+        serviceContent.detachesHiddenViews = true
         serviceContent.spacing = 8
         serviceContent.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         serviceContent.setContentHuggingPriority(.defaultHigh, for: .horizontal)
@@ -244,10 +246,7 @@ final class ActivityStatusBar: NSStackView {
         currentSession = current?.session
         var text = current.map { ($0.session.map(jobTitle).map { $0 + " · " } ?? "") + ActivityWork.stage($0) } ?? ""
         if let current, current.kind == .importMedia, current.state != .cancelling, let progress = importProgress {
-            text = progress.label
-            if let fraction = progress.fraction, fraction.isFinite {
-                text += " · \(Int(min(1, max(0, fraction)) * 100))%"
-            }
+            text = progress.progressLabel
         }
         job.title = text
         job.toolTip = text
