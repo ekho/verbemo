@@ -663,11 +663,7 @@ struct SetupTests {
         }
     }
 
-    /// Both icons are in the form, and both are switches somebody listens to.
-    /// The pair is worth checking together: each is only safe to offer
-    /// because the other exists, and a form that grew one of them without the
-    /// other would be a form that can strand a running recorder.
-    @Test("Settings offer the menu bar and the Dock as two switches, and each writes its own")
+    @Test("Turning off the menu bar restores and locks the Dock until the menu bar returns")
     @MainActor
     func iconSwitchesAreOffered() throws {
         try withFreshHome { _ in
@@ -680,33 +676,28 @@ struct SetupTests {
             #expect(menuBar.accessibilityLabel() == "In the menu bar")
             #expect(dock.accessibilityLabel() == "In the Dock")
 
-            menuBar.performClick(nil)
-            #expect(!Config.menuBarIcon())
-            #expect(Config.dockIcon(), "the Dock went with the menu bar")
-
             dock.performClick(nil)
             #expect(!Config.dockIcon())
+            #expect(dock.state == .off && dock.isEnabled)
 
             menuBar.performClick(nil)
+            #expect(!Config.menuBarIcon())
+            #expect(Config.dockIcon())
+            #expect(dock.state == .on && !dock.isEnabled)
+            #expect(menuBar.isEnabled)
             dock.performClick(nil)
+            #expect(Config.dockIcon())
+            #expect(dock.state == .on)
+
+            menuBar.performClick(nil)
             #expect(Config.menuBarIcon() && Config.dockIcon())
+            #expect(dock.isEnabled)
             #expect(Config.raw()["menu_bar_icon"] == nil && Config.raw()["dock_icon"] == nil)
+
+            menuBar.performClick(nil)
+            #expect(Config.dockIcon())
+            #expect(dock.state == .on && !dock.isEnabled)
         }
-    }
-
-    /// The sentence that is the only way back into a program with no icon.
-    /// It has to appear exactly when it is true, and to say the two things
-    /// that matter in the order they matter: that recording carries on, and
-    /// how the window is reached.
-    @Test("Giving up both icons says how to get the window back")
-    func bothIconsOffExplainsItself() {
-        #expect(SetupForm.noIconsNote(menuBar: true, dock: true).isEmpty)
-        #expect(SetupForm.noIconsNote(menuBar: false, dock: true).isEmpty)
-        #expect(SetupForm.noIconsNote(menuBar: true, dock: false).isEmpty)
-
-        let note = SetupForm.noIconsNote(menuBar: false, dock: false)
-        #expect(note.contains("keeps recording"))
-        #expect(note.contains("open Verbemo"))
     }
 
     /// The window used to ask for a two-letter code in a text field, which

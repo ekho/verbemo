@@ -436,15 +436,12 @@ enum Config {
     /// item when it runs out of room, and a recorder whose only indicator can
     /// silently disappear is a recorder you can't trust.
     static func dockIcon() -> Bool {
-        flag(.dockIcon, in: load())
+        let config = load()
+        return flag(.dockIcon, in: config) || !flag(.menuBarIcon, in: config)
     }
 
     /// Show verbemo's wave in the menu bar, with the clock beside it while a
-    /// meeting is being recorded. On by default, and it may be turned off
-    /// together with the Dock icon: with neither, verbemo is a program with no
-    /// icon anywhere, and the way back to its window is to open Verbemo again —
-    /// from Spotlight or from Applications, which reaches the copy already
-    /// running rather than starting a second one.
+    /// meeting is being recorded. Turning it off keeps the Dock icon available.
     static func menuBarIcon() -> Bool {
         flag(.menuBarIcon, in: load())
     }

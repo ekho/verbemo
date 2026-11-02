@@ -6,6 +6,13 @@ import Testing
 @Suite("Dock visibility follows the workspace", .serialized)
 @MainActor
 struct DockVisibilityTests {
+    @Test("An existing configuration with both icons off keeps the Dock available",
+          .freshHome(config: #"{"dock_icon": false, "menu_bar_icon": false}"#))
+    func bothIconsOffKeepsDockAvailable() {
+        #expect(!Config.menuBarIcon())
+        #expect(Config.dockIcon())
+    }
+
     @Test(.freshHome(config: #"{"dock_icon": false}"#))
     func openingWorkspaceRestoresDockAndApplicationMenu() {
         let application = NSApplication.shared
@@ -102,7 +109,7 @@ struct DockVisibilityTests {
     @Test(.freshHome, arguments: [false, true])
     func dockClickMinimizesWithDockIconAndCloseHidesToTray(keepIcon: Bool) async throws {
         try Home.current.writeConfig([
-            "dock_icon": keepIcon, "menu_bar_icon": false, "auto_record": ["enabled": false],
+            "dock_icon": keepIcon, "menu_bar_icon": true, "auto_record": ["enabled": false],
         ])
         let application = NSApplication.shared
         let previous = application.activationPolicy()

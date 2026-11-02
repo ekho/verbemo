@@ -555,10 +555,8 @@ enum SettingsSchema {
             Entry(["menu_bar_icon"],
                   localised("Show in the menu bar", "Показывать в строке меню"),
                   localised(
-                      "With both icons off, minimizing or closing the window hides verbemo: open Verbemo "
-                          + "again to bring its window back.",
-                      "Когда оба значка выключены, свёрнутое или закрытое окно скрывает verbemo: чтобы вернуть "
-                          + "окно, откройте Verbemo ещё раз."),
+                      "When the menu bar icon is off, the Dock icon stays on.",
+                      "Когда значок в строке меню выключен, значок в доке остаётся включённым."),
                   .toggle, default: true, askedInSetup: true),
             Entry(["window"],
                   localised("Open the window at launch", "Открывать окно при запуске"),
