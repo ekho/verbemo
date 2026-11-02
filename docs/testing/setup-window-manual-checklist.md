@@ -253,7 +253,7 @@ At least one icon must remain on so a running verbemo stays reachable.
   the window is minimized or closed, and returns when the window is reopened.
 - With **In the Dock** off, turn **In the menu bar** off. Confirm **In the Dock**
   turns on and becomes disabled. Clicking the disabled switch must not turn it
-  off. Close the window and confirm the Dock icon remains and reopens it.
+  off. Minimize the window and confirm the Dock icon remains and restores it.
 - Turn **In the menu bar** back on. Confirm **In the Dock** becomes editable
   again and can be turned off. Repeat turning the menu bar off while Dock is
   already on; Dock must stay on and become disabled.

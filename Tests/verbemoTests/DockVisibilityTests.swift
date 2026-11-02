@@ -13,6 +13,66 @@ struct DockVisibilityTests {
         #expect(Config.dockIcon())
     }
 
+    @Test(.freshHome, arguments: [(false, true), (true, true), (true, false)])
+    func closeQuitsWithoutMenuBarAndOtherwiseHides(menuBar: Bool, dock: Bool) throws {
+        try Home.current.writeConfig(["menu_bar_icon": menuBar, "dock_icon": dock])
+        let application = NSApplication.shared
+        let previousPolicy = application.activationPolicy()
+        let window = ApplicationWindow()
+        var quitRequests = 0
+        window.onQuit = { quitRequests += 1 }
+        defer {
+            window.hide()
+            application.setActivationPolicy(previousPolicy)
+        }
+
+        window.bringToFront()
+        // Simulated system-button clicks can exit SwiftPM's async test host.
+        #expect(!window.windowShouldClose(window.panel))
+
+        #expect(quitRequests == (menuBar ? 0 : 1))
+        #expect(window.isVisible == !menuBar, "A cancelled quit must leave the window open")
+        #expect(!window.panel.isMiniaturized)
+        #expect(application.activationPolicy() == (dock || !menuBar ? .regular : .accessory))
+
+        window.bringToFront()
+        #expect(window.isVisible)
+        #expect(application.activationPolicy() == .regular)
+
+        Config.update(path: ["menu_bar_icon"], value: !menuBar)
+        #expect(!window.windowShouldClose(window.panel))
+        #expect(quitRequests == 1)
+        #expect(window.isVisible == menuBar)
+    }
+
+    @Test(.freshHome, arguments: [(true, false), (false, true), (true, true)])
+    func yellowButtonMinimizesToDockOrHidesToMenuBar(menuBar: Bool, dock: Bool) async throws {
+        try Home.current.writeConfig(["menu_bar_icon": menuBar, "dock_icon": dock])
+        let application = NSApplication.shared
+        let previous = application.activationPolicy()
+        let window = ApplicationWindow()
+        defer {
+            window.hide()
+            application.setActivationPolicy(previous)
+        }
+        window.bringToFront()
+        let button = try #require(window.panel.standardWindowButton(.miniaturizeButton))
+        try #require(button.target === window)
+        #expect(button.sendAction(button.action, to: button.target))
+        for _ in 0..<100 where dock && !window.panel.isMiniaturized {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(!window.isVisible)
+        #expect(window.panel.isMiniaturized == dock)
+        #expect(application.activationPolicy() == (dock ? .regular : .accessory))
+
+        window.bringToFront()
+        #expect(window.isVisible)
+        #expect(!window.panel.isMiniaturized)
+        #expect(application.activationPolicy() == .regular)
+    }
+
     @Test(.freshHome(config: #"{"dock_icon": false}"#))
     func openingWorkspaceRestoresDockAndApplicationMenu() {
         let application = NSApplication.shared
@@ -35,7 +95,7 @@ struct DockVisibilityTests {
         #expect(window.isVisible)
         #expect(application.activationPolicy() == .regular)
 
-        window.panel.performClose(nil)
+        #expect(!window.windowShouldClose(window.panel))
         #expect(!window.isVisible)
         #expect(application.activationPolicy() == .accessory)
     }
@@ -79,7 +139,7 @@ struct DockVisibilityTests {
         #expect(window.isVisible)
         #expect(application.activationPolicy() == .regular)
 
-        window.panel.performClose(nil)
+        #expect(!window.windowShouldClose(window.panel))
         #expect(application.activationPolicy() == (keepIcon ? .regular : .accessory))
     }
 
@@ -134,7 +194,7 @@ struct DockVisibilityTests {
         #expect(panel.isVisible && !panel.isMiniaturized)
         controller.toggleWindow(alreadyActive: false)
         #expect(panel.isVisible && !panel.isMiniaturized, "Switching to Verbemo must keep its window open")
-        panel.performClose(nil)
+        #expect(panel.delegate?.windowShouldClose?(panel) == false)
         #expect(!panel.isVisible && !panel.isMiniaturized)
         controller.toggleWindow(alreadyActive: true)
         #expect(panel.isVisible && !panel.isMiniaturized)
