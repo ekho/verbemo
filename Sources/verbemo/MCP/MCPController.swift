@@ -158,6 +158,7 @@ import Foundation
         }
         values["recordings_dir"] = .string(root.path)
         values["mcp.enabled"] = .bool(config.enabled); values["mcp.port"] = .int(config.port)
+        values["dock_icon"] = .bool(Config.dockIcon(in: json))
         values["live_transcription.enabled"] = .bool(Config.liveTranscriptionEnabled(in: json))
         values["transcription.local_diarization"] = .bool(Config.localDiarizationEnabled(in: json))
         values["transcription.diarization_model"] = .string(Config.diarizationModel(in: json).rawValue)

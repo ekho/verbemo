@@ -495,7 +495,7 @@ import enum MCP.Version
         try Data(#"{"mcp":{"enabled":true,"port":55303},"window":true}"#.utf8).write(to: home.configFile)
         let token = try MCPCredentials(home: home).rotate()
         let controller = MCPController(home: home, snapshot: { .init(root: root) })
-        try Data(#"{"mcp":{"enabled":true,"port":55303},"window":false,"on_stop":"SECRET","summary":{"openai_base_url":"https://u:SECRET@example.test/path?secret=SECRET#SECRET"}}"#.utf8).write(to: home.configFile)
+        try Data(#"{"mcp":{"enabled":true,"port":55303},"window":false,"dock_icon":false,"menu_bar_icon":false,"on_stop":"SECRET","summary":{"openai_base_url":"https://u:SECRET@example.test/path?secret=SECRET#SECRET"}}"#.utf8).write(to: home.configFile)
         controller.refresh()
         for _ in 0..<200 where controller.listeningAddress == nil { try await Task.sleep(for: .milliseconds(5)) }
         let result = try await wire(port: 55303, token: token, method: "tools/call", params: .object(["name": .string("get_settings"), "arguments": .object([:])]))
@@ -503,6 +503,8 @@ import enum MCP.Version
         let window = try #require(items.first { $0["key"] == .string("window") })
         #expect(window["saved_value"] == .bool(false)); #expect(window["applied_value"] == .bool(true)); #expect(window["pending_apply"] == .bool(true))
         #expect(items.first { $0["key"] == .string("recordings_dir") }?["value"] == .string(root.path))
+        #expect(items.first { $0["key"] == .string("dock_icon") }?["value"] == .bool(true))
+        #expect(items.first { $0["key"] == .string("menu_bar_icon") }?["value"] == .bool(false))
         let text = String(decoding: try result.encoded(), as: UTF8.self)
         #expect(!text.contains("SECRET")); #expect(!text.contains(token))
         await controller.stop()

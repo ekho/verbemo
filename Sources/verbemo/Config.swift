@@ -436,7 +436,10 @@ enum Config {
     /// item when it runs out of room, and a recorder whose only indicator can
     /// silently disappear is a recorder you can't trust.
     static func dockIcon() -> Bool {
-        let config = load()
+        dockIcon(in: load())
+    }
+
+    static func dockIcon(in config: [String: Any]?) -> Bool {
         return flag(.dockIcon, in: config) || !flag(.menuBarIcon, in: config)
     }
 
