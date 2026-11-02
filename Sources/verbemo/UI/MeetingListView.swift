@@ -120,7 +120,7 @@ final class MeetingListView: NSTableCellView {
         host.setAccessibilityLabel(stage.title)
         let image = NSImageView(image: NSImage(systemSymbolName: stage.symbol, accessibilityDescription: nil) ?? NSImage())
         image.symbolConfiguration = .init(pointSize: 14, weight: .regular)
-        image.contentTintColor = stage.state == .off ? .tertiaryLabelColor : stage.state == .failed ? .systemOrange : .controlAccentColor
+        image.contentTintColor = stage.state == .off || stage.state == .waiting ? StudioStyle.muted : stage.state == .failed ? .systemOrange : .controlAccentColor
         image.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(image)
         NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 16), image.heightAnchor.constraint(equalToConstant: 16), image.centerXAnchor.constraint(equalTo: host.centerXAnchor), image.centerYAnchor.constraint(equalTo: host.centerYAnchor)])

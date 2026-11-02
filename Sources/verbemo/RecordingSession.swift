@@ -49,10 +49,8 @@ final class RecordingSession {
 
     let dir: URL
     let startedAt = Date()
-    /// What we knew about the meeting when it started: calendar title, the app
-    /// holding the microphone, attendees, link. Shapes the folder name and
-    /// most of meta.json.
-    let context: MeetingContext
+    /// Current calendar association and the app that started capture.
+    private(set) var context: MeetingContext
     let trigger: Trigger
 
     private var editedTitle: String?
@@ -68,6 +66,21 @@ final class RecordingSession {
         manifest["title"] = cleaned
         try writeFile(Self.json(manifest), marker)
         editedTitle = cleaned
+    }
+
+    func associateCalendar(_ meeting: CalendarWatcher.Meeting?) throws {
+        if let meeting, !meeting.hasPersistentID || meeting.id.isEmpty { throw CalendarSelectionError.missingEvent }
+        let updated = MeetingContext(meeting: meeting, app: context.app, appFamilies: context.appFamilies)
+        let updatedTitle = meeting != nil && (title == nil || title == context.title) ? meeting?.title : title
+        let marker = dir.appendingPathComponent(Self.manifestFile)
+        guard var manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: marker)) as? [String: Any] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        manifest["calendar"] = updated.metaFields["calendar"]
+        manifest["title"] = updatedTitle
+        try writeFile(Self.json(manifest), marker)
+        context = updated
+        editedTitle = updatedTitle
     }
 
     private let mic: MicTrackRecorder

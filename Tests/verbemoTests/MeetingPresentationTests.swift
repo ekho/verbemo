@@ -114,11 +114,11 @@ struct ActiveMeetingPresentationTests {
         var active = MeetingPresentation.ActiveRecording(dir: root.appendingPathComponent("meeting"), title: "Live meeting", started: Date(), paused: false, liveStatus: .live)
         let stages = MeetingPresentation.stages(active.item, active: active)
         #expect(stages.first { $0.symbol == "mic" }?.state == .active)
-        #expect(stages.first { $0.symbol == "doc.text" }?.state == .active)
+        #expect(stages.first { $0.symbol == "doc.text" }?.title == localised("Transcription waits for the recording to finish", "Расшифровка ожидает окончания записи"))
         active.paused = true
         let paused = MeetingPresentation.stages(active.item, active: active)
         #expect(paused.first { $0.symbol == "mic" }?.state == .paused)
-        #expect(paused.first { $0.symbol == "doc.text" }?.state == .paused)
+        #expect(paused.first { $0.symbol == "doc.text" }?.title == localised("Transcription waits for the recording to finish", "Расшифровка ожидает окончания записи"))
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         app.libraryProvider = { library }

@@ -31,7 +31,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private var showingLive = false
     private lazy var live = LiveTranscriptContent()
     private lazy var liveView: LiveTranscriptView = {
-        let view = LiveTranscriptView(content: live.contentView)
+        let view = LiveTranscriptView(content: live.contentView, recordingBar: recordingBar)
         view.onError = { [weak self] in self?.activityBar.reportError($0) }
         view.readAudioLevels = { [weak self] in self?.readAudioLevels?() ?? (.off, .off) }
         view.onRename = { [weak self] name in
@@ -191,7 +191,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         settingsBackRow.edgeInsets = .init(top: 8, left: 24, bottom: 0, right: 24)
         settingsBackRow.isHidden = true
         let divider = NSBox(); divider.boxType = .separator
-        let right = NSStackView(views: [recordingBar, settingsBackRow, contentHost])
+        let right = NSStackView(views: [settingsBackRow, contentHost])
         right.orientation = .vertical
         right.distribution = .fill
         right.spacing = 0
@@ -468,6 +468,10 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         if presentedSetup != nil { navigate(.allMeetings) }
         panel.orderOut(nil)
         updateActivationPolicy(windowVisible: false)
+    }
+    func minimize() {
+        if keepsDockIcon { panel.miniaturize(nil) }
+        else { hide() }
     }
     func applyDockPreference() {
         keepsDockIcon = Config.dockIcon()

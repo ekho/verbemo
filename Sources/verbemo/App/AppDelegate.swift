@@ -36,8 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         becameActiveAt = Date()
     }
 
-    /// Clicking the Dock icon of an app that's already in front should put the
-    /// window away again — show, hide, show. The catch is that AppKit
+    /// Clicking the Dock icon of an app that's already in front minimizes its
+    /// window (or hides it when the Dock icon is disabled). The catch is that AppKit
     /// activates the app *before* asking us, so `NSApp.isActive` is true
     /// either way; the only thing that separates "already working in verbemo"
     /// from "just switched to it" is how long ago activation happened.
