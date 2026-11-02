@@ -1,9 +1,7 @@
 import AppKit
 
-/// Dock behaviour. Clicking the icon of a running app sends a reopen, which is
-/// how the window comes back after you close it; and verbemo must not quit just
-/// because its only window was closed — it's a recorder, the window is a view
-/// onto it.
+/// Dock reopens restore or minimize the workspace. Quit requests pass through
+/// recording confirmation and wait for owned work to finish.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Called on a Dock click, with `alreadyActive` false when that click was

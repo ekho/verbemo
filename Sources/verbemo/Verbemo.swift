@@ -1163,7 +1163,7 @@ final class AppController {
         onSetupAvailable?(available)
     }
 
-    /// A repeated Dock click minimizes the window; Close hides it to the tray.
+    /// A repeated Dock click minimizes the visible workspace.
     func toggleWindow(alreadyActive: Bool) {
         if alreadyActive, window.isVisible {
             window.minimize()
