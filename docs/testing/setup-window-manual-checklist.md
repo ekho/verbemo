@@ -242,23 +242,25 @@ for it any more.
 
 ## Where verbemo shows up
 
-The two switches that can leave the program with nothing to click, so the
-whole point of the check is that both of them undo.
+At least one icon must remain on so a running verbemo stays reachable.
 
 - Turn **In the menu bar** off. Confirm the feather leaves the menu bar at
   once, with no gap where it was, and that nothing opens when its old place is
   clicked. Turn it back on and confirm the icon returns and its menu still
   works — the same menu, with every item still doing what it did.
-- Turn **In the Dock** off. Confirm the Dock icon goes at once and verbemo
-  leaves ⌘-Tab, while the window you are looking at stays open and usable.
-  Turn it on again and confirm the icon comes back.
-- Turn both off. Confirm the line under the box appears, saying verbemo keeps
-  recording and how to bring the window back. Close every verbemo window, then
-  open Verbemo from Spotlight and confirm the status window comes back and
-  `pgrep verbemo` still shows the one copy that was already running.
-- With both still off, start a recording from the window, quit and relaunch,
-  and confirm verbemo comes up with no icon anywhere and the setting still off.
-  Then put both back on from Settings.
+- With **In the menu bar** on, turn **In the Dock** off. Confirm the Dock icon
+  remains while the window is open, disappears along with its ⌘-Tab entry when
+  the window is minimized or closed, and returns when the window is reopened.
+- With **In the Dock** off, turn **In the menu bar** off. Confirm **In the Dock**
+  turns on and becomes disabled. Clicking the disabled switch must not turn it
+  off. Minimize the window and confirm the Dock icon remains and restores it.
+- Turn **In the menu bar** back on. Confirm **In the Dock** becomes editable
+  again and can be turned off. Repeat turning the menu bar off while Dock is
+  already on; Dock must stay on and become disabled.
+- Relaunch with the menu bar icon off and confirm Dock remains on and disabled
+  in Settings. Repeat with an older configuration containing both
+  `menu_bar_icon: false` and `dock_icon: false`; Dock must still remain available.
+  Then put both switches back on from Settings.
 
 **By hand** from here down — all of it needs a microphone, sound coming out of
 the Mac, and a few minutes of waiting.

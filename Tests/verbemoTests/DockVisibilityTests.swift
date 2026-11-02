@@ -6,6 +6,13 @@ import Testing
 @Suite("Dock visibility follows the workspace", .serialized)
 @MainActor
 struct DockVisibilityTests {
+    @Test("An existing configuration with both icons off keeps the Dock available",
+          .freshHome(config: #"{"dock_icon": false, "menu_bar_icon": false}"#))
+    func bothIconsOffKeepsDockAvailable() {
+        #expect(!Config.menuBarIcon())
+        #expect(Config.dockIcon())
+    }
+
     @Test(.freshHome, arguments: [(false, true), (true, true), (true, false)])
     func closeQuitsWithoutMenuBarAndOtherwiseHides(menuBar: Bool, dock: Bool) throws {
         try Home.current.writeConfig(["menu_bar_icon": menuBar, "dock_icon": dock])

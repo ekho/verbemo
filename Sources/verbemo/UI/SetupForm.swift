@@ -201,17 +201,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let recordingsPath = NSTextField(labelWithString: "")
     private let menuBarIcon = NSSwitch()
     private let dockIcon = NSSwitch()
-    /// Says what is left when both icons are off. Present only then: it is a
-    /// consequence, not a warning, and a line explaining how to get back to a
-    /// window you are looking at is noise until it is the only way.
-    private let noIconsNote: NSTextField = {
-        let label = SetupLayout.status()
-        label.lineBreakMode = .byWordWrapping
-        // Keep the way back into the app readable on narrow settings pages.
-        label.maximumNumberOfLines = 3
-        label.preferredMaxLayoutWidth = 520
-        return label
-    }()
     private let autoRecord = NSSwitch()
 
     /// What is wrong with the config file, above everything else in the form:
@@ -292,7 +281,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 for child in content { child.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -48).isActive = true }
                 settingsPages[destination] = page
             }
-            page(.general, [SetupLayout.box([startAtLoginRow(), menuBarIconRow(), dockIconRow()]), noIconsNote])
+            page(.general, [SetupLayout.box([startAtLoginRow(), menuBarIconRow(), dockIconRow()])])
             page(.recording, [SetupLayout.box([micRow, audioRow]), SetupLayout.box([autoRecordRow()])])
             page(.calendar, [SetupLayout.box([calendarRow])])
             var transcription = [SetupLayout.section(localised("Transcription models", "Модели расшифровки"), content: transcriptionRows())]
@@ -988,10 +977,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         return row
     }
 
-    /// The two places a person can find a running verbemo, each of which can be
-    /// given up. Both, if they like: what is left then is the program itself,
-    /// which is opened the way any program is opened, and `noIconsNote` says
-    /// so at the moment it becomes true.
     private func menuBarIconRow() -> NSView {
         menuBarIcon.target = self
         menuBarIcon.action = #selector(iconsChanged)
@@ -1040,19 +1025,6 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         SetupLayout.link(title, url, target: self, action: #selector(linkClicked(_:)))
     }
 
-    /// What is left when neither icon is on, and nothing at all while either
-    /// is. Static and free of AppKit so the sentence can be checked without a
-    /// window: it is the only instruction verbemo gives for reaching itself,
-    /// and it is shown exactly when it is the only way in.
-    nonisolated static func noIconsNote(menuBar: Bool, dock: Bool) -> String {
-        guard !menuBar, !dock else { return "" }
-        return localised(
-            "When the window is minimized or closed, verbemo keeps recording without an icon. To bring it back, open Verbemo "
-                + "again — from Spotlight, or from Applications.",
-            "Когда окно свёрнуто или закрыто, verbemo продолжит записывать без значка. Чтобы вернуть окно, "
-                + "откройте Verbemo ещё раз — из Spotlight или из папки «Программы».")
-    }
-
     /// "18 Aug" — enough to tell this week from last spring, and short enough
     /// to sit beside a row title.
     ///
@@ -1089,18 +1061,14 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         NSWorkspace.shared.open(url)
     }
 
-    /// Written the moment they are clicked, and taken up the moment they are
-    /// written — the app reads the same file change and moves its icons. So
-    /// the switch that has just emptied the menu bar is on screen beside the
-    /// evidence of it, which is what makes turning both off a safe thing to
-    /// let anyone do.
-    ///
-    /// One action for both switches, because `Config.update` writes only what
-    /// differs: the half nobody touched costs a comparison and leaves the
-    /// file, and its timestamp, alone.
     @objc private func iconsChanged() {
-        Config.update(path: ["menu_bar_icon"], value: menuBarIcon.state == .on ? nil : false)
-        Config.update(path: ["dock_icon"], value: dockIcon.state == .on ? nil : false)
+        // A successful write refreshes both switches synchronously.
+        let menuBarOn = menuBarIcon.state == .on
+        let dockOn = !menuBarOn || dockIcon.state == .on
+        if Config.update(path: ["dock_icon"], value: dockOn ? nil : false) {
+            Config.update(path: ["menu_bar_icon"], value: menuBarOn ? nil : false)
+        }
+        refresh()
     }
 
     @objc private func keepAudioChanged() {
@@ -1993,9 +1961,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         menuBarIcon.state = Config.menuBarIcon() ? .on : .off
         dockIcon.state = Config.dockIcon() ? .on : .off
-        noIconsNote.stringValue = Self.noIconsNote(
-            menuBar: Config.menuBarIcon(), dock: Config.dockIcon())
-        noIconsNote.isHidden = noIconsNote.stringValue.isEmpty
+        dockIcon.isEnabled = Config.menuBarIcon()
 
         let autoRecordOn = Config.flag(.autoRecordEnabled, in: config)
         autoRecord.state = autoRecordOn ? .on : .off
