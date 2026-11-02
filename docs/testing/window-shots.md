@@ -60,6 +60,7 @@ The New recording fixture also renders the attached form with a synthetic calend
 | `about-{light,dark}.png` | About inside Journal. |
 | `journal-empty-{light,dark}.png` | An empty meeting library. |
 | `journal-live-{light,dark}.png` and `-narrow` | Active recording controls and a synthetic live transcript. |
+| `journal-live-off-{light,dark}.png` | Active recording with live transcription off and an empty framed transcript area. |
 | `journal-meeting-{completed,pending,failed}-{light,dark}.png` | Transcript and inspector, including speakers and processing state. |
 | `journal-meeting-summary-{light,dark}.png` and `-narrow` | The selected meeting's summary. |
 | `journal-meeting-inspector-{light,dark}-narrow.png` | The inspector opened at minimum width. |

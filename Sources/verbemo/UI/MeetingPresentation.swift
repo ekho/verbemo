@@ -2,7 +2,7 @@ import Foundation
 
 /// Presentation reads the session's recorded states, never a simulated percentage.
 enum MeetingPresentation {
-    enum StageState { case done, active, paused, pending, off, failed }
+    enum StageState { case done, active, paused, pending, waiting, off, failed }
     struct ActiveRecording: Equatable {
         let dir: URL
         var title: String
@@ -58,21 +58,10 @@ enum MeetingPresentation {
             var stages: [Stage] = []
             if calendarLinked(item.dir) { stages.append(Stage(symbol: "calendar", title: localised("Linked calendar event", "Связано с событием календаря"), state: .done)) }
             stages.append(Stage(symbol: "mic", title: active.paused ? localised("Recording paused", "Запись приостановлена") : localised("Recording", "Идёт запись"), state: active.paused ? .paused : .active))
-            let transcript: Stage
-            if active.paused && active.liveStatus != .idle { transcript = Stage(symbol: "doc.text", title: localised("Live transcript paused", "Онлайн-расшифровка приостановлена"), state: .paused) }
-            else {
-                transcript = switch active.liveStatus {
-                case .live: Stage(symbol: "doc.text", title: localised("Transcribing live", "Расшифровка в реальном времени"), state: .active)
-                case .error(let reason): Stage(symbol: "doc.text", title: reason, state: .failed)
-                case .overloaded: Stage(symbol: "doc.text", title: localised("Live transcript overloaded", "Онлайн-расшифровка перегружена"), state: .failed)
-                case .downloading, .loading, .modelMissing: Stage(symbol: "doc.text", title: localised("Waiting for the live model", "Ожидается модель онлайн-расшифровки"), state: .pending)
-                case .idle, .paused: Stage(symbol: "doc.text", title: localised("Live transcript is not running", "Онлайн-расшифровка не запущена"), state: .off)
-                }
-            }
-            stages.append(transcript)
+            stages.append(Stage(symbol: "doc.text", title: localised("Transcription waits for the recording to finish", "Расшифровка ожидает окончания записи"), state: .waiting))
             stages.append(item.summary == .off
                 ? Stage(symbol: "checklist", title: localised("Summary was not created", "Сводка не создавалась"), state: .off)
-                : Stage(symbol: "checklist", title: localised("Summary waits for the finished transcript", "Сводка ожидает готовую расшифровку"), state: .pending))
+                : Stage(symbol: "checklist", title: localised("Summary waits for transcription", "Сводка ожидает расшифровки"), state: .waiting))
             return stages
         }
         let busy = SessionClaim.isHeld(item.dir)

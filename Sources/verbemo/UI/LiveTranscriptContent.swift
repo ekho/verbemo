@@ -19,6 +19,7 @@ final class LiveTranscriptContent {
     private let liveText = NSTextView()
     private let liveScroll = NSScrollView()
     private let liveSection = NSStackView()
+    private let emptySpace = NSView()
     var serviceViews: [NSView] { [configProblemLabel, liveStatus, liveDownload] }
 
     private var liveTextVisible = false
@@ -76,22 +77,27 @@ final class LiveTranscriptContent {
         liveScroll.hasVerticalScroller = true
         liveScroll.autohidesScrollers = true
         liveScroll.drawsBackground = false
-        liveScroll.borderType = .bezelBorder
         liveScroll.isHidden = true
 
         let liveHeader = NSStackView(views: [liveCheckbox, NSView(), liveReveal])
         liveHeader.orientation = .horizontal
         liveHeader.spacing = 8
-        liveSection.setViews([liveHeader, liveScroll], in: .top)
+        liveHeader.setContentHuggingPriority(.required, for: .vertical)
+        let heading = NSTextField(wrappingLabelWithString: localised("Real-time transcription", "Расшифровка в реальном времени"))
+        heading.font = .systemFont(ofSize: 17, weight: .semibold)
+        let sourceNote = NSTextField(wrappingLabelWithString: localised(
+            "You and Them describe audio sources, not verified participant names.",
+            "«Вы» и «Они» — источники звука, а не подтверждённые имена участников."))
+        sourceNote.font = .systemFont(ofSize: 10)
+        sourceNote.textColor = StudioStyle.muted
+        liveSection.setViews([heading, liveHeader, sourceNote, liveScroll, emptySpace], in: .top)
         liveSection.orientation = .vertical
         liveSection.alignment = .leading
         liveSection.spacing = 6
-        // Spare height belongs to the transcript only while it is visible.
-        liveSection.setContentHuggingPriority(.required, for: .vertical)
-        // The live transcript runs a local streaming model. On an Intel Mac
-        // there is none, so the checkbox would be an offer that turns itself
-        // back off — hidden instead.
-        liveSection.isHidden = !Platform.supportsLocalModels
+        emptySpace.setContentHuggingPriority(.init(1), for: .vertical)
+        for view in [heading, sourceNote] { view.setContentHuggingPriority(.required, for: .vertical) }
+        // Intel Macs have no local streaming model.
+        liveHeader.isHidden = !Platform.supportsLocalModels
 
         let rows = NSStackView()
         rows.setViews([liveSection], in: .top)
@@ -104,15 +110,16 @@ final class LiveTranscriptContent {
         container.onFiles = { [weak self] urls in self?.onImportFiles?(urls) }
         container.addSubview(rows)
 
-        // Fill available height without squeezing rows together in a short page.
-        let fill = rows.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        fill.priority = .defaultLow
         NSLayoutConstraint.activate([
             rows.topAnchor.constraint(equalTo: container.topAnchor),
             rows.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             rows.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            fill,
+            rows.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             liveSection.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -32),
+            liveSection.heightAnchor.constraint(equalTo: rows.heightAnchor, constant: -28),
+            heading.widthAnchor.constraint(equalTo: liveSection.widthAnchor),
+            liveHeader.widthAnchor.constraint(equalTo: liveSection.widthAnchor),
+            sourceNote.widthAnchor.constraint(equalTo: liveSection.widthAnchor),
             liveScroll.widthAnchor.constraint(equalTo: liveSection.widthAnchor),
             liveScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
         ])
@@ -218,7 +225,7 @@ final class LiveTranscriptContent {
         guard visible != liveTextVisible else { return }
         liveTextVisible = visible
         liveScroll.isHidden = !visible
-        liveSection.setContentHuggingPriority(visible ? .defaultLow : .required, for: .vertical)
+        emptySpace.isHidden = visible
         setRevealTitle(showing: visible)
     }
 

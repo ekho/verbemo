@@ -18,7 +18,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
             if name.currentEditor() == nil { name.stringValue = newValue }
         }
     }
-    init(content: NSView) {
+    init(content: NSView, recordingBar: RecordingBarView) {
         super.init(frame: .zero)
         name.font = JournalStyle.titleFont()
         name.textColor = JournalStyle.ink
@@ -27,17 +27,6 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         name.identifier = .init("recording-title")
         name.setAccessibilityLabel(localised("Current meeting title", "Название текущей встречи"))
         name.delegate = self
-        let heading = NSTextField(labelWithString: localised("Real-time transcription", "Расшифровка в реальном времени"))
-        heading.font = .systemFont(ofSize: 17, weight: .semibold)
-        let note = NSTextField(wrappingLabelWithString: localised(
-            "Preliminary text. The final transcript and summary are prepared after the meeting.",
-            "Предварительный текст. Полная расшифровка и сводка готовятся после встречи."))
-        note.textColor = .secondaryLabelColor
-        let sourceNote = NSTextField(wrappingLabelWithString: localised(
-            "You and Them describe audio sources, not verified participant names.",
-            "«Вы» и «Они» — источники звука, а не подтверждённые имена участников."))
-        sourceNote.font = .systemFont(ofSize: 11)
-        sourceNote.textColor = .secondaryLabelColor
         let sources = NSStackView(views: [
             micLevel, systemLevel,
         ])
@@ -48,7 +37,16 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         meetingActionsHost.setContentCompressionResistancePriority(.required, for: .horizontal)
         let titleRow = NSStackView(views: [name, meetingActionsHost])
         titleRow.spacing = 12
-        let stack = NSStackView(views: [titleRow, note, sources, heading, content, sourceNote])
+        let transcript = NSBox()
+        transcript.boxType = .custom
+        transcript.borderType = .lineBorder
+        transcript.borderColor = StudioStyle.line
+        transcript.fillColor = .clear
+        transcript.cornerRadius = 9
+        transcript.contentViewMargins = .zero
+        transcript.contentView = content
+        transcript.identifier = .init("recording.transcript")
+        let stack = NSStackView(views: [titleRow, recordingBar, sources, transcript])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
@@ -60,12 +58,11 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 40),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -40),
             titleRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            recordingBar.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sources.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            note.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            sourceNote.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            content.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            transcript.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
-        content.setContentHuggingPriority(.defaultLow, for: .vertical)
+        transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 

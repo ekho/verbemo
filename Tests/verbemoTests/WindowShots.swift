@@ -381,17 +381,23 @@ struct WindowGallery {
     @Test("Journal's empty library and live transcript, in both appearances")
     func livePage() throws {
         for (name, appearance) in [("light", light), ("dark", dark)] {
-            try withJournal(builtIn: appearance) { app, _ in
+            try withJournal(builtIn: appearance) { app, library in
                 app.update(state: .idle, elapsed: nil)
                 app.updateAutoRecord(enabled: true, decision: localised("ready", "готов"))
                 try write(app.panel, "journal-empty-\(name)")
 
                 app.recordingTitle = localised("Release review", "Разбор релиза")
+                library.setActiveRecording(.init(
+                    dir: Home.current.url.appendingPathComponent("meetings/active"),
+                    title: app.recordingTitle, started: Date(), paused: false, liveStatus: .live))
                 app.update(state: .recording, elapsed: "12:04")
                 app.updateLive(.init(
                     isRecording: true, isEnabled: true, entries: Self.conversation, status: .live))
                 app.showActiveRecording()
                 try write(app.panel, "journal-live-\(name)")
+                app.updateLive(.init(isRecording: true, isEnabled: false, entries: [], status: .paused))
+                try write(app.panel, "journal-live-off-\(name)")
+                app.updateLive(.init(isRecording: true, isEnabled: true, entries: Self.conversation, status: .live))
                 app.panel.setContentSize(NSSize(width: 760, height: 680))
                 try write(app.panel, "journal-live-\(name)-narrow")
             }

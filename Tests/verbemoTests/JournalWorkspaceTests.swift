@@ -446,7 +446,7 @@ struct JournalWorkspaceTests {
         #expect(!title.isHiddenOrHasHiddenAncestor)
     }
 
-    @Test(.freshHome) func settingsKeepCategoriesAndGlobalRecordingControls() throws {
+    @Test(.freshHome) func settingsKeepCategoriesWithoutRecordingControls() throws {
         let app = ApplicationWindow()
         defer { app.hide() }
         let library = MeetingLibraryController(root: Home.current.url, hostWindow: app.panel)
@@ -458,11 +458,10 @@ struct JournalWorkspaceTests {
         let sidebar = try #require(views.first { $0 is SidebarView })
         #expect(!sidebar.allDescendants.contains { $0 is MeetingTableView })
         #expect(sidebar.allDescendants.contains { $0.identifier?.rawValue == "settings.categories" })
-        let bar = try #require(views.first { $0.identifier?.rawValue == "recording-bar" })
-        app.panel.contentView?.layoutSubtreeIfNeeded()
-        #expect(!bar.isHiddenOrHasHiddenAncestor)
-        let rect = bar.convert(bar.bounds, to: app.panel.contentView)
-        #expect(rect.midY > app.panel.contentLayoutRect.height / 2, "Recording controls stay above the document")
+        #expect(!views.contains { $0.identifier?.rawValue == "recording-bar" })
+        #expect(app.recordingBarIsVisible, "Navigating to settings must keep the recording active")
+        let status = try #require(views.first { $0.identifier?.rawValue == "activity.recording" } as? NSButton)
+        #expect(status.isEnabled && !status.isHiddenOrHasHiddenAncestor)
         #expect(views.contains { $0.identifier?.rawValue == "settings.categories" && !$0.isHiddenOrHasHiddenAncestor })
     }
 

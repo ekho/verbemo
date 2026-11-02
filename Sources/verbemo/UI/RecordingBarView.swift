@@ -16,16 +16,20 @@ final class RecordingBarView: NSStackView {
     init() {
         super.init(frame: .zero)
         orientation = .horizontal
-        spacing = 12
-        edgeInsets = NSEdgeInsets(top: 12, left: 24, bottom: 12, right: 24)
+        spacing = 8
+        edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        wantsLayer = true
+        layer?.cornerRadius = 9
         identifier = .init("recording-bar")
         name.title = localised("New meeting", "Новая встреча")
         name.isBordered = false
         name.alignment = .left
-        name.font = .systemFont(ofSize: 13, weight: .semibold)
+        name.font = .systemFont(ofSize: 11, weight: .semibold)
+        name.cell?.lineBreakMode = .byTruncatingTail
         name.target = self
         name.action = #selector(openClicked)
-        time.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        time.textColor = StudioStyle.muted
         for (button, symbol, label, selector) in [
             (pause, "pause", localised("Pause recording", "Приостановить запись"), #selector(pauseClicked)),
             (stop, "stop.fill", localised("Stop and save recording", "Остановить и сохранить запись"), #selector(stopClicked))
@@ -33,6 +37,8 @@ final class RecordingBarView: NSStackView {
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
             button.setAccessibilityLabel(label)
             button.bezelStyle = .rounded
+            button.font = .systemFont(ofSize: 11)
+            button.heightAnchor.constraint(equalToConstant: 30).isActive = true
             button.target = self
             button.action = selector
         }
@@ -47,6 +53,14 @@ final class RecordingBarView: NSStackView {
         isHidden = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance { layer?.backgroundColor = StudioStyle.inset.cgColor }
+    }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
     func update(state: MenuBarController.State, elapsed: String?) {
         isHidden = state == .idle
         time.stringValue = elapsed ?? "00:00"

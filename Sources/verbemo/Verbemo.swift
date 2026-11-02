@@ -323,6 +323,12 @@ final class AppController {
             self.window.recordingTitle = title
             self.updateActiveRecording()
         }
+        library.onAssociateActiveRecording = { [weak self] dir, meeting in
+            guard let self, let session = self.session, session.dir == dir else { throw CocoaError(.fileNoSuchFile) }
+            try session.associateCalendar(meeting)
+            self.window.recordingTitle = session.title ?? localised("New meeting", "Новая встреча")
+            self.updateActiveRecording()
+        }
         library.onRetranscribe = { [weak self] _ in self?.catchUp() }
         library.onImportFiles = { [weak self] files in self?.importFiles(files) }
         let coordinator = transcription
@@ -1157,11 +1163,10 @@ final class AppController {
         onSetupAvailable?(available)
     }
 
-    /// The Dock icon: show the window, or put it away if verbemo was already in
-    /// front and it's sitting there.
+    /// A repeated Dock click minimizes the window; Close hides it to the tray.
     func toggleWindow(alreadyActive: Bool) {
         if alreadyActive, window.isVisible {
-            window.hide()
+            window.minimize()
         } else {
             window.show()
         }

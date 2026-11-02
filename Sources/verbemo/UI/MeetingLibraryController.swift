@@ -89,6 +89,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var activeRecording: MeetingPresentation.ActiveRecording?
     var onOpenActiveRecording: (() -> Void)?
     var onRenameActiveRecording: ((String) throws -> Void)?
+    var onAssociateActiveRecording: ((URL, CalendarWatcher.Meeting?) throws -> Void)?
     private let openActiveButton = NSButton()
     func setActiveRecording(_ value: MeetingPresentation.ActiveRecording?) {
         guard activeRecording != value else { return }
@@ -684,10 +685,16 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         calendarPicker.isHidden = item == nil
         guard let item else { calendarPicker.cancel(); detailMeta.stringValue = ""; return }
         calendarPicker.update(date: item.started ?? Date(), snapshot: metadata, contextID: item.dir.path,
-                              enabled: activeRecording?.dir != item.dir && !working && !SessionClaim.isHeld(item.dir))
+                              enabled: !working && !SessionClaim.isHeld(item.dir))
         calendarPicker.onSelect = { [weak self] meeting in
-            try MeetingCalendarMetadata.associate(meeting, in: item.dir)
-            self?.reload()
+            guard let self else { throw CancellationError() }
+            if activeRecording?.dir == item.dir {
+                guard let onAssociateActiveRecording else { throw CocoaError(.fileNoSuchFile) }
+                try onAssociateActiveRecording(item.dir, meeting)
+            } else {
+                try MeetingCalendarMetadata.associate(meeting, in: item.dir)
+            }
+            reload()
         }
         let duration = item.duration.map { localised("\(Int($0 / 60)) min", "\(Int($0 / 60)) мин") }
         let invited = metadata?.isConfirmed == true ? metadata.map { localised("Invited: \($0.participants.count)", "Приглашены: \($0.participants.count)") } : nil
@@ -2190,10 +2197,10 @@ private extension MeetingLibraryController {
                 row.spacing = 10
                 if stage.symbol == "doc.text" {
                     row.identifier = .init("meeting.processing-transcript")
-                    row.addArrangedSubview(repeatButton)
+                    if activeRecording?.dir != item.dir { row.addArrangedSubview(repeatButton) }
                 } else if stage.symbol == "checklist" {
                     row.identifier = .init("meeting.processing-summary")
-                    row.addArrangedSubview(regenerateButton)
+                    if activeRecording?.dir != item.dir { row.addArrangedSubview(regenerateButton) }
                 }
                 pipeline.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: pipeline.widthAnchor).isActive = true
