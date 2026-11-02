@@ -67,6 +67,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         didSet { connectLibrary(); if navigation.destination.isMeetings { navigate(navigation.destination) } }
     }
     var onToggle: (() -> Void)?
+    var onQuit: () -> Void = { NSApp.terminate(nil) }
     var onStartRecording: ((String, CalendarWatcher.Meeting?) -> Void)?
     var recordingCalendar: ((Date) async -> NewRecordingSheet.CalendarOptions?)?
     var calendarSearch: CalendarEventPicker.Loader?
@@ -96,6 +97,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
         panel.delegate = self
+        panel.standardWindowButton(.miniaturizeButton)?.target = self
+        panel.standardWindowButton(.miniaturizeButton)?.action = #selector(minimize)
         (panel as? WorkspaceWindow)?.onFindMeeting = { [weak self] in
             guard let self, self.navigation.destination.isMeetings, !self.showingLive else { return false }
             return self.libraryProvider?()?.focusMeetingSearch() == true
@@ -469,7 +472,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         panel.orderOut(nil)
         updateActivationPolicy(windowVisible: false)
     }
-    func minimize() {
+    @objc func minimize() {
         if keepsDockIcon { panel.miniaturize(nil) }
         else { hide() }
     }
@@ -489,6 +492,11 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     }
     func windowDidDeminiaturize(_ notification: Notification) {
         updateActivationPolicy(windowVisible: true)
+    }
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if Config.menuBarIcon() { hide() }
+        else { onQuit() }
+        return false
     }
     func windowWillClose(_ notification: Notification) {
         if presentedSetup != nil { navigate(.allMeetings) }
