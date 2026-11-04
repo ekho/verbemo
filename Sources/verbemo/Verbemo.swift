@@ -388,7 +388,7 @@ final class AppController {
          operations: ProcessingOperations = .shared, calendar: CalendarWatcher = CalendarWatcher()) {
         self.root = root
         self.calendar = calendar
-        window = ApplicationWindow(calendar: calendar)
+        window = ApplicationWindow(calendar: calendar, operations: operations)
         self.followsConfiguredRoot = followsConfiguredRoot
         self.operations = operations
         transcription = TranscriptionCoordinator(operations: operations)
@@ -703,6 +703,11 @@ final class AppController {
         if Task.isCancelled {
             noteImportCancellation(id)
             combined.cancelled = true
+        }
+        if combined.cancelled {
+            operations.reportCancellation()
+        } else if !combined.failures.isEmpty {
+            operations.reportFailure(MediaImportPresentation.finished(combined).label)
         }
         finishImport(combined)
     }

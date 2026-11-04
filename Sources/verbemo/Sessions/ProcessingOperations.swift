@@ -90,7 +90,7 @@ final class ProcessingOperations: @unchecked Sendable {
     private struct Entry {
         var snapshot: Snapshot
         var cancel: (@Sendable () -> Void)?
-        var failure: String?
+        var reportedResult: Completion?
     }
     private let lock = NSLock()
     private var entries: [UUID: Entry] = [:]
@@ -147,8 +147,17 @@ final class ProcessingOperations: @unchecked Sendable {
 
     /// For owners that persist an error instead of throwing it out of the run.
     func reportFailure(_ message: String) {
+        report(.failed(message))
+    }
+
+    /// A worker can still return partial results for presentation after cancellation.
+    func reportCancellation() {
+        report(.cancelled)
+    }
+
+    private func report(_ result: Completion) {
         guard let context = Self.context, context.owner === self else { return }
-        lock.withLock { entries[context.id]?.failure = message }
+        lock.withLock { entries[context.id]?.reportedResult = result }
     }
 
     private func pruneGenerations() {
@@ -174,6 +183,11 @@ final class ProcessingOperations: @unchecked Sendable {
 
     func cancelAndWait(_ snapshot: Snapshot) async -> Completion {
         cancel(snapshot.id)
+        return await snapshot.result.wait()
+    }
+
+    func removeWaiting(_ snapshot: Snapshot) async -> Completion? {
+        guard requestCancellation(snapshot.id, onlyWaiting: true) else { return nil }
         return await snapshot.result.wait()
     }
 
@@ -217,28 +231,32 @@ final class ProcessingOperations: @unchecked Sendable {
     }
 
     func cancel(_ id: UUID) {
-        var waiting: ResultHandle?
-        let action: (@Sendable () -> Void)? = lock.withLock {
-            guard var entry = entries[id] else { return nil }
+        _ = requestCancellation(id)
+    }
+
+    private func requestCancellation(_ id: UUID, onlyWaiting: Bool = false) -> Bool {
+        let request: (reservation: ResultHandle?, stop: (@Sendable () -> Void)?)? = lock.withLock {
+            guard var entry = entries[id], !onlyWaiting || entry.snapshot.state == .waiting else { return nil }
             if let cancel = entry.cancel {
                 entry.snapshot = entry.snapshot.updating(state: .cancelling)
                 entries[id] = entry
-                return cancel
+                return (nil, cancel)
             }
             // No task or resources exist for a reservation that never started.
             entries.removeValue(forKey: id)
-            waiting = entry.snapshot.result
-            return nil
+            return (entry.snapshot.result, nil)
         }
-        waiting?.finish(.cancelled)
-        action?()
+        guard let request else { return false }
+        request.reservation?.finish(.cancelled)
+        request.stop?()
         lock.withLock { pruneGenerations() }
+        return true
     }
 
     private func finish(_ id: UUID, result: Completion) {
         guard let entry = lock.withLock({ entries.removeValue(forKey: id) }) else { return }
         let outcome: Completion
-        if result == .completed, let failure = entry.failure { outcome = .failed(failure) }
+        if result == .completed, let reported = entry.reportedResult { outcome = reported }
         else { outcome = result }
         entry.snapshot.result.finish(outcome)
         lock.withLock { pruneGenerations() }

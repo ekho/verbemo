@@ -13,7 +13,11 @@ struct ActivityWork {
     static func stage(_ job: ProcessingOperations.Snapshot) -> String {
         if job.state == .cancelling { return localised("Cancelling…", "Отмена…") }
         if job.state == .waiting { return localised("Waiting", "Ожидание") }
-        switch job.kind {
+        return kindTitle(job.kind)
+    }
+
+    static func kindTitle(_ kind: ProcessingOperations.Kind) -> String {
+        switch kind {
         case .transcription: return localised("Transcription", "Расшифровка")
         case .diarization: return localised("Separating speakers", "Разделение говорящих")
         case .postProcessing: return localised("Naming speakers", "Имена говорящих")
@@ -92,6 +96,10 @@ final class ActivityStatusBar: NSStackView {
     private var previousReadings: (mic: AudioMeter.Reading, system: AudioMeter.Reading)?
     private let recording = NSButton()
     private let queue = NSButton()
+    let queuePopover: ActivityQueuePopover
+    private let queueNotice = NSStackView()
+    private let queueResult = NSTextField(wrappingLabelWithString: "")
+    private var queueResults: [String] = []
     private let job = NSButton()
     private let warning = NSButton()
     private let warningMenu = NSMenu()
@@ -112,7 +120,8 @@ final class ActivityStatusBar: NSStackView {
     private var work = ActivityWork([])
     private var jobTitle: (URL) -> String = { $0.lastPathComponent }
 
-    init() {
+    init(operations: ProcessingOperations = .shared) {
+        queuePopover = ActivityQueuePopover(operations: operations)
         super.init(frame: .zero)
         identifier = .init("activity-status-bar")
         orientation = .horizontal
@@ -175,6 +184,22 @@ final class ActivityStatusBar: NSStackView {
         serviceError.textColor = .systemOrange
         serviceError.isHidden = true
         serviceError.identifier = .init("activity.error")
+        queueResult.font = .systemFont(ofSize: 11)
+        queueResult.textColor = JournalStyle.ink
+        let dismissResult = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)!,
+                                     target: self, action: #selector(dismissQueueResults))
+        dismissResult.bezelStyle = .inline
+        dismissResult.setAccessibilityLabel(localised("Dismiss queue messages", "Скрыть сообщения очереди"))
+        queueNotice.setViews([queueResult, dismissResult], in: .center)
+        queueNotice.alignment = .top
+        queueNotice.isHidden = true
+        queueNotice.identifier = .init("activity.queue-result")
+        queuePopover.onOpenProcessing = { [weak self] in self?.onQueue?() }
+        queuePopover.onResult = { [weak self] in self?.reportQueueResult($0) }
+        queuePopover.onChange = { [weak self] in
+            guard let self else { return }
+            updateWork(operations.snapshot(), title: jobTitle)
+        }
         configureMessages()
         setServiceViews([])
         let capture = NSStackView(views: [automatic, recording, levels])
@@ -329,16 +354,17 @@ final class ActivityStatusBar: NSStackView {
         queue.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
         queue.imagePosition = .imageLeading
         queue.contentTintColor = work.running > 0 ? .systemBlue : JournalStyle.muted
-        queue.setAccessibilityLabel(localised("Running: \(work.running). Waiting: \(work.waiting). Open processing.",
-            "Выполняется: \(work.running). Ожидают: \(work.waiting). Открыть обработку."))
+        queue.setAccessibilityLabel(localised("Running: \(work.running). Waiting: \(work.waiting). Open task queue.",
+            "Выполняется: \(work.running). Ожидают: \(work.waiting). Открыть очередь задач."))
         queue.toolTip = ([localised("Running: \(work.running) · Waiting: \(work.waiting)",
                                     "Выполняется: \(work.running) · Ожидают: \(work.waiting)")] + work.jobs.map { ($0.session.map(title) ?? localised("Import", "Импорт")) + " · " + ActivityWork.stage($0) }).joined(separator: "\n")
         spinner.toolTip = queue.toolTip
         if work.running > 0 { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
+        queuePopover.update(work, title: title)
         refreshJob()
     }
 
-    var serviceRows: [NSView] { [importStatus, serviceError] + serviceViews }
+    var serviceRows: [NSView] { [importStatus, serviceError, queueNotice] + serviceViews }
 
     func setServiceViews(_ views: [NSView]) {
         serviceContent.setViews([], in: .center)
@@ -440,6 +466,23 @@ final class ActivityStatusBar: NSStackView {
         refreshMessages()
         NSAccessibility.post(element: serviceError, notification: .valueChanged)
     }
+
+    private func reportQueueResult(_ message: String) {
+        queueResults.append(message.split(whereSeparator: \.isNewline).joined(separator: " "))
+        queueResults = Array(queueResults.suffix(4))
+        queueResult.stringValue = queueResults.joined(separator: "\n")
+        queueResult.toolTip = queueResult.stringValue
+        queueNotice.isHidden = false
+        refreshMessages()
+        NSAccessibility.post(element: queueResult, notification: .valueChanged)
+    }
+
+    @objc private func dismissQueueResults() {
+        queueResults.removeAll()
+        queueResult.stringValue = ""
+        queueNotice.isHidden = true
+        refreshMessages()
+    }
     func showImport(_ update: MediaImportCoordinator.Update) {
         importFailed = false
         importStatus.update(update)
@@ -510,6 +553,7 @@ final class ActivityStatusBar: NSStackView {
         levelTimer = nil
         spinner.stopAnimation(nil)
         messagePopover.close()
+        queuePopover.stop()
     }
     func refreshAudioLevels() {
         let readings = recordingState == .idle ? (mic: AudioMeter.Reading.off, system: .off)
@@ -535,7 +579,7 @@ final class ActivityStatusBar: NSStackView {
     }
     @objc private func calendarSettings() { onAccess?(.calendar) }
     @objc private func recordingClicked() { onRecording?() }
-    @objc private func queueClicked() { onQueue?() }
+    @objc private func queueClicked() { queuePopover.toggle(from: queue) }
     @objc private func jobClicked() { onJob?(currentSession) }
     @objc private func openAttention() { onAttention?() }
     @objc private func warningClicked() {

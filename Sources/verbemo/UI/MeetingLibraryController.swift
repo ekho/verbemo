@@ -354,9 +354,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             ? items[table.selectedRow]
             : nil
     }
-    /// Naming and summarizing take a while and talk to the network; the
-    /// buttons stay disabled meanwhile so a second click can't start the same
-    /// work twice.
     var onActivityChange: (() -> Void)?
     private let deletion = SessionDeletionController()
     var mcpPendingDeletion: Set<String> { Set(allItems.filter { deletion.isPending($0.dir) }.map { $0.dir.lastPathComponent }) }
@@ -364,20 +361,26 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let deletionLabel = NSTextField(labelWithString: "")
     var serviceViews: [NSView] { [detailError, resultNotice, deletionNotice, busyLabel, librarySearchStatus] + audioPlayer.serviceViews }
     private var undoDeletionID: UUID?
-    var isProcessing: Bool { working || deletion.hasWork || processingCancellation.hasPending }
+    var isProcessing: Bool { !workByMeeting.isEmpty || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
-    private var summarySheet: SummaryRegenerationSheet?
-    private var summaryDirectory: URL?
-    private var working = false {
-        didSet {
-            if working {
-                detailError.isHidden = true
-                detailError.stringValue = ""
-                detailError.toolTip = nil
-            }
-            if oldValue != working { showDetail() }
-            onActivityChange?()
+    private var summarySheets: [URL: (version: URL, sheet: SummaryRegenerationSheet)] = [:]
+    private var workByMeeting: [URL: String] = [:]
+    private var selectedWork: String? { selected.flatMap { workByMeeting[$0.dir] } }
+
+    private func isBusy(_ dir: URL) -> Bool {
+        workByMeeting[dir] != nil || SessionClaim.isHeld(dir)
+    }
+
+    private func setWorking(_ working: Bool, in dir: URL) {
+        workByMeeting[dir] = working ? localised("working…", "работаю…") : nil
+        guard !terminating else { return }
+        if working {
+            detailError.isHidden = true
+            detailError.stringValue = ""
+            detailError.toolTip = nil
         }
+        if selected?.dir == dir { showDetail() }
+        onActivityChange?()
     }
 
     init(root: URL, pasteboard: NSPasteboard = .general,
@@ -435,7 +438,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         if let monitor { cleanup.append(monitor) }
         cleanup.append(deletion.stopForTermination())
         cleanup.append(Task { [audioPlayer] in await audioPlayer.settled() })
-        if let task = summarySheet?.task { task.cancel(); cleanup.append(task) }
+        for task in summarySheets.values.compactMap({ $0.sheet.task }) {
+            task.cancel()
+            cleanup.append(task)
+        }
         return cleanup
     }
 
@@ -685,7 +691,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         calendarPicker.isHidden = item == nil
         guard let item else { calendarPicker.cancel(); detailMeta.stringValue = ""; return }
         calendarPicker.update(date: item.started ?? Date(), snapshot: metadata, contextID: item.dir.path,
-                              enabled: !working && !SessionClaim.isHeld(item.dir))
+                              enabled: !isBusy(item.dir))
         calendarPicker.onSelect = { [weak self] meeting in
             guard let self else { throw CancellationError() }
             if activeRecording?.dir == item.dir {
@@ -713,7 +719,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             && (dir.map { DiarizationState.persisted(in: $0).isFinal } ?? false)
         var state = MeetingActionState(transcriptReady: ready, summaryReady: summaryToCopy != nil,
             hasAudio: item?.hasAudio == true, isRecording: activeRecording?.dir == item?.dir && activeRecording != nil,
-            isBusy: working || (item.map { SessionClaim.isHeld($0.dir) } ?? false),
+            isBusy: item.map { isBusy($0.dir) } ?? false,
             configReadable: !Config.settingsUnknown, transcriptionEnabled: Config.transcriptionEnabled(),
             summaryEnabled: PostProcessor.Policy.configured.summary)
         state.hasPendingTranscript = item.map { TranscriptVersions.isRequested($0.dir) } ?? false
@@ -875,29 +881,26 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private func regenerateSummary() {
         guard currentActions.reason(for: .regenerateSummary) == nil, let dir = artifactDirectory,
               let item = selected, panel.attachedSheet == nil else { updateButtons(); return }
-        working = true
-        updateButtons()
-        if summaryDirectory == dir, let summarySheet {
-            summarySheet.selectionChanged()
-            panel.beginSheet(summarySheet.window)
+        setWorking(true, in: item.dir)
+        if let saved = summarySheets[item.dir], saved.version == dir {
+            saved.sheet.selectionChanged()
+            panel.beginSheet(saved.sheet.window)
             return
         }
         let sheet = SummaryRegenerationSheet(onSettings: { [weak self] in self?.onNavigateSettings?(.summary) }, run: { request in
             try await PostProcessor.regenerateSummary(dir, request: request)
         }, onFailure: { [weak self] error in
             guard let self else { return }
-            working = false
+            setWorking(false, in: item.dir)
             reload()
             say(error.localizedDescription, about: item)
         }, completion: { [weak self] in
             guard let self else { return }
-            summarySheet = nil
-            summaryDirectory = nil
-            working = false
+            summarySheets.removeValue(forKey: item.dir)
+            setWorking(false, in: item.dir)
             reload()
         })
-        summarySheet = sheet
-        summaryDirectory = dir
+        summarySheets[item.dir] = (dir, sheet)
         panel.beginSheet(sheet.window)
     }
     @objc func beginRenamingMeeting() {
@@ -1220,7 +1223,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             summaryText.string = ""
             transcriptText.string = ""
             openActiveButton.isHidden = false
-            busyLabel.stringValue = activeRecording.paused ? localised("Recording paused", "Запись приостановлена") : localised("Recording in progress", "Идёт запись")
+            busyLabel.isHidden = true
             return
         }
         showCalendar(for: selected)
@@ -1305,7 +1308,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let diarized = DiarizationState.read(dir).map { $0.status == .completed }
             ?? (!Config.localEngines.contains(transcript.engine) || Set(transcript.segments.map(\.speaker)).count > 2)
         let participantChoices = calendar?.isConfirmed == true ? calendar!.participants : []
-        let canEdit = !working && !SessionClaim.isHeld(item.dir) && !TranscriptVersions.isRequested(item.dir)
+        let canEdit = !isBusy(item.dir) && !TranscriptVersions.isRequested(item.dir)
             && DiarizationState.persisted(in: dir).isFinal
         meetingTranscript.onAssign = { [weak self] speaker, participant, name in
             guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
@@ -1342,7 +1345,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             "Встреча или расшифровка изменилась либо редактирование сейчас недоступно. Откройте редактор говорящего заново.")])
         guard selected?.dir.standardizedFileURL.path == session.standardizedFileURL.path,
               artifactDirectory?.standardizedFileURL.path == version.standardizedFileURL.path, selectedVersion?.isRequest != true,
-              !working, !SessionClaim.isHeld(session), !TranscriptVersions.isRequested(session),
+              !isBusy(session), !TranscriptVersions.isRequested(session),
               DiarizationState.persisted(in: version).isFinal, !SpeakerNames.isUnknown(speaker) else {
             throw unavailable
         }
@@ -1374,7 +1377,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, transcriptData: Data?, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
         let title = MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments)
         let session = selected?.dir ?? dir
-        let canEdit = !working && !SessionClaim.isHeld(session)
+        let canEdit = !isBusy(session)
             && !TranscriptVersions.isRequested(session) && DiarizationState.persisted(in: dir).isFinal
         let editor = SpeakerAssignmentEditor(speaker: sample.label, title: title,
             entry: SpeakerNames.isUnknown(sample.label) ? nil : names?.speakers[sample.label],
@@ -1436,20 +1439,21 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
 
     private func updateButtons() {
         let item = selected
+        let actions = currentActions
         moreButton.isEnabled = item != nil
-        finishButton.isEnabled = !working && (selectedVersion?.isRequest == true
+        finishButton.isEnabled = !actions.isBusy && (selectedVersion?.isRequest == true
             ? item?.transcript.isOutstanding ?? false
             : artifactDirectory.map { !PostProcessor.outstanding($0, retryFailed: true).isEmpty } ?? item?.isOutstanding ?? false)
         finishButton.isHidden = !finishButton.isEnabled
         let state = item.flatMap { DiarizationState.read($0.dir) }
-        let actionable = !working && item?.unreadableDiarization != true
+        let actionable = !actions.isBusy && item?.unreadableDiarization != true
             && state?.retainsAudio == true && state?.status != .running
             && item.map { !TranscriptVersions.isRequested($0.dir) } == true
         retryDiarizationButton.isEnabled = actionable && onRetryDiarization != nil
         skipDiarizationButton.isEnabled = actionable && onSkipDiarization != nil
-        busyLabel.isHidden = !working
-        busyLabel.stringValue = working ? localised("working…", "работаю…") : ""
-        let actions = currentActions
+        let work = selectedWork
+        busyLabel.isHidden = work == nil
+        busyLabel.stringValue = work ?? ""
         let summaryAction = summaryToCopy == nil ? localised("Generate summary", "Создать сводку") : localised("Regenerate summary", "Перегенерировать сводку")
         let transcriptAction = localised("Transcribe again", "Расшифровать повторно")
         regenerateButton.setAccessibilityLabel(summaryAction)
@@ -1519,29 +1523,28 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     @objc private func retryDiarizationClicked() {
-        guard let item = selected, let action = onRetryDiarization else { return }
-        working = true
-        updateButtons()
+        guard let item = selected, !isBusy(item.dir), let action = onRetryDiarization else { return }
+        setWorking(true, in: item.dir)
         Task {
             do {
                 if let state = DiarizationState.read(item.dir), let resume = onResumeDiarization,
                    !DiarizationModelStore.isReady(at: DiarizationModelStore.shared(for: state.request.model).directory, model: state.request.model) {
-                    busyLabel.stringValue = localised("Downloading \(state.request.model.title)…", "Загрузка \(state.request.model.title)…")
+                    workByMeeting[item.dir] = localised("Downloading \(state.request.model.title)…", "Загрузка \(state.request.model.title)…")
+                    if selected?.dir == item.dir { updateButtons() }
                     try await MeetingModelDownload.continueDiarization(item.dir, resume: resume)
                 } else { try await action(item.dir) }
             } catch { say(error.localizedDescription, about: item) }
-            working = false
+            setWorking(false, in: item.dir)
             reload()
         }
     }
 
     @objc private func skipDiarizationClicked() {
-        guard let item = selected, let action = onSkipDiarization else { return }
-        working = true
-        updateButtons()
+        guard let item = selected, !isBusy(item.dir), let action = onSkipDiarization else { return }
+        setWorking(true, in: item.dir)
         Task {
             do { try await action(item.dir) } catch { say(error.localizedDescription, about: item) }
-            working = false
+            setWorking(false, in: item.dir)
             reload()
         }
     }
@@ -1598,7 +1601,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     @objc private func finishClicked() {
-        guard let item = selected else { return }
+        guard let item = selected, !isBusy(item.dir) else { return }
         if let version = selectedVersion, !version.isRequest, version.dir != item.dir {
             finishManually(version.dir, about: item)
             return
@@ -1627,11 +1630,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     private func finishManually(_ dir: URL, about item: SessionInventory.Item) {
-        working = true
-        updateButtons()
+        setWorking(true, in: item.dir)
         Task {
             let result = await PostProcessor.finishManually(dir)
-            working = false
+            setWorking(false, in: item.dir)
             reload()
             say(result.described, about: item)
         }
@@ -2152,7 +2154,7 @@ private extension MeetingLibraryController {
             case nil: message = ""
             }
         }
-        if message.isEmpty, !working, !processingCancellation.canCancel,
+        if message.isEmpty, selectedWork == nil, !processingCancellation.canCancel,
            let item = selected, activeRecording?.dir != item.dir {
             if let request = versions.last(where: \.isRequest) {
                 message = request.title

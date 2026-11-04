@@ -6,6 +6,100 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct SummaryProviderSheetTests {
+    @Test("A background summary leaves summary, transcription and calendar actions available for other meetings")
+    func summaryDoesNotBlockOtherMeetings() async throws {
+        let entered = Flag(), release = Gate()
+        let backend = LLMBackend(name: "codex-cli", model: "synthetic") { _, content in
+            if content.contains("First meeting") {
+                entered.raise()
+                await release.pass()
+                return "first summary"
+            }
+            return "second summary"
+        }
+        let home = Home.sandbox(languageModels: { _ in [backend] })
+        let recordings = try TestRecordings()
+        defer { recordings.remove(); try? FileManager.default.removeItem(at: home.url) }
+        let first = try recordings.session("2026-10-28-120000-first", state: ["title": "First meeting"])
+        let second = try recordings.session("2026-10-28-130000-second")
+        let audio = try recordings.session("2026-10-28-140000-audio")
+        let calendar = try recordings.session("2026-10-28-150000-calendar")
+        for dir in [first, second, audio] { try SessionFixture.transcript.write(to: dir) }
+        try home.writeConfig(["summary": ["backend": "codex-cli"], "transcription": ["enabled": true, "diarization": ["enabled": false]]])
+
+        try await Home.$scoped.withValue(home) {
+            let app = ApplicationWindow()
+            let library = MeetingLibraryController(root: recordings.root, hostWindow: app.panel)
+            app.libraryProvider = { library }
+            app.navigate(.allMeetings)
+            app.show()
+            var queued: [URL] = []
+            library.onRetranscribe = { queued.append($0) }
+            defer {
+                release.open()
+                _ = library.stopForTermination()
+                if let attached = app.panel.attachedSheet { app.panel.endSheet(attached) }
+                app.panel.orderOut(nil)
+            }
+            @MainActor func submitSummary() async throws {
+                let generate = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+                    .first { $0.identifier?.rawValue == "meeting.generate-summary" })
+                try #require(generate.isEnabled)
+                #expect(generate.sendAction(generate.action, to: generate.target))
+                for _ in 0..<200 where app.panel.attachedSheet == nil { try await Task.sleep(for: .milliseconds(10)) }
+                let create = try #require(app.panel.attachedSheet?.contentView?.allDescendants.compactMap { $0 as? NSButton }
+                    .first { $0.identifier?.rawValue == "summary.create" })
+                #expect(create.sendAction(create.action, to: create.target))
+                #expect(app.panel.attachedSheet == nil)
+            }
+            try #require(await library.reveal(first))
+            try await submitSummary()
+            for _ in 0..<200 where !entered.isRaised { try await Task.sleep(for: .milliseconds(10)) }
+            try #require(entered.isRaised)
+            #expect(library.currentActions.reason(for: .regenerateSummary) != nil)
+
+            try #require(await library.reveal(second))
+            if library.currentActions.reason(for: .regenerateSummary) == nil { try await submitSummary() }
+            else { Issue.record("A running summary disabled summary generation for another meeting") }
+
+            try #require(await library.reveal(audio))
+            let transcribe = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+                .first { $0.identifier?.rawValue == "meeting.retranscribe" })
+            #expect(transcribe.isEnabled)
+            if transcribe.isEnabled {
+                #expect(transcribe.sendAction(transcribe.action, to: transcribe.target))
+                for _ in 0..<200 where app.panel.attachedSheet == nil { try await Task.sleep(for: .milliseconds(10)) }
+                let confirm = try #require(app.panel.attachedSheet?.contentView?.allDescendants.compactMap { $0 as? NSButton }
+                    .first { $0.title == localised("Transcribe again", "Расшифровать заново") })
+                for _ in 0..<200 where !confirm.isEnabled { try await Task.sleep(for: .milliseconds(10)) }
+                try #require(confirm.isEnabled)
+                #expect(confirm.sendAction(confirm.action, to: confirm.target))
+                for _ in 0..<200 where queued.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+            }
+            #expect(queued.map { $0.resolvingSymlinksInPath() } == [audio.resolvingSymlinksInPath()])
+            #expect(TranscriptVersions.isRequested(audio))
+
+            try #require(await library.reveal(calendar))
+            let picker = library.calendarPicker
+            #expect(picker.button.isEnabled)
+            let start = Date()
+            if picker.button.isEnabled {
+                picker.choose(.init(id: "event", title: "Calendar event", start: start, end: start.addingTimeInterval(3600),
+                    attendees: [], link: nil, looksLikeCall: false))
+                await picker.settled()
+            }
+            #expect(MeetingCalendarMetadata.read(from: calendar)?.eventID == "event")
+            #expect(SessionClaim.isHeld(first))
+            #expect(library.isProcessing)
+
+            release.open()
+            for _ in 0..<200 where library.isProcessing { try await Task.sleep(for: .milliseconds(10)) }
+            #expect(!library.isProcessing)
+            #expect(try String(contentsOf: first.appendingPathComponent("summary.md"), encoding: .utf8) == "first summary\n")
+            #expect(try String(contentsOf: second.appendingPathComponent("summary.md"), encoding: .utf8) == "second summary\n")
+        }
+    }
+
     @Test("A background error appears in Journal and reopening preserves the explicit choice")
     func backgroundErrorCanBeRetriedFromJournal() async throws {
         let chosen = FakeModel("openai-api") { call, _, _ in
