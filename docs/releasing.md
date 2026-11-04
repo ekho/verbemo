@@ -60,11 +60,13 @@ no Finder session is needed to package the image. `background.swift` renders
 the bilingual instructions and wave motif into a TIFF with 1×/2× representations.
 The mounted volume uses the existing Verbemo icon. Layout is applied before
 DMG signing, notarization, Sparkle signatures and receipt hashes.
+The preview route includes the visible plain-text file `Первый запуск.txt`
+with a copyable Terminal command for a trusted preview blocked on first launch.
 
 For a packaging-only check, pass an already signed app, volume name and new output:
 
 ```sh
-bash scripts/build-dmg.sh .build/Verbemo.app "Verbemo DMG Test Preview" /tmp/verbemo-layout.dmg
+bash scripts/build-dmg.sh .build/Verbemo.app "Verbemo DMG Test Preview" /tmp/verbemo-layout.dmg --preview
 python3 -m unittest discover -s Tests/macos-scripts -p test_dmg.py
 ```
 

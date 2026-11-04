@@ -46,6 +46,7 @@ class DMGTests(unittest.TestCase):
             mount.mkdir()
             self.run_command('hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', str(mount), str(dmg))
             try:
+                self.assertFalse((mount / 'Первый запуск.txt').exists())
                 self.assertEqual(os.readlink(mount / 'Applications'), '/Applications')
                 self.assertEqual((mount / '.VolumeIcon.icns').read_bytes(),
                                  (ROOT / 'Resources/Verbemo.icns').read_bytes())
@@ -80,6 +81,21 @@ for rep in NSBitmapImageRep.imageReps(with: data) {
             finally:
                 self.run_command('hdiutil', 'detach', str(mount))
             self.assertEqual((app / 'Contents/_CodeSignature/CodeResources').read_bytes(), seal)
+
+            preview = work / 'Preview with instructions.dmg'
+            self.run_command('bash', str(BUILDER), str(app), 'Verbemo Preview', str(preview), '--preview')
+            self.run_command('hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', str(mount), str(preview))
+            try:
+                guide = mount / 'Первый запуск.txt'
+                instructions = guide.read_text(encoding='utf-8')
+                self.assertIn('sudo xattr -dr com.apple.quarantine "/Applications/Verbemo.app" &&\n'
+                              'open "/Applications/Verbemo.app"', instructions)
+                self.assertFalse(os.access(guide, os.X_OK))
+                with DSStore.open(str(mount / '.DS_Store'), 'r') as store:
+                    guide_position = store[guide.name]['Iloc']
+                    self.assertGreater(guide_position[1], store['Verbemo.app']['Iloc'][1])
+            finally:
+                self.run_command('hdiutil', 'detach', str(mount))
 
     def test_existing_output_is_never_overwritten(self):
         self.assertTrue(BUILDER.is_file(), 'shared DMG builder is missing')

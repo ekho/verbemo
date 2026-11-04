@@ -1,4 +1,6 @@
 """Shared Finder layout for preview and signed Verbemo images."""
+from pathlib import Path
+
 format = 'UDZO'
 files = [(defines['app'], 'Verbemo.app')]
 symlinks = {'Applications': '/Applications'}
@@ -14,3 +16,10 @@ show_toolbar = False
 show_status_bar = False
 show_pathbar = False
 show_sidebar = False
+
+guide = defines.get('preview_guide')
+if guide:
+    guide_name = Path(guide).name
+    files.append((guide, guide_name))
+    icon_locations[guide_name] = (330, 266)
+    icon_size = 72

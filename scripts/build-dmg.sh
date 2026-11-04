@@ -3,8 +3,11 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 die() { printf 'DMG: %s\n' "$*" >&2; exit 1; }
-[ "$#" -eq 3 ] || die 'usage: build-dmg.sh <app> <volume-name> <output.dmg>'
+[ "$#" -eq 3 ] || { [ "$#" -eq 4 ] && [ "$4" = --preview ]; } \
+    || die 'usage: build-dmg.sh <app> <volume-name> <output.dmg> [--preview]'
 APP=$1 VOLUME=$2 OUTPUT=$3
+GUIDE=''
+if [ "${4:-}" = --preview ]; then GUIDE="$ROOT/Packaging/dmg/Первый запуск.txt"; fi
 [ ! -e "$OUTPUT" ] && [ ! -L "$OUTPUT" ] || die "output already exists: $OUTPUT"
 [ -d "$APP/Contents" ] || die "app bundle is missing: $APP"
 [ "$(uname -s)" = Darwin ] || die 'requires macOS'
@@ -23,7 +26,7 @@ trap cleanup EXIT
 swift "$ROOT/Packaging/dmg/background.swift" "$WORK/background.tiff"
 python3 -m dmgbuild -s "$ROOT/Packaging/dmg/settings.py" \
     -D "app=$APP" -D "icon=$ROOT/Resources/Verbemo.icns" \
-    -D "background=$WORK/background.tiff" "$VOLUME" "$WORK/image.dmg"
+    -D "background=$WORK/background.tiff" -D "preview_guide=$GUIDE" "$VOLUME" "$WORK/image.dmg"
 hdiutil verify "$WORK/image.dmg" >/dev/null
 # dmgbuild's ditto invocation does not check its exit status; verify the payload.
 mkdir "$WORK/mounted"
@@ -31,6 +34,9 @@ hdiutil attach -readonly -nobrowse -mountpoint "$WORK/mounted" "$WORK/image.dmg"
 MOUNT="$WORK/mounted"
 codesign --verify --deep --strict "$MOUNT/Verbemo.app"
 [ "$(readlink "$MOUNT/Applications")" = /Applications ] || die 'Applications link is missing'
+if [ -n "$GUIDE" ]; then
+    cmp -s "$GUIDE" "$MOUNT/${GUIDE##*/}" || die 'first launch guide is missing or incomplete'
+fi
 for file in .DS_Store .background.tiff .VolumeIcon.icns; do
     [ -s "$MOUNT/$file" ] || die "missing layout resource: $file"
 done
