@@ -57,12 +57,12 @@ internal sealed class ActivityStatusBar : Border
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
         presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-        var hitArea = new FrameworkElementFactory(typeof(Border));
-        hitArea.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+        var hitArea = new FrameworkElementFactory(typeof(Grid));
+        hitArea.SetValue(Panel.BackgroundProperty, Brushes.Transparent);
         hitArea.AppendChild(presenter);
         auto.Template = new ControlTemplate(typeof(ClickCheckBox)) { VisualTree = hitArea };
-        auto.MinWidth = 32;
-        auto.MinHeight = 32;
+        auto.Width = 32;
+        auto.Height = 32;
         auto.Cursor = System.Windows.Input.Cursors.Hand;
         var settingsMenu = new ContextMenu();
         var settingsItem = new MenuItem { Header = T("Recording settings", "Настройки записи") };

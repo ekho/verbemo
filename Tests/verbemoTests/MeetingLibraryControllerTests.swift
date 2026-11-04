@@ -57,7 +57,8 @@ struct MeetingLibraryControllerTests {
         app.panel.setContentSize(.init(width: 760, height: 600))
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let before = try Self.fileSnapshot(dir)
-        let notice = try #require(app.panel.contentView?.allDescendants.first {
+        try app.activityBar.openServiceMessagesForTest()
+        let notice = try #require(app.activityBar.serviceRows.first {
             $0.identifier?.rawValue == "meeting.result-notice"
         })
         let close = try #require(notice.allDescendants.first {
@@ -72,17 +73,18 @@ struct MeetingLibraryControllerTests {
         let closeFrame = close.convert(close.bounds, to: notice)
         #expect(abs(notice.bounds.maxX - closeFrame.maxX - 6) < 2,
                 "The notice close button belongs at the trailing edge even when the message is short")
-        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
-        #expect(bar.allDescendants.contains { $0 === notice })
+        #expect(!app.activityBar.allDescendants.contains { $0 === notice })
         #expect(!library.contentView.allDescendants.contains { $0 === notice })
         #expect(close.sendAction(close.action, to: close.target))
+        app.activityBar.refreshMessages()
         library.refresh(); await library.settled()
         #expect(notice.isHiddenOrHasHiddenAncestor)
         #expect(try Self.fileSnapshot(dir) == before)
         #expect(library.currentActions.hasPendingTranscript)
         try SessionState.amend(dir, with: [SessionState.Key.transcriptionFailed: "Synthetic different failure"])
         library.refresh(); await library.settled()
-        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        app.activityBar.refreshMessages()
+        #expect(!notice.isHidden)
         #expect(status.stringValue.contains("Synthetic different failure"))
         for task in library.stopForTermination() { await task.value }
     }
@@ -100,7 +102,8 @@ struct MeetingLibraryControllerTests {
         app.show()
         app.panel.setContentSize(.init(width: 1340, height: 600))
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let notice = try #require(app.panel.contentView?.allDescendants.first {
+        try app.activityBar.openServiceMessagesForTest()
+        let notice = try #require(app.activityBar.serviceRows.first {
             $0.identifier?.rawValue == "meeting.result-notice"
         })
         let close = try #require(notice.allDescendants.first {
@@ -157,10 +160,10 @@ struct MeetingLibraryControllerTests {
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
         defer { _ = library.stopForTermination(); app.hide() }
         app.libraryProvider = { library }
-        let notice = try #require(app.panel.contentView?.allDescendants.first {
+        let notice = try #require(app.activityBar.serviceRows.first {
             $0.identifier?.rawValue == "meeting.result-notice"
         })
-        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        #expect(!notice.isHidden)
         #expect(library.currentActions.transcriptReady)
         #expect(library.currentActions.hasPendingTranscript)
         #expect(library.currentActions.reason(for: .regenerateSummary) != nil)

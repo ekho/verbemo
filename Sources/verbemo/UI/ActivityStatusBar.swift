@@ -131,6 +131,7 @@ final class ActivityStatusBar: NSStackView {
             (warning, "activity.warning", #selector(warningClicked))
         ] {
             button.identifier = .init(id)
+            button.title = ""
             button.isBordered = false
             button.font = .systemFont(ofSize: 11)
             button.alignment = .left
@@ -141,6 +142,7 @@ final class ActivityStatusBar: NSStackView {
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
         automatic.identifier = .init("navigation.auto-record")
+        automatic.title = ""
         automatic.isBordered = false
         automatic.imagePosition = .imageOnly
         automatic.setButtonType(.toggle)

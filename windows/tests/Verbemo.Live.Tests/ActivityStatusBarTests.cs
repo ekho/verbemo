@@ -124,7 +124,8 @@ public sealed class ActivityStatusBarTests
             }
             var toggle = Find<ClickCheckBox>(bar, "activity.auto");
             Assert.False(runtime.Settings.AutoRecord.Enabled);
-            Assert.NotNull(toggle.InputHitTest(new Point(2, toggle.ActualHeight / 2)));
+            Assert.True(toggle.IsEnabled);
+            Assert.NotNull(System.Windows.Media.VisualTreeHelper.HitTest(toggle, new Point(2, toggle.ActualHeight / 2)));
             var peer = UIElementAutomationPeer.CreatePeerForElement(toggle)!;
             ((IToggleProvider)peer.GetPattern(PatternInterface.Toggle)!).Toggle();
             Assert.True(runtime.Settings.AutoRecord.Enabled);
