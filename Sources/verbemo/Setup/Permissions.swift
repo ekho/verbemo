@@ -106,10 +106,8 @@ enum SetupPermissions {
     /// enough that a grant revoked months ago doesn't go on being believed.
     nonisolated static let systemAudioMemory: TimeInterval = 30 * 24 * 60 * 60
 
-    /// What a remembered test is still worth. A grant that was verified this
-    /// month is reported as granted; anything older is treated as unknown and
-    /// tested again, because the only evidence this permission ever gives is
-    /// a tone that made it back.
+    /// A recent result can satisfy the setup check. It does not report the
+    /// current macOS permission.
     nonisolated static func rememberedSystemAudio(
         heardAt: Date?,
         now: Date = Date(),
