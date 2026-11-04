@@ -142,8 +142,8 @@ enum PostProcessor {
         }
         let names = SpeakerNames.read(from: dir)
         let generated = await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir, request: request)
-        try Task.checkCancellation()
         guard generated != nil else {
+            try Task.checkCancellation()
             throw SummaryRegenerationError.unavailable(localised(
                 "The summary could not be regenerated. The previous summary is preserved; see the session log.",
                 "Не удалось перегенерировать сводку. Предыдущая сводка сохранена; подробности в журнале встречи."))

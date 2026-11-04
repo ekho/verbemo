@@ -41,6 +41,66 @@ struct ProcessingOperationsTests {
         #expect(operations.snapshot().isEmpty)
     }
 
+    @Test("Removing from the queue never cancels a job that has started")
+    func removalChecksLiveState() async throws {
+        let operations = ProcessingOperations(), entered = Gate(), release = Gate(), ran = Flag()
+        let a = try operations.register(session: URL(fileURLWithPath: "/synthetic/a"), kind: .transcription)
+        let b = try operations.register(session: URL(fileURLWithPath: "/synthetic/b"), kind: .summary)
+        let snapshots = operations.snapshot()
+        let waiting = try #require(snapshots.first { $0.id == a.id })
+        let stale = try #require(snapshots.first { $0.id == b.id })
+        let running = Task { try await b.run {
+            await withTaskCancellationHandler { entered.open(); await release.pass() } onCancel: { release.open() }
+            try Task.checkCancellation()
+        } }
+        defer { release.open() }
+        await entered.pass()
+        #expect(await operations.removeWaiting(stale) == nil)
+        #expect(await operations.removeWaiting(waiting) == .cancelled)
+        #expect(operations.snapshot().map(\.id) == [b.id])
+        await #expect(throws: CancellationError.self) { try await a.run { ran.raise() } }
+        #expect(!ran.isRaised)
+        release.open()
+        try await running.value
+    }
+
+    @Test("A removed engine waiter stays visible until its cleanup completes")
+    func removalWaitsForCleanup() async throws {
+        let operations = ProcessingOperations(), entered = Gate(), cancelled = Flag(), release = Gate()
+        let ticket = try operations.register(session: nil, kind: .diarization)
+        let worker = Task {
+            try await ticket.run {
+                operations.stage(.diarization, state: .waiting)
+                await withTaskCancellationHandler {
+                    entered.open()
+                    await release.pass()
+                } onCancel: { cancelled.raise() }
+                try Task.checkCancellation()
+            }
+        }
+        defer { release.open() }
+        await entered.pass()
+        let waiting = try #require(operations.snapshot().first)
+        let removal = Task { await operations.removeWaiting(waiting) }
+        for _ in 0..<100 where !cancelled.isRaised { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(cancelled.isRaised)
+        #expect(operations.snapshot().first?.state == .cancelling)
+        #expect(waiting.completion == nil)
+        release.open()
+        #expect(await removal.value == .cancelled)
+        _ = try? await worker.value
+    }
+
+    @Test("A worker returning partial results can report cancellation without throwing")
+    func reportedCancellation() async throws {
+        let operations = ProcessingOperations()
+        let ticket = try operations.register(session: nil, kind: .importMedia)
+        let run = try #require(operations.snapshot().first)
+        let value = try await ticket.run { operations.reportCancellation(); return 2 }
+        #expect(value == 2)
+        #expect(run.completion == .cancelled)
+    }
+
     @Test("Old run handles do not cancel a new run of the same meeting")
     func generationIsolation() async throws {
         let operations = ProcessingOperations(), entered = Gate(), release = Gate()

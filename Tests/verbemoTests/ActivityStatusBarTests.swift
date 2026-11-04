@@ -128,22 +128,131 @@ struct ActivityStatusBarTests {
         #expect(!app.isVisible, "Status updates must not reveal a hidden window")
     }
 
-    @Test(.freshHome)
-    func globalQueueAndWarningsClearUnrelatedSearch() throws {
+    @Test(.freshHome, .speaking(.english))
+    func queueOpensWithoutNavigationAndItsFooterClearsSearch() throws {
         let app = ApplicationWindow()
-        defer { _ = app.stopForTermination() }
+        defer { _ = app.stopForTermination(); app.hide() }
         let library = MeetingLibraryController(root: Home.current.defaultRecordings, hostWindow: app.panel)
         app.libraryProvider = { library }
         app.navigate(.allMeetings)
+        app.show()
         let search = try #require(library.listContentView.allDescendants.first { $0 is NSSearchField } as? NSSearchField)
-        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar } as? ActivityStatusBar)
+        let bar = app.activityBar
+        let queue = try Self.click("activity.queue", in: bar)
+        #expect(app.navigation.destination == .allMeetings)
+        let content = bar.queuePopover.view
+        #expect(content.window?.isVisible == true)
+        #expect(content.allDescendants.contains { ($0 as? NSTextField)?.stringValue == "The queue is empty." })
+        let popoverWindow = try #require(content.window)
+        let anchor = app.panel.convertToScreen(queue.convert(queue.bounds, to: nil))
+        #expect(popoverWindow.frame.minY >= anchor.midY, "The queue opens above the activity counter")
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: popoverWindow.windowNumber, context: nil,
+            characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(content.performKeyEquivalent(with: escape))
+        #expect(app.panel.firstResponder === queue)
+        try Self.click("activity.queue", in: bar)
+        search.stringValue = "unrelated meeting"
+        try Self.click("activity.queue-processing", in: content)
+        #expect(app.navigation.destination == .processing)
+        #expect(search.stringValue.isEmpty)
         bar.updateAttention(count: 1, detail: nil)
-        for id in ["activity.queue", "activity.warning"] {
-            search.stringValue = "unrelated meeting"
-            let button = try #require(bar.allDescendants.first { $0.identifier?.rawValue == id } as? NSButton)
-            #expect(NSApp.sendAction(try #require(button.action), to: button.target, from: button))
-            #expect(search.stringValue.isEmpty)
+        search.stringValue = "unrelated meeting"
+        try Self.click("activity.warning", in: bar)
+        #expect(search.stringValue.isEmpty)
+    }
+
+    @Test("The queue removes a waiting run and cancels only the confirmed running job", .freshHome, .speaking(.russian))
+    func queueActionsAreScopedToTheRun() async throws {
+        let operations = ProcessingOperations()
+        let app = ApplicationWindow(operations: operations)
+        let a = try operations.register(session: URL(fileURLWithPath: "/test/Обзор"), kind: .summary)
+        let b = try operations.register(session: URL(fileURLWithPath: "/test/Интервью"), kind: .diarization)
+        let c = try operations.register(session: URL(fileURLWithPath: "/test/Релиз"), kind: .transcription)
+        let enteredA = Gate(), enteredB = Gate(), releaseA = Gate(), releaseB = Gate()
+        let cancelledA = Flag(), cancelledB = Flag()
+        let taskA = Task { try await a.run {
+            await withTaskCancellationHandler { enteredA.open(); await releaseA.pass() } onCancel: { cancelledA.raise() }
+            try Task.checkCancellation()
+        } }
+        let taskB = Task { try await b.run {
+            await withTaskCancellationHandler { enteredB.open(); await releaseB.pass() } onCancel: { cancelledB.raise() }
+        } }
+        defer { releaseA.open(); releaseB.open(); _ = app.stopForTermination(); app.hide() }
+        await enteredA.pass(); await enteredB.pass()
+        app.show()
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.activityBar.updateWork(operations.snapshot(), title: { $0.lastPathComponent })
+        try Self.click("activity.queue", in: app.activityBar)
+        let content = app.activityBar.queuePopover.view
+        try Self.click("activity.queue-remove.\(c.id)", in: content)
+        for _ in 0..<100 where operations.snapshot().contains(where: { $0.id == c.id }) {
+            try await Task.sleep(for: .milliseconds(10))
         }
+        #expect(!operations.snapshot().contains { $0.id == c.id })
+        try Self.click("activity.queue-cancel.\(a.id)", in: content)
+        let keep = try #require(content.allDescendants.first { $0.identifier?.rawValue == "activity.queue-keep.\(a.id)" } as? NSButton)
+        let new = try operations.register(session: URL(fileURLWithPath: "/test/Другая"), kind: .transcription)
+        app.activityBar.updateWork(operations.snapshot(), title: { $0.lastPathComponent })
+        #expect(content.allDescendants.contains { $0 === keep })
+        #expect(content.window?.firstResponder === keep)
+        #expect(!cancelledA.isRaised)
+        try Self.click("activity.queue-confirm.\(a.id)", in: content)
+        for _ in 0..<100 where !cancelledA.isRaised { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(cancelledA.isRaised)
+        #expect(operations.snapshot().first { $0.id == a.id }?.state == .cancelling)
+        #expect(!cancelledB.isRaised)
+        #expect(operations.snapshot().contains { $0.id == new.id && $0.state == .waiting })
+        releaseA.open()
+        _ = try? await taskA.value
+        try Self.click("activity.queue-cancel.\(b.id)", in: content)
+        try Self.click("activity.queue-confirm.\(b.id)", in: content)
+        for _ in 0..<100 where !cancelledB.isRaised { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(cancelledB.isRaised)
+        releaseB.open()
+        try await taskB.value
+        let notices = app.activityBar.serviceRows.flatMap { [$0] + $0.allDescendants }.compactMap { $0 as? NSTextField }
+        for _ in 0..<100 where !notices.contains(where: { $0.stringValue.contains("успело завершиться") }) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(notices.contains { $0.stringValue.contains("Интервью") && $0.stringValue.contains("успело завершиться") })
+        #expect(notices.contains { $0.stringValue.contains("Обзор") && $0.stringValue.contains("Задание отменено") })
+        #expect(notices.contains { $0.stringValue.contains("Релиз") && $0.stringValue.contains("Автообработка может добавить") })
+    }
+
+    @Test("A long task list scrolls inside the queue with the Processing link still visible",
+          .freshHome, arguments: [false, true])
+    func queueListScrolls(dark: Bool) throws {
+        let operations = ProcessingOperations()
+        for index in 0..<20 {
+            _ = try operations.register(session: URL(fileURLWithPath: "/test/\(index)"), kind: .transcription)
+        }
+        let app = ApplicationWindow(operations: operations)
+        defer { _ = app.stopForTermination(); app.hide() }
+        app.panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.show()
+        let long = String(repeating: "Очень длинное название встречи ", count: 8)
+        app.activityBar.updateWork(operations.snapshot(), title: { _ in long })
+        try Self.click("activity.queue", in: app.activityBar)
+        let content = app.activityBar.queuePopover.view
+        let scroll = try #require(content.allDescendants.first { $0.identifier?.rawValue == "activity.queue-list" } as? NSScrollView)
+        let document = try #require(scroll.documentView)
+        let footer = try #require(content.allDescendants.first { $0.identifier?.rawValue == "activity.queue-processing" } as? NSButton)
+        #expect(scroll.hasVerticalScroller)
+        #expect(document.bounds.height > scroll.contentView.bounds.height)
+        #expect(content.bounds.width >= 400)
+        #expect(!footer.isDescendant(of: scroll))
+        #expect(content.bounds.contains(footer.convert(footer.bounds, to: content)))
+        #expect(document.allDescendants.contains { ($0 as? NSTextField)?.toolTip == long })
+    }
+
+    @discardableResult
+    private static func click(_ id: String, in view: NSView) throws -> NSButton {
+        let button = try #require(view.allDescendants.first { $0.identifier?.rawValue == id } as? NSButton)
+        #expect(button.isEnabled)
+        #expect(button.sendAction(button.action, to: button.target))
+        return button
     }
 
     @Test(.freshHome)
@@ -299,10 +408,9 @@ struct ActivityStatusBarTests {
             let item = try button(id)
             #expect(NSApp.sendAction(try #require(item.action), to: item.target, from: item))
         }
-        var recorded = false, queued = false, attention = false
+        var recorded = false, attention = false
         var destination: ApplicationNavigationState.Destination?
         bar.onRecording = { recorded = true }
-        bar.onQueue = { queued = true }
         bar.onAttention = { attention = true }
         bar.onAccess = { destination = $0 }
         bar.readAudioLevels = { (.level(0), .level(0)) }
@@ -323,8 +431,6 @@ struct ActivityStatusBarTests {
         #expect(try button("activity.warning").isHidden)
         bar.updateRecording(.idle, elapsed: nil)
         #expect(try !button("activity.recording").isEnabled)
-        try click("activity.queue")
-        #expect(queued)
         bar.updateAccess(.init(microphone: .granted, systemAudio: .heard, calendar: .denied))
         try click("activity.calendar-access")
         #expect(destination == .calendar)

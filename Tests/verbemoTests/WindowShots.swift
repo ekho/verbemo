@@ -378,6 +378,33 @@ struct WindowGallery {
     private var light: NSAppearance? { NSAppearance(named: .aqua) }
     private var dark: NSAppearance? { NSAppearance(named: .darkAqua) }
 
+    @Test("The task queue in a narrow Journal window")
+    func taskQueue() async throws {
+        let operations = ProcessingOperations(), entered = Gate(), release = Gate()
+        let summary = try operations.register(session: URL(fileURLWithPath: "/test/review"), kind: .summary)
+        let waiting = try operations.register(session: URL(fileURLWithPath: "/test/planning"), kind: .transcription)
+        let task = Task { try await summary.run { entered.open(); await release.pass() } }
+        defer { release.open(); operations.cancel(waiting.id) }
+        await entered.pass()
+        for (name, appearance) in [("light", light), ("dark", dark)] {
+            try withJournal(builtIn: appearance) { app, _ in
+                app.panel.setContentSize(.init(width: 760, height: 600))
+                app.show()
+                app.activityBar.updateWork(operations.snapshot()) {
+                    $0.lastPathComponent == "review" ? localised("Project review", "Обзор проекта")
+                        : localised("Release planning", "Планирование релиза")
+                }
+                let button = try #require(app.activityBar.allDescendants.first { $0.identifier?.rawValue == "activity.queue" } as? NSButton)
+                #expect(button.sendAction(button.action, to: button.target))
+                let popover = try #require(app.activityBar.queuePopover.view.window)
+                try write(popover, "task-queue-\(name)")
+                _ = app.stopForTermination()
+            }
+        }
+        release.open()
+        try await task.value
+    }
+
     @Test("Journal's empty library and live transcript, in both appearances")
     func livePage() throws {
         for (name, appearance) in [("light", light), ("dark", dark)] {

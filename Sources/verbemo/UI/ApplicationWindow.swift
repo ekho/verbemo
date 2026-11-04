@@ -13,7 +13,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private let primarySettings = NSButton()
 
     private let recordingBar = RecordingBarView()
-    let activityBar = ActivityStatusBar()
+    let activityBar: ActivityStatusBar
     private let toolbar = NSStackView()
     private let title = NSButton()
     private let heading = NSTextField(labelWithString: "")
@@ -92,8 +92,9 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     var recordingBarIsVisible: Bool { !recordingBar.isHidden }
     var isVisible: Bool { panel.isVisible && !panel.isMiniaturized }
 
-    init(calendar: CalendarWatcher = CalendarWatcher()) {
+    init(calendar: CalendarWatcher = CalendarWatcher(), operations: ProcessingOperations = .shared) {
         self.calendar = calendar
+        activityBar = ActivityStatusBar(operations: operations)
         panel = WorkspaceWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
