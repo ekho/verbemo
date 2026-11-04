@@ -7,6 +7,10 @@ final class AboutPage: NSObject {
     var onCheckForUpdates: (() -> Void)?
     private let updates = NSButton()
     var updatesAvailable = false { didSet { updates.isHidden = !updatesAvailable } }
+    var previewUpdateState: PreviewUpdates.State = .idle { didSet { showPreviewUpdateState() } }
+    private let updateResult = NSStackView()
+    private let updateStatus = NSTextField(labelWithString: "")
+    private let download = NSButton()
     private var linkButtons: [NSButton] = []
 
     override init() {
@@ -54,7 +58,19 @@ final class AboutPage: NSObject {
         updates.action = #selector(checkForUpdatesClicked)
         updates.identifier = .init("about.checkUpdates")
         updates.isHidden = true
-        let links = NSStackView(views: [updates] + linkButtons)
+        download.title = localised("Download", "Скачать")
+        download.bezelStyle = .rounded
+        download.target = self
+        download.action = #selector(downloadClicked)
+        download.identifier = .init("about.downloadUpdate")
+        download.isHidden = true
+        updateResult.addArrangedSubview(updateStatus)
+        updateResult.addArrangedSubview(download)
+        updateResult.orientation = .vertical
+        updateResult.alignment = .leading
+        updateResult.spacing = 8
+        updateResult.isHidden = true
+        let links = NSStackView(views: [updates, updateResult] + linkButtons)
         links.orientation = .vertical
         links.alignment = .leading
         links.spacing = 18
@@ -109,6 +125,32 @@ final class AboutPage: NSObject {
     }
 
     @objc private func checkForUpdatesClicked() { onCheckForUpdates?() }
+
+    private func showPreviewUpdateState() {
+        updates.isEnabled = previewUpdateState != .checking
+        updateResult.isHidden = previewUpdateState == .idle
+        download.isHidden = true
+        switch previewUpdateState {
+        case .idle: updateStatus.stringValue = ""
+        case .checking: updateStatus.stringValue = localised("Checking for updates…", "Проверяем обновления…")
+        case .available(let release):
+            updateStatus.stringValue = localised("Verbemo \(release.version) Preview is available.",
+                                                 "Доступна Verbemo \(release.version) Preview.")
+            download.isHidden = false
+        case .upToDate:
+            updateStatus.stringValue = localised("You have the latest Preview.", "У вас последняя версия Preview.")
+        case .failed:
+            updateStatus.stringValue = localised("Could not check for updates.", "Не удалось проверить обновления.")
+        }
+    }
+
+    @objc private func downloadClicked() {
+        guard case .available(let release) = previewUpdateState else { return }
+        if !NSWorkspace.shared.open(release.downloadURL) {
+            updateStatus.stringValue = localised("Could not open the download in your browser.",
+                                                 "Не удалось открыть ссылку для скачивания в браузере.")
+        }
+    }
 
     private func link(_ title: String, _ url: String) -> NSButton {
         SetupLayout.link(title, url, target: self, action: #selector(linkClicked(_:)))

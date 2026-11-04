@@ -155,7 +155,7 @@ struct Run: ParsableCommand {
         controller.onSetupAvailable = { available in
             MainActor.assumeIsolated { delegate.setupAvailable(available) }
         }
-        delegate.onCheckForUpdates = { MainActor.assumeIsolated { controller.checkForUpdates() } }
+        delegate.onCheckForUpdates = { MainActor.assumeIsolated { controller.checkForUpdates(showAbout: true) } }
         delegate.onShowAbout = { MainActor.assumeIsolated { controller.showAbout() } }
         app.delegate = delegate
         app.mainMenu = Self.mainMenu(settingsTarget: delegate)
@@ -257,6 +257,7 @@ final class AppController {
     private lazy var updates = AppUpdates(
         gate: UpdateGate(isBusy: { [weak self] in self?.isBusyForUpdate == true })
     )
+    private var previewUpdates: PreviewUpdates?
     // Reserve synchronously before spawning a Task: otherwise stopping the
     // recording leaves a gap before the actor has accepted its work.
     private var pendingProcessing = 0
@@ -423,10 +424,17 @@ final class AppController {
         menuBar.onImport = { [weak self] in self?.chooseMediaToImport() }
         menuBar.onShowSettings = { [weak self] in self?.showSettings() }
         menuBar.onShowSetup = { [weak self] in self?.showSetup() }
-        window.onCheckForUpdates = { [weak self] in self?.updates.checkForUpdates() }
+        window.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.update(state: .idle, elapsed: nil)
-        window.updatesAvailable = updates.isAvailable
+        if let info = Runtime.appBundle?.infoDictionary, info["VerbemoPreview"] as? Bool == true,
+           let version = info["CFBundleShortVersionString"] as? String {
+            let service = PreviewUpdates { try await PreviewRelease.latest(after: version) }
+            service.onChange = { [weak self] state in self?.window.previewUpdateState = state }
+            previewUpdates = service
+            service.start()
+        }
+        window.updatesAvailable = updates.isAvailable || previewUpdates != nil
         window.readAudioLevels = { [weak self] in self?.session?.audioLevels ?? (.off, .off) }
 
         window.libraryProvider = { [weak self] in self?.recordings }
@@ -612,7 +620,14 @@ final class AppController {
     /// tool can drive recording without going through the menu.
     func toggleRecording() { toggle() }
 
-    func checkForUpdates() { updates.checkForUpdates() }
+    func checkForUpdates(showAbout: Bool = false) {
+        if let previewUpdates {
+            if showAbout { self.showAbout() }
+            previewUpdates.checkManually()
+        } else {
+            updates.checkForUpdates()
+        }
+    }
 
     /// Both menu commands end here, so there is one picker and one import
     /// pipeline regardless of where a person starts from.
