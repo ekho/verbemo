@@ -145,9 +145,8 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         liveTranscription.LineReady += (_, line) => LiveLineReady?.Invoke(this, line);
         capture.TrackLost += (_, track) =>
         {
-            if (!State.IsRecording) return;
             var microphone = track == "mic";
-            Interlocked.Or(ref lostRecordingTracks, microphone ? 1 : 2);
+            if (State.IsRecording) Interlocked.Or(ref lostRecordingTracks, microphone ? 1 : 2);
             Notify(T("A recording device went away", "Устройство записи пропало"), LostTrackMessage(microphone), NotificationKind.Warning);
         };
         liveTranscription.StatusChanged += (_, status) => LiveStatusChanged?.Invoke(this, status);
