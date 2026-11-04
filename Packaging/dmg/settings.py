@@ -1,5 +1,6 @@
 """Shared Finder layout for preview and signed Verbemo images."""
 from pathlib import Path
+from unicodedata import normalize
 
 format = 'UDZO'
 files = [(defines['app'], 'Verbemo.app')]
@@ -21,5 +22,6 @@ guide = defines.get('preview_guide')
 if guide:
     guide_name = Path(guide).name
     files.append((guide, guide_name))
-    icon_locations[guide_name] = (330, 266)
+    # The HFS+ image decomposes filenames, so Finder looks up the NFD name.
+    icon_locations[normalize('NFD', guide_name)] = (330, 266)
     icon_size = 72
