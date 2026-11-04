@@ -80,7 +80,6 @@ final class ActivityStatusBar: NSStackView {
     var onQueue: (() -> Void)?
     var onJob: ((URL?) -> Void)?
     var onAccess: ((ApplicationNavigationState.Destination) -> Void)?
-    var onAttention: (() -> Void)?
     var onCancelImport: (() -> Void)?
     var settingsExplainsConfigProblem: (() -> Bool)?
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
@@ -102,7 +101,7 @@ final class ActivityStatusBar: NSStackView {
     private var queueResults: [String] = []
     private let job = NSButton()
     private let warning = NSButton()
-    private let warningMenu = NSMenu()
+    private let attentionPopover = ActivityAttentionPopover()
     private let spinner = NSProgressIndicator()
     let serviceContent = NSStackView()
     private let importStatus = MediaImportStatusView()
@@ -112,10 +111,10 @@ final class ActivityStatusBar: NSStackView {
     private let levels = NSStackView()
     private var levelTimer: Timer?
     private var currentSession: URL?
+    private var automaticEnabled = false
     private var automaticDestination = ApplicationNavigationState.Destination.recording
     private var recordingState = MenuBarController.State.idle
     private var warningDetail: String?
-    private var attentionCount = 0
     private var importFailed = false
     private var work = ActivityWork([])
     private var jobTitle: (URL) -> String = { $0.lastPathComponent }
@@ -195,6 +194,8 @@ final class ActivityStatusBar: NSStackView {
         queueNotice.isHidden = true
         queueNotice.identifier = .init("activity.queue-result")
         queuePopover.onOpenProcessing = { [weak self] in self?.onQueue?() }
+        attentionPopover.onOpenMeeting = { [weak self] in self?.onJob?($0) }
+        attentionPopover.onOpenSettings = { [weak self] in self?.onAccess?(.general) }
         queuePopover.onResult = { [weak self] in self?.reportQueueResult($0) }
         queuePopover.onChange = { [weak self] in
             guard let self else { return }
@@ -220,6 +221,7 @@ final class ActivityStatusBar: NSStackView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func updateAutomatic(_ enabled: Bool, reason: String?, blocked: Bool = false) {
+        automaticEnabled = enabled
         automatic.state = enabled ? .on : .off
         let unavailable = enabled && blocked
         automatic.image = unavailable ? Self.blockedAutomaticImage : Self.automaticImage
@@ -227,8 +229,13 @@ final class ActivityStatusBar: NSStackView {
         let detail = (unavailable ? localised("Auto-record blocked", "Автозапись заблокирована")
             : enabled ? localised("Auto-record on", "Автозапись включена") : localised("Auto-record off", "Автозапись выключена"))
             + (reason.map { "\n" + $0 } ?? "")
-        describe(automatic, detail + "\n" + localised("Right-click for settings", "Правый клик открывает настройки"))
+        let hint = automaticNeedsMicrophone
+            ? localised("Click for recording settings", "Клик открывает настройки записи")
+            : localised("Right-click for settings", "Правый клик открывает настройки")
+        describe(automatic, detail + "\n" + hint)
     }
+
+    private var automaticNeedsMicrophone: Bool { automaticEnabled && accessState.microphone != .granted }
 
     private static let automaticImage = automaticGlyph(crossed: false)
     private static let blockedAutomaticImage = automaticGlyph(crossed: true)
@@ -276,25 +283,26 @@ final class ActivityStatusBar: NSStackView {
 
     private func refreshSources() {
         let parts = accessState.detail.components(separatedBy: "\n")
-        let micDenied = accessState.microphone == .denied
+        let micNeedsAccess = accessState.microphone != .granted
         let systemDenied: Bool
         if case .refused = accessState.systemAudio { systemDenied = true } else { systemDenied = false }
-        let micLost = previousReadings?.mic == .unavailable
+        let micLost = !micNeedsAccess && previousReadings?.mic == .unavailable
         let systemLost = previousReadings?.system == .unavailable
-        source(microphoneAccess, symbol: micDenied || micLost ? "mic.slash" : "mic",
-               detail: micDenied ? localised("Microphone access denied", "Доступ к микрофону запрещён")
+        source(microphoneAccess, symbol: micNeedsAccess || micLost ? "mic.slash" : "mic",
+               detail: accessState.microphone == .denied ? localised("Microphone access denied", "Доступ к микрофону запрещён")
                    : micLost ? localised("Microphone signal unavailable", "Сигнал микрофона недоступен") : parts[0],
-               caution: micDenied || micLost)
+               caution: micNeedsAccess || micLost)
         source(systemAccess, symbol: systemDenied || systemLost ? "speaker.slash" : "speaker.wave.2",
                detail: systemDenied ? localised("System audio access denied", "Доступ к звуку системы запрещён")
                    : systemLost ? localised("System audio signal unavailable", "Сигнал звука системы недоступен") : parts[1],
-               caution: systemDenied || systemLost)
+               caution: SetupPermissions.needsSystemAudioTest(accessState.systemAudio) || systemLost)
         calendarAccess.isHidden = accessState.calendar == nil
         if let calendar = accessState.calendar {
+            let unavailable = calendar != .granted
             source(calendarAccess, symbol: "calendar", detail: calendar == .denied
                 ? localised("Calendar access denied", "Доступ к календарю запрещён") : parts[2],
-                caution: calendar == .denied)
-            if calendar == .denied, let image = calendarAccess.image {
+                caution: unavailable)
+            if unavailable, let image = calendarAccess.image {
                 let crossed = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
                     image.draw(in: rect.insetBy(dx: 2, dy: 2))
                     let slash = NSBezierPath()
@@ -506,26 +514,21 @@ final class ActivityStatusBar: NSStackView {
         job.isHidden = current == nil || current?.kind == .importMedia && !importStatus.isHidden
     }
 
-    func updateAttention(count: Int, detail: String?) {
-        attentionCount = count
+    func updateAttention(_ meetings: [MeetingPresentation.Attention], detail: String?) {
+        attentionPopover.update(meetings, settingsProblem: detail)
         warningDetail = detail
         refreshWarning()
         refreshMessages()
     }
     private func refreshWarning() {
-        let count = attentionCount + (warningDetail == nil ? 0 : 1)
+        let count = attentionPopover.meetings.count + (warningDetail == nil ? 0 : 1)
         warning.isHidden = count == 0
-        let combined = attentionCount > 0 && warningDetail != nil
-        warning.menu = combined ? warningMenu : nil
         warning.title = "\(count)"
         warning.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
         warning.imagePosition = .imageLeading
         warning.contentTintColor = .systemOrange
         var details = [localised("\(count) need attention", "Требуют внимания: \(count)")]
         if let warningDetail { details.append(warningDetail) }
-        if combined {
-            details.append(localised("Right-click for meetings needing attention", "Правый клик открывает встречи, требующие внимания"))
-        }
         let detail = details.joined(separator: "\n")
         warning.toolTip = detail
         warning.setAccessibilityLabel(detail)
@@ -554,6 +557,7 @@ final class ActivityStatusBar: NSStackView {
         spinner.stopAnimation(nil)
         messagePopover.close()
         queuePopover.stop()
+        attentionPopover.close()
     }
     func refreshAudioLevels() {
         let readings = recordingState == .idle ? (mic: AudioMeter.Reading.off, system: .off)
@@ -566,10 +570,17 @@ final class ActivityStatusBar: NSStackView {
         if case .refused = accessState.systemAudio { system.update(.off) } else { system.update(readings.system) }
         if sourceChanged { refreshSources() }
     }
-    @objc private func automaticClicked() { onToggleAutomatic?() }
+    @objc private func automaticClicked() {
+        if automaticNeedsMicrophone {
+            automatic.state = .on
+            onAccess?(.recording)
+        } else {
+            onToggleAutomatic?()
+        }
+    }
     @objc private func automaticDetails() { onAccess?(automaticDestination) }
     @objc private func microphoneClicked() {
-        if previousReadings?.mic == .unavailable && accessState.microphone != .denied { onRecording?() }
+        if previousReadings?.mic == .unavailable && accessState.microphone == .granted { onRecording?() }
         else { onAccess?(.recording) }
     }
     @objc private func systemClicked() {
@@ -581,9 +592,8 @@ final class ActivityStatusBar: NSStackView {
     @objc private func recordingClicked() { onRecording?() }
     @objc private func queueClicked() { queuePopover.toggle(from: queue) }
     @objc private func jobClicked() { onJob?(currentSession) }
-    @objc private func openAttention() { onAttention?() }
     @objc private func warningClicked() {
-        if warningDetail != nil { onAccess?(.general) }
-        else { onAttention?() }
+        if !attentionPopover.meetings.isEmpty { attentionPopover.toggle(from: warning) }
+        else if warningDetail != nil { onAccess?(.general) }
     }
 }

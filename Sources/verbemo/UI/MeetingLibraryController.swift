@@ -1113,11 +1113,13 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         activityTitles[dir] ?? dir.lastPathComponent
     }
     private var activityTitles: [URL: String] = [:]
-    var attentionCount: Int {
-        allItems.filter { item in
-            !deletion.isPending(item.dir) && (item.unreadableDiarization || item.diarization?.status == .failed
-                || [item.transcript, item.speakers, item.summary].contains { if case .failed = $0 { true } else { false } })
-        }.count + (activeRecording?.needsAttention == true ? 1 : 0)
+    var attentionMeetings: [MeetingPresentation.Attention] {
+        let active = activeRecording
+        let inventory = (active.map { [$0.item] } ?? []) + allItems
+        return inventory.compactMap { item in
+            guard !deletion.isPending(item.dir) else { return nil }
+            return MeetingPresentation.attention(for: item, active: active)
+        }
     }
 
     /// A status-menu link must select its meeting even with a search/filter active.
