@@ -28,19 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var terminationReplied = false
     private var confirmingQuit = false
 
-    private var becameActiveAt = Date.distantPast
+    private var activationStartedAt = Date.distantPast
 
-    func applicationDidBecomeActive(_ notification: Notification) {
-        becameActiveAt = Date()
+    func applicationWillBecomeActive(_ notification: Notification) {
+        activationStartedAt = Date()
     }
 
-    /// Clicking the Dock icon of an app that's already in front minimizes its
-    /// window (or hides it when the Dock icon is disabled). The catch is that AppKit
-    /// activates the app *before* asking us, so `NSApp.isActive` is true
-    /// either way; the only thing that separates "already working in verbemo"
-    /// from "just switched to it" is how long ago activation happened.
+    /// AppKit can deliver the Dock reopen after isActive becomes true but
+    /// before applicationDidBecomeActive. Measure from the start of activation.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        let justActivated = Date().timeIntervalSince(becameActiveAt) < 0.3
+        let justActivated = Date().timeIntervalSince(activationStartedAt) < 0.3
         onReopen?(!justActivated)
         return true
     }
