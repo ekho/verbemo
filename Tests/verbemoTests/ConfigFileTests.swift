@@ -160,7 +160,7 @@ struct ConfigFileTests {
         }
     }
 
-    @Test("The menu and bottom status row say it in one line", .freshHome(config: broken))
+    @Test("The menu and bottom status row surface an unreadable file", .freshHome(config: broken))
     @MainActor
     func menuAndLivePageSaySo() throws {
         let headline = try #require(Config.problems().first?.headline)
@@ -174,12 +174,13 @@ struct ConfigFileTests {
         let window = ApplicationWindow()
         defer { _ = window.stopForTermination() }
         window.updateConfigProblem(headline)
-        let bar = try #require(window.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
-        let shown = bar.allDescendants
-            .compactMap { $0 as? NSTextField }
-            .filter { !$0.isHiddenOrHasHiddenAncestor }
-            .map(\.stringValue)
-        #expect(shown.contains(headline))
+        let warning = try #require(window.activityBar.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "activity.warning" })
+        #expect(!warning.isHiddenOrHasHiddenAncestor)
+        #expect(warning.toolTip?.contains(try #require(Config.problems().first?.explanation)) == true)
+        #expect(!window.activityBar.allDescendants.contains {
+            $0.identifier?.rawValue == "activity.messages" && !$0.isHiddenOrHasHiddenAncestor
+        })
     }
 
     @Test("The permissions and settings pages explain it, once each", .freshHome(config: broken))
@@ -200,8 +201,14 @@ struct ConfigFileTests {
         let app = ApplicationWindow()
         for destination in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage] {
             app.navigate(destination)
-            #expect(visible(in: app.panel.contentView).filter { $0 == explanation }.count == 1,
-                    "The settings page should explain the configuration error once: \(destination)")
+            let warning = try #require(app.activityBar.allDescendants.compactMap { $0 as? NSButton }
+                .first { $0.identifier?.rawValue == "activity.warning" })
+            #expect(!warning.isHiddenOrHasHiddenAncestor)
+            #expect(warning.toolTip?.contains(explanation) == true)
+            #expect(!visible(in: app.panel.contentView).contains(explanation))
+            #expect(!app.activityBar.allDescendants.contains {
+                $0.identifier?.rawValue == "activity.messages" && !$0.isHiddenOrHasHiddenAncestor
+            })
         }
     }
 

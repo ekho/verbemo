@@ -93,11 +93,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
         coordinator.StateChanged += (_, state) =>
         {
-            if (!state.IsRecording)
-            {
-                RecordingWarning = null;
-                RecordingWarningTrack = null;
-            }
+            if (!state.IsRecording) Interlocked.Exchange(ref lostRecordingTracks, 0);
             StateChanged?.Invoke(this, state);
             SessionsChanged?.Invoke(this,EventArgs.Empty);
             if (state.IsRecording)
@@ -149,14 +145,10 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         liveTranscription.LineReady += (_, line) => LiveLineReady?.Invoke(this, line);
         capture.TrackLost += (_, track) =>
         {
-            var message = track == "mic"
-                ? T("The microphone stopped delivering sound; the recording goes on with the call audio.",
-                    "Микрофон перестал давать звук; запись продолжается со звуком звонка.")
-                : T("The call audio stopped; the recording goes on with the microphone. Start a new recording to pick up the new device.",
-                    "Звук звонка пропал; запись продолжается с микрофоном. Чтобы подхватить новое устройство, начните запись заново.");
-            RecordingWarning = State.IsRecording ? message : null;
-            RecordingWarningTrack = State.IsRecording ? track : null;
-            Notify(T("A recording device went away", "Устройство записи пропало"), message, NotificationKind.Warning);
+            if (!State.IsRecording) return;
+            var microphone = track == "mic";
+            Interlocked.Or(ref lostRecordingTracks, microphone ? 1 : 2);
+            Notify(T("A recording device went away", "Устройство записи пропало"), LostTrackMessage(microphone), NotificationKind.Warning);
         };
         liveTranscription.StatusChanged += (_, status) => LiveStatusChanged?.Invoke(this, status);
 
@@ -215,8 +207,15 @@ public sealed class VerbemoRuntime : IAsyncDisposable
             return activity with { Running = activity.Running.Where(job => job.SessionDirectory is not { } directory || !Deletions.IsPending(directory)).ToArray() };
         }
     }
-    internal string? RecordingWarning { get; private set; }
-    internal string? RecordingWarningTrack { get; private set; }
+    private int lostRecordingTracks;
+
+    internal string? RecordingWarningFor(bool microphone) =>
+        (Volatile.Read(ref lostRecordingTracks) & (microphone ? 1 : 2)) == 0 ? null : LostTrackMessage(microphone);
+
+    private static string LostTrackMessage(bool microphone) => microphone
+        ? T("The microphone stopped delivering sound.", "Микрофон перестал давать звук.")
+        : T("The call audio stopped. Start a new recording to pick up the new device.",
+            "Звук звонка пропал. Чтобы подхватить новое устройство, начните запись заново.");
     internal string? AutoRecordWarning { get; private set; }
     public string LiveStatus => liveTranscription.Status;
     public LanguageModels LanguageModels => processing.LanguageModels;

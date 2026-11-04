@@ -231,6 +231,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         panel.setFrameAutosaveName("name.ekho.verbemo.workspace")
         if panel.frame.origin == .zero { panel.center() }
         activityBar.setServiceViews(live.serviceViews)
+        updateConfigProblem(Config.problems().first?.headline)
         navigate(.allMeetings)
     }
     @objc private func primaryRecordClicked() { newRecording() }
@@ -525,7 +526,10 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         let library = libraryProvider?()
         activityBar.updateWork(operations) { [weak library] in library?.activityTitle(for: $0) ?? $0.lastPathComponent }
         activityBar.updateAccess(access)
-        activityBar.updateAttention(count: library?.attentionCount ?? 0,
+        refreshActivityAttention()
+    }
+    private func refreshActivityAttention() {
+        activityBar.updateAttention(count: libraryProvider?()?.attentionCount ?? 0,
                                     detail: Config.unreadableReason.map { Config.Problem.unreadable(reason: $0).explanation })
     }
     func updateLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {
@@ -535,7 +539,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     func updateLivePreference(enabled: Bool) { live.updateLivePreference(enabled: enabled) }
     func updateConfigProblem(_ headline: String?) {
         live.updateConfigProblem(headline)
-        activityBar.refreshMessages()
+        refreshActivityAttention()
     }
     func updateImport(_ update: MediaImportCoordinator.Update) {
         activityBar.showImport(update)

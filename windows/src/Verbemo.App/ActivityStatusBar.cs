@@ -18,8 +18,8 @@ internal sealed record ActivityAccess(string Label, string Detail, bool Blocked)
             MicrophoneAccess.State.DeniedForEveryone or MicrophoneAccess.State.DeniedForDesktopApps =>
                 new(T("Access: blocked", "Доступ: нет"), T("Allow desktop apps to use the microphone in Windows settings.", "Разрешите классическим приложениям доступ к микрофону в параметрах Windows."), true),
             MicrophoneAccess.State.Allowed => new(T("Access: allowed", "Доступ: есть"), T(
-                "Microphone permission is allowed. Windows needs no separate permission for call audio. Permission does not prove that audio is being captured; check the meters while recording.",
-                "Микрофон разрешён. Для звука звонка Windows не требует отдельного разрешения. Разрешение не подтверждает захват звука: проверьте индикаторы во время записи."), false),
+                "Microphone permission is allowed. Permission does not prove that audio is being captured; check the meters while recording.",
+                "Микрофон разрешён. Разрешение не подтверждает захват звука: проверьте индикаторы во время записи."), false),
             _ => new(T("Access: unknown", "Доступ: ?"), T("Windows microphone access could not be verified. Check recording settings.", "Не удалось проверить доступ к микрофону Windows. Проверьте настройки записи."), false),
         };
 }
@@ -57,7 +57,10 @@ internal sealed class ActivityStatusBar : Border
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
         presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-        auto.Template = new ControlTemplate(typeof(ClickCheckBox)) { VisualTree = presenter };
+        var hitArea = new FrameworkElementFactory(typeof(Border));
+        hitArea.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+        hitArea.AppendChild(presenter);
+        auto.Template = new ControlTemplate(typeof(ClickCheckBox)) { VisualTree = hitArea };
         auto.MinWidth = 32;
         auto.MinHeight = 32;
         auto.Cursor = System.Windows.Input.Cursors.Hand;
@@ -75,7 +78,7 @@ internal sealed class ActivityStatusBar : Border
             Ui.TryUpdate(Window.GetWindow(this), () => runtime.SetAutoRecord(auto.IsChecked == true));
             Refresh();
         };
-        access = ActionButton("activity.microphone-access", () => navigate(runtime.RecordingWarningTrack == "mic"
+        access = ActionButton("activity.microphone-access", () => navigate(runtime.RecordingWarningFor(microphone: true) is not null
             ? ApplicationDestination.Live : ApplicationDestination.General));
         system = ActionButton("activity.system-audio", () => navigate(ApplicationDestination.Live));
         recording = ActionButton("activity.recording", () => navigate(ApplicationDestination.Live));
@@ -170,7 +173,8 @@ internal sealed class ActivityStatusBar : Border
         foreach (var (bar, source, microphone) in meters)
         {
             var value = microphone ? runtime.MicrophoneDecibels : runtime.SystemDecibels;
-            var trackLost = runtime.RecordingWarningTrack == (microphone ? "mic" : "system");
+            var sourceWarning = runtime.RecordingWarningFor(microphone);
+            var trackLost = sourceWarning is not null;
             var denied = microphone && readiness.Blocked;
             var state = !runtime.State.IsRecording ? T("Not recording", "Нет записи")
                 : runtime.State.IsPaused ? T("Paused", "Пауза") : value is null ? T("No reading", "Нет данных")
@@ -180,7 +184,9 @@ internal sealed class ActivityStatusBar : Border
             bar.ToolTip = state;
             AutomationProperties.SetHelpText(bar, state);
             var name = microphone ? T("Microphone", "Микрофон") : T("System audio", "Звук системы");
-            var detail = (trackLost ? runtime.RecordingWarning + " " : "") + (microphone ? readiness.Label + ". " + readiness.Detail : "") + " " + state;
+            var accessDetail = microphone ? readiness.Label + ". " + readiness.Detail
+                : T("Windows needs no separate permission for call audio.", "Для звука звонка Windows не требует отдельного разрешения.");
+            var detail = (trackLost ? sourceWarning + " " : "") + accessDetail + " " + state;
             var symbol = microphone ? "M7 4A2 2 0 0 1 11 4V8A2 2 0 0 1 7 8Z M5 8A4 4 0 0 0 13 8 M9 12V16"
                 : "M2 7H5L9 3V15L5 11H2Z M12 6Q16 9 12 12 M14 4Q20 9 14 14";
             if (denied || trackLost) symbol += " M2 2L16 16";

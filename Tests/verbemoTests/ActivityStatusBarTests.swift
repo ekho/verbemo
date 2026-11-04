@@ -95,6 +95,9 @@ struct ActivityStatusBarTests {
                 #expect(NSApp.sendAction(try #require(messagesButton.action), to: messagesButton.target, from: messagesButton))
             }
             app.finishImport(result)
+            #expect(!bar.allDescendants.contains {
+                !$0.isHiddenOrHasHiddenAncestor && $0.identifier?.rawValue == "activity.job"
+            }, "The import result owns the status until the outstanding import leaves the queue")
             let dismiss = try #require(progress.allDescendants.first { $0.identifier?.rawValue == "media-import.dismiss" } as? NSButton)
             dismiss.performClick(nil)
             bar.refreshMessages()

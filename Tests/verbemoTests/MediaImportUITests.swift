@@ -17,13 +17,17 @@ struct MediaImportUITests {
         app.show()
         app.finishImport(.init())
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        let progress = try #require(app.panel.contentView?.allDescendants.first { $0 is MediaImportStatusView })
-        let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
-        #expect(bar.allDescendants.contains { $0 === progress })
-        #expect(progress.frame.height <= 44)
+        let bar = app.activityBar
+        let progress = try #require(bar.serviceRows.first { $0 is MediaImportStatusView })
+        #expect(!bar.allDescendants.contains { $0 === progress })
+        let messages = try #require(bar.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "activity.messages" })
+        #expect(messages.toolTip?.contains("Imported 0") == true)
+        #expect(bar.frame.height == 36)
         app.panel.setContentSize(.init(width: 760, height: 600))
         app.panel.contentView?.layoutSubtreeIfNeeded()
-        #expect(progress.frame.height <= 44)
+        #expect(bar.frame.height == 36)
+        #expect(messages.convert(messages.bounds, to: bar).maxX <= bar.bounds.width)
     }
 
     @Test("A finished import message stays inside a narrow row and has no progress bar", .freshHome)
@@ -69,13 +73,13 @@ struct MediaImportUITests {
         let panel = app.panel
         app.updateImport(.init(source: URL(fileURLWithPath: "/tmp/interview.mov"),
             index: 1, total: 1, stage: .checking, fraction: nil))
-        let progress = try #require(panel.contentView?.allDescendants.first { $0 is MediaImportStatusView })
+        let progress = try #require(app.activityBar.serviceRows.first { $0 is MediaImportStatusView })
         let cancel = try #require(progress.allDescendants.compactMap { $0 as? NSButton }.first)
         #expect(!progress.isHidden)
         #expect(!cancel.isHidden)
         var requests = 0
         app.onCancelImport = { requests += 1 }
-        cancel.performClick(nil)
+        #expect(NSApp.sendAction(try #require(cancel.action), to: cancel.target, from: cancel))
         #expect(requests == 1)
         #expect(!cancel.isEnabled)
         app.updateImport(.init(source: URL(fileURLWithPath: "/tmp/interview.mov"),
@@ -85,9 +89,9 @@ struct MediaImportUITests {
         #expect(cancel.isEnabled)
         #expect(!cancel.isHidden && cancel.image != nil && cancel.title.isEmpty)
         #expect(progress.allDescendants.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Imported 0" })
-        #expect(progress.window === panel)
+        #expect(progress.window == nil, "The result stays in the closed message popover")
         #expect(!panel.isVisible, "Progress must not reopen the window")
-        cancel.performClick(nil)
+        #expect(NSApp.sendAction(try #require(cancel.action), to: cancel.target, from: cancel))
         #expect(progress.isHidden)
         #expect(requests == 1, "Dismissal must not cancel another import")
     }

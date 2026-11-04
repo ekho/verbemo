@@ -94,6 +94,7 @@ final class ActivityStatusBar: NSStackView {
     private let queue = NSButton()
     private let job = NSButton()
     private let warning = NSButton()
+    private let warningMenu = NSMenu()
     private let spinner = NSProgressIndicator()
     let serviceContent = NSStackView()
     private let importStatus = MediaImportStatusView()
@@ -108,7 +109,6 @@ final class ActivityStatusBar: NSStackView {
     private var warningDetail: String?
     private var attentionCount = 0
     private var importFailed = false
-    private var importing = false
     private var work = ActivityWork([])
     private var jobTitle: (URL) -> String = { $0.lastPathComponent }
 
@@ -441,14 +441,12 @@ final class ActivityStatusBar: NSStackView {
     func showImport(_ update: MediaImportCoordinator.Update) {
         importFailed = false
         importStatus.update(update)
-        importing = true
         refreshJob()
         refreshMessages()
     }
     func finishImport(_ result: MediaImportCoordinator.Result) {
         importFailed = !result.failures.isEmpty
         importStatus.finish(result)
-        importing = false
         refreshJob()
         refreshMessages()
     }
@@ -460,7 +458,7 @@ final class ActivityStatusBar: NSStackView {
         job.toolTip = text
         job.setAccessibilityLabel(text)
         job.isEnabled = current != nil
-        job.isHidden = current == nil || current?.kind == .importMedia && importing
+        job.isHidden = current == nil || current?.kind == .importMedia && !importStatus.isHidden
     }
 
     func updateAttention(count: Int, detail: String?) {
@@ -472,11 +470,18 @@ final class ActivityStatusBar: NSStackView {
     private func refreshWarning() {
         let count = attentionCount + (warningDetail == nil ? 0 : 1)
         warning.isHidden = count == 0
+        let combined = attentionCount > 0 && warningDetail != nil
+        warning.menu = combined ? warningMenu : nil
         warning.title = "\(count)"
         warning.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
         warning.imagePosition = .imageLeading
         warning.contentTintColor = .systemOrange
-        let detail = ([localised("\(count) need attention", "Требуют внимания: \(count)")] + [warningDetail].compactMap { $0 }).joined(separator: "\n")
+        var details = [localised("\(count) need attention", "Требуют внимания: \(count)")]
+        if let warningDetail { details.append(warningDetail) }
+        if combined {
+            details.append(localised("Right-click for meetings needing attention", "Правый клик открывает встречи, требующие внимания"))
+        }
+        let detail = details.joined(separator: "\n")
         warning.toolTip = detail
         warning.setAccessibilityLabel(detail)
     }
@@ -530,6 +535,7 @@ final class ActivityStatusBar: NSStackView {
     @objc private func recordingClicked() { onRecording?() }
     @objc private func queueClicked() { onQueue?() }
     @objc private func jobClicked() { onJob?(currentSession) }
+    @objc private func openAttention() { onAttention?() }
     @objc private func warningClicked() {
         if warningDetail != nil { onAccess?(.general) }
         else { onAttention?() }

@@ -112,9 +112,9 @@ public sealed class ActivityStatusBarTests
             Assert.Contains(title, Assert.IsType<string>(work.ToolTip));
             var warning = Find<Button>(bar, "activity.warning");
             var system = Find<Button>(bar, "activity.system-audio");
-            Assert.Contains(runtime.RecordingWarning!, Assert.IsType<string>(system.ToolTip));
-            Assert.DoesNotContain(runtime.RecordingWarning!, Assert.IsType<string>(warning.ToolTip));
-            Assert.DoesNotContain(runtime.RecordingWarning!, Assert.IsType<string>(work.ToolTip));
+            Assert.Contains(runtime.RecordingWarningFor(microphone: false)!, Assert.IsType<string>(system.ToolTip));
+            Assert.DoesNotContain(runtime.RecordingWarningFor(microphone: false)!, Assert.IsType<string>(warning.ToolTip));
+            Assert.DoesNotContain(runtime.RecordingWarningFor(microphone: false)!, Assert.IsType<string>(work.ToolTip));
             foreach (var (id, expected) in new[] { ("activity.work", ApplicationDestination.Processing),
                          ("activity.recording", ApplicationDestination.Live), ("activity.microphone-access", ApplicationDestination.General),
                          ("activity.warning", ApplicationDestination.Attention) })
@@ -124,6 +124,7 @@ public sealed class ActivityStatusBarTests
             }
             var toggle = Find<ClickCheckBox>(bar, "activity.auto");
             Assert.False(runtime.Settings.AutoRecord.Enabled);
+            Assert.NotNull(toggle.InputHitTest(new Point(2, toggle.ActualHeight / 2)));
             var peer = UIElementAutomationPeer.CreatePeerForElement(toggle)!;
             ((IToggleProvider)peer.GetPattern(PatternInterface.Toggle)!).Toggle();
             Assert.True(runtime.Settings.AutoRecord.Enabled);
@@ -150,7 +151,8 @@ public sealed class ActivityStatusBarTests
             var microphone = Find<ProgressBar>(bar, "activity.microphone");
             Assert.Equal(-60, microphone.Value);
             Assert.Equal(Localized.T("Silence", "Тишина"), AutomationProperties.GetHelpText(microphone));
-            Assert.Null(runtime.RecordingWarning);
+            Assert.Null(runtime.RecordingWarningFor(microphone: true));
+            Assert.Null(runtime.RecordingWarningFor(microphone: false));
             Assert.Equal(Localized.T("No reading", "Нет данных"), AutomationProperties.GetHelpText(Find<ProgressBar>(bar, "activity.system")));
             typeof(RecordingCoordinator).GetProperty("State")!.SetValue(coordinator, state with { IsPaused = true });
             bar.Refresh();
@@ -160,11 +162,18 @@ public sealed class ActivityStatusBarTests
             bar.Refresh();
             Assert.Equal(Visibility.Collapsed, Find<Button>(bar, "activity.warning").Visibility);
             var source = Find<Button>(bar, "activity.microphone-access");
-            Assert.Contains(runtime.RecordingWarning!, Assert.IsType<string>(source.ToolTip));
+            var micWarning = Assert.IsType<string>(runtime.RecordingWarningFor(microphone: true));
+            Assert.Contains(micWarning, Assert.IsType<string>(source.ToolTip));
+            ((EventHandler<string>)typeof(WindowsAudioCapture).GetField("TrackLost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(capture)!).Invoke(capture, "system");
+            bar.Refresh();
+            var systemWarning = Assert.IsType<string>(runtime.RecordingWarningFor(microphone: false));
+            Assert.Contains(micWarning, Assert.IsType<string>(source.ToolTip));
+            Assert.Contains(systemWarning, Assert.IsType<string>(Find<Button>(bar, "activity.system-audio").ToolTip));
             source.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal(ApplicationDestination.Live, destination);
             typeof(RecordingCoordinator).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(coordinator, [RecordingState.Ready]);
-            Assert.Null(runtime.RecordingWarning);
+            Assert.Null(runtime.RecordingWarningFor(microphone: true));
+            Assert.Null(runtime.RecordingWarningFor(microphone: false));
         }));
 
     [Fact]
