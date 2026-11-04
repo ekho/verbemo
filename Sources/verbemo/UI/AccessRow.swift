@@ -137,9 +137,7 @@ final class AccessRow: NSView, LayerTinted {
         button.setAccessibilityLabel("\(button.title) — \(title.stringValue)")
     }
 
-    /// `action` keeps a button on a granted row — for the one permission
-    /// macOS will not report, where "granted" is a measurement someone may
-    /// reasonably want to take again.
+    /// An explicit action keeps the button visible even on a granted row.
     func update(
         _ state: SetupPermissions.State,
         detail override: String? = nil,
@@ -186,7 +184,9 @@ final class AccessRow: NSView, LayerTinted {
         case .notAsked, .unknown:
             mark.image = NSImage(
                 systemSymbolName: "circle.dashed",
-                accessibilityDescription: localised("not asked", "не спрашивали"))
+                accessibilityDescription: state == .unknown
+                    ? localised("Current access is unknown", "Текущий доступ неизвестен")
+                    : localised("not asked", "не спрашивали"))
             mark.contentTintColor = .tertiaryLabelColor
             button.isHidden = false
         }

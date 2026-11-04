@@ -100,8 +100,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let audioRow = AccessRow(
         title: localised("System audio", "Звук системы"),
         detail: "",
-        action: localised("Allow and test", "Разрешить и проверить"),
-        grantedNote: localised("heard the tone", "тон услышан"))
+        action: localised("Allow and test", "Разрешить и проверить"))
     private let calendarRow = AccessRow(
         title: localised("Calendar", "Календарь"),
         detail: localised(
@@ -1037,10 +1036,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// worth caching for.
     private static var day: DateFormatter {
         let formatter = DateFormatter()
-        // The window's language, on the Mac's own region: a Russian window
-        // saying "heard the tone · 19 Aug" is two languages in one line, and
-        // a locale built from the language alone would take the day and month
-        // out of the order this Mac writes them in as well.
+        // Use the window's language for the month and the Mac's region for date order.
         var locale = Locale.Components(locale: .current)
         locale.languageComponents.languageCode = .init(InterfaceLanguage.current.rawValue)
         formatter.locale = Locale(components: locale)
@@ -1904,12 +1900,15 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 "not while a recording is running — the test tone would play into the call",
                 "не во время записи — тестовый тон прозвучит в звонке"))
         case .heard:
+            let lastTest = SetupState.systemAudioHeardAt().map {
+                localised("Last successful test: ", "Последняя успешная проверка: ")
+                    + Self.day.string(from: $0)
+            } ?? localised("Sound test passed.", "Проверка звука прошла.")
             audioRow.update(
-                .granted,
-                note: SetupState.systemAudioHeardAt().map {
-                    localised("heard the tone · ", "тон услышан · ")
-                        + Self.day.string(from: $0)
-                } ?? localised("heard the tone", "тон услышан"),
+                .unknown,
+                detail: lastTest + "\n" + localised(
+                    "macOS may ask for access again.",
+                    "macOS может снова запросить доступ."),
                 action: localised("Test again", "Проверить ещё раз"))
         case .silent:
             audioRow.update(.denied, detail: localised(
@@ -1917,7 +1916,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 "Записалась тишина. Проверьте разрешение или прибавьте громкость и "
                     + "попробуйте снова."))
         case .refused(let why): audioRow.update(.denied, detail: why)
-        case nil: audioRow.update(.notAsked)
+        case nil: audioRow.update(.unknown)
         }
 
         let config = Config.raw()

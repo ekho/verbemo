@@ -165,8 +165,7 @@ struct SetupProgress: Equatable {
         let named = outstanding.map(\.described)
         switch named.count {
         case 0:
-            return localised(
-                "Everything verbemo needs is granted.", "Всё, что нужно verbemo, разрешено.")
+            return localised("Setup checks are complete.", "Проверки завершены.")
         case 1:
             return localised("One thing left: ", "Осталось одно: ") + named[0]
         default:

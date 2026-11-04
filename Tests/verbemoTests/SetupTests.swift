@@ -52,6 +52,26 @@ struct SetupTests {
             heardAt: quarter, now: heard) == nil)
     }
 
+    @Test("A past system-audio test is shown as history, without a permission checkmark", .freshHome)
+    @MainActor
+    func rememberedSystemAudioIsNotAnAccessGrant() throws {
+        SetupState.rememberSystemAudioHeard(now: Date().addingTimeInterval(-86_400))
+        let application = ApplicationWindow()
+        let form = application.settings.setup
+        defer { form.stop(); withExtendedLifetime(application) {} }
+        application.navigate(.recording)
+
+        let row = try Self.control(AccessRow.self, "access.system-audio", in: application.panel.contentView)
+        let mark = try #require(row.allDescendants.compactMap { $0 as? NSImageView }.first)
+        #expect(mark.contentTintColor != .systemGreen)
+        #expect(mark.image?.accessibilityDescription == "Current access is unknown")
+        #expect(row.allDescendants.compactMap { $0 as? NSTextField }.contains {
+            !$0.isHidden && $0.stringValue.hasPrefix("Last successful test:")
+        })
+        let retest = try Self.control(NSButton.self, "access.system-audio.action", in: row)
+        #expect(retest.isEnabled && !retest.isHidden)
+    }
+
     @Test("The remembered tone survives marking setup complete, and vice versa")
     func systemAudioMemoryRoundTrip() throws {
         let dir = FileManager.default.temporaryDirectory
@@ -1136,7 +1156,7 @@ struct SetupTests {
     /// only appears when something is wrong leaves them counting green ticks.
     @Test("The sentence says the good news as well as the bad")
     func outstandingSentenceShapes() {
-        #expect(SetupForm.sentence(for: []) == "Everything verbemo needs is granted.")
+        #expect(SetupForm.sentence(for: []) == "Setup checks are complete.")
         #expect(SetupForm.sentence(for: [.microphone]) == "One thing left: microphone")
         #expect(SetupForm.sentence(for: [.microphone, .systemAudio])
             == "Left: microphone, system audio")

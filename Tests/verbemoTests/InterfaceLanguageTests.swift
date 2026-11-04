@@ -243,9 +243,9 @@ struct InterfaceLanguageTests {
     @MainActor
     func theOutstandingSentenceIsTranslated() {
         #expect(Self.inLanguage(.english) { SetupForm.sentence(for: []) }
-            == "Everything verbemo needs is granted.")
+            == "Setup checks are complete.")
         #expect(Self.inLanguage(.russian) { SetupForm.sentence(for: []) }
-            == "Всё, что нужно verbemo, разрешено.")
+            == "Проверки завершены.")
 
         // A name stays a name in either language; what surrounds it does not.
         let left = Self.inLanguage(.russian) {
