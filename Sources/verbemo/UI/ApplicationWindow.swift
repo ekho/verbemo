@@ -114,7 +114,6 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         activityBar.onToggleAutomatic = { [weak self] in self?.onToggleAutoRecord?() }
         activityBar.onRecording = { [weak self] in self?.showActiveRecording() }
         activityBar.onQueue = { [weak self] in self?.navigate(.processing, clearSearch: true) }
-        activityBar.onAttention = { [weak self] in self?.navigate(.attention, clearSearch: true) }
         activityBar.onAccess = { [weak self] in self?.navigate($0) }
         activityBar.onJob = { [weak self] dir in
             guard let self else { return }
@@ -530,7 +529,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         refreshActivityAttention()
     }
     private func refreshActivityAttention() {
-        activityBar.updateAttention(count: libraryProvider?()?.attentionCount ?? 0,
+        activityBar.updateAttention(libraryProvider?()?.attentionMeetings ?? [],
                                     detail: Config.unreadableReason.map { Config.Problem.unreadable(reason: $0).explanation })
     }
     func updateLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {

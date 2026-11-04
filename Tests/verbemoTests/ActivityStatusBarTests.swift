@@ -39,7 +39,8 @@ struct ActivityStatusBarTests {
         #expect(notice.toolTip?.contains("synthetic_status_fixture") == true)
         #expect(!bar.allDescendants.contains { $0 === notice })
         #expect(!app.settings.content(for: .general).allDescendants.contains { $0 === notice })
-        bar.updateAttention(count: 1, detail: "Synthetic configuration problem")
+        bar.updateAttention([.init(dir: Home.current.url, title: "Test meeting", problems: ["Test failure"])],
+                            detail: "Synthetic configuration problem")
         app.update(state: .recording, elapsed: "12:34")
         bar.readAudioLevels = { (.unavailable, .level(0.5)) }
         bar.refreshAudioLevels()
@@ -156,10 +157,54 @@ struct ActivityStatusBarTests {
         try Self.click("activity.queue-processing", in: content)
         #expect(app.navigation.destination == .processing)
         #expect(search.stringValue.isEmpty)
-        bar.updateAttention(count: 1, detail: nil)
-        search.stringValue = "unrelated meeting"
-        try Self.click("activity.warning", in: bar)
-        #expect(search.stringValue.isEmpty)
+    }
+
+    @Test(.freshHome, .speaking(.russian))
+    func attentionListsProblemsAndOpensTheChosenMeeting() async throws {
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination(); app.hide() }
+        let root = Home.current.defaultRecordings
+        let otherFailures = (10..<19).map { ("\($0)", "Встреча \($0)", Optional("Сбой расшифровки")) }
+        for (name, title, failure) in [("01", "Первая", "Нет звука"), ("02", "Вторая", "Сбой модели"), ("03", "Без ошибок", nil)] + otherFailures {
+            let dir = root.appendingPathComponent(name, isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            var meta = ["title": title]
+            meta[SessionState.Key.transcriptionFailed] = failure
+            try JSONSerialization.data(withJSONObject: meta).write(to: dir.appendingPathComponent("meta.json"))
+        }
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.panel.setContentSize(.init(width: 760, height: 600))
+        app.show()
+        await library.settled()
+        app.updateActivity([], access: .init(microphone: .granted, systemAudio: .heard, calendar: nil))
+        app.navigate(.calendar)
+
+        let warning = try Self.click("activity.warning", in: app.activityBar)
+        #expect(warning.title == "11")
+        #expect(app.navigation.destination == .calendar)
+        let popup = try #require(NSApp.windows.compactMap(\.contentView).flatMap { [$0] + $0.allDescendants }
+            .first { $0.identifier?.rawValue == "activity.attention-popover" })
+        popup.layoutSubtreeIfNeeded()
+        let scroll = try #require(popup.allDescendants.first { $0 is NSScrollView } as? NSScrollView)
+        #expect(scroll.hasVerticalScroller)
+        #expect(try #require(scroll.documentView).bounds.height > scroll.contentView.bounds.height)
+        let rows = popup.allDescendants.compactMap { $0 as? NSButton }
+        #expect(rows.contains { $0.attributedTitle.string.contains("Вторая")
+            && $0.attributedTitle.string.contains("Сбой модели") })
+        let first = try #require(rows.first { $0.accessibilityLabel()?.contains("Первая") == true
+            && $0.accessibilityLabel()?.contains("Нет звука") == true })
+        #expect(!rows.contains { $0.accessibilityLabel()?.contains("Без ошибок") == true })
+        #expect(first.sendAction(first.action, to: first.target))
+        #expect(app.navigation.destination == .allMeetings)
+        let title = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.title" } as? NSTextField)
+        for _ in 0..<50 where title.stringValue != "Первая" { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(title.stringValue == "Первая")
+
+        app.activityBar.updateAttention(library.attentionMeetings, detail: "Ошибка настроек")
+        try Self.click("activity.warning", in: app.activityBar)
+        try Self.click("activity.attention-settings", in: popup)
+        #expect(app.navigation.destination == .general)
     }
 
     @Test("The queue removes a waiting run and cancels only the confirmed running job", .freshHome, .speaking(.russian))
@@ -368,6 +413,44 @@ struct ActivityStatusBarTests {
         #expect(destination == .recording)
     }
 
+    @Test(.freshHome, .speaking(.russian), arguments: [SetupPermissions.State.denied, .notAsked])
+    func microphonePermissionBlockOpensRecordingSettings(permission: SetupPermissions.State) throws {
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination() }
+        var toggles = 0
+        app.onToggleAutoRecord = { toggles += 1 }
+        let access = ActivityAccess(microphone: permission, systemAudio: .heard, calendar: nil)
+        app.updateActivity([], access: access)
+        app.updateAutoRecord(enabled: true, decision: access.automaticBlockReason, blocked: true)
+        let mic = try #require(app.activityBar.allDescendants.first { $0.identifier?.rawValue == "activity.microphone-access" } as? NSButton)
+        #expect(mic.contentTintColor == .systemOrange)
+        #expect(mic.toolTip == (permission == .denied ? "Доступ к микрофону запрещён" : "Нужен доступ к микрофону"))
+        let button = try #require(app.activityBar.allDescendants.first { $0.identifier?.rawValue == "navigation.auto-record" } as? NSButton)
+        button.performClick(nil)
+        #expect(app.navigation.destination == .recording)
+        #expect(button.state == .on)
+        #expect(toggles == 0)
+
+        app.updateActivity([], access: .init(microphone: .granted, systemAudio: .heard, calendar: nil))
+        #expect(mic.contentTintColor != .systemOrange)
+        try Self.click("navigation.auto-record", in: app.activityBar)
+        #expect(toggles == 1)
+    }
+
+    @Test(.freshHome, .speaking(.russian))
+    func calendarWarnsUntilAccessIsGranted() throws {
+        let app = ApplicationWindow()
+        defer { _ = app.stopForTermination() }
+        app.updateActivity([], access: .init(microphone: .granted, systemAudio: .heard, calendar: .notAsked))
+        let calendar = try Self.click("activity.calendar-access", in: app.activityBar)
+        #expect(calendar.contentTintColor == .systemOrange)
+        #expect(app.navigation.destination == .calendar)
+        app.updateActivity([], access: .init(microphone: .granted, systemAudio: .heard, calendar: .granted))
+        #expect(calendar.contentTintColor != .systemOrange)
+        app.updateActivity([], access: .init(microphone: .granted, systemAudio: .heard, calendar: nil))
+        #expect(calendar.isHidden)
+    }
+
     @Test(.freshHome, .speaking(.russian))
     func countsRealWorkAndRetainsCancellationUntilCleanup() async throws {
         let operations = ProcessingOperations()
@@ -408,11 +491,17 @@ struct ActivityStatusBarTests {
             let item = try button(id)
             #expect(NSApp.sendAction(try #require(item.action), to: item.target, from: item))
         }
-        var recorded = false, attention = false
+        var recorded = false
         var destination: ApplicationNavigationState.Destination?
         bar.onRecording = { recorded = true }
-        bar.onAttention = { attention = true }
         bar.onAccess = { destination = $0 }
+        let system = try button("activity.system-access")
+        #expect(system.contentTintColor == .systemOrange)
+        #expect(system.toolTip?.contains("нужно проверить") == true)
+        try click("activity.system-access")
+        #expect(destination == .recording)
+        bar.updateAccess(.init(microphone: .granted, systemAudio: .heard, calendar: nil))
+        #expect(system.contentTintColor != .systemOrange)
         bar.readAudioLevels = { (.level(0), .level(0)) }
         bar.updateRecording(.recording, elapsed: "12:34")
         #expect(try button("activity.recording").title == "12:34")
@@ -422,7 +511,8 @@ struct ActivityStatusBarTests {
         bar.readAudioLevels = { (.level(0), .unavailable) }
         bar.refreshAudioLevels()
         #expect(try button("activity.warning").isHidden)
-        #expect(try button("activity.system-access").toolTip == "Сигнал звука системы недоступен")
+        #expect(system.contentTintColor == .systemOrange)
+        #expect(system.toolTip == "Сигнал звука системы недоступен")
         recorded = false
         try click("activity.system-access")
         #expect(recorded)
@@ -434,10 +524,7 @@ struct ActivityStatusBarTests {
         bar.updateAccess(.init(microphone: .granted, systemAudio: .heard, calendar: .denied))
         try click("activity.calendar-access")
         #expect(destination == .calendar)
-        bar.updateAttention(count: 2, detail: nil)
-        try click("activity.warning")
-        #expect(attention)
-        bar.updateAttention(count: 0, detail: "Configuration unreadable")
+        bar.updateAttention([], detail: "Configuration unreadable")
         try click("activity.warning")
         #expect(destination == .general)
     }
@@ -456,7 +543,7 @@ struct ActivityStatusBarTests {
         await entered.pass()
         app.updateAutoRecord(enabled: true, decision: "Ожидает окончания звонка", blocked: true)
         app.update(state: .recording, elapsed: "1:23:45")
-        bar.updateAttention(count: 2, detail: nil)
+        bar.updateAttention([.init(dir: Home.current.url, title: "Встреча", problems: ["Сбой расшифровки"])], detail: nil)
         let title = String(repeating: "Очень длинное название встречи ", count: 8)
         bar.updateWork(operations.snapshot()) { _ in title }
         app.panel.setContentSize(NSSize(width: width, height: 680))

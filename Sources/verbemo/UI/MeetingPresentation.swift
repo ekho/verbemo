@@ -3,6 +3,12 @@ import Foundation
 /// Presentation reads the session's recorded states, never a simulated percentage.
 enum MeetingPresentation {
     enum StageState { case done, active, paused, pending, waiting, off, failed }
+    struct Attention: Equatable {
+        let dir: URL
+        let title: String
+        let problems: [String]
+    }
+
     struct ActiveRecording: Equatable {
         let dir: URL
         var title: String
@@ -14,8 +20,14 @@ enum MeetingPresentation {
                 trigger: nil, engine: nil, transcript: .pending, diarization: nil, unreadableDiarization: false,
                 speakers: .off, summary: Config.summary().enabled ? .pending : .off, namedSpeakers: nil, sizeBytes: 0, hasAudio: true)
         }
-        var needsAttention: Bool {
-            switch liveStatus { case .modelMissing, .overloaded, .error: true; default: false }
+        var attentionProblem: String? {
+            switch liveStatus {
+            case .modelMissing: localised("Live transcription needs the Nemotron model", "Для онлайн-расшифровки нужна модель Nemotron")
+            case .overloaded: localised("Live transcription stopped because the Mac couldn't keep up",
+                                        "Онлайн-расшифровка остановлена: мак не успевает")
+            case .error(let reason): localised("Live transcription failed", "Сбой онлайн-расшифровки") + ": " + reason
+            default: nil
+            }
         }
     }
     struct Stage {
@@ -36,10 +48,34 @@ enum MeetingPresentation {
         let steps = [item.transcript, item.speakers, item.summary]
         let busy = SessionClaim.isHeld(item.dir)
         if filter == .processing && !busy && !steps.contains(where: \.isOutstanding) { return false }
-        if filter == .attention && !(active?.dir == item.dir && active?.needsAttention == true) && !item.unreadableDiarization && item.diarization?.status != .failed
-            && !steps.contains(where: { if case .failed = $0 { return true }; return false }) { return false }
+        if filter == .attention && attention(for: item, active: active) == nil { return false }
         return query.isEmpty || ([item.title ?? item.name, item.name, date(item.started)] + (MeetingCalendarMetadata.read(from: item.dir)?.participants.map(\.name) ?? []))
             .contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    static func attention(for item: SessionInventory.Item, active: ActiveRecording? = nil) -> Attention? {
+        var problems: [String] = []
+        func add(_ label: String, reason: String?) {
+            let detail = reason?.split(whereSeparator: \.isNewline).joined(separator: " ") ?? ""
+            problems.append(detail.isEmpty ? label : label + ": " + detail)
+        }
+        if let active, active.dir == item.dir, let problem = active.attentionProblem { add(problem, reason: nil) }
+        if case .failed(let reason) = item.transcript {
+            add(localised("Transcription failed", "Сбой расшифровки"), reason: reason)
+        }
+        if item.unreadableDiarization {
+            add(localised("Speaker separation state could not be read", "Не удалось прочитать состояние диаризации"), reason: nil)
+        } else if let diarization = item.diarization, diarization.status == .failed {
+            add(localised("Speaker separation failed", "Сбой диаризации"), reason: diarization.reason)
+        }
+        if case .failed(let reason) = item.speakers {
+            add(localised("Naming speakers failed", "Не удалось определить имена говорящих"), reason: reason)
+        }
+        if case .failed(let reason) = item.summary {
+            add(localised("Summary creation failed", "Сбой создания сводки"), reason: reason)
+        }
+        guard !problems.isEmpty else { return nil }
+        return Attention(dir: item.dir, title: item.title ?? item.name, problems: problems)
     }
     static func audioFiles(_ dir: URL) -> [URL] {
         let files = SessionState.read(dir)?["files"] as? [String: String] ?? [:]

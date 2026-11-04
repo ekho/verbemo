@@ -833,11 +833,11 @@ final class AppController {
             hasSelectedCalendar: !automatic.calendar || automatic.micActivity || !calendar.selectedCalendars().isEmpty)
         let decision = autoRecord.enabled ? access.automaticBlockReason ?? autoRecord.notice?.title ?? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
+        let activity = operations.snapshot()
+        window.updateActivity(activity, access: access)
         window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision,
             blocked: autoRecord.notice != nil || access.automaticBlockReason != nil)
-        let activity = operations.snapshot()
         menuBar.updateActivity(activity)
-        window.updateActivity(activity, access: access)
     }
 
     /// The main window's live-transcript switch. It only writes, as the
