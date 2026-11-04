@@ -67,11 +67,25 @@ final class ActivityAttentionPopover: NSObject {
 
     func update(_ meetings: [MeetingPresentation.Attention], settingsProblem: String?) {
         guard self.meetings != meetings || settings.toolTip != settingsProblem else { return }
+        let window = popover.contentViewController?.view.window
+        let focused = window?.firstResponder as? NSButton
+        let focusedMeeting = focused.flatMap { meeting(for: $0)?.dir }
         self.meetings = meetings
         settings.toolTip = settingsProblem
         settings.setAccessibilityLabel([settings.title, settingsProblem].compactMap { $0 }.joined(separator: ". "))
-        if meetings.isEmpty { popover.close() }
-        else if popover.isShown { render() }
+        if meetings.isEmpty {
+            close()
+        } else if popover.isShown {
+            render()
+            if let focusedMeeting {
+                let index = meetings.firstIndex { $0.dir == focusedMeeting }
+                let row = index.map { rows.arrangedSubviews[$0] }
+                window?.makeFirstResponder(row ?? closeButton)
+                if let row { rows.scrollToVisible(row.frame) }
+            } else if focused === settings && settingsProblem == nil {
+                window?.makeFirstResponder(closeButton)
+            }
+        }
     }
 
     func toggle(from button: NSButton) {
@@ -134,10 +148,14 @@ final class ActivityAttentionPopover: NSObject {
     }
 
     @objc private func openMeeting(_ sender: NSButton) {
-        guard sender.superview === rows, meetings.indices.contains(sender.tag) else { return }
-        let dir = meetings[sender.tag].dir
+        guard let meeting = meeting(for: sender) else { return }
         close()
-        onOpenMeeting?(dir)
+        onOpenMeeting?(meeting.dir)
+    }
+
+    private func meeting(for button: NSButton) -> MeetingPresentation.Attention? {
+        guard button.superview === rows, meetings.indices.contains(button.tag) else { return nil }
+        return meetings[button.tag]
     }
 
     @objc private func openSettings() {
