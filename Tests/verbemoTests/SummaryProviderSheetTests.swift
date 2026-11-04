@@ -46,8 +46,9 @@ struct SummaryProviderSheetTests {
             #expect(!library.isProcessing)
             await library.settled()
             #expect(app.panel.attachedSheet == nil)
-            let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
-            let message = try #require(bar.allDescendants.compactMap { $0 as? NSTextField }.first {
+            app.panel.orderFront(nil)
+            try app.activityBar.openServiceMessagesForTest()
+            let message = try #require(app.activityBar.serviceDescendants.compactMap { $0 as? NSTextField }.first {
                 $0.identifier?.rawValue == "meeting.operation-error"
             })
             #expect(!message.isHiddenOrHasHiddenAncestor)

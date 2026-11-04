@@ -13,7 +13,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private let primarySettings = NSButton()
 
     private let recordingBar = RecordingBarView()
-    private let activityBar = ActivityStatusBar()
+    let activityBar = ActivityStatusBar()
     private let toolbar = NSStackView()
     private let title = NSButton()
     private let heading = NSTextField(labelWithString: "")
@@ -55,6 +55,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         settings.isProcessing = { [weak self] in self?.isProcessing?() == true }
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
         settingsServiceViews = settings.serviceViews
+        activityBar.settingsExplainsConfigProblem = { [weak settings] in settings?.hasConfigProblemNotice == true }
         activityBar.setServiceViews(live.serviceViews + (libraryProvider?()?.serviceViews ?? []) + settingsServiceViews)
         return settings
     }()
@@ -230,6 +231,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         panel.setFrameAutosaveName("name.ekho.verbemo.workspace")
         if panel.frame.origin == .zero { panel.center() }
         activityBar.setServiceViews(live.serviceViews)
+        updateConfigProblem(Config.problems().first?.headline)
         navigate(.allMeetings)
     }
     @objc private func primaryRecordClicked() { newRecording() }
@@ -524,11 +526,21 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         let library = libraryProvider?()
         activityBar.updateWork(operations) { [weak library] in library?.activityTitle(for: $0) ?? $0.lastPathComponent }
         activityBar.updateAccess(access)
-        activityBar.updateAttention(count: library?.attentionCount ?? 0, detail: Config.unreadableReason)
+        refreshActivityAttention()
     }
-    func updateLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) { live.updateLive(snapshot) }
+    private func refreshActivityAttention() {
+        activityBar.updateAttention(count: libraryProvider?()?.attentionCount ?? 0,
+                                    detail: Config.unreadableReason.map { Config.Problem.unreadable(reason: $0).explanation })
+    }
+    func updateLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {
+        live.updateLive(snapshot)
+        activityBar.refreshMessages()
+    }
     func updateLivePreference(enabled: Bool) { live.updateLivePreference(enabled: enabled) }
-    func updateConfigProblem(_ headline: String?) { live.updateConfigProblem(headline) }
+    func updateConfigProblem(_ headline: String?) {
+        live.updateConfigProblem(headline)
+        refreshActivityAttention()
+    }
     func updateImport(_ update: MediaImportCoordinator.Update) {
         activityBar.showImport(update)
     }

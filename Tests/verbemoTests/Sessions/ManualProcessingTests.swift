@@ -198,8 +198,7 @@ struct ManualProcessingTests {
             }
             await library.settled()
             let button = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }.first { $0.action == NSSelectorFromString("finishClicked") })
-            let bar = try #require(app.panel.contentView?.allDescendants.first { $0 is ActivityStatusBar })
-            let status = try #require(bar.allDescendants.compactMap { $0 as? NSTextField }.first {
+            let status = try #require(app.activityBar.serviceDescendants.compactMap { $0 as? NSTextField }.first {
                 $0.identifier?.rawValue == "meeting.operation-error"
             })
             #expect(button.isEnabled)
@@ -208,6 +207,7 @@ struct ManualProcessingTests {
                 try await Task.sleep(for: .milliseconds(10))
             }
             #expect(app.panel.attachedSheet == nil)
+            try app.activityBar.openServiceMessagesForTest()
             #expect(!status.isHiddenOrHasHiddenAncestor)
             let text = status.toolTip ?? status.stringValue
             #expect(text.lowercased().contains(outcome))
