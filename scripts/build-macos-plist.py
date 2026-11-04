@@ -11,6 +11,7 @@ parser.add_argument('template', type=Path)
 parser.add_argument('output', type=Path)
 parser.add_argument('--version', required=True)
 parser.add_argument('--build', required=True, type=int)
+parser.add_argument('--preview', action='store_true')
 args = parser.parse_args()
 try:
     version = validate_version(args.version)
@@ -22,6 +23,10 @@ try:
     info['SUFeedURL'] = FEED_URL
     info.pop('SUPublicEDKey', None)
     key = os.environ.get('VERBEMO_SPARKLE_PUBLIC_KEY', '')
+    if args.preview:
+        if key:
+            raise ValueError('Preview cannot use a Sparkle key')
+        info['VerbemoPreview'] = True
     if key:
         public_key(key)
         info['SUPublicEDKey'] = key

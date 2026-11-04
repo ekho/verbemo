@@ -129,7 +129,7 @@ app: build $(ICON)
 	@cp -R $(NEMOTRON_ROOT)/lib/. $(NEMOTRON_BUNDLE)/lib/
 	@cp $(NEMOTRON_ROOT)/verification.json $(APP)/Contents/Resources/Nemotron-verification.json
 	@python3 scripts/build-macos-plist.py Packaging/Verbemo-Info.plist $(APP)/Contents/Info.plist \
-		--version $(VERSION) --build $(BUILD)
+        --version $(VERSION) --build $(BUILD) $(if $(filter 1,$(MACOS_PREVIEW)),--preview)
 	@printf 'APPL????' > $(APP)/Contents/PkgInfo
 	@cp $(BUILT_ICON)/Verbemo.icns $(APP)/Contents/Resources/Verbemo.icns
 	@cp $(BUILT_ICON)/Assets.car $(APP)/Contents/Resources/Assets.car

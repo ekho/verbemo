@@ -25,7 +25,7 @@ for tool in make swift codesign hdiutil ditto; do
 done
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/verbemo-preview.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
-VERBEMO_SPARKLE_PUBLIC_KEY='' make app VERSION="$VERSION_ARG" BUILD="$BUILD" SIGN_ID=- RELEASE_SIGNING=0
+VERBEMO_SPARKLE_PUBLIC_KEY='' make app VERSION="$VERSION_ARG" BUILD="$BUILD" SIGN_ID=- RELEASE_SIGNING=0 MACOS_PREVIEW=1
 APP="$ROOT/.build/Verbemo.app"
 codesign --verify --deep --strict "$APP"
 DETAILS=$(codesign -dvv "$APP" 2>&1)
@@ -35,8 +35,9 @@ import plistlib, sys
 with open(sys.argv[1], 'rb') as stream:
     info = plistlib.load(stream)
 if (info.get('CFBundleShortVersionString') != sys.argv[2] or info.get('CFBundleVersion') != sys.argv[3]
+        or info.get('VerbemoPreview') is not True
         or info.get('SUEnableAutomaticChecks') is not False or 'SUPublicEDKey' in info):
-    sys.exit('Preview bundle identity or disabled updater validation failed')
+    sys.exit('Preview bundle identity or Sparkle configuration validation failed')
 PY
 NAME="Verbemo-$VERSION_ARG-macos-universal.dmg"
 bash scripts/build-dmg.sh "$APP" "Verbemo $VERSION_ARG Preview" "$WORK/$NAME" --preview

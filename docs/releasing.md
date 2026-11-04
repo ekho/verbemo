@@ -261,7 +261,7 @@ publishers must coordinate with that same release process. Fresh checks reduce
 race windows but do not provide a cross-client atomic lock. Do not run an
 external publisher concurrently or claim that latest is race-proof.
 
-Updates use:
+Stable updates use these feeds.
 
 - macOS: `https://github.com/ekho/verbemo/releases/latest/download/appcast.xml`.
 - Windows: `https://github.com/ekho/verbemo/releases/latest/download/`, channel `stable`.
@@ -271,6 +271,10 @@ the pending update installs at the next normal **primary** startup, before
 recording/processing begins. Secondary launches cannot autoapply. There is no
 Restart now action and an interactive check never applies, exits or restarts.
 Finish work, quit normally and relaunch. Portable packages do not self-update.
+
+macOS Preview checks published GitHub prereleases every 24 hours while the app
+is running. About also offers a manual check. When a newer Preview is available,
+Download opens its universal DMG in the default browser for manual installation.
 
 After actual verified publication, prepare README/site links locally:
 

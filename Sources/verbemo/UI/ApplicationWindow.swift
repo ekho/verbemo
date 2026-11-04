@@ -62,6 +62,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private lazy var about = AboutPage()
     var onCheckForUpdates: (() -> Void)? { didSet { about.onCheckForUpdates = onCheckForUpdates } }
     var updatesAvailable = false { didSet { about.updatesAvailable = updatesAvailable } }
+    var previewUpdateState: PreviewUpdates.State = .idle { didSet { about.previewUpdateState = previewUpdateState } }
     var onOpenFolder: (() -> Void)? { didSet { settings.setup.onOpenFolder = onOpenFolder } }
     private(set) var navigation = ApplicationNavigationState()
     var libraryProvider: (() -> MeetingLibraryController?)? {
