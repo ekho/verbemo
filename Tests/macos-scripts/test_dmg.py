@@ -86,14 +86,18 @@ for rep in NSBitmapImageRep.imageReps(with: data) {
             self.run_command('bash', str(BUILDER), str(app), 'Verbemo Preview', str(preview), '--preview')
             self.run_command('hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', str(mount), str(preview))
             try:
-                guide = mount / 'Первый запуск.txt'
+                guide = next(mount.glob('*.txt'))
                 instructions = guide.read_text(encoding='utf-8')
                 self.assertIn('sudo xattr -dr com.apple.quarantine "/Applications/Verbemo.app" &&\n'
                               'open "/Applications/Verbemo.app"', instructions)
                 self.assertFalse(os.access(guide, os.X_OK))
                 with DSStore.open(str(mount / '.DS_Store'), 'r') as store:
+                    # Look up the filename as Finder sees it on the mounted volume.
                     guide_position = store[guide.name]['Iloc']
-                    self.assertGreater(guide_position[1], store['Verbemo.app']['Iloc'][1])
+                    app_position = store['Verbemo.app']['Iloc']
+                    target_position = store['Applications']['Iloc']
+                    self.assertEqual(guide_position[0], (app_position[0] + target_position[0]) // 2)
+                    self.assertGreater(guide_position[1], app_position[1])
             finally:
                 self.run_command('hdiutil', 'detach', str(mount))
 
