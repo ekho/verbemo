@@ -1,0 +1,20 @@
+Первый запуск / First launch
+
+Перетащите Verbemo.app в Applications. Если macOS блокирует первый запуск,
+откройте Терминал и вставьте команду ниже. Используйте её только для доверенной
+копии Verbemo Preview, скачанной с официальной страницы релизов.
+
+Drag Verbemo.app into Applications. If macOS blocks the first launch, open
+Terminal and paste the command below. Use it only for a trusted Verbemo Preview
+downloaded from the official releases page.
+
+https://github.com/ekho/verbemo/releases
+
+sudo xattr -dr com.apple.quarantine "/Applications/Verbemo.app" &&
+open "/Applications/Verbemo.app"
+
+Пароль администратора запрашивается для снятия метки карантина. Verbemo
+откроется от имени обычного пользователя.
+
+The administrator password is used to remove the quarantine attribute.
+Verbemo opens as your regular user.

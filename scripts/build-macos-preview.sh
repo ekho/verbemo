@@ -39,7 +39,7 @@ if (info.get('CFBundleShortVersionString') != sys.argv[2] or info.get('CFBundleV
     sys.exit('Preview bundle identity or disabled updater validation failed')
 PY
 NAME="Verbemo-$VERSION_ARG-macos-universal.dmg"
-bash scripts/build-dmg.sh "$APP" "Verbemo $VERSION_ARG Preview" "$WORK/$NAME"
+bash scripts/build-dmg.sh "$APP" "Verbemo $VERSION_ARG Preview" "$WORK/$NAME" --preview
 python3 scripts/release_manifest.py receipt --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
     --build-number "$BUILD" --output "$WORK" --prerelease
 python3 scripts/release_manifest.py validate-macos --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
