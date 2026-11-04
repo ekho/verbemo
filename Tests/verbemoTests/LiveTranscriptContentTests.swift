@@ -12,7 +12,7 @@ struct LiveTranscriptContentTests {
         var requests: [Bool] = []
         content.onToggleLive = { requests.append($0) }
         content.updateLive(.init(isRecording: true, isEnabled: true, entries: [], status: .modelMissing))
-        let download = try #require(content.serviceViews.compactMap { $0 as? NSButton }
+        let download = try #require(content.serviceViews.flatMap { [$0] + $0.allDescendants }.compactMap { $0 as? NSButton }
             .first { $0.identifier?.rawValue == "live.download" })
         #expect(download.isHidden == !Platform.supportsLocalModels)
         #expect(download.title == "Скачать модель")
@@ -23,7 +23,7 @@ struct LiveTranscriptContentTests {
         content.updateLive(.init(isRecording: true, isEnabled: true, entries: [], status: .error("Offline")))
         #expect(download.isHidden == !Platform.supportsLocalModels)
         #expect(download.title == "Повторить")
-        let status = try #require(content.serviceViews.compactMap { $0 as? NSTextField }
+        let status = try #require(content.serviceViews.flatMap { [$0] + $0.allDescendants }.compactMap { $0 as? NSTextField }
             .first { $0.identifier?.rawValue == "activity.live-status" })
         #expect(status.stringValue.contains("Расшифровка на лету"))
         #expect(status.toolTip?.contains("Offline") == true)

@@ -33,6 +33,7 @@ final class AudioLevelView: NSStackView {
             addArrangedSubview(view)
             view.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
         }
+        label.isHidden = compact
         status.isHidden = compact
         meter.heightAnchor.constraint(equalToConstant: compact ? 5 : 12).isActive = true
         update(.off)
@@ -63,6 +64,7 @@ final class AudioLevelView: NSStackView {
         if meter.doubleValue != value { meter.doubleValue = value }
         if status.stringValue != text {
             status.stringValue = text
+            meter.toolTip = text
             meter.setAccessibilityValueDescription(text)
         }
     }

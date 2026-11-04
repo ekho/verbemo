@@ -15,12 +15,13 @@ final class LiveTranscriptContent {
         target: nil, action: nil)
     private let liveStatus = NSTextField(labelWithString: "")
     private let liveDownload = NSButton(title: "", target: nil, action: nil)
+    private let liveNotice = NSStackView()
     private let liveReveal = NSButton(title: "", target: nil, action: nil)
     private let liveText = NSTextView()
     private let liveScroll = NSScrollView()
     private let liveSection = NSStackView()
     private let emptySpace = NSView()
-    var serviceViews: [NSView] { [configProblemLabel, liveStatus, liveDownload] }
+    var serviceViews: [NSView] { [configProblemLabel, liveNotice] }
 
     private var liveTextVisible = false
     private var liveRevealedAfterStop = false
@@ -50,6 +51,10 @@ final class LiveTranscriptContent {
         liveDownload.target = self
         liveDownload.action = #selector(downloadClicked)
         liveDownload.isHidden = true
+        liveNotice.identifier = .init("activity.live-notice")
+        liveNotice.setViews([liveStatus, liveDownload], in: .leading)
+        liveNotice.alignment = .centerY
+        liveNotice.isHidden = true
 
         // The way back to a transcript the end of the recording folded away.
         // It sits where the status line does: a recording that has stopped
@@ -158,6 +163,7 @@ final class LiveTranscriptContent {
         default: liveDownload.isHidden = true
         }
 
+        liveNotice.isHidden = liveStatus.isHidden && liveDownload.isHidden
         let rendered = NSMutableAttributedString()
         for entry in snapshot.entries {
             switch entry {

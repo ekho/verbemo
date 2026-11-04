@@ -1107,8 +1107,8 @@ struct SetupTests {
         for destination in ApplicationNavigationState.Destination.allCases
             where !destination.isMeetings && destination != .about {
             application.navigate(destination)
-            let notice = try Self.control(NSTextField.self, "settings.notice", in: application.panel.contentView)
-            #expect(!notice.isHiddenOrHasHiddenAncestor)
+            let notice = try #require(application.activityBar.serviceRows.first { $0.identifier?.rawValue == "settings.notice" } as? NSTextField)
+            #expect(!notice.isHidden)
             #expect(problems.allSatisfy { notice.stringValue.contains($0) })
             #expect(notice.stringValue.contains("misspelled_setting"))
         }
@@ -1126,8 +1126,8 @@ struct SetupTests {
         language.sendAction(language.action, to: language.target)
         #expect(Config.interfaceLanguage() == "ru")
         application.navigate(.recording)
-        let notice = try Self.control(NSTextField.self, "settings.notice", in: application.panel.contentView)
-        #expect(!notice.isHiddenOrHasHiddenAncestor)
+        let notice = try #require(application.activityBar.serviceRows.first { $0.identifier?.rawValue == "settings.notice" } as? NSTextField)
+        #expect(!notice.isHidden)
         #expect(notice.stringValue.contains("next time verbemo starts"))
     }
 

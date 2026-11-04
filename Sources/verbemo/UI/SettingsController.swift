@@ -21,6 +21,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     private var pages: [ApplicationNavigationState.Destination: NSView] = [:]
     private let serviceNotice = NSTextField(labelWithString: "")
     var serviceViews: [NSView] { [serviceNotice] }
+    private(set) var hasConfigProblemNotice = false
     private var operationNotice = ""
     private var providerRows: [(SettingsSchema.Entry, NSView)] = []
     private var configWatch: ConfigWatch.Token?
@@ -678,7 +679,12 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         let stray = SettingsSchema.strayKeys(in: config)
         let strayNotice = stray.isEmpty ? ""
             : localised("Not read by this version: ", "Эта версия не читает: ") + stray.joined(separator: ", ")
-        let notices = (Config.problems().map(\.explanation) + [restartNotice, strayNotice, mcpNotice, operationNotice])
+        let problems = Config.problems().filter {
+            if case .unreadable = $0 { return false }
+            return true
+        }
+        hasConfigProblemNotice = !problems.isEmpty
+        let notices = (problems.map(\.explanation) + [restartNotice, strayNotice, mcpNotice, operationNotice])
             .filter { !$0.isEmpty }.joined(separator: "\n")
         refreshModels()
         serviceNotice.stringValue = notices.split(whereSeparator: \.isNewline).joined(separator: " · ")

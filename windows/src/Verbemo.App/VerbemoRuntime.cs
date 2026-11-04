@@ -93,7 +93,11 @@ public sealed class VerbemoRuntime : IAsyncDisposable
 
         coordinator.StateChanged += (_, state) =>
         {
-            if (!state.IsRecording) RecordingWarning = null;
+            if (!state.IsRecording)
+            {
+                RecordingWarning = null;
+                RecordingWarningTrack = null;
+            }
             StateChanged?.Invoke(this, state);
             SessionsChanged?.Invoke(this,EventArgs.Empty);
             if (state.IsRecording)
@@ -151,6 +155,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
                 : T("The call audio stopped; the recording goes on with the microphone. Start a new recording to pick up the new device.",
                     "Звук звонка пропал; запись продолжается с микрофоном. Чтобы подхватить новое устройство, начните запись заново.");
             RecordingWarning = State.IsRecording ? message : null;
+            RecordingWarningTrack = State.IsRecording ? track : null;
             Notify(T("A recording device went away", "Устройство записи пропало"), message, NotificationKind.Warning);
         };
         liveTranscription.StatusChanged += (_, status) => LiveStatusChanged?.Invoke(this, status);
@@ -211,6 +216,7 @@ public sealed class VerbemoRuntime : IAsyncDisposable
         }
     }
     internal string? RecordingWarning { get; private set; }
+    internal string? RecordingWarningTrack { get; private set; }
     internal string? AutoRecordWarning { get; private set; }
     public string LiveStatus => liveTranscription.Status;
     public LanguageModels LanguageModels => processing.LanguageModels;

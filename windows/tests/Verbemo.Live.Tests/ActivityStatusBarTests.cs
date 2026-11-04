@@ -87,6 +87,11 @@ public sealed class ActivityStatusBarTests
             using var operation = processor.TryReserveIdleSession(root);
             var title = string.Concat(Enumerable.Repeat("Очень длинное название встречи ", 20));
             var destination = ApplicationDestination.AllMeetings;
+            var coordinator = RecordingActionsTests.Field<RecordingCoordinator>(runtime, "coordinator");
+            var capture = RecordingActionsTests.Field<WindowsAudioCapture>(runtime, "capture");
+            typeof(RecordingCoordinator).GetProperty("State")!.SetValue(coordinator,
+                new RecordingState(true, false, DateTimeOffset.Now.AddSeconds(-65), root, null, null));
+            ((EventHandler<string>)typeof(WindowsAudioCapture).GetField("TrackLost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(capture)!).Invoke(capture, "system");
             var bar = new ActivityStatusBar(runtime, value => destination = value, () => 2, _ => title);
             bar.Measure(new Size(788, 52));
             bar.Arrange(new Rect(0, 0, 788, 52));
@@ -105,8 +110,13 @@ public sealed class ActivityStatusBarTests
             var work = Find<Button>(bar, "activity.work");
             Assert.Contains(title, AutomationProperties.GetName(work));
             Assert.Contains(title, Assert.IsType<string>(work.ToolTip));
+            var warning = Find<Button>(bar, "activity.warning");
+            var system = Find<Button>(bar, "activity.system-audio");
+            Assert.Contains(runtime.RecordingWarning!, Assert.IsType<string>(system.ToolTip));
+            Assert.DoesNotContain(runtime.RecordingWarning!, Assert.IsType<string>(warning.ToolTip));
+            Assert.DoesNotContain(runtime.RecordingWarning!, Assert.IsType<string>(work.ToolTip));
             foreach (var (id, expected) in new[] { ("activity.work", ApplicationDestination.Processing),
-                         ("activity.recording", ApplicationDestination.Live), ("activity.access", ApplicationDestination.General),
+                         ("activity.recording", ApplicationDestination.Live), ("activity.microphone-access", ApplicationDestination.General),
                          ("activity.warning", ApplicationDestination.Attention) })
             {
                 Find<Button>(bar, id).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -148,7 +158,10 @@ public sealed class ActivityStatusBarTests
             Assert.Equal(Localized.T("Paused", "Пауза"), AutomationProperties.GetHelpText(microphone));
             ((EventHandler<string>)typeof(WindowsAudioCapture).GetField("TrackLost", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(capture)!).Invoke(capture, "mic");
             bar.Refresh();
-            Find<Button>(bar, "activity.warning").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(Visibility.Collapsed, Find<Button>(bar, "activity.warning").Visibility);
+            var source = Find<Button>(bar, "activity.microphone-access");
+            Assert.Contains(runtime.RecordingWarning!, Assert.IsType<string>(source.ToolTip));
+            source.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal(ApplicationDestination.Live, destination);
             typeof(RecordingCoordinator).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(coordinator, [RecordingState.Ready]);
             Assert.Null(runtime.RecordingWarning);
@@ -244,7 +257,10 @@ public sealed class ActivityStatusBarTests
             var toggle = Find<ClickCheckBox>(bar, "activity.auto");
             Assert.True(toggle.IsChecked);
             Assert.False(toggle.IsEnabled);
-            Assert.Contains(Localized.T("Access: unknown", "Доступ: ?"), AutomationProperties.GetName(Find<Button>(bar, "activity.access")));
+            var microphone = Find<Button>(bar, "activity.microphone-access");
+            var warning = Find<Button>(bar, "activity.warning");
+            Assert.DoesNotContain("config.json", Assert.IsType<string>(microphone.ToolTip));
+            Assert.Contains("config.json", Assert.IsType<string>(warning.ToolTip));
             var peer = UIElementAutomationPeer.CreatePeerForElement(toggle)!;
             Assert.Throws<ElementNotEnabledException>(() => ((IToggleProvider)peer.GetPattern(PatternInterface.Toggle)!).Toggle());
             Assert.Equal(config, File.ReadAllText(runtime.ConfigPath));
@@ -266,7 +282,7 @@ public sealed class ActivityStatusBarTests
                     Assert.Equal(Visibility.Visible, bar.Visibility);
                     Assert.Equal(2, Grid.GetRow(bar));
                 }
-                Find<Button>(bar, "activity.access").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Find<Button>(bar, "activity.microphone-access").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Equal(ApplicationDestination.General, window.Navigation.Destination);
                 Assert.Contains(Descendants((DependencyObject)RecordingActionsTests.Field<ContentControl>(window, "host").Content),
                     child => child is Button button && Equals(button.Content, Localized.T("Open settings", "Открыть параметры")));
