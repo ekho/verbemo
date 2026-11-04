@@ -372,7 +372,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     private func setWorking(_ working: Bool, in dir: URL) {
-        workByMeeting[dir] = working ? localised("working…", "работаю…") : nil
+        // An empty value keeps the meeting busy without adding a status message.
+        workByMeeting[dir] = working ? "" : nil
         guard !terminating else { return }
         if working {
             detailError.isHidden = true
@@ -1453,9 +1454,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             && item.map { !TranscriptVersions.isRequested($0.dir) } == true
         retryDiarizationButton.isEnabled = actionable && onRetryDiarization != nil
         skipDiarizationButton.isEnabled = actionable && onSkipDiarization != nil
-        let work = selectedWork
-        busyLabel.isHidden = work == nil
-        busyLabel.stringValue = work ?? ""
+        let work = selectedWork ?? ""
+        busyLabel.isHidden = work.isEmpty
+        busyLabel.stringValue = work
         let summaryAction = summaryToCopy == nil ? localised("Generate summary", "Создать сводку") : localised("Regenerate summary", "Перегенерировать сводку")
         let transcriptAction = localised("Transcribe again", "Расшифровать повторно")
         regenerateButton.setAccessibilityLabel(summaryAction)

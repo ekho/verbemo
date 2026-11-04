@@ -237,6 +237,26 @@ struct MeetingLibraryControllerTests {
         #expect(restored.choice.isEnabled)
         #expect(try Self.fileSnapshot(dir) == before)
     }
+
+    @Test("Opening the summary form does not add a status message")
+    func summaryFormDoesNotAddStatusMessage() throws {
+        let root = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = try Self.session("2026-09-28-100000-meeting", in: root)
+        try Self.transcribe(dir)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        defer { _ = library.stopForTermination(); app.hide() }
+        app.libraryProvider = { library }
+        let start = try #require(library.contentView.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "meeting.generate-summary" })
+        #expect(start.sendAction(start.action, to: start.target))
+        #expect(library.isProcessing)
+        app.activityBar.refreshMessages()
+        let messages = try #require(app.activityBar.allDescendants.first { $0.identifier?.rawValue == "activity.messages" })
+        #expect(messages.isHidden)
+    }
+
     @Test("Diarization details distinguish confirmed speakers, unknown speech and retained retry audio")
     func diarizationDetails() {
         var state = DiarizationState(
