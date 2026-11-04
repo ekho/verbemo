@@ -6,6 +6,19 @@ import Testing
 @Suite("Dock visibility follows the workspace", .serialized)
 @MainActor
 struct DockVisibilityTests {
+    @Test func dockClickDuringActivationIsNotARepeatedClick() {
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        var alreadyActive: Bool?
+        delegate.onReopen = { alreadyActive = $0 }
+
+        (delegate as NSApplicationDelegate).applicationWillBecomeActive?(
+            Notification(name: NSApplication.willBecomeActiveNotification, object: application))
+        _ = delegate.applicationShouldHandleReopen(application, hasVisibleWindows: true)
+
+        #expect(alreadyActive == false)
+    }
+
     @Test("An existing configuration with both icons off keeps the Dock available",
           .freshHome(config: #"{"dock_icon": false, "menu_bar_icon": false}"#))
     func bothIconsOffKeepsDockAvailable() {
