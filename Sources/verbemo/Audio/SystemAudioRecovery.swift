@@ -7,6 +7,10 @@ struct SystemAudioRecovery {
     private(set) var probeStartedAt: TimeInterval?
     private var probeSoundAt: TimeInterval?
 
+    init(lastSignalAt: TimeInterval) {
+        self.lastSignalAt = lastSignalAt
+    }
+
     mutating func record(peak: Float?, at now: TimeInterval) {
         if peak == nil || !peak!.isFinite || peak! > 0.000001 {
             lastSignalAt = now
