@@ -8,7 +8,8 @@ import os.lock
 /// chosen processes' output to stereo and hands us buffers through a private
 /// aggregate device. First use triggers the one-time "System Audio Recording"
 /// TCC prompt and lights the purple recording indicator while active.
-final class SystemAudioRecorder {
+// Native resources stay on the main thread; callbacks share only locked state and the serial queue.
+final class SystemAudioRecorder: @unchecked Sendable {
     /// Whose output lands on the far-end track.
     enum Scope: Equatable {
         /// Everything the Mac plays. Safe and indiscriminate: notification
@@ -49,9 +50,10 @@ final class SystemAudioRecorder {
     private var tappedObjects: [AudioObjectID] = []
     private var refreshFailed = false
 
-    private var tapID = AudioObjectID(kAudioObjectUnknown)
-    private var aggregateID = AudioObjectID(kAudioObjectUnknown)
-    private var procID: AudioDeviceIOProcID?
+    private var tap: SystemAudioTap?
+    private var probe: SystemAudioTap?
+    private var healthTimer: DispatchSourceTimer?
+    private var sessionDir: URL?
     private let queue = DispatchQueue(label: "name.ekho.verbemo.system-tap")
     private let liveAudio = LiveAudioBufferRelay()
     private(set) var isRecording = false
@@ -65,6 +67,11 @@ final class SystemAudioRecorder {
         var levelMeasurable = true
         var meter = AudioMeter()
         var muted = false
+        var activeTap: UUID?
+        var probeTap: UUID?
+        var recovery = SystemAudioRecovery(lastSignalAt: 0)
+        var lastAudioEnd: Double?
+        var handoffPending = false
     }
     private let state = OSAllocatedUnfairLock(initialState: LockedState())
 
@@ -110,31 +117,36 @@ final class SystemAudioRecorder {
         self.scope = objects.isEmpty ? .everything : scope
         tappedObjects = objects
 
-        var newTapID = AudioObjectID(kAudioObjectUnknown)
-        let status = AudioHardwareCreateProcessTap(description, &newTapID)
-        guard status == noErr else { throw RecorderError.tapCreationFailed(status) }
-        tapID = newTapID
-
         do {
-            let format = try tapStreamFormat()
-            try createAggregateDevice(tapUUID: description.uuid)
-            file = try makeFile(url: url, format: format)
-            try installIOProc(format: format)
+            let tap = try SystemAudioTap(description: description)
+            self.tap = tap
+            file = try makeFile(url: url, format: tap.format)
+            sessionDir = url.deletingLastPathComponent()
+            let id = tap.uuid
+            state.withLock {
+                $0.activeTap = id
+                $0.recovery = SystemAudioRecovery(lastSignalAt: ProcessInfo.processInfo.systemUptime)
+            }
+            try start(tap)
         } catch {
             cleanup()
             throw error
         }
 
         isRecording = true
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in self?.checkHealth() }
+        healthTimer = timer
+        timer.resume()
     }
 
     /// Stop capturing and finalize the file. Idempotent.
     func stop() {
         guard isRecording else { return }
         isRecording = false
-        if let procID, aggregateID != kAudioObjectUnknown {
-            AudioDeviceStop(aggregateID, procID)
-        }
+        healthTimer?.cancel()
+        healthTimer = nil
         cleanup()
         liveAudio.install(nil)
     }
@@ -157,21 +169,34 @@ final class SystemAudioRecorder {
     /// system refuses, the existing tap keeps running and we say so once
     /// rather than every fifteen seconds for an hour.
     func refresh(scope newScope: Scope) {
-        guard isRecording, tapID != kAudioObjectUnknown else { return }
-        guard case .apps = newScope else { return }
+        finishRecovery()
+        guard isRecording, case .apps = newScope else { return }
 
         let (description, objects) = Self.describe(newScope)
         guard !objects.isEmpty, objects != tappedObjects else { return }
+        if let probe {
+            let id = probe.uuid
+            let inactive = state.withLock { s in
+                guard s.activeTap != id else { return false }
+                s.probeTap = nil
+                s.recovery.endProbe()
+                return true
+            }
+            if inactive { probe.stop(); self.probe = nil }
+            else { finishRecovery() }
+        }
+        guard let tap else { return }
 
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioTapPropertyDescription,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
+        description.uuid = tap.uuid
         var value = description
         let status = withUnsafeMutablePointer(to: &value) { pointer in
             AudioObjectSetPropertyData(
-                tapID, &address, 0, nil, UInt32(MemoryLayout<CATapDescription>.size), pointer
+                tap.id, &address, 0, nil, UInt32(MemoryLayout<CATapDescription>.size), pointer
             )
         }
         guard status == noErr else {
@@ -198,14 +223,14 @@ final class SystemAudioRecorder {
     /// An app scope that matches no running process comes back as a global tap
     /// — recording everything is wrong in a small way, recording nothing is
     /// wrong in the way that loses the meeting.
-    private static func describe(_ scope: Scope) -> (CATapDescription, [AudioObjectID]) {
+    private static func describe(_ scope: Scope, reportingFallback: Bool = true) -> (CATapDescription, [AudioObjectID]) {
         var objects: [AudioObjectID] = []
         var bundleIDs: [String] = []
         if case .apps(let families) = scope {
             let processes = AudioProcesses.matching(families: families)
             objects = processes.map(\.object)
             bundleIDs = Array(Set(processes.map(\.bundleID))).sorted()
-            if objects.isEmpty {
+            if objects.isEmpty, reportingFallback {
                 FileHandle.standardError.write(Data(
                     ("system tap: nothing running for \(families.joined(separator: ", ")) — "
                         + "recording all system audio instead\n").utf8
@@ -231,42 +256,6 @@ final class SystemAudioRecorder {
         return (description, objects)
     }
 
-    private func tapStreamFormat() throws -> AVAudioFormat {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioTapPropertyFormat,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var asbd = AudioStreamBasicDescription()
-        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        let status = AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &asbd)
-        guard status == noErr, let format = AVAudioFormat(streamDescription: &asbd) else {
-            throw RecorderError.tapFormatUnreadable(status)
-        }
-        return format
-    }
-
-    private func createAggregateDevice(tapUUID: UUID) throws {
-        let desc: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "verbemo-tap",
-            kAudioAggregateDeviceUIDKey: UUID().uuidString,
-            kAudioAggregateDeviceIsPrivateKey: true,
-            kAudioAggregateDeviceIsStackedKey: false,
-            kAudioAggregateDeviceTapAutoStartKey: true,
-            kAudioAggregateDeviceSubDeviceListKey: [] as [[String: Any]],
-            kAudioAggregateDeviceTapListKey: [
-                [
-                    kAudioSubTapUIDKey: tapUUID.uuidString,
-                    kAudioSubTapDriftCompensationKey: true,
-                ]
-            ],
-        ]
-        var newAggregateID = AudioObjectID(kAudioObjectUnknown)
-        let status = AudioHardwareCreateAggregateDevice(desc as CFDictionary, &newAggregateID)
-        guard status == noErr else { throw RecorderError.aggregateCreationFailed(status) }
-        aggregateID = newAggregateID
-    }
-
     private func makeFile(url: URL, format: AVAudioFormat) throws -> AVAudioFile {
         do {
             return try AVAudioFile(
@@ -282,27 +271,136 @@ final class SystemAudioRecorder {
         }
     }
 
-    private func installIOProc(format: AVAudioFormat) throws {
-        var status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) {
-            [weak self] _, inInputData, _, _, _ in
-            guard let self, let file = self.file else { return }
-            if self.firstBufferAt == nil { self.firstBufferAt = Date() }
-            guard let buffer = AVAudioPCMBuffer(
-                pcmFormat: format,
-                bufferListNoCopy: inInputData,
-                deallocator: nil
-            ) else { return }
-            self.writeTracked(buffer, to: file)
+    private func start(_ tap: SystemAudioTap) throws {
+        let id = tap.uuid
+        try tap.start(queue: queue) { [weak self] buffer, time in
+            self?.receive(buffer, from: id, at: time)
         }
-        guard status == noErr, let procID else { throw RecorderError.ioProcCreationFailed(status) }
+    }
 
-        status = AudioDeviceStart(aggregateID, procID)
-        guard status == noErr else { throw RecorderError.deviceStartFailed(status) }
+    private func receive(_ buffer: AVAudioPCMBuffer, from id: UUID, at time: Double) {
+        guard buffer.frameLength > 0, let file else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let peak = AudioLevel.peak(of: buffer)
+        let accepted = state.withLock { s -> Bool in
+            if id == s.activeTap {
+                s.recovery.record(peak: peak, at: now)
+                return true
+            }
+            guard id == s.probeTap, !s.muted,
+                  s.recovery.hearsReplacement(peak: peak, at: now) else { return false }
+            s.activeTap = id
+            s.handoffPending = true
+            s.recovery.record(peak: peak, at: now)
+            return true
+        }
+        guard accepted else { return }
+        if firstBufferAt == nil { firstBufferAt = Date() }
+        let rate = buffer.format.sampleRate
+        let end = time + Double(buffer.frameLength) / rate
+        let adjustment = state.withLock { s -> Int in
+            guard s.handoffPending, let previousEnd = s.lastAudioEnd else { return 0 }
+            return Int(((time - previousEnd) * rate).rounded())
+        }
+        do {
+            var outgoing = buffer
+            if adjustment > 0 {
+                try writeSilence(frames: adjustment, format: buffer.format, to: file)
+            } else if adjustment < 0 {
+                let skip = min(-adjustment, Int(buffer.frameLength))
+                guard skip < buffer.frameLength,
+                      let trimmed = AVAudioPCMBuffer(pcmFormat: buffer.format,
+                          frameCapacity: buffer.frameLength - AVAudioFrameCount(skip)) else { return }
+                trimmed.frameLength = trimmed.frameCapacity
+                let bytesPerFrame = Int(buffer.format.streamDescription.pointee.mBytesPerFrame)
+                let input = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+                let output = UnsafeMutableAudioBufferListPointer(trimmed.mutableAudioBufferList)
+                for index in input.indices {
+                    guard let source = input[index].mData, let destination = output[index].mData else { return }
+                    memcpy(destination, source.advanced(by: skip * bytesPerFrame), Int(output[index].mDataByteSize))
+                }
+                outgoing = trimmed
+            }
+            try writeTracked(outgoing, to: file)
+            state.withLock { $0.lastAudioEnd = end; $0.handoffPending = false }
+        } catch {
+            FileHandle.standardError.write(Data("system track write failed: \(error)\n".utf8))
+        }
+    }
+
+    private func writeSilence(frames: Int, format: AVAudioFormat, to file: AVAudioFile) throws {
+        guard let silence = AVAudioPCMBuffer(pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(format.sampleRate)) else { throw CocoaError(.fileWriteUnknown) }
+        silence.frameLength = silence.frameCapacity
+        for audio in UnsafeMutableAudioBufferListPointer(silence.mutableAudioBufferList) {
+            if let data = audio.mData { memset(data, 0, Int(audio.mDataByteSize)) }
+        }
+        var remaining = frames
+        while remaining > 0 {
+            silence.frameLength = AVAudioFrameCount(min(remaining, Int(silence.frameCapacity)))
+            try file.write(from: silence)
+            liveAudio.forward(silence)
+            remaining -= Int(silence.frameLength)
+        }
+    }
+
+    private func checkHealth() {
+        guard isRecording else { return }
+        finishRecovery()
+        let now = ProcessInfo.processInfo.systemUptime
+        if let probe {
+            let id = probe.uuid
+            let expired = state.withLock { s in
+                guard s.activeTap != id, s.recovery.probeFinished(at: now, paused: s.muted) else { return false }
+                s.probeTap = nil
+                s.recovery.endProbe()
+                return true
+            }
+            if expired { probe.stop(); self.probe = nil }
+        }
+        guard probe == nil, state.withLock({ $0.recovery.shouldProbe(at: now, paused: $0.muted) }) else { return }
+        let (description, objects) = Self.describe(scope, reportingFallback: false)
+        // An empty app selection must never broaden a recovery probe to other apps.
+        if case .apps = scope, objects.isEmpty { return }
+        state.withLock { $0.recovery.beginProbe(at: now) }
+        do {
+            let candidate = try SystemAudioTap(description: description)
+            // shortcut: preserve the file format; add resampling if recovery must change sample rates.
+            guard candidate.format == file?.processingFormat else {
+                throw RecorderError.tapFormatUnreadable(kAudioHardwareUnsupportedOperationError)
+            }
+            probe = candidate
+            let id = candidate.uuid
+            state.withLock { $0.probeTap = id }
+            try start(candidate)
+        } catch {
+            state.withLock { $0.probeTap = nil; $0.recovery.endProbe() }
+            probe?.stop()
+            probe = nil
+            logRecovery("system audio recovery probe failed: \(error)")
+        }
+    }
+
+    private func finishRecovery() {
+        guard let probe else { return }
+        let id = probe.uuid
+        guard state.withLock({ $0.activeTap == id }) else { return }
+        let old = tap
+        tap = probe
+        self.probe = nil
+        state.withLock { $0.probeTap = nil; $0.recovery.endProbe() }
+        old?.stop()
+        logRecovery("system audio recovered: a fresh tap heard audio while the previous tap was silent")
+    }
+
+    private func logRecovery(_ message: String) {
+        FileHandle.standardError.write(Data((message + "\n").utf8))
+        if let sessionDir { appendSessionLog(message, to: sessionDir) }
     }
 
     /// Write one tapped buffer, tracking its level on the way through and
     /// substituting silence while paused.
-    private func writeTracked(_ buffer: AVAudioPCMBuffer, to file: AVAudioFile) {
+    private func writeTracked(_ buffer: AVAudioPCMBuffer, to file: AVAudioFile) throws {
         let peak = AudioLevel.peak(of: buffer)
         let hasFrames = buffer.frameLength > 0
         let muted: Bool = state.withLock { s in
@@ -319,31 +417,25 @@ final class SystemAudioRecorder {
         if muted {
             // The tap's buffer is Core Audio's memory, borrowed no-copy — the
             // silence has to be written into a buffer of our own.
-            guard let silent = AudioLevel.silence(like: buffer) else { return }
+            guard let silent = AudioLevel.silence(like: buffer) else { throw CocoaError(.fileWriteUnknown) }
             outgoing = silent
         }
-        do {
-            try file.write(from: outgoing)
-            liveAudio.forward(outgoing)
-        } catch {
-            FileHandle.standardError.write(Data("system track write failed: \(error)\n".utf8))
-        }
+        try file.write(from: outgoing)
+        liveAudio.forward(outgoing)
     }
 
     private func cleanup() {
-        if let procID, aggregateID != kAudioObjectUnknown {
-            AudioDeviceDestroyIOProcID(aggregateID, procID)
-        }
-        procID = nil
-        if aggregateID != kAudioObjectUnknown {
-            AudioHardwareDestroyAggregateDevice(aggregateID)
-            aggregateID = AudioObjectID(kAudioObjectUnknown)
-        }
-        if tapID != kAudioObjectUnknown {
-            AudioHardwareDestroyProcessTap(tapID)
-            tapID = AudioObjectID(kAudioObjectUnknown)
-        }
+        probe?.stop()
+        tap?.stop()
+        queue.sync {}
+        probe = nil
+        tap = nil
         file = nil
-        state.withLock { $0.meter.reset() }
+        state.withLock {
+            $0.meter.reset()
+            $0.activeTap = nil
+            $0.probeTap = nil
+            $0.recovery.endProbe()
+        }
     }
 }
