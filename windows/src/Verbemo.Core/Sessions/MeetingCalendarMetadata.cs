@@ -28,7 +28,11 @@ public sealed record MeetingCalendarMetadata(string? EventId, string? Associatio
                 catch(JsonException) { }
             }
         return new(Text("event_id"),Text("association"),Text("title") ?? "",Text("calendar_title"),url,
-            string.IsNullOrEmpty(agenda) ? null : agenda,participants);
+            string.IsNullOrEmpty(agenda) ? null : agenda,participants
+                .OrderBy(person => string.IsNullOrWhiteSpace(person.Email))
+                .ThenBy(person => person.Email?.Trim() ?? "", StringComparer.OrdinalIgnoreCase)
+                .ThenBy(person => person.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(person => person.Id, StringComparer.Ordinal).ToArray());
     }
     public static async Task<MeetingCalendarMetadata?> ReadAsync(string directory, CancellationToken cancellationToken = default)
     {
