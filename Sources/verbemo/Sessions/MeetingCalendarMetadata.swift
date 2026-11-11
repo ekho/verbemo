@@ -37,7 +37,12 @@ struct MeetingCalendarMetadata {
         if let values = json["participants"] as? [[String: Any]], let data = try? JSONSerialization.data(withJSONObject: values),
            let decoded = try? JSONDecoder().decode([CalendarParticipant].self, from: data) {
             var ids: Set<String> = []
-            participants = decoded.filter { !$0.id.isEmpty && ids.insert($0.id).inserted }
+            participants = decoded.filter { !$0.id.isEmpty && ids.insert($0.id).inserted }.sorted {
+                let first = $0.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+                let second = $1.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+                if first.isEmpty != second.isEmpty { return !first.isEmpty }
+                return (first, $0.name.lowercased(), $0.id) < (second, $1.name.lowercased(), $1.id)
+            }
         } else {
             participants = (json["attendees"] as? [String] ?? []).enumerated().map {
                 CalendarParticipant(id: "legacy-\($0.offset)", name: $0.element)

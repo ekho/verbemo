@@ -401,44 +401,53 @@ public static class SpeakerFile
 
     public static async Task<bool> ApplySelfParticipantAsync(string directory, TranscriptDocument transcript, AppSettings settings, CancellationToken cancellationToken)
     {
-        if (!transcript.Segments.Any(segment => segment.Speaker == SpeakerLabels.Me)) return false;
         var file = await ReadAsync(directory, cancellationToken).ConfigureAwait(false);
-        var source = file.Sources.GetValueOrDefault(SpeakerLabels.Me);
-        if (source is "manual" or "calendar" || file.ParticipantIds.ContainsKey(SpeakerLabels.Me) && source != "calendar-auto") return false;
-        if (settings.UserEmails.Count == 0 && source != "calendar-auto") return false;
+        if (settings.UserEmails.Count == 0 && !file.Sources.Values.Contains("calendar-auto")) return false;
         var root = TranscriptVersions.ValidatedSessionRoot(directory);
         var calendar = await MeetingCalendarMetadata.ReadAsync(root, cancellationToken).ConfigureAwait(false);
         var emails = EmailAddresses.Normalize(settings.UserEmails).ToHashSet(StringComparer.OrdinalIgnoreCase);
         CalendarParticipant[] matches = calendar?.IsConfirmed == true && emails.Count > 0
             ? calendar.Participants.Where(person => person.Email is { } email && emails.Contains(email.Trim())).ToArray() : [];
-        var participant = matches.Length == 1 ? matches[0] : null;
-        if (participant is null && source != "calendar-auto") return false;
-        var name = string.IsNullOrWhiteSpace(settings.UserName) ? participant?.Name : settings.UserName.Trim();
-        if (participant is not null && file.ParticipantIds.GetValueOrDefault(SpeakerLabels.Me) == participant.Id
-            && file.Names.GetValueOrDefault(SpeakerLabels.Me) == name) return false;
+        var assignments = new Dictionary<string, CalendarParticipant>();
+        if (matches.Length == 1)
+        {
+            if (transcript.Segments.Any(segment => segment.Speaker == SpeakerLabels.Me)) assignments[SpeakerLabels.Me] = matches[0];
+            var remote = transcript.Segments.Select(segment => segment.Speaker).Where(label => label != SpeakerLabels.Me).Distinct().ToArray();
+            if (calendar!.Participants.Count == 2 && remote.Length == 1 && remote[0] is { } label
+                && (label == SpeakerLabels.Them || label.StartsWith("them ", StringComparison.Ordinal)) && !SpeakerLabels.IsUnknown(label)
+                && (transcript.IsDiarized || TranscriptionSettings.CloudEngines.Contains(transcript.Engine)))
+            {
+                var peer = calendar.Participants.Single(person => person.Id != matches[0].Id);
+                if (!file.ParticipantIds.Any(pair => pair.Key != label && pair.Value == peer.Id
+                    && file.Sources.GetValueOrDefault(pair.Key) != "calendar-auto")) assignments[label] = peer;
+            }
+        }
         var names = new Dictionary<string, string>(file.Names);
         var sources = new Dictionary<string, string>(file.Sources);
         var ids = new Dictionary<string, string>(file.ParticipantIds);
-        if (participant is null)
+        var changed = false;
+        foreach (var label in assignments.Keys.Concat(file.Sources.Where(pair => pair.Value == "calendar-auto").Select(pair => pair.Key)).Distinct())
         {
-            if (string.IsNullOrWhiteSpace(settings.UserName))
+            var source = sources.GetValueOrDefault(label);
+            if (source is "manual" or "calendar" || ids.ContainsKey(label) && source != "calendar-auto") continue;
+            var participant = assignments.GetValueOrDefault(label);
+            var name = label == SpeakerLabels.Me && !string.IsNullOrWhiteSpace(settings.UserName) ? settings.UserName.Trim() : participant?.Name;
+            if (participant is not null && ids.GetValueOrDefault(label) == participant.Id && names.GetValueOrDefault(label) == name) continue;
+            changed = true;
+            if (participant is not null)
             {
-                names.Remove(SpeakerLabels.Me);
-                sources.Remove(SpeakerLabels.Me);
+                names[label] = name!;
+                sources[label] = "calendar-auto";
+                ids[label] = participant.Id;
             }
             else
             {
-                names[SpeakerLabels.Me] = settings.UserName.Trim();
-                sources[SpeakerLabels.Me] = "account";
+                ids.Remove(label);
+                if (name is not null) { names[label] = name; sources[label] = "account"; }
+                else { names.Remove(label); sources.Remove(label); }
             }
-            ids.Remove(SpeakerLabels.Me);
         }
-        else
-        {
-            names[SpeakerLabels.Me] = name!;
-            sources[SpeakerLabels.Me] = "calendar-auto";
-            ids[SpeakerLabels.Me] = participant.Id;
-        }
+        if (!changed) return false;
         await WriteAsync(directory, file with { Names = names, Sources = sources, ParticipantIds = ids }, cancellationToken).ConfigureAwait(false);
         return true;
     }

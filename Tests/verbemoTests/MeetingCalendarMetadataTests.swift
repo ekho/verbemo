@@ -4,6 +4,16 @@ import Testing
 @testable import verbemo
 
 struct MeetingCalendarMetadataTests {
+    @Test func participantsAreOrderedByEmailWithMissingAddressesLast() throws {
+        let metadata = try #require(MeetingCalendarMetadata(["participants": [
+            ["id": "z", "name": "Aaron", "email": "z@example.test"],
+            ["id": "none", "name": "No email"],
+            ["id": "b", "name": "Alex", "email": " B@example.test "],
+            ["id": "a", "name": "Zoe", "email": "a@example.test"],
+        ]]))
+        #expect(metadata.participants.map(\.id) == ["a", "b", "z", "none"])
+    }
+
     @Test func legacyAndCandidatesNeverClaimAConfirmedAssociation() throws {
         let legacy = MeetingCalendarMetadata(["title": "Planning", "attendees": ["Anna"], "link": "https://call.example"])
         #expect(legacy?.isConfirmed == false)

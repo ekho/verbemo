@@ -5,6 +5,17 @@ namespace Verbemo.Core.Tests;
 
 public sealed class MeetingCalendarMetadataTests
 {
+    [Fact]
+    public void Participants_are_ordered_by_email_with_missing_addresses_last()
+    {
+        using var json = JsonDocument.Parse("""
+            {"participants":[{"id":"z","name":"Aaron","email":"z@example.test"},
+            {"id":"none","name":"No email"},{"id":"b","name":"Alex","email":" B@example.test "},
+            {"id":"a","name":"Zoe","email":"a@example.test"}]}
+            """);
+        Assert.Equal(["a", "b", "z", "none"], MeetingCalendarMetadata.Parse(json.RootElement).Participants.Select(p => p.Id));
+    }
+
     [Theory]
     [InlineData("candidate", false)]
     [InlineData("confirmed", true)]

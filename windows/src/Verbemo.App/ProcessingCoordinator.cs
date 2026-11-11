@@ -467,12 +467,7 @@ public sealed class ProcessingCoordinator : IAsyncDisposable
     {
         var current = settings();
         var stored = await SpeakerFile.ReadAsync(directory, cancellationToken).ConfigureAwait(false);
-        var source = stored.Sources.GetValueOrDefault(SpeakerLabels.Me);
-        if (current.UserEmails.Count == 0 && source != "calendar-auto"
-            || source is "manual" or "calendar"
-            || stored.ParticipantIds.ContainsKey(SpeakerLabels.Me) && source != "calendar-auto") return;
-        var existing = await ReadTranscriptAsync(directory, cancellationToken).ConfigureAwait(false);
-        if (!existing.Segments.Any(segment => segment.Speaker == SpeakerLabels.Me)) return;
+        if (current.UserEmails.Count == 0 && !stored.Sources.Values.Contains("calendar-auto")) return;
         var root = TranscriptVersions.ValidatedSessionRoot(directory);
         using var reservation = TryReserveIdleSession(root);
         if (reservation is null || Has(root, ".recording.json") || Has(root, TranscriptVersions.RequestFile)) return;

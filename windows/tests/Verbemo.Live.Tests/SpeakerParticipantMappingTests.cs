@@ -9,6 +9,84 @@ namespace Verbemo.Live.Tests;
 public sealed class SpeakerParticipantMappingTests
 {
     [Theory]
+    [InlineData("me,them A", "confirmed", "owner@example.test,guest@example.test", "assemblyai", "p1")]
+    [InlineData("me,them", "confirmed", "owner@example.test,guest@example.test", "assemblyai", "p1")]
+    [InlineData("them A", "confirmed", "owner@example.test,guest@example.test", "assemblyai", "p1")]
+    [InlineData("me,them A,them B", "confirmed", "owner@example.test,guest@example.test", "assemblyai", null)]
+    [InlineData("me,them ?", "confirmed", "owner@example.test,guest@example.test", "assemblyai", null)]
+    [InlineData("A,B", "confirmed", "owner@example.test,guest@example.test", "assemblyai", null)]
+    [InlineData("me,them A", "candidate", "owner@example.test,guest@example.test", "assemblyai", null)]
+    [InlineData("me,them A", "confirmed", "owner@example.test,work@example.test", "assemblyai", null)]
+    [InlineData("me,them A", "confirmed", "other@example.test,guest@example.test", "assemblyai", null)]
+    [InlineData("me,them A", "confirmed", "owner@example.test,guest@example.test,third@example.test", "assemblyai", null)]
+    [InlineData("me,them", "confirmed", "owner@example.test,guest@example.test", "whisper", null)]
+    public async Task One_to_one_mapping_requires_a_unique_owner_and_one_separated_remote_voice(
+        string labels, string association, string emails, string engine, string? expected)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "verbemo-pair-mapping", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var settings = AppSettings.CreateConservative(root);
+            settings.UserEmails = [" OWNER@example.test ", "work@example.test"];
+            File.WriteAllText(Path.Combine(root, "meta.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                calendar = new { event_id = "event", association, participants = emails.Split(',').Select((email, i) => new CalendarParticipant($"p{i}", $"Person {i}", email)) },
+            }));
+            var transcript = new TranscriptDocument(engine, "test", DateTimeOffset.UtcNow,
+                labels.Split(',').Select((label, i) => new TranscriptSegment(i * 1000, (i + 1) * 1000, "Hello", label)).ToArray());
+            await SpeakerFile.ApplySelfParticipantAsync(root, transcript, settings, default);
+            var names = await SpeakerFile.ReadAsync(root, default);
+            Assert.Equal(expected, names.ParticipantIds.GetValueOrDefault(labels.Split(',').Last()));
+            if (expected is not null)
+            {
+                Assert.Equal("Person 1", names.Names[labels.Split(',').Last()]);
+                Assert.False(await SpeakerFile.ApplySelfParticipantAsync(root, transcript, settings, default));
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task Opening_a_version_maps_the_peer_even_with_manual_self_and_preserves_explicit_unlink()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "verbemo-pair-mapping", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var settings = AppSettings.CreateConservative(root);
+        settings.UserEmails = ["owner@example.test"];
+        using var http = new HttpClient();
+        await using var analytics = new AnalyticsService(root, () => settings, () => false, http);
+        await using var processor = new ProcessingCoordinator(() => settings, () => true, new SecretStore(), new ModelManager(root, http), http, analytics);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "meta.json"), """
+                {"calendar":{"event_id":"event","association":"confirmed","participants":[
+                {"id":"owner","name":"Owner","email":"owner@example.test"},
+                {"id":"guest","name":"Guest","email":"guest@example.test"}]}}
+                """);
+            var transcript = new TranscriptDocument("assemblyai", "test", DateTimeOffset.UtcNow, [new(0, 1000, "Hello", "me"), new(1000, 2000, "Hi", "them A")]);
+            await TranscriptWriter.WriteAsync(root, "Test", transcript);
+            await processor.SetSpeakerNameAsync(root, "me", "Manual owner");
+            await TranscriptVersions.ArchiveCurrentAsync(root);
+            var archive = Directory.GetDirectories(Path.Combine(root, "transcripts")).Single();
+            await processor.RefreshSelfParticipantAsync(archive);
+            var names = await SpeakerFile.ReadAsync(archive, default);
+            Assert.Equal("guest", names.ParticipantIds.GetValueOrDefault("them A"));
+            Assert.Equal("Manual owner", names.Names["me"]);
+            Assert.Empty((await SpeakerFile.ReadAsync(root, default)).ParticipantIds);
+            settings.UserEmails = [];
+            await processor.RefreshSelfParticipantAsync(archive);
+            Assert.False((await SpeakerFile.ReadAsync(archive, default)).Names.ContainsKey("them A"));
+            settings.UserEmails = ["owner@example.test"];
+            await processor.RefreshSelfParticipantAsync(archive);
+            await processor.SetSpeakerParticipantAsync(archive, "them A", null);
+            await processor.RefreshSelfParticipantAsync(archive);
+            Assert.False((await SpeakerFile.ReadAsync(archive, default)).ParticipantIds.ContainsKey("them A"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Theory]
     [InlineData("personal@example.test", false)]
     [InlineData("work@example.test", false)]
     [InlineData("personal@example.test", true)]
@@ -57,7 +135,7 @@ public sealed class SpeakerParticipantMappingTests
 
     [Theory]
     [InlineData("me", " ME@EXAMPLE.TEST ", "confirmed", "self")]
-    [InlineData("them A", "me@example.test", "confirmed", null)]
+    [InlineData("them A", "me@example.test", "confirmed", "other")]
     [InlineData("me A", "me@example.test", "confirmed", null)]
     [InlineData("?", "me@example.test", "confirmed", null)]
     [InlineData("me ?", "me@example.test", "confirmed", null)]
@@ -66,7 +144,7 @@ public sealed class SpeakerParticipantMappingTests
     [InlineData("me", "", "confirmed", null)]
     [InlineData("me", "me@example.test", "duplicate", null)]
     [InlineData("me", "me@example.test", "missing", null)]
-    public async Task Self_identity_uses_only_unique_confirmed_email_for_known_me(string label, string email, string association, string? expectedId)
+    public async Task Calendar_identity_requires_unique_confirmed_email_and_a_known_side(string label, string email, string association, string? expectedId)
     {
         var root = Path.Combine(Path.GetTempPath(), "verbemo-self-mapping", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -87,7 +165,7 @@ public sealed class SpeakerParticipantMappingTests
             var file = await SpeakerFile.ReadAsync(root, default);
             Assert.Equal(expectedId, file.ParticipantIds.GetValueOrDefault(label));
             if (expectedId is not null) Assert.Equal("Account Name", file.Names[label]);
-            if (label != "me") Assert.False(file.Names.ContainsKey(label));
+            if (label != "me" && expectedId is null) Assert.False(file.Names.ContainsKey(label));
         }
         finally { Directory.Delete(root, true); }
     }

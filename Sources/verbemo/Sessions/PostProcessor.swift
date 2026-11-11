@@ -621,7 +621,7 @@ enum PostProcessor {
             names.speakers[speakerID] = SpeakerNames.Entry(name: known?.name ?? manual, source: .manual,
                 participantID: known?.id, manualName: manual)
             try names.write(to: dir)
-            try transcript.writeMarkdown(to: dir, names: names)
+            try transcript.writeMarkdown(to: dir, names: SpeakerNames.read(from: dir))
         }
     }
 

@@ -9,8 +9,9 @@ manual editor is available in Windows settings for saved calendar metadata.
 `user_email` now writes an array and still reads legacy single strings. Owner
 matching checks all configured addresses, ignoring case and surrounding spaces.
 Two matching calendar identities remain ambiguous. Manual assignments and
-explicit unlinking continue to take precedence; only the known microphone voice
-can be linked. These addresses are not added to model requests.
+explicit unlinking continue to take precedence. Owner matching links the known
+microphone voice; [one-to-one matching](2026-11-12-calendar-participants.md) also
+links a single separated remote voice. These addresses are not added to model requests.
 
 On macOS, the first successful calendar authorization imports addresses marked
 `EKParticipant.isCurrentUser`, including organizers. Already authorized users

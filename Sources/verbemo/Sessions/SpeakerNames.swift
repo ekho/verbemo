@@ -96,12 +96,11 @@ struct SpeakerNames: Codable {
         let data = try? Data(contentsOf: dir.appendingPathComponent(file))
         let names = data.flatMap { try? JSONDecoder().decode(SpeakerNames.self, from: $0) }
         if data != nil && names == nil { return nil }
-        let resolved = (names ?? SpeakerNames()).resolvingOwner(in: dir)
+        let resolved = (names ?? SpeakerNames()).resolvingParticipants(in: dir)
         return names == nil && resolved.speakers.isEmpty ? nil : resolved
     }
 
-    private func resolvingOwner(in dir: URL) -> SpeakerNames {
-        guard speakers["me"]?.source != .manual else { return self }
+    private func resolvingParticipants(in dir: URL) -> SpeakerNames {
         var result = self
         let root = dir.deletingLastPathComponent().lastPathComponent == "transcripts"
             ? dir.deletingLastPathComponent().deletingLastPathComponent() : dir
@@ -110,14 +109,33 @@ struct SpeakerNames: Codable {
         let matching = calendar?.isConfirmed == true && !emails.isEmpty ? calendar!.participants.filter {
             $0.email.map { emails.contains($0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) } == true
         } : []
+        let transcript = matching.count == 1 && DiarizationState.persisted(in: dir).isFinal
+            ? PostProcessor.readTranscript(dir) : nil
         let previous = speakers["me"]
-        if matching.count == 1, let person = matching.first,
-           DiarizationState.persisted(in: dir).isFinal,
-           PostProcessor.readTranscript(dir)?.segments.contains(where: { $0.speaker == "me" }) == true {
+        if previous?.source != .manual, let person = matching.first,
+           transcript?.segments.contains(where: { $0.speaker == "me" }) == true {
             result.speakers["me"] = Entry(name: Config.userName() ?? person.name, source: .config,
                 participantID: person.id, manualName: previous?.participantID == nil ? previous?.name : previous?.manualName)
         } else if previous?.source == .config, previous?.participantID != nil {
             result.speakers["me"] = Entry(name: Config.userName() ?? previous?.manualName, source: .config)
+        }
+        // Recompute automatic links when the invitation or this version's voices change.
+        for (label, entry) in speakers where label != "me" && entry.source == .config && entry.participantID != nil {
+            result.speakers[label] = Entry(name: entry.manualName, source: .config)
+        }
+        if let transcript, let calendar, calendar.participants.count == 2, let owner = matching.first {
+            let remote = Set(transcript.segments.map(\.speaker).filter { $0 != "me" })
+            let diarized = DiarizationState.read(dir).map { $0.status == .completed }
+                ?? !Config.localEngines.contains(transcript.engine)
+            if diarized, remote.count == 1, let label = remote.first,
+               (label == "them" || label.hasPrefix("them ")), !Self.isUnknown(label),
+               speakers[label]?.source != .manual,
+               let person = calendar.participants.first(where: { $0.id != owner.id }),
+               !speakers.contains(where: { $0.key != label && $0.value.source == .manual && $0.value.participantID == person.id }) {
+                let previous = speakers[label]
+                result.speakers[label] = Entry(name: person.name, source: .config, participantID: person.id,
+                    manualName: previous?.participantID == nil ? previous?.name : previous?.manualName)
+            }
         }
         return result
     }
@@ -125,7 +143,7 @@ struct SpeakerNames: Codable {
     func write(to dir: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(resolvingOwner(in: dir)).write(
+        try encoder.encode(resolvingParticipants(in: dir)).write(
             to: dir.appendingPathComponent(Self.file), options: .atomic
         )
     }
