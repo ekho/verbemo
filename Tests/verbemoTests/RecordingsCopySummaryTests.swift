@@ -127,7 +127,7 @@ struct RecordingsCopySummaryTests {
         let dir = root.appendingPathComponent("meeting")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: dir.appendingPathComponent("meta.json"))
-        let markdown = "## Решения\n\n- **First**\n  - Nested\n"
+        let markdown = "## Решения\n\n- **First**\n  - Nested\n\n## Задачи\n\n— One\n— Two\n"
         try Data(markdown.utf8).write(to: dir.appendingPathComponent("summary.md"))
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
@@ -140,7 +140,7 @@ struct RecordingsCopySummaryTests {
         defer { withExtendedLifetime(app) {} }
         let menu = library.makeCopyMenu()
         try invoke(menu.items[0])
-        #expect(pasteboard.string(forType: .string) == "Решения\n• First\n• Nested")
+        #expect(pasteboard.string(forType: .string) == "Решения\n• First\n• Nested\nЗадачи\n— One\n— Two")
         #expect(pasteboard.data(forType: .rtf) == nil)
         try invoke(menu.items[1])
         #expect(pasteboard.string(forType: .string) == markdown)

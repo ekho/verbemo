@@ -4,6 +4,35 @@ import Testing
 @testable import verbemo
 
 struct MarkdownPreviewTests {
+    @Test("Action items written with em dashes keep their source lines and inline formatting")
+    @MainActor
+    func actionItemLines() {
+        let markdown = "## Задачи\n\n— **Анна**: подготовить план.\n— Борис: [проверить](https://example.com) план."
+        let expected = "Задачи\n— Анна: подготовить план.\n— Борис: проверить план."
+        let rendered = MarkdownPreview.render(markdown)
+        #expect(rendered.string == expected)
+        #expect(MarkdownPreview.searchableText(markdown) == expected)
+        let bold = (rendered.string as NSString).range(of: "Анна")
+        let font = rendered.attribute(.font, at: bold.location, effectiveRange: nil) as? NSFont
+        #expect(font.map { NSFontManager.shared.traits(of: $0).contains(.boldFontMask) } == true)
+        let link = (rendered.string as NSString).range(of: "проверить")
+        #expect(rendered.attribute(.link, at: link.location, effectiveRange: nil) as? URL
+                == URL(string: "https://example.com"))
+    }
+
+    @Test("Markdown line breaks survive without changing code whitespace", arguments: [
+        ("First\nSecond", "First\nSecond"),
+        ("First  \nSecond", "First\nSecond"),
+        ("First\\\nSecond", "First\nSecond"),
+        ("```\none\ntwo\n```", "one\ntwo\n"),
+        ("Inline `one\ntwo`", "Inline one two"),
+    ])
+    @MainActor
+    func lineBreaks(markdown: String, expected: String) {
+        #expect(MarkdownPreview.render(markdown).string == expected)
+        #expect(MarkdownPreview.searchableText(markdown) == expected)
+    }
+
     @Test("Nested lists use their nearest list's marker and their own depth")
     @MainActor
     func nestedLists() throws {

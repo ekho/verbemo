@@ -10,7 +10,8 @@ enum MarkdownPreview {
         for run in parsed.runs {
             let block = run.presentationIntent?.components.first?.identity
             if block != previousBlock, !text.isEmpty { text += "\n" }
-            text += String(parsed[run.range].characters)
+            text += run.inlinePresentationIntent?.contains(.softBreak) == true
+                ? "\n" : String(parsed[run.range].characters)
             previousBlock = block
         }
         return text
@@ -82,7 +83,9 @@ enum MarkdownPreview {
                 if !prefix.isEmpty { result.append(NSAttributedString(string: prefix, attributes: attributes)) }
                 previousBlock = block
             }
-            result.append(NSAttributedString(string: String(parsed[run.range].characters), attributes: attributes))
+            // Keep source lines separate, including the summary template's em-dash action items.
+            let text = inline.contains(.softBreak) ? "\n" : String(parsed[run.range].characters)
+            result.append(NSAttributedString(string: text, attributes: attributes))
         }
         return result
     }
