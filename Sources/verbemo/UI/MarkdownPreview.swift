@@ -25,6 +25,7 @@ enum MarkdownPreview {
         }
         let result = NSMutableAttributedString(string: "")
         var previousBlock: Int?
+        var continuationBlock: Int?
         for run in parsed.runs {
             let components = run.presentationIntent?.components ?? []
             let block = components.first?.identity
@@ -63,6 +64,9 @@ enum MarkdownPreview {
                     break
                 }
             }
+            if listed, block == continuationBlock {
+                paragraph.firstLineHeadIndent = paragraph.headIndent
+            }
             let inline = run.inlinePresentationIntent ?? []
             if isCode || inline.contains(.code) {
                 font = .monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -86,6 +90,7 @@ enum MarkdownPreview {
             // Keep source lines separate, including the summary template's em-dash action items.
             let text = inline.contains(.softBreak) ? "\n" : String(parsed[run.range].characters)
             result.append(NSAttributedString(string: text, attributes: attributes))
+            if inline.contains(.softBreak) || inline.contains(.lineBreak) { continuationBlock = block }
         }
         return result
     }

@@ -33,6 +33,39 @@ struct MarkdownPreviewTests {
         #expect(MarkdownPreview.searchableText(markdown) == expected)
     }
 
+    @Test("List continuation lines keep their hanging indent", arguments: ["\n", "  \n", "\\\n"])
+    @MainActor
+    func listContinuationIndent(lineBreak: String) throws {
+        let rendered = MarkdownPreview.render(
+            "- First\(lineBreak)  Second **bold**\n  - Child\(lineBreak)    Continuation\n- Next")
+        #expect(rendered.string == "• First\nSecond bold\n• Child\nContinuation\n• Next")
+        let paragraphs: [(String, CGFloat, CGFloat)] = [
+            ("First", 0, 20), ("Second", 20, 20), ("bold", 20, 20),
+            ("Child", 20, 40), ("Continuation", 40, 40), ("Next", 0, 20),
+        ]
+        for (text, first, rest) in paragraphs {
+            let range = (rendered.string as NSString).range(of: text)
+            try #require(range.location != NSNotFound)
+            let paragraph = try #require(rendered.attribute(.paragraphStyle, at: range.location,
+                                                            effectiveRange: nil) as? NSParagraphStyle)
+            #expect(paragraph.firstLineHeadIndent == first)
+            #expect(paragraph.headIndent == rest)
+        }
+        let storage = NSTextStorage(attributedString: rendered)
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: 400, height: 1000))
+        container.lineFragmentPadding = 0
+        storage.addLayoutManager(layout)
+        layout.addTextContainer(container)
+        layout.ensureLayout(for: container)
+        for (text, expectedX) in [("Second", 20.0), ("Continuation", 40.0)] {
+            let range = (rendered.string as NSString).range(of: text)
+            let glyph = layout.glyphIndexForCharacter(at: range.location)
+            let bounds = layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container)
+            #expect(abs(bounds.minX - expectedX) < 0.01)
+        }
+    }
+
     @Test("Nested lists use their nearest list's marker and their own depth")
     @MainActor
     func nestedLists() throws {
