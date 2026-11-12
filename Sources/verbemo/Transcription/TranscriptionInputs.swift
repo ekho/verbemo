@@ -283,6 +283,7 @@ struct SessionMeta {
         let speaker: String
         let offsetMs: Int
         let channel: Int?
+        var participant: CallAudioMetadata.Track? = nil
     }
 
     let tracks: [Track]
@@ -293,6 +294,7 @@ struct SessionMeta {
     let title: String?
     let attendees: [String]
     let app: String?
+    var callAudio: CallAudioMetadata? = nil
 
     var isSingleSource: Bool {
         tracks.count == 1 && tracks[0].speaker == "speaker"
@@ -346,12 +348,19 @@ struct SessionMeta {
                 offsetMs: offsets["source"] ?? 0,
                 channel: channels["source"]))
         }
+        let callAudio = try json["call_audio"].map { try CallAudioMetadata.read($0, files: files, offsets: offsets) }
+        for participant in callAudio?.tracks ?? [] {
+            tracks.append(Track(file: files[participant.fileKey]!, speaker: participant.speakerID,
+                                offsetMs: offsets[participant.fileKey]!, channel: channels[participant.fileKey],
+                                participant: participant))
+        }
         let calendar = json["calendar"] as? [String: Any]
         return SessionMeta(
             tracks: tracks,
             title: (json["title"] as? String) ?? (calendar?["title"] as? String),
             attendees: calendar?["attendees"] as? [String] ?? [],
-            app: json["app"] as? String
+            app: json["app"] as? String,
+            callAudio: callAudio
         )
     }
 }
