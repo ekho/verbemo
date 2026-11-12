@@ -61,7 +61,19 @@ final class RecordingSession {
     var callIntegrationID: String? { integrationCall?.integrationID }
     private var integrationCall: CallObservation?
     typealias CallAudioFactory = @Sendable () async throws -> any CallAudioCapture
-    enum CaptureSource: Equatable { case ordinary, preparing, direct, fallback, ended, failed }
+    enum CaptureSource: Equatable {
+        case ordinary, preparing, direct, fallback, ended, failed
+        var title: String {
+            switch self {
+            case .ordinary: localised("Microphone and computer audio", "Микрофон и звук компьютера")
+            case .preparing: localised("Preparing call audio…", "Подготовка звука звонка…")
+            case .direct: localised("Separate KTalk participant tracks", "Отдельные дорожки участников KTalk")
+            case .fallback: localised("Fallback: microphone and computer audio; KTalk mute does not apply", "Резерв: микрофон и звук компьютера; mute KTalk не учитывается")
+            case .ended: localised("Call ended — finish recording", "Звонок завершён — завершите запись")
+            case .failed: localised("Audio unavailable — recording stopped", "Звук недоступен — запись остановлена")
+            }
+        }
+    }
     private(set) var captureSource: CaptureSource = .ordinary {
         didSet { onSourceChange?(captureSource) }
     }

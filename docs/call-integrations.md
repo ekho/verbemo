@@ -5,7 +5,8 @@ dependencies. `CallIntegrations` contains the public `CallIntegration` protocol
 and Codable/Sendable observations; `KTalkIntegration` implements the protocol.
 Future providers implement `id`, `application`, `observe()` and `stop()` and are
 registered in `CallIntegrationMonitor.configuredProviders()`. Recording decisions
-and microphone privacy consume the common types, never KTalk objects or CDP.
+and audio capture consume the common types, never KTalk objects or CDP.
+Providers with direct audio additionally implement `CallAudioIntegration`.
 
 An observation carries a timestamp, participation (`unknown`, `idle`, `preparing`,
 `inCall`), source, optional call identity/title/URL, optional participant roster,
@@ -16,8 +17,8 @@ Providers own their transport lifecycle and must return unknown on failure.
 ## KTalk
 
 Set `call_integrations.ktalk.enabled` to true and, for CDP, set `space_url` to an
-exact HTTPS space origin. Settings are in Advanced and require restarting
-Verbemo. Existing Accessibility permission is optional. The adapter never opens
+exact HTTPS space origin. Settings have their own **KTalk integration** /
+**Интеграция с KTalk** page and require restarting Verbemo. Existing Accessibility permission is optional. The adapter never opens
 a debug port, changes installed KTalk files, reads session tokens, joins a call,
 or requests system permission. To use CDP, fully quit KTalk and explicitly start
 it with the diagnostic flags used in the research:
@@ -40,34 +41,51 @@ prejoin does not start recording. Unknown observation suspends the end-of-call
 clock for a tracked call and cannot release the manual-stop hold. Existing
 duration and silence backstops remain active.
 
-Observed call metadata is saved under `call` in session JSON, with source and
-observation time. It is separate from calendar invitees and does not automatically
-assign speaker identities. Context is refreshed during an associated recording;
-loss of observation clears the currently reported roster.
+Observed call metadata is saved under `call`, separately from calendar invitees.
+Direct capture requires a fresh, unique joined application call. The session owns
+asynchronous preparation, cancellation and one-way fallback. It does not report
+active recording until a source is ready; Stop and quit wait for transport cleanup.
 
-While an integration is enabled, every recording has a microphone gate, including
-manual/calendar recordings and recordings of other apps. This covers recordings
-started before joining a call. Before a call is associated, fresh confirmed idle
-state permits the mic; unknown state blocks it even in an unrelated recording.
-For an associated call, the local mic gets a **1.5-second permission lease**,
-renewed only by explicit fresh unmuted observations of the same call.
-The audio callback checks expiry independently of
-the UI thread. CDP requests are bounded to 700 ms and the monitor waits 200 ms
-between samples; these are polling intervals, not guaranteed mute-event times.
+The CDP adapter clones existing KTalk output tracks, including the local outgoing
+track. It does not request a new microphone or stop the original call tracks.
+An AudioWorklet produces mono Float32 PCM on one audio clock, delivered via a
+CDP binding. Metadata, frame ranges, sample rates, finite PCM, run/generation IDs,
+message size and bounded queues are checked before disk writes. Heartbeats and
+an expiring renderer lease detect transport failure without treating silence as
+failure. Only the configured HTTPS origin and a loopback diagnostic socket are
+accepted. Verbemo never exposes this endpoint as its own server.
 
-Local PCM is held in memory for **2 seconds**, before file writing and live ASR.
-Mute/unknown/lease expiry invalidates held buffers permanently, even after
-unmute. Manual pause also invalidates pending buffers. Stop writes pending frames
-as silence, never raw audio. The remote track is unaffected and recorded track
-frames remain aligned. Local live transcription receives audio about two seconds
-later; the existing live preview timestamps reflect delivery time. This
-intentionally loses up to the final two seconds before mute,
-pause, uncertainty or stop. AX-only fallback keeps the local mic silent.
+Direct mode starts neither Verbemo device recorder and needs no microphone or
+system-capture permission. The local clone follows KTalk mute, including a clone
+created while muted. Verbemo pause writes zeros to all tracks and to live ASR.
+KTalk's internal tracks and mute state are sampled; use Verbemo pause when you
+need a capture boundary independent of KTalk's internal implementation.
 
-Polling cannot prove that a very short mute/unmute entirely between samples did
-not happen. This mode is not a vendor-supported instantaneous privacy interlock;
-use Verbemo's own pause for that guarantee until a reliable mute event source is
-qualified. A real call acceptance test is separate from deterministic PCM tests.
+Unavailable direct capture or transport failure closes the direct source, then
+starts ordinary microphone and system capture in the same meeting. **Fallback
+records the device microphone independently of KTalk mute or unknown state.**
+The normal pause still applies. Device/permission failure stops the session and
+persists `capture_failure` alongside all captured audio. Confirmed call exit does
+not trigger fallback; automatic recording follows the existing end-of-call rules.
+There is no automatic return to direct mode until the next recording.
+
+`call_audio` version 1 supplements `files` and `start_offset_ms` with capture
+periods, participant IDs/names, local/remote provenance, source generations,
+sample rates and stable speaker IDs. Generated file keys never use participant
+text. Replaced tracks have independent files on the same timeline. Both the
+recovery manifest and final metadata preserve this index. Each nonempty source
+is archived separately to AAC; metadata is atomically published before original
+CAF files are removed. Empty tracks retain their empty CAF. Legacy ordinary
+sessions keep their two-channel archive format. MCP exposes validated referenced
+files through its existing authenticated audio interface.
+
+Known tracks use per-track final ASR and dynamic live ASR consumers; identity
+comes from KTalk, not acoustic speaker matching. Local diarization and cloud
+speaker-label switches are bypassed where the existing provider supports it.
+A configured OpenAI model that performs diarization internally is not replaced.
+Hybrid fallback audio retains normal diarization settings and unknown labels
+when identity cannot be established. Manual names survive retranscription.
+Summary generation continues to consume the canonical transcript as before.
 
 ## Verification
 
@@ -76,11 +94,13 @@ swift test --package-path Packages/CallIntegrations
 swift build --package-path Packages/CallIntegrations --product call-integration-probe
 python3 Packages/CallIntegrations/Tests/test_transport.py \
   Packages/CallIntegrations/.build/debug/call-integration-probe
-swift test --filter 'MicrophonePrivacy|CallIntegration|AutoRecord|RecordingSessionTests|SettingsSchemaTests|SettingsDocumentationTests'
+node --test Packages/CallIntegrations/Tests/audio_capture.test.mjs
+swift test --no-parallel --filter 'Participant|CallIntegration|AutoRecord|RecordingSession|KTalkSettings|TrackCompressor|MCPQueries'
 ```
 
 The probe takes an explicit space, port and sample count and prints JSON through
-the universal interface without audio capture or Accessibility:
+the universal interface without Accessibility. Add `--audio` for bounded direct-audio diagnostics
+(metadata and sample/peak counts, not raw PCM):
 
 ```sh
 swift run --package-path Packages/CallIntegrations call-integration-probe \

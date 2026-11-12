@@ -59,10 +59,6 @@ struct ActivityAccess {
         microphone == .granted && systemAudio == .heard && calendar != nil && calendar != .granted ? .calendar : .recording
     }
     var detail: String {
-        if directCallReady {
-            return localised("Direct call audio is available. Microphone and system audio access is needed only for fallback.",
-                "Доступен прямой звук звонка. Доступ к микрофону и системному звуку нужен только для резервной записи.")
-        }
         var parts = [microphone == .granted
             ? localised("Microphone allowed", "Микрофон разрешён")
             : localised("Microphone access needed", "Нужен доступ к микрофону")]
@@ -280,7 +276,7 @@ final class ActivityStatusBar: NSStackView {
 
     func updateAccess(_ state: ActivityAccess) {
         let changed = accessState.microphone != state.microphone || accessState.systemAudio != state.systemAudio
-            || accessState.calendar != state.calendar
+            || accessState.calendar != state.calendar || accessState.directCallReady != state.directCallReady
         accessState = state
         automaticDestination = state.automaticDestination
         if changed || microphoneAccess.image == nil { refreshSources() }
@@ -301,6 +297,10 @@ final class ActivityStatusBar: NSStackView {
                detail: systemDenied ? localised("System audio access denied", "Доступ к звуку системы запрещён")
                    : systemLost ? localised("System audio signal unavailable", "Сигнал звука системы недоступен") : parts[1],
                caution: SetupPermissions.needsSystemAudioTest(accessState.systemAudio) || systemLost)
+        if accessState.directCallReady {
+            source(microphoneAccess, symbol: "person.wave.2", detail: localised("Your audio comes from KTalk; device access is only needed for fallback.", "Ваш звук поступает из KTalk; доступ к устройству нужен только для резерва."), caution: false)
+            source(systemAccess, symbol: "person.2.wave.2", detail: localised("Participant audio comes from KTalk; system capture is only needed for fallback.", "Звук участников поступает из KTalk; системный захват нужен только для резерва."), caution: false)
+        }
         calendarAccess.isHidden = accessState.calendar == nil
         if let calendar = accessState.calendar {
             let unavailable = calendar != .granted

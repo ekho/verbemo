@@ -44,6 +44,15 @@ final class CallIntegrationMonitor {
         }
     }
 
+    var statusText: String {
+        if providers.isEmpty { return localised("KTalk integration is off", "Интеграция с KTalk выключена") }
+        if directCallReady { return localised("Call detected — direct audio will be checked when recording starts", "Звонок обнаружен — прямой звук будет проверен при начале записи") }
+        if observations.contains(where: { $0.participation == .inCall }) {
+            return localised("Call detected; recording will use microphone and system audio", "Звонок обнаружен; запись будет использовать микрофон и системный звук")
+        }
+        return localised("Waiting for a confirmed KTalk call", "Ожидание подтверждённого звонка KTalk")
+    }
+
     var directCallReady: Bool { Self.directCandidate(in: observations) != nil }
 
     static func directCandidate(in observations: [CallObservation], now: Date = Date()) -> CallObservation? {

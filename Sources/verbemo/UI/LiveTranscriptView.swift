@@ -5,6 +5,15 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
     private let micLevel = AudioLevelView(title: localised("Microphone", "Микрофон"), source: "mic")
     private let systemLevel = AudioLevelView(title: localised("Computer audio", "Звук компьютера"), source: "system")
+    private let sourceLabel = NSTextField(wrappingLabelWithString: "")
+    var captureSource: RecordingSession.CaptureSource = .ordinary {
+        didSet {
+            sourceLabel.stringValue = captureSource.title
+            sourceLabel.textColor = captureSource == .fallback ? .systemOrange : JournalStyle.muted
+            micLevel.title = captureSource == .direct ? localised("Your call audio", "Ваш звук в звонке") : localised("Microphone", "Микрофон")
+            systemLevel.title = captureSource == .direct ? localised("Other participants", "Остальные участники") : localised("Computer audio", "Звук компьютера")
+        }
+    }
     private var levelTimer: Timer?
     var onRename: ((String) throws -> Void)?
     private let name = NSTextField()
@@ -46,7 +55,10 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         transcript.contentViewMargins = .zero
         transcript.contentView = content
         transcript.identifier = .init("recording.transcript")
-        let stack = NSStackView(views: [titleRow, recordingBar, sources, transcript])
+        sourceLabel.font = SetupLayout.detailFont
+        sourceLabel.maximumNumberOfLines = 0
+        sourceLabel.identifier = .init("recording.source")
+        let stack = NSStackView(views: [titleRow, recordingBar, sourceLabel, sources, transcript])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
@@ -59,6 +71,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -40),
             titleRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             recordingBar.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            sourceLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sources.widthAnchor.constraint(equalTo: stack.widthAnchor),
             transcript.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])

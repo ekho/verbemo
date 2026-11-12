@@ -15,6 +15,7 @@ enum MeetingPresentation {
         let started: Date
         var paused: Bool
         var liveStatus: LiveTranscriptionCoordinator.Status
+        var captureSource: RecordingSession.CaptureSource = .ordinary
         var item: SessionInventory.Item {
             .init(dir: dir, name: dir.lastPathComponent, title: title, started: started, duration: nil,
                 trigger: nil, engine: nil, transcript: .pending, diarization: nil, unreadableDiarization: false,
@@ -60,6 +61,9 @@ enum MeetingPresentation {
             problems.append(detail.isEmpty ? label : label + ": " + detail)
         }
         if let active, active.dir == item.dir, let problem = active.attentionProblem { add(problem, reason: nil) }
+        if let failure = SessionState.read(item.dir)?["capture_failure"] as? String {
+            add(localised("Recording incomplete", "Запись неполная"), reason: failure)
+        }
         if case .failed(let reason) = item.transcript {
             add(localised("Transcription failed", "Сбой расшифровки"), reason: reason)
         }
@@ -93,7 +97,7 @@ enum MeetingPresentation {
         if let active, active.dir == item.dir {
             var stages: [Stage] = []
             if calendarLinked(item.dir) { stages.append(Stage(symbol: "calendar", title: localised("Linked calendar event", "Связано с событием календаря"), state: .done)) }
-            stages.append(Stage(symbol: "mic", title: active.paused ? localised("Recording paused", "Запись приостановлена") : localised("Recording", "Идёт запись"), state: active.paused ? .paused : .active))
+            stages.append(Stage(symbol: "mic", title: active.paused ? localised("Recording paused", "Запись приостановлена") : active.captureSource.title, state: active.paused ? .paused : [.preparing, .ended].contains(active.captureSource) ? .waiting : .active))
             stages.append(Stage(symbol: "doc.text", title: localised("Transcription waits for the recording to finish", "Расшифровка ожидает окончания записи"), state: .waiting))
             stages.append(item.summary == .off
                 ? Stage(symbol: "checklist", title: localised("Summary was not created", "Сводка не создавалась"), state: .off)
@@ -113,10 +117,12 @@ enum MeetingPresentation {
         }
         var result: [Stage] = []
         if calendarLinked(item.dir) { result.append(Stage(symbol: "calendar", title: localised("Linked calendar event", "Связано с событием календаря"), state: .done)) }
-        result.append(Stage(symbol: "mic", title: localised("Recording saved", "Запись сохранена"), state: .done))
+        let incomplete = SessionState.read(item.dir)?["capture_failure"] != nil
+        result.append(Stage(symbol: "mic", title: incomplete ? localised("Recording incomplete", "Запись неполная")
+            : localised("Recording saved", "Запись сохранена"), state: incomplete ? .failed : .done))
         var transcript = stage(item.transcript, symbol: "doc.text", label: localised("Transcription", "Расшифровка"),
             done: localised("Transcript ready", "Расшифровка готова"), active: busy && !ready)
-        transcript.diarized = item.diarization.map { $0.status != .skipped } ?? item.isDiarized
+        transcript.diarized = item.diarization.map { $0.status != .skipped && $0.status != .notApplicable } ?? item.isDiarized
         if transcript.diarized { transcript.title += localised(" · diarization enabled", " · диаризация включена") }
         result.append(transcript)
         var summary = stage(item.summary, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),

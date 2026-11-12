@@ -9,6 +9,7 @@ final class RecordingBarView: NSStackView {
     private let time = NSTextField(labelWithString: "00:00")
     private let pause = NSButton()
     private let stop = NSButton()
+    private let dot = NSTextField(labelWithString: "●")
     var title: String {
         get { name.title }
         set { name.title = newValue; name.setAccessibilityLabel(localised("Open recording: ", "Открыть запись: ") + newValue) }
@@ -42,7 +43,6 @@ final class RecordingBarView: NSStackView {
             button.target = self
             button.action = selector
         }
-        let dot = NSTextField(labelWithString: "●")
         dot.textColor = .systemRed
         dot.setAccessibilityLabel(localised("Recording active", "Запись активна"))
         stop.title = localised("Finish", "Завершить")
@@ -64,6 +64,10 @@ final class RecordingBarView: NSStackView {
     func update(state: MenuBarController.State, elapsed: String?) {
         isHidden = state == .idle
         time.stringValue = elapsed ?? "00:00"
+        dot.textColor = state == .recording ? .systemRed : StudioStyle.muted
+        dot.setAccessibilityLabel(state == .recording ? localised("Recording active", "Запись активна")
+            : state == .preparing ? localised("Preparing audio", "Подготовка звука") : localised("Recording inactive", "Запись неактивна"))
+        pause.isEnabled = state != .waiting
         let paused = state == .paused
         pause.image = NSImage(systemSymbolName: paused ? "play" : "pause", accessibilityDescription: nil)
         pause.setAccessibilityLabel(paused ? localised("Resume recording", "Продолжить запись") : localised("Pause recording", "Приостановить запись"))

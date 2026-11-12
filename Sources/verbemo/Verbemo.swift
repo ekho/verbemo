@@ -854,7 +854,8 @@ final class AppController {
                 ? (calendarPermission == .notAsked && calendar.authorized ? .granted : calendarPermission) : nil,
             micActivity: automatic.micActivity, autoCalendar: automatic.calendar,
             hasSelectedCalendar: !automatic.calendar || automatic.micActivity || !calendar.selectedCalendars().isEmpty,
-            directCallReady: callIntegrations.directCallReady)
+            directCallReady: session.map { $0.captureSource == .direct } ?? callIntegrations.directCallReady)
+        window.settings.updateKTalkStatus(session?.captureSource.title ?? callIntegrations.statusText)
         let decision = autoRecord.enabled ? access.automaticBlockReason ?? autoRecord.notice?.title ?? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         let activity = operations.snapshot()
@@ -1053,6 +1054,7 @@ final class AppController {
             notifyUser(title: localised("Recording stopped: audio unavailable", "Запись остановлена: звук недоступен"),
                 body: session.sourceError ?? localised("Check audio access in Settings.", "Проверьте доступ к звуку в настройках."),
                 opening: session.dir)
+            autoRecord.noteCaptureFailure()
             stopSession(reason: "capture-failed")
         }
         tick()
@@ -1257,7 +1259,7 @@ final class AppController {
     private func updateActiveRecording() {
         guard recordingsBuilt else { return }
         recordings.setActiveRecording(session.map {
-            MeetingPresentation.ActiveRecording(dir: $0.dir, title: $0.title ?? localised("New meeting", "Новая встреча"), started: $0.startedAt, paused: $0.isPaused, liveStatus: liveRecordingStatus)
+            MeetingPresentation.ActiveRecording(dir: $0.dir, title: $0.title ?? localised("New meeting", "Новая встреча"), started: $0.startedAt, paused: $0.isPaused, liveStatus: liveRecordingStatus, captureSource: $0.captureSource)
         })
     }
 
@@ -1265,6 +1267,7 @@ final class AppController {
         guard !isStopping else { return }
         showAutoRecord()
         guard let session else { return }
+        window.updateCaptureSource(session.captureSource)
         present(
             session.isPaused ? .paused : session.captureSource == .preparing ? .preparing : session.captureSource == .ended ? .waiting : .recording,
             elapsed: Self.format(Date().timeIntervalSince(session.startedAt))

@@ -76,6 +76,7 @@ struct ParticipantTranscriptionTests {
             })
         try await coordinator.transcribeNow(dir)
         #expect(DiarizationState.read(dir)?.retainsAudio != true)
+        #expect(SessionInventory.item(for: dir)?.isDiarized == false)
         #expect(SpeakerNames.read(from: dir)?.name(for: speaker) == "Corrected")
         let transcript = try #require(PostProcessor.readTranscript(dir))
         try TranscriptVersions.commit(transcript, to: dir, metadata: ["retry_test": true], preserveRemoteNames: false)

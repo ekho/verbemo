@@ -476,6 +476,14 @@ final class AutoRecordController {
             startFailures = 0
             return true
         }
+        recordStartFailure(at: now)
+        return false
+    }
+
+    /// Source preparation can fail after the synchronous start was accepted.
+    func noteCaptureFailure() { recordStartFailure(at: now()) }
+
+    private func recordStartFailure(at now: Date) {
         startFailures += 1
         let wait = Self.retryDelay(afterFailures: startFailures)
         phase = .backingOff(until: now.addingTimeInterval(wait))
@@ -483,7 +491,6 @@ final class AutoRecordController {
         lastDecision = localised(
             "couldn't start recording — trying again in \(Int(wait))s",
             "не удалось начать запись — повторю через \(Int(wait)) с")
-        return false
     }
 
     /// 30 s, 1 min, 2 min, 4 min, 8 min, then every 10 minutes.

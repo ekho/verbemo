@@ -50,6 +50,19 @@ struct CallIntegrationRecordingTests {
         #expect(starts == 2)
     }
 
+    @Test func asynchronousCaptureFailureUsesTheAutomaticStartBackoff() {
+        let h = AutoRecordHarness()
+        h.micActive = true
+        h.run(for: 15)
+        #expect(h.starts.count == 1)
+        h.controller.noteCaptureFailure()
+        h.session = nil
+        h.run(for: 20)
+        #expect(h.starts.count == 1)
+        h.run(for: 15)
+        #expect(h.starts.count == 2)
+    }
+
     @Test func ordinaryCaptureIgnoresCallMuteButHonoursSessionPause() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

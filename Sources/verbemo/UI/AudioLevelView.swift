@@ -3,6 +3,11 @@ import AppKit
 @MainActor
 final class AudioLevelView: NSStackView {
     let meter = NSLevelIndicator()
+    private let label = NSTextField(labelWithString: "")
+    var title: String {
+        get { label.stringValue }
+        set { label.stringValue = newValue; meter.setAccessibilityLabel(newValue) }
+    }
     private let status = NSTextField(labelWithString: "")
 
     init(title: String, source: String, compact: Bool = false) {
@@ -10,7 +15,7 @@ final class AudioLevelView: NSStackView {
         orientation = .vertical
         alignment = .leading
         spacing = compact ? 0 : 5
-        let label = NSTextField(labelWithString: title)
+        label.stringValue = title
         label.font = .systemFont(ofSize: compact ? 9 : 12, weight: .medium)
         label.textColor = JournalStyle.ink
         meter.levelIndicatorStyle = .continuousCapacity
