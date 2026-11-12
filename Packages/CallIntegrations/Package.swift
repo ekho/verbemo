@@ -6,7 +6,7 @@ let package = Package(name: "CallIntegrations", platforms: [.macOS("14.2")], pro
     .executable(name: "call-integration-probe", targets: ["CallIntegrationProbe"]),
 ], targets: [
     .target(name: "CallIntegrations"),
-    .target(name: "KTalkIntegration", dependencies: ["CallIntegrations"]),
+    .target(name: "KTalkIntegration", dependencies: ["CallIntegrations"], resources: [.process("Resources")]),
     .executableTarget(name: "CallIntegrationProbe", dependencies: ["CallIntegrations", "KTalkIntegration"]),
     .testTarget(name: "CallIntegrationTests", dependencies: ["CallIntegrations", "KTalkIntegration"]),
 ])

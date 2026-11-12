@@ -52,22 +52,67 @@ class Handler(BaseHTTPRequestHandler):
                 data = self.rfile.read(n)
                 request = json.loads(bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
                 self.server.requests.append(request['method'])
-                index = len(self.server.requests)
-                if index == 3:
-                    response = {'id': request['id'], 'error': {'code': -1, 'message': 'synthetic disconnect'}}
-                else:
-                    value = {'kind': 'conference', 'joined': True,
-                             'room': {'key': 'probe', 'title': 'Synthetic room', 'conference_id': 'c'},
-                             'local_participant_id': 'self', 'microphone_muted': index != 2,
-                             'camera_muted': True,
-                             'participants': [{'id': 'self', 'name': 'Test Host', 'local': True, 'guest': False}]}
-                    response = {'id': request['id'], 'result': {'result': {'type': 'object', 'value': value}}}
-                payload = json.dumps(response).encode()
-                frame = bytes([0x81, len(payload)]) if len(payload) < 126 else b'\x81\x7e' + struct.pack('!H', len(payload))
-                self.wfile.write(frame + payload)
-                self.wfile.flush()
+                for response in self.messages(request):
+                    payload = json.dumps(response).encode()
+                    frame = bytes([0x81, len(payload)]) if len(payload) < 126 else b'\x81\x7e' + struct.pack('!H', len(payload))
+                    self.wfile.write(frame + payload)
+                    self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ValueError):
             return
+
+    def messages(self, request):
+        index = len(self.server.requests)
+        if index == 3:
+            return [{'id': request['id'], 'error': {'code': -1, 'message': 'synthetic disconnect'}}]
+        value = {'kind': 'conference', 'joined': True,
+                 'room': {'key': 'probe', 'title': 'Synthetic room', 'conference_id': 'c'},
+                 'local_participant_id': 'self', 'microphone_muted': index != 2,
+                 'camera_muted': True,
+                 'participants': [{'id': 'self', 'name': 'Test Host', 'local': True, 'guest': False}]}
+        return [{'id': request['id'], 'result': {'result': {'type': 'object', 'value': value}}}]
+
+
+class AudioHandler(Handler):
+    def messages(self, request):
+        method = request['method']
+        reply = {'id': request['id'], 'result': {}}
+        if method == 'Runtime.addBinding':
+            self.binding = request['params']['name']
+        elif method == 'Runtime.evaluate':
+            expression = request['params']['expression']
+            if 'verbemo participant capture' not in expression:
+                if 'cleanup' in expression:
+                    self.server.cleaned = True
+                if not hasattr(self, 'binding'):
+                    replies = super().messages(request)
+                    if self.server.fail_audio == 'call_changed' and len(self.server.requests) == 2:
+                        replies[0]['result']['result']['value']['room']['conference_id'] = 'other'
+                    return replies
+                reply['result'] = {'result': {'type': 'boolean', 'value': True}}
+            else:
+                if self.server.fail_audio == 'timeout':
+                    return []
+                run = self.binding.removeprefix('__verbemoAudio_')
+                def event(body):
+                    return {'method': 'Runtime.bindingCalled', 'params': {
+                        'name': self.binding, 'executionContextId': 1,
+                        'payload': json.dumps({'run': run, **body})}}
+                participant = {'id': 'p1', 'name': 'Same name', 'isLocal': False, 'isGuest': True}
+                descriptor = {'type': 'track', 'id': 'p1', 'generation': 1, 'rate': 48000, 'participant': participant}
+                audio = {'type': 'audio', 'id': 'p1', 'generation': 1, 'rate': 48000, 'frame': 96000,
+                         'pcm': base64.b64encode(struct.pack('<fff', 0, 0.5, -0.5)).decode()}
+                reply['result'] = {'result': {'type': 'boolean', 'value': True}}
+                result = [event({'type': 'heartbeat', 'frame': 0, 'rate': 48000}),
+                          event(descriptor), event(audio), reply]
+                if self.server.fail_audio:
+                    result.append(event({'type': 'error'}))
+                else:
+                    result += [event({'type': 'removed', 'id': 'p1'}),
+                               event({**descriptor, 'generation': 2}),
+                               event({**audio, 'generation': 2, 'frame': 192000}),
+                               event({'type': 'ended'})]
+                return result
+        return [reply]
 
 
 class TransportTest(unittest.TestCase):
@@ -88,6 +133,53 @@ class TransportTest(unittest.TestCase):
                 self.assertEqual(server.requests, ['Runtime.evaluate'] * 4)
             finally:
                 server.shutdown()
+
+    def audio_run(self, fail=False):
+        with ThreadingHTTPServer(('127.0.0.1', 0), AudioHandler) as server:
+            server.daemon_threads = True
+            server.requests = []
+            server.cleaned = False
+            server.fail_audio = fail
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                run = subprocess.run([BINARY, 'https://synthetic.ktalk.ru', str(server.server_port), '--audio', '20'],
+                                     text=True, capture_output=True, timeout=20)
+                return run, server.requests, server.cleaned
+            finally:
+                server.shutdown()
+
+    def test_audio_events_interleave_with_commands_and_cleanup(self):
+        run, requests, cleaned = self.audio_run()
+        self.assertEqual(run.returncode, 0, run.stderr)
+        rows = [json.loads(line) for line in run.stdout.splitlines()]
+        audio = [r for r in rows if r['type'] == 'audio']
+        self.assertEqual([r['frame'] for r in audio], [96000, 192000])
+        self.assertEqual([r['samples'] for r in audio], [3, 3])
+        self.assertEqual([r['peak'] for r in audio], [0.5, 0.5])
+        self.assertEqual([r['generation'] for r in audio], [1, 2])
+        self.assertEqual(rows[-1]['type'], 'ended')
+        self.assertIn('Runtime.removeBinding', requests)
+        self.assertTrue(cleaned)
+
+    def test_audio_error_is_visible_and_still_cleans_up(self):
+        run, requests, cleaned = self.audio_run(fail=True)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn('unsupportedSchema', run.stderr)
+        self.assertIn('Runtime.removeBinding', requests)
+        self.assertTrue(cleaned)
+
+    def test_install_timeout_is_bounded_and_cleans_up(self):
+        run, requests, cleaned = self.audio_run(fail='timeout')
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn('timedOut', run.stderr)
+        self.assertIn('Runtime.removeBinding', requests)
+        self.assertTrue(cleaned)
+
+    def test_a_changed_call_is_rejected_before_install(self):
+        run, requests, _ = self.audio_run(fail='call_changed')
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn('unavailable', run.stderr)
+        self.assertNotIn('Runtime.addBinding', requests)
 
 
 if __name__ == '__main__':

@@ -132,6 +132,7 @@ jobs:
           swift test --package-path Packages/CallIntegrations
           swift build --package-path Packages/CallIntegrations --product call-integration-probe
           python3 Packages/CallIntegrations/Tests/test_transport.py Packages/CallIntegrations/.build/debug/call-integration-probe
+          node --test Packages/CallIntegrations/Tests/audio_capture.test.mjs
           python3 -m unittest discover -s Tests/scripts -p 'test_*.py'
           python3 -m unittest discover -s Tests/macos-scripts -p 'test_*.py'
           python3 -m pip install PyYAML==6.0.3

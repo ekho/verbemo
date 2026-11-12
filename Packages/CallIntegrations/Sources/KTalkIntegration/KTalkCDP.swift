@@ -24,7 +24,7 @@ actor KTalkCDP {
         config.timeoutIntervalForRequest = 0.7
         config.timeoutIntervalForResource = 0.7
         config.connectionProxyDictionary = [:]
-        session = URLSession(configuration: config, delegate: NoRedirects(), delegateQueue: nil)
+        session = URLSession(configuration: config, delegate: KTalkNoRedirects(), delegateQueue: nil)
     }
 
     func stop() {
@@ -139,7 +139,7 @@ actor KTalkCDP {
     """#
 }
 
-private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+final class KTalkNoRedirects: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         completionHandler(nil)
