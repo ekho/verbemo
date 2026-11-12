@@ -64,17 +64,20 @@ configuration file hash was unchanged. Build 734 was retained at
 
 The fresh ad-hoc build does not match the old permission grants. The macOS TCC
 log explicitly reports `Failed to match existing code requirement` for
-Microphone, Calendar and AudioCapture. The UI blocks automatic recording until
-microphone access is restored; the system-audio badge retains an earlier
-successful check and does not prove access for this new build.
+Microphone, Calendar and AudioCapture. Initially the UI blocked automatic
+recording until microphone access was restored; the system-audio badge retained
+an earlier successful check and did not prove access for this new build.
 
 Toggling the existing microphone grant and restarting did not restore access.
 A reset scoped to `Microphone name.ekho.verbemo`, followed by a restart, produced
-a real TCC microphone request. The log shows `AUTHREQ_PROMPTING` and a later
-`Delaying prompt`; answering the system prompt remains pending. Calendar remains
-enabled in System Settings, but its old grant does not match this binary.
-No calendar reset was performed. Permission restoration and a new call must
-precede claiming installed runtime acceptance.
+a real TCC microphone request. After the user granted it, the installed UI was
+verified showing `Микрофон разрешён` and `Автозапись включена`.
+
+A new system-audio test emitted `AUTHREQ_PROMPTING` for `kTCCServiceAudioCapture`
+and awaits the user's response to that separate macOS prompt. Calendar remains
+enabled in System Settings, but its old grant does not match this binary; no
+calendar reset was performed. System-audio permission restoration and a new
+call must precede claiming installed runtime acceptance.
 
 KTalk was verified outside a call, quit and relaunched through LaunchServices
 with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9333`.
