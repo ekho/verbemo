@@ -36,15 +36,16 @@ struct ActivityAccess {
     var micActivity = true
     var autoCalendar = false
     var hasSelectedCalendar = true
+    var directCallReady = false
 
     var denied: Bool {
         if microphone == .denied || calendar == .denied { return true }
         if case .refused = systemAudio { return true }
         return false
     }
-    var ready: Bool { microphone == .granted && systemAudio == .heard && (calendar == nil || calendar == .granted) }
+    var ready: Bool { (directCallReady || (microphone == .granted && systemAudio == .heard)) && (calendar == nil || calendar == .granted) }
     var automaticBlockReason: String? {
-        if microphone != .granted { return localised("Microphone access needed", "Нужен доступ к микрофону") }
+        if microphone != .granted && !directCallReady { return localised("Microphone access needed", "Нужен доступ к микрофону") }
         if !micActivity && !autoCalendar { return localised("Enable microphone or calendar triggering", "Включите запуск по микрофону или календарю") }
         if !micActivity && calendar != .granted { return localised("Calendar access needed", "Нужен доступ к календарю") }
         if !micActivity && !hasSelectedCalendar { return localised("Choose a calendar", "Выберите календарь") }
@@ -58,6 +59,10 @@ struct ActivityAccess {
         microphone == .granted && systemAudio == .heard && calendar != nil && calendar != .granted ? .calendar : .recording
     }
     var detail: String {
+        if directCallReady {
+            return localised("Direct call audio is available. Microphone and system audio access is needed only for fallback.",
+                "Доступен прямой звук звонка. Доступ к микрофону и системному звуку нужен только для резервной записи.")
+        }
         var parts = [microphone == .granted
             ? localised("Microphone allowed", "Микрофон разрешён")
             : localised("Microphone access needed", "Нужен доступ к микрофону")]
@@ -343,6 +348,8 @@ final class ActivityStatusBar: NSStackView {
         case .idle: title = localised("Not recording", "Нет записи"); symbol = "circle"
         case .recording: title = localised("Recording", "Запись"); symbol = "circle.fill"
         case .paused: title = localised("Paused", "Пауза"); symbol = "pause.fill"
+        case .preparing: title = localised("Preparing audio…", "Подготовка звука…"); symbol = "hourglass"
+        case .waiting: title = localised("Call ended — finish recording", "Звонок завершён — завершите запись"); symbol = "stop.circle"
         }
         recording.title = state == .idle ? "" : elapsed ?? "0:00"
         recording.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)

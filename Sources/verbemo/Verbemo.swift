@@ -289,6 +289,7 @@ final class AppController {
     private let autoRecord: AutoRecordController
     private let callIntegrations = CallIntegrationMonitor()
     private var session: RecordingSession?
+    private var recordingCleanup: Task<Void, Never>?
     /// Whether a meeting is being recorded. The session itself stays private —
     /// four things need this one fact about it (the settings form, the setup
     /// form, the update gate, and the quit alert) and none of them need the
@@ -402,7 +403,7 @@ final class AppController {
         // whether or not the event is what started the recording.
         self.autoRecord = watcher ?? AutoRecordController(
             settings: settings, calendar: calendar,
-            canStartRecording: { SetupPermissions.microphone() == .granted },
+            canStartRecording: { [callIntegrations] in SetupPermissions.microphone() == .granted || callIntegrations.directCallReady },
             callObservations: { [callIntegrations] in callIntegrations.observations })
         sweeps = SweepScheduler(
             waitForQueue: { [transcription] in await transcription.waitUntilIdle() },
@@ -755,6 +756,7 @@ final class AppController {
             let text = localised("Stopping…", "Останавливаю…")
             window.showStopping(text)
         }, finishRecording: { [self] in
+            await recordingCleanup?.value
             await liveTransitions.wait()
             await liveTranscription.finishRecording()
         }, finishServices: { [self] in
@@ -851,7 +853,8 @@ final class AppController {
             calendar: Config.useCalendar() || automatic.calendar
                 ? (calendarPermission == .notAsked && calendar.authorized ? .granted : calendarPermission) : nil,
             micActivity: automatic.micActivity, autoCalendar: automatic.calendar,
-            hasSelectedCalendar: !automatic.calendar || automatic.micActivity || !calendar.selectedCalendars().isEmpty)
+            hasSelectedCalendar: !automatic.calendar || automatic.micActivity || !calendar.selectedCalendars().isEmpty,
+            directCallReady: callIntegrations.directCallReady)
         let decision = autoRecord.enabled ? access.automaticBlockReason ?? autoRecord.notice?.title ?? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         let activity = operations.snapshot()
@@ -957,26 +960,28 @@ final class AppController {
     /// loop decides from the answer when to try again.
     @discardableResult
     private func startSession(trigger: RecordingSession.Trigger, context: MeetingContext, title: String? = nil) -> Bool {
-        guard !isStopping else { return false }
+        guard !isStopping, recordingCleanup == nil else { return false }
         guard session == nil else { return true }
         do {
             var context = context
-            // Privacy also applies to manual/calendar starts before the first
-            // observation, independently of the automatic-trigger whitelist.
             if context.callObservation == nil,
-               let pending = callIntegrations.observations.first(where: { $0.participation != .idle }) {
-                context.applyCall(pending)
+               let joined = CallIntegrationMonitor.directCandidate(in: callIntegrations.observations) {
+                context.applyCall(joined)
             }
             let newSession = try RecordingSession(root: root, context: context, trigger: trigger, title: title,
                                                  callObservations: callIntegrations.observations)
             newSession.updateCallObservation(callIntegrations.observations)
-            try newSession.start()
+            newSession.onSourceChange = { [weak self, weak newSession] source in
+                guard let self, let newSession, self.session === newSession else { return }
+                self.captureSourceChanged(source, session: newSession)
+            }
+            try newSession.start(callAudio: callIntegrations.audioFactory(for: context.callObservation))
             session = newSession
             updates.activityDidChange()
             FileHandle.standardError.write(Data(
                 "● recording (\(trigger.rawValue)) → \(newSession.dir.path)\n".utf8
             ))
-            if trigger != .manual {
+            if trigger != .manual, newSession.captureSource == .ordinary {
                 notifyUser(
                     title: localised("verbemo — recording started", "verbemo — запись началась"),
                     body: context.folderSuffix ?? newSession.dir.lastPathComponent,
@@ -1012,6 +1017,8 @@ final class AppController {
             await liveTranscription.beginRecording(
                 enabled: liveEnabled,
                 language: liveLanguage,
+                participants: newSession.captureSource == .preparing,
+                startedAt: newSession.startedAt,
                 update: { [weak self] snapshot in
                     Task { @MainActor in self?.showLive(snapshot) }
                 },
@@ -1022,14 +1029,33 @@ final class AppController {
                     Task { @MainActor in
                         guard let self, self.session === newSession else { return }
                         newSession.installLiveAudioSinks(
-                            mic: sinks?.mic, system: sinks?.system)
+                            mic: sinks?.mic, system: sinks?.system, participants: sinks?.participants)
                     }
                 }
             )
         }
 
-        present(.recording, elapsed: "0:00")
+        present(newSession.captureSource == .preparing ? .preparing : .recording, elapsed: "0:00")
         return true
+    }
+
+    private func captureSourceChanged(_ source: RecordingSession.CaptureSource, session: RecordingSession) {
+        if source == .fallback {
+            let language = LiveTranscriptionLanguage.prompt(for: Config.transcriptionLanguage())
+            liveTransitions.append { [liveTranscription] in await liveTranscription.useOrdinarySources(language: language) }
+            notifyUser(title: localised("Using microphone and system audio", "Запись с микрофона и системного звука"),
+                body: localised("Direct call audio is unavailable. Your microphone is recorded independently of mute in KTalk.",
+                    "Прямой звук звонка недоступен. Микрофон записывается независимо от mute в KTalk."), opening: session.dir)
+        } else if source == .direct, session.trigger != .manual {
+            notifyUser(title: localised("verbemo — recording started", "verbemo — запись началась"),
+                body: session.title ?? session.dir.lastPathComponent, opening: session.dir)
+        } else if source == .failed {
+            notifyUser(title: localised("Recording stopped: audio unavailable", "Запись остановлена: звук недоступен"),
+                body: session.sourceError ?? localised("Check audio access in Settings.", "Проверьте доступ к звуку в настройках."),
+                opening: session.dir)
+            stopSession(reason: "capture-failed")
+        }
+        tick()
     }
 
     private static let startFailedBanner = "recording-start-failed"
@@ -1042,6 +1068,11 @@ final class AppController {
         guard let session else { return }
         session.installLiveAudioSinks(mic: nil, system: nil)
         let finished = session.stop(reason: reason)
+        let cleanup = Task { [weak self] in
+            await session.finishCapture()
+            self?.recordingCleanup = nil
+        }
+        recordingCleanup = cleanup
         let duration = Date().timeIntervalSince(session.startedAt)
         FileHandle.standardError.write(Data(
             "○ stopped (\(reason)) · \(Self.format(duration)) · \(session.dir.path)\n".utf8
@@ -1068,9 +1099,10 @@ final class AppController {
                     + "\(Int(duration))s of recording is under the \(Int(settings.minDuration))s "
                     + "minimum for an automatic recording\n").utf8
             ))
-            session.discard()
             liveTransitions.append { [self, liveTranscription] in
+                await cleanup.value
                 await liveTranscription.finishRecording()
+                session.discard()
                 processingFinished()
             }
             return
@@ -1092,6 +1124,7 @@ final class AppController {
             // Drop the large streaming model before Parakeet begins its final,
             // canonical pass so the two heavyweight ASR pipelines don't
             // compete for memory or the Neural Engine.
+            await cleanup.value
             await liveTranscription.finishRecording()
             await queue?.enqueue(dir)
         }
@@ -1233,7 +1266,7 @@ final class AppController {
         showAutoRecord()
         guard let session else { return }
         present(
-            session.isPaused ? .paused : .recording,
+            session.isPaused ? .paused : session.captureSource == .preparing ? .preparing : session.captureSource == .ended ? .waiting : .recording,
             elapsed: Self.format(Date().timeIntervalSince(session.startedAt))
         )
     }

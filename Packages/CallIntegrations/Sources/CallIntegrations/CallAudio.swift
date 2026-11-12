@@ -40,8 +40,14 @@ public enum CallAudioFailure: Error, Sendable, Equatable {
 
 public protocol CallAudioCapture: Sendable {
     var events: AsyncThrowingStream<CallAudioEvent, Error> { get }
+    /// Wall-clock anchor for frame zero, measured once at the transport boundary.
+    var clockOrigin: Date? { get async }
     func start() async throws
     func stop() async
+}
+
+public extension CallAudioCapture {
+    var clockOrigin: Date? { get async { nil } }
 }
 
 /// Optional capability: metadata-only providers need not acquire audio.

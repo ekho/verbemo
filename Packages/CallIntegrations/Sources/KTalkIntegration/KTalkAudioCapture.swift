@@ -17,6 +17,7 @@ actor KTalkAudioCapture: CallAudioCapture {
     private var nextID = 0
     private var decoder: KTalkAudioDecoder?
     private var pulse = ContinuousClock.now
+    private(set) var clockOrigin: Date?
     private var failure: (any Error)?
     private var began = false
     private var stopping = false
@@ -147,7 +148,10 @@ actor KTalkAudioCapture: CallAudioCapture {
                       let payload = params["payload"] as? String else { continue }
                 do {
                     guard let event = try decoder?.receive(payload) else { continue }
-                    if case .heartbeat = event { pulse = .now }
+                    if case .heartbeat(let frame, let rate) = event {
+                        pulse = .now
+                        if clockOrigin == nil { clockOrigin = Date(timeIntervalSinceNow: -Double(frame) / Double(rate)) }
+                    }
                     switch continuation.yield(event) {
                     case .enqueued: break
                     case .dropped: throw CallAudioFailure.overloaded

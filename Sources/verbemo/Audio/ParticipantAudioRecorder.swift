@@ -29,6 +29,10 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
         var paused = false
         var closed = false
         var sink: Sink?
+        var localMeter = AudioMeter()
+        var remoteMeter = AudioMeter()
+        var localSoundAt: Date?
+        var remoteSoundAt: Date?
     }
     private let state = OSAllocatedUnfairLock(initialState: State())
     private let directory: URL
@@ -44,6 +48,14 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
         get { state.withLock { $0.paused } }
         set { state.withLock { $0.paused = newValue } }
     }
+
+    var audioLevels: (mic: AudioMeter.Reading, system: AudioMeter.Reading) {
+        state.withLock { s in
+            (s.localMeter.read(running: !s.closed, paused: s.paused),
+             s.remoteMeter.read(running: !s.closed, paused: s.paused))
+        }
+    }
+    var lastSoundAt: (local: Date?, remote: Date?) { state.withLock { ($0.localSoundAt, $0.remoteSoundAt) } }
 
     func installLiveSink(_ sink: Sink?) {
         state.withLock { state in
@@ -118,6 +130,14 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
                 }
                 let samples = state.paused ? Array(repeating: Float(0), count: chunk.samples.count) : chunk.samples
                 let buffer = try write(samples, to: entry.file)
+                let peak = samples.reduce(Float(0)) { max($0, abs($1)) }
+                if entry.descriptor.participant.isLocal {
+                    state.localMeter.record(peak: peak)
+                    if peak >= AudioLevel.speechThreshold { state.localSoundAt = Date() }
+                } else {
+                    state.remoteMeter.record(peak: peak)
+                    if peak >= AudioLevel.speechThreshold { state.remoteSoundAt = Date() }
+                }
                 entry.nextFrame = chunk.frameStart + Int64(samples.count)
                 state.entries[chunk.trackID] = entry
                 state.sink?(.audio(state.snapshot.tracks[entry.index], buffer, milliseconds: milliseconds))

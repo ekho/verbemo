@@ -24,11 +24,12 @@ final class RecordingSession {
     enum StartFailure: Error, CustomStringConvertible {
         case systemAudio(Error)
         case microphone(Error)
+        case microphoneAccess
 
         var analyticsComponent: String {
             switch self {
             case .systemAudio: return "system_audio"
-            case .microphone: return "microphone"
+            case .microphone, .microphoneAccess: return "microphone"
             }
         }
 
@@ -36,6 +37,7 @@ final class RecordingSession {
             switch self {
             case .systemAudio(let error): return "system audio: \(error)"
             case .microphone(let error): return "microphone: \(error)"
+            case .microphoneAccess: return localised("Allow microphone access to use fallback recording.", "Для резервной записи разрешите доступ к микрофону.")
             }
         }
     }
@@ -58,41 +60,44 @@ final class RecordingSession {
     var title: String? { editedTitle ?? context.title ?? context.callObservation?.call?.title ?? integrationCall?.call?.title }
     var callIntegrationID: String? { integrationCall?.integrationID }
     private var integrationCall: CallObservation?
-    private let privacyIntegrationIDs: Set<String>
-    private var callPrivacyGate: MicrophonePrivacyGate?
+    typealias CallAudioFactory = @Sendable () async throws -> any CallAudioCapture
+    enum CaptureSource: Equatable { case ordinary, preparing, direct, fallback, ended, failed }
+    private(set) var captureSource: CaptureSource = .ordinary {
+        didSet { onSourceChange?(captureSource) }
+    }
+    private(set) var sourceError: String?
+    var onSourceChange: ((CaptureSource) -> Void)?
+    private var callAudio: CallAudioMetadata?
+    private var participantRecorder: ParticipantAudioRecorder?
+    var participantSnapshot: ParticipantAudioRecorder.Snapshot? { participantRecorder?.snapshot }
+    private var audioCapture: (any CallAudioCapture)?
+    private var audioPreparation: Task<Void, Never>?
+    private var audioConsumer: Task<Void, Never>?
+    private var audioShutdown: Task<Void, Never>?
+    private var participantSink: ParticipantAudioRecorder.Sink?
+    private var recordingStopped = false
+    private var ordinaryStarted = false
+    private var ordinaryStartedAt: Date?
+    private var stopResult: Bool?
 
     func updateCallObservation(_ observations: [CallObservation], now: Date = Date()) {
-        guard let gate = callPrivacyGate else { return }
-        let monitored = observations.filter { privacyIntegrationIDs.contains($0.integrationID) }
-        let complete = Set(monitored.map(\.integrationID)) == privacyIntegrationIDs
-            && monitored.allSatisfy { (0...MicrophonePrivacyGate.maximumAge).contains(now.timeIntervalSince($0.observedAt)) }
         if integrationCall == nil {
-            let joined = monitored.filter { $0.participation == .inCall }
-            if complete, joined.count == 1 {
+            let joined = observations.filter { $0.participation == .inCall && (0...5).contains(now.timeIntervalSince($0.observedAt)) }
+            if joined.count == 1 {
                 integrationCall = joined[0]
                 context.applyCall(joined[0])
-            } else {
-                let ages = monitored.map { now.timeIntervalSince($0.observedAt) }
-                let idle = complete && !monitored.isEmpty && monitored.allSatisfy { $0.participation == .idle }
-                gate.update(unmuted: idle && ages.allSatisfy { $0 >= 0 },
-                            validFor: MicrophonePrivacyGate.maximumAge - (ages.max() ?? .infinity))
-                return
             }
         }
         guard let original = integrationCall else { return }
         guard let current = observations.first(where: { $0.integrationID == original.integrationID }),
-              complete, monitored.allSatisfy({ $0.integrationID == original.integrationID || $0.participation == .idle }),
               current.participation == .inCall,
               original.call == nil || original.call?.id == current.call?.id
                 || (original.source != current.source && original.call?.url != nil && original.call?.url == current.call?.url) else {
-            gate.update(unmuted: false, validFor: 0)
             context.callObservation = .init(integrationID: original.integrationID, application: original.application,
                                            observedAt: now, participation: .unknown)
             return
         }
         let age = now.timeIntervalSince(current.observedAt)
-        gate.update(unmuted: current.call?.microphoneMuted == false && age >= 0,
-                    validFor: MicrophonePrivacyGate.maximumAge - age)
         if (0...5).contains(age) {
             context.callObservation = current
             if original.call == nil || (original.source == .accessibility && current.source == .application) {
@@ -207,18 +212,13 @@ final class RecordingSession {
         self.editedTitle = cleanedTitle
         self.context = context
         self.integrationCall = context.callObservation?.call == nil ? nil : context.callObservation
-        self.privacyIntegrationIDs = Set(callObservations.map(\.integrationID) + [context.callObservation?.integrationID].compactMap { $0 })
         self.trigger = trigger
         self.tapFamilies = context.appFamilies
         // Built here rather than as default arguments: a default argument is
         // evaluated in the caller's isolation, and these are only ever made
         // for the session that owns them.
         self.mic = mic ?? MicRecorder()
-        if !privacyIntegrationIDs.isEmpty {
-            let gate = MicrophonePrivacyGate()
-            self.callPrivacyGate = gate
-            self.mic.privacyGate = gate
-        }
+        self.mic.privacyGate = nil
         self.system = system ?? SystemAudioRecorder()
         self.writeFile = writeFile
 
@@ -244,7 +244,19 @@ final class RecordingSession {
     /// with no meta.json is invisible to every list, so it would never be
     /// transcribed or tidied; an auto-start retrying against a refusal used
     /// to leave one behind per attempt.
-    func start(systemAudioScope: String = Config.systemAudioScope()) throws {
+    func start(systemAudioScope: String = Config.systemAudioScope(), callAudio: CallAudioFactory? = nil,
+               fallbackPermission: @escaping @MainActor @Sendable () -> Bool = { SetupPermissions.microphone() == .granted }) throws {
+        guard !recordingStopped, audioPreparation == nil, !ordinaryStarted else { throw CallAudioFailure.stopped }
+        if let callAudio {
+            prepareCallAudio(callAudio, scope: systemAudioScope, fallbackPermission: fallbackPermission)
+        } else {
+            try startOrdinary(systemAudioScope: systemAudioScope)
+        }
+    }
+
+    private func startOrdinary(systemAudioScope: String) throws {
+        ordinaryStarted = true
+        ordinaryStartedAt = Date()
         // Point the tap at the call app when we know it. Everything else the
         // Mac plays — music, notifications, the video you open afterwards —
         // then stays out of both the transcript and the auto-record loop's
@@ -259,7 +271,7 @@ final class RecordingSession {
         do {
             try system.start(writingTo: dir.appendingPathComponent("system.caf"), scope: scope)
         } catch {
-            abandonFolder()
+            if callAudio == nil { abandonFolder() }
             throw StartFailure.systemAudio(error)
         }
         do {
@@ -269,7 +281,7 @@ final class RecordingSession {
             try mic.start(writingTo: dir.appendingPathComponent("mic.caf"), callApps: tapFamilies)
         } catch {
             system.stop()
-            abandonFolder()
+            if callAudio == nil { abandonFolder() }
             throw StartFailure.microphone(error)
         }
         Analytics.track(.recordingStarted, [.trigger: .text(trigger.rawValue)])
@@ -284,6 +296,120 @@ final class RecordingSession {
         // tick is what follows the microphone and notices a stalled track.
         RunLoop.main.add(watchdog, forMode: .common)
         self.watchdog = watchdog
+    }
+
+    private func prepareCallAudio(_ factory: @escaping CallAudioFactory, scope: String,
+                                  fallbackPermission: @escaping @MainActor @Sendable () -> Bool) {
+        let observation = integrationCall ?? context.callObservation
+        callAudio = CallAudioMetadata(integrationID: observation?.integrationID ?? "call",
+            callID: observation?.call?.id ?? "unknown", periods: [], tracks: [])
+        captureSource = .preparing
+        writeManifest()
+        audioPreparation = Task { [self] in
+            do {
+                let capture = try await factory()
+                guard !recordingStopped, !Task.isCancelled else { await capture.stop(); return }
+                audioCapture = capture
+                let preparingAt = Date()
+                try await capture.start()
+                let origin = await capture.clockOrigin ?? preparingAt
+                guard !recordingStopped, !Task.isCancelled else { await capture.stop(); return }
+                let offset = max(0, Int(origin.timeIntervalSince(startedAt) * 1000))
+                let recorder = ParticipantAudioRecorder(directory: dir, offsetMs: offset)
+                recorder.isPaused = isPaused
+                recorder.installLiveSink(participantSink)
+                participantRecorder = recorder
+                callAudio?.periods.append(.init(mode: .direct, startMs: offset))
+                captureSource = .direct
+                Analytics.track(.recordingStarted, [.trigger: .text(trigger.rawValue)])
+                writeManifest()
+                audioConsumer = Task.detached { [weak self] in
+                    do {
+                        for try await event in capture.events {
+                            guard !Task.isCancelled else { return }
+                            if case .ended = event { await self?.directEnded(); return }
+                            if try recorder.consume(event) { await self?.refreshParticipantManifest() }
+                        }
+                        if !Task.isCancelled {
+                            await self?.startFallback(after: CallAudioFailure.unavailable, scope: scope, permission: fallbackPermission)
+                        }
+                    } catch {
+                        if !Task.isCancelled { await self?.startFallback(after: error, scope: scope, permission: fallbackPermission) }
+                    }
+                }
+            } catch {
+                if !recordingStopped, !Task.isCancelled { await startFallback(after: error, scope: scope, permission: fallbackPermission) }
+            }
+        }
+    }
+
+    private var elapsedMs: Int { max(0, Int(Date().timeIntervalSince(startedAt) * 1000)) }
+
+    private func closeDirectPeriod() {
+        participantRecorder?.close()
+        callAudio?.tracks = participantSnapshot?.tracks ?? []
+        if let index = callAudio?.periods.indices.last, callAudio?.periods[index].endMs == nil {
+            callAudio?.periods[index].endMs = elapsedMs
+        }
+    }
+
+    private func directEnded() async {
+        guard !recordingStopped else { return }
+        closeDirectPeriod()
+        await audioCapture?.stop()
+        guard !recordingStopped else { return }
+        captureSource = .ended
+        writeManifest()
+    }
+
+    private func startFallback(after error: any Error, scope: String, permission: @MainActor @Sendable () -> Bool) async {
+        guard !recordingStopped, captureSource != .fallback, captureSource != .failed else { return }
+        closeDirectPeriod()
+        sourceError = String(describing: error)
+        captureSource = .preparing
+        await audioCapture?.stop()
+        guard !recordingStopped, !Task.isCancelled else { return }
+        do {
+            guard permission() else {
+                throw StartFailure.microphoneAccess
+            }
+            mic.privacyGate = nil
+            callAudio?.periods.append(.init(mode: .fallback, startMs: elapsedMs, reason: sourceError))
+            try startOrdinary(systemAudioScope: scope)
+            captureSource = .fallback
+            writeManifest()
+        } catch {
+            sourceError = String(describing: error)
+            captureSource = .failed
+            if !recordingStopped { writeManifest() }
+        }
+    }
+
+    private func refreshParticipantManifest() {
+        guard !recordingStopped else { return }
+        callAudio?.tracks = participantSnapshot?.tracks ?? []
+        writeManifest()
+    }
+
+    func finishCapture() async {
+        await audioShutdown?.value
+    }
+
+    private var audioFiles: [String: String] {
+        var files = participantSnapshot?.files ?? [:]
+        if callAudio == nil || ordinaryStarted { files.merge(["mic": "mic.caf", "system": "system.caf"]) { _, value in value } }
+        return files
+    }
+
+    private var audioOffsets: [String: Int] {
+        guard callAudio != nil else { return Self.startOffsets(mic: mic.firstBufferAt, system: system.firstBufferAt) }
+        var offsets = participantSnapshot?.offsets ?? [:]
+        if ordinaryStarted {
+            let fallback = callAudio?.periods.last?.startMs ?? elapsedMs
+            offsets["mic"] = mic.firstBufferAt.map { max(0, Int($0.timeIntervalSince(startedAt) * 1000)) } ?? fallback
+            offsets["system"] = system.firstBufferAt.map { max(0, Int($0.timeIntervalSince(startedAt) * 1000)) } ?? fallback
+        }
+        return offsets
     }
 
     /// Remove the folder of a session that never started. Only ever called
@@ -307,6 +433,17 @@ final class RecordingSession {
     /// has to finish from its manifest. Only a finished one can be queued.
     @discardableResult
     func stop(reason: String = "manual") -> Bool {
+        if let stopResult { return stopResult }
+        recordingStopped = true
+        closeDirectPeriod()
+        audioPreparation?.cancel()
+        audioConsumer?.cancel()
+        let capture = audioCapture, preparing = audioPreparation, consuming = audioConsumer
+        audioShutdown = Task {
+            await capture?.stop()
+            await preparing?.value
+            await consuming?.value
+        }
         watchdog?.invalidate()
         watchdog = nil
         if pausedSince != nil { resume() }
@@ -319,10 +456,9 @@ final class RecordingSession {
         var meta: [String: Any] = [
             "started": iso.string(from: startedAt),
             "ended": iso.string(from: ended),
-            "duration_seconds": Int(ended.timeIntervalSince(startedAt)),
-            "files": ["mic": "mic.caf", "system": "system.caf"],
-            "start_offset_ms": Self.startOffsets(
-                mic: mic.firstBufferAt, system: system.firstBufferAt),
+            "duration_seconds": callAudio == nil ? Int(ended.timeIntervalSince(startedAt)) : Int(ceil(ended.timeIntervalSince(startedAt))),
+            "files": audioFiles,
+            "start_offset_ms": audioOffsets,
             "trigger": trigger.rawValue,
             "stop_reason": reason,
             "system_audio": {
@@ -354,6 +490,8 @@ final class RecordingSession {
         // recording still in progress.
         let finished: Bool
         do {
+            if let callAudio { meta["call_audio"] = try callAudio.jsonValue() }
+            if captureSource == .failed { meta["capture_failure"] = sourceError ?? "Source unavailable" }
             try writeFile(Self.json(meta), dir.appendingPathComponent("meta.json"))
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.manifestFile))
             finished = true
@@ -364,7 +502,7 @@ final class RecordingSession {
         }
 
         let length = ended.timeIntervalSince(startedAt)
-        let systemHeardSomething = system.lastSoundAt != nil
+        let systemHeardSomething = lastSystemSoundAt != nil
         Analytics.track(.recordingFinished, [
             .trigger: .text(trigger.rawValue),
             .durationBucket: Analytics.durationBucket(seconds: length),
@@ -376,16 +514,21 @@ final class RecordingSession {
                 .durationBucket: Analytics.durationBucket(seconds: length),
             ])
         }
+        stopResult = finished
         return finished
     }
 
     /// Attach/detach optional live-ASR consumers without touching the durable
     /// recording. Installing midway through a meeting deliberately receives
     /// only new buffers, so enabling live text never performs catch-up work.
-    func installLiveAudioSinks(mic micSink: LiveAudioSink?, system systemSink: LiveAudioSink?) {
-        if micSink != nil || systemSink != nil { liveAudioEverInstalled = true }
-        mic.installLiveAudioSink(micSink)
-        system.installLiveAudioSink(systemSink)
+    func installLiveAudioSinks(mic micSink: LiveAudioSink?, system systemSink: LiveAudioSink?,
+                               participants: ParticipantAudioRecorder.Sink? = nil) {
+        if micSink != nil || systemSink != nil || participants != nil { liveAudioEverInstalled = true }
+        participantSink = recordingStopped ? nil : participants
+        participantRecorder?.installLiveSink(participantSink)
+        let ordinary = callAudio == nil || captureSource == .fallback
+        mic.installLiveAudioSink(ordinary ? micSink : nil)
+        system.installLiveAudioSink(ordinary ? systemSink : nil)
     }
 
     private var liveAudioEverInstalled = false
@@ -403,6 +546,7 @@ final class RecordingSession {
     func pause() {
         guard !isPaused else { return }
         isPaused = true
+        participantRecorder?.isPaused = true
         pausedSince = Date()
         mic.setLiveAudioPaused(true)
         system.setLiveAudioPaused(true)
@@ -413,6 +557,7 @@ final class RecordingSession {
     func resume() {
         guard isPaused else { return }
         isPaused = false
+        participantRecorder?.isPaused = false
         if let since = pausedSince { pausedFor += Date().timeIntervalSince(since) }
         pausedSince = nil
         mic.isMuted = false
@@ -424,19 +569,25 @@ final class RecordingSession {
     // MARK: - levels
 
     var audioLevels: (mic: AudioMeter.Reading, system: AudioMeter.Reading) {
-        (mic.audioLevel, system.audioLevel)
+        captureSource == .direct ? (participantRecorder?.audioLevels ?? (.off, .off)) : (mic.audioLevel, system.audioLevel)
     }
 
     /// When either track last carried something audible. The auto-record
     /// controller's silence backstop reads this; nil means nothing has been
     /// heard on that track yet.
-    var lastMicSoundAt: Date? { mic.lastSoundAt }
-    var lastSystemSoundAt: Date? { system.lastSoundAt }
+    var lastMicSoundAt: Date? { mic.lastSoundAt ?? participantRecorder?.lastSoundAt.local }
+    var lastSystemSoundAt: Date? { system.lastSoundAt ?? participantRecorder?.lastSoundAt.remote }
 
     /// False when either track's sample format defeated the level meter. The
     /// silence backstop must then stand down — "can't measure" and "silent"
     /// look identical, and only one of them should end a meeting.
-    var levelsMeasurable: Bool { mic.levelMeasurable && system.levelMeasurable }
+    var levelsMeasurable: Bool {
+        switch captureSource {
+        case .direct: return true
+        case .ordinary, .fallback: return mic.levelMeasurable && system.levelMeasurable
+        case .preparing, .ended, .failed: return false
+        }
+    }
 
     // MARK: - discarding
 
@@ -672,7 +823,8 @@ final class RecordingSession {
         let iso = ISO8601DateFormatter()
         var manifest: [String: Any] = [
             "started": iso.string(from: startedAt),
-            "files": ["mic": "mic.caf", "system": "system.caf"],
+            "files": audioFiles,
+            "start_offset_ms": audioOffsets,
             "trigger": trigger.rawValue,
         ]
         if let stopped {
@@ -682,11 +834,12 @@ final class RecordingSession {
         }
         if let title { manifest["title"] = title }
         manifest.merge(context.metaFields) { current, _ in current }
-        if mic.firstBufferAt != nil || system.firstBufferAt != nil {
+        if callAudio == nil && (mic.firstBufferAt != nil || system.firstBufferAt != nil) {
             manifest["start_offset_ms"] = Self.startOffsets(
                 mic: mic.firstBufferAt, system: system.firstBufferAt)
         }
         do {
+            if let callAudio { manifest["call_audio"] = try callAudio.jsonValue() }
             try writeFile(Self.json(manifest), dir.appendingPathComponent(Self.manifestFile))
         } catch {
             FileHandle.standardError.write(Data(
@@ -801,7 +954,7 @@ final class RecordingSession {
             // Counted from the start for a track that has never grown, so a
             // file that never appeared stalls on the same clock as one that
             // stopped.
-            let last = trackLastGrew[name] ?? startedAt
+            let last = trackLastGrew[name] ?? ordinaryStartedAt ?? startedAt
             guard !trackStalled.contains(name),
                   now.timeIntervalSince(last) >= Self.stallThreshold
             else { continue }
