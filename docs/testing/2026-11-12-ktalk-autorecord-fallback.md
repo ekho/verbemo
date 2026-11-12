@@ -73,11 +73,15 @@ A reset scoped to `Microphone name.ekho.verbemo`, followed by a restart, produce
 a real TCC microphone request. After the user granted it, the installed UI was
 verified showing `Микрофон разрешён` and `Автозапись включена`.
 
-A new system-audio test emitted `AUTHREQ_PROMPTING` for `kTCCServiceAudioCapture`
-and awaits the user's response to that separate macOS prompt. Calendar remains
-enabled in System Settings, but its old grant does not match this binary; no
-calendar reset was performed. System-audio permission restoration and a new
-call must precede claiming installed runtime acceptance.
+A new system-audio test emitted `AUTHREQ_PROMPTING` for `kTCCServiceAudioCapture`.
+That first attempt returned silence. After the user granted access, a fresh
+test passed and the installed UI showed `Звук системы: недавняя проверка звуком
+пройдена`. This verifies the built-in system-audio tone probe on build 736;
+a new real call is still needed for end-to-end recording acceptance.
+
+Calendar remains enabled in System Settings, but its old grant does not match
+this binary; no calendar reset was performed. Calendar-triggered recording is
+disabled in the inspected configuration.
 
 KTalk was verified outside a call, quit and relaunched through LaunchServices
 with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9333`.
