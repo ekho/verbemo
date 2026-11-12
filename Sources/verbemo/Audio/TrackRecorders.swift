@@ -18,6 +18,7 @@ protocol MicTrackRecorder: AnyObject {
     var levelMeasurable: Bool { get }
     var audioLevel: AudioMeter.Reading { get }
     var isMuted: Bool { get set }
+    var privacyGate: MicrophonePrivacyGate? { get set }
     var capture: MicRecorder.Capture { get }
     var restarts: [MicRecorder.Restart] { get }
     func installLiveAudioSink(_ sink: LiveAudioBufferRelay.Sink?)

@@ -211,6 +211,7 @@ struct ManualStopAutoRecordTests {
 
 @MainActor
 final class FakeAutoSession: AutoRecordedSession {
+    var callIntegrationID: String?
     let startedAt: Date
     let trigger: RecordingSession.Trigger
     var lastMicSoundAt: Date?

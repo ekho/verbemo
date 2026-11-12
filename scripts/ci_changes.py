@@ -29,7 +29,7 @@ def select_checks(paths):
             selected.add('macos_scripts')
         elif path.startswith(('Tests/verbemoTests/', 'Tests/QuietTestWindows/')):
             selected.add('macos_test')
-        elif path.startswith('Sources/'):
+        elif path.startswith(('Sources/', 'Packages/CallIntegrations/')):
             selected.update(MACOS)
         elif path in ('Package.swift', 'Package.resolved'):
             selected.update(MACOS | {'scripts'})

@@ -17,6 +17,7 @@ final class FakeMicRecorder: MicTrackRecorder {
     var levelMeasurable = true
     var audioLevel: AudioMeter.Reading = .unavailable
     var isMuted = false
+    var privacyGate: MicrophonePrivacyGate?
     var capture = MicRecorder.Capture(
         requestedVoiceProcessing: false, initialVoiceProcessing: false,
         finalVoiceProcessing: false, inputDevice: nil, outputDevice: nil,

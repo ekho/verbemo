@@ -5,6 +5,7 @@ let package = Package(
     name: "verbemo",
     platforms: [.macOS("14.2")],
     dependencies: [
+        .package(path: "Packages/CallIntegrations"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
         .package(url: "https://github.com/apple/swift-nio.git", exact: "2.94.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
@@ -15,6 +16,8 @@ let package = Package(
         .executableTarget(
             name: "verbemo",
             dependencies: [
+                .product(name: "CallIntegrations", package: "CallIntegrations"),
+                .product(name: "KTalkIntegration", package: "CallIntegrations"),
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),

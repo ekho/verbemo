@@ -22,6 +22,8 @@ class ChangesTests(unittest.TestCase):
     def test_platform_and_tool_changes_select_their_consumers(self):
         cases = [
             ('Sources/verbemo/Config.swift', {'macos_test', 'macos_build'}),
+            ('Packages/CallIntegrations/Sources/KTalkIntegration/KTalkCDP.swift', {'macos_test', 'macos_build'}),
+            ('Packages/CallIntegrations/Tests/test_transport.py', {'macos_test', 'macos_build'}),
             ('Tests/verbemoTests/ConfigTests.swift', {'macos_test'}),
             ('Tests/QuietTestWindows/QuietTestWindows.m', {'macos_test'}),
             ('windows/src/Verbemo.App/Config.cs', {'windows_test', 'windows_build'}),

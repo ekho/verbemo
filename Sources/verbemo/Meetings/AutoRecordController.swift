@@ -1,4 +1,5 @@
 import Foundation
+import CallIntegrations
 
 /// Decides on its own when a meeting starts and ends.
 ///
@@ -22,6 +23,7 @@ import Foundation
 /// never ends, and neither can be arranged on purpose with a real one.
 @MainActor
 protocol AutoRecordedSession: AnyObject {
+    var callIntegrationID: String? { get }
     var startedAt: Date { get }
     var trigger: RecordingSession.Trigger { get }
     var lastMicSoundAt: Date? { get }
@@ -30,6 +32,7 @@ protocol AutoRecordedSession: AnyObject {
 }
 
 extension RecordingSession: AutoRecordedSession {}
+extension AutoRecordedSession { var callIntegrationID: String? { nil } }
 
 /// The two questions the controller asks the calendar, so a test can answer
 /// them with meetings of its own.
@@ -122,6 +125,10 @@ final class AutoRecordController {
     private let saveEnabled: (Bool) -> Bool
     private let canStartRecording: () -> Bool
     private let checkMic: (Config.AutoRecordSettings) -> MicActivityMonitor.Result
+    private let callObservations: () -> [CallObservation]
+    private var currentCall: CallObservation?
+    private var trackedIntegrationID: String?
+    private var callUnknown = false
     private let now: () -> Date
     private var timer: Timer?
     private var micActiveSince: Date?
@@ -178,7 +185,8 @@ final class AutoRecordController {
         checkMic: @escaping (Config.AutoRecordSettings) -> MicActivityMonitor.Result = {
             MicActivityMonitor.check(callApps: $0.callApps, ignoring: $0.ignoreApps)
         },
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        callObservations: @escaping () -> [CallObservation] = { [] }
     ) {
         self.enabled = settings.enabled
         self.calendar = calendar
@@ -187,6 +195,7 @@ final class AutoRecordController {
         self.canStartRecording = canStartRecording
         self.checkMic = checkMic
         self.now = now
+        self.callObservations = callObservations
     }
 
     /// Start the loop. It runs whether or not auto-record is on, and a tick
@@ -260,6 +269,7 @@ final class AutoRecordController {
     /// don't want it recorded; stay out of the way until that call actually
     /// ends, and consider the current calendar event dealt with.
     func noteManualStop() {
+        trackedIntegrationID = currentSession?()?.callIntegrationID ?? trackedIntegrationID
         phase = .standingDown(.manualStop)
         notice = .manualStop
         micActiveSince = nil
@@ -302,10 +312,24 @@ final class AutoRecordController {
             return
         }
 
-        let mic = checkMic(settings)
+        let observations = callObservations()
+        var micSettings = settings
+        micSettings.ignoreApps += observations.map(\.application.bundleID)
+        let signal = CallIntegrationBridge.signal(microphone: checkMic(micSettings),
+            observations: observations, settings: settings, now: now)
+        let mic = signal.microphone
+        currentCall = signal.observation
+        let relevantID = currentSession?()?.callIntegrationID ?? trackedIntegrationID
+        callUnknown = relevantID.map { id in
+            guard let value = observations.first(where: { $0.integrationID == id }) else { return true }
+            return value.participation == .unknown || !(0...5).contains(now.timeIntervalSince(value.observedAt))
+        } ?? false
 
         if mic.active {
             if micActiveSince == nil { micActiveSince = now }
+            micIdleSince = nil
+        } else if callUnknown {
+            micActiveSince = nil
             micIdleSince = nil
         } else {
             micActiveSince = nil
@@ -395,8 +419,9 @@ final class AutoRecordController {
             if let event = started.first(where: { !isHandled($0) }) {
                 // The call app usually grabs the mic a moment after the event
                 // starts, so it may be nil here — the calendar carries the name.
-                let context = MeetingContext(
+                var context = MeetingContext(
                     meeting: event, app: mic.names.first, appFamilies: mic.families)
+                context.applyCall(currentCall)
                 if attemptStart(.calendar, context, now: now) {
                     markHandled(event)
                     currentEvent = event
@@ -428,7 +453,8 @@ final class AutoRecordController {
             return
         }
         let event = calendar?.bestMatch(for: now)
-        let context = MeetingContext(meeting: event, app: mic.names.first, appFamilies: mic.families)
+        var context = MeetingContext(meeting: event, app: mic.names.first, appFamilies: mic.families)
+        context.applyCall(currentCall)
         if attemptStart(.micActivity, context, now: now) {
             currentEvent = event
             lastDecision = localised(
@@ -445,6 +471,7 @@ final class AutoRecordController {
         _ trigger: RecordingSession.Trigger, _ context: MeetingContext, now: Date
     ) -> Bool {
         if startRecording?(trigger, context) == true {
+            trackedIntegrationID = context.callObservation?.integrationID
             phase = .recording
             startFailures = 0
             return true
@@ -512,6 +539,11 @@ final class AutoRecordController {
                 "stopped after \(Int(settings.silenceStop / 60)) min of silence",
                 "остановила после \(Int(settings.silenceStop / 60)) мин тишины")
             stop("silence")
+            return
+        }
+
+        if callUnknown {
+            lastDecision = localised("Call observation unavailable — recording continues", "Нет данных о звонке — запись продолжается")
             return
         }
 
