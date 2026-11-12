@@ -16,7 +16,6 @@ final class CallIntegrationMonitor {
         guard settings.enabled else { return [] }
         let text = settings.space
         let url = text.isEmpty ? nil : URL(string: text)
-        // Invalid configuration must not re-enable the raw microphone trigger.
         let provider = (text.isEmpty || url != nil ? try? KTalkIntegration(spaceURL: url,
                 accessibilityEnabled: settings.accessibility) : nil)
             ?? (try! KTalkIntegration(accessibilityEnabled: settings.accessibility))

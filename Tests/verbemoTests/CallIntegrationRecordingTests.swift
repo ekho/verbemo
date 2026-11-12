@@ -21,7 +21,7 @@ struct CallIntegrationRecordingTests {
         var starts = 0, stops = 0
         let controller = AutoRecordController(settings: settings, calendar: nil, loadSettings: { settings },
             checkMic: { configuration in
-                #expect(configuration.ignoreApps.contains("kontur.talk"))
+                #expect(configuration.ignoreApps.contains("kontur.talk") == (reading.participation != .unknown))
                 return .init(active: false, names: [], families: [], allHolders: ["KTalk helper"])
             }, now: { now }, callObservations: { [reading] })
         controller.currentSession = { session }
@@ -61,6 +61,56 @@ struct CallIntegrationRecordingTests {
         #expect(h.starts.count == 1)
         h.run(for: 15)
         #expect(h.starts.count == 2)
+    }
+
+    @Test(arguments: [CallParticipation.unknown, .inCall, .idle, .preparing])
+    func unknownCallIntegrationFallsBackToMicrophoneAutostart(_ participation: CallParticipation) {
+        var now = Date(timeIntervalSince1970: 1_800_000_000)
+        var settings = Config.AutoRecordSettings()
+        settings.calendar = false
+        let process = AudioProcesses.Process(object: 1, pid: 100,
+            bundleID: "kontur.talk.helper", name: "Толк Helper",
+            runningInput: true, runningOutput: false)
+        var starts = 0
+        let controller = AutoRecordController(settings: settings, calendar: nil, loadSettings: { settings },
+            checkMic: {
+                MicActivityMonitor.evaluate(processes: [process], callApps: $0.callApps, ignoring: $0.ignoreApps)
+            }, now: { now }, callObservations: {
+                [.init(integrationID: "ktalk", application: .init(bundleID: "kontur.talk", name: "Толк"),
+                       observedAt: now.addingTimeInterval(participation == .unknown ? 0 : -6),
+                       participation: participation)]
+            })
+        controller.startRecording = { trigger, context in
+            #expect(trigger == .micActivity)
+            #expect(context.callObservation == nil)
+            #expect(context.appFamilies == ["kontur.talk"])
+            starts += 1
+            return true
+        }
+        controller.tick()
+        now.addTimeInterval(settings.startDelay)
+        controller.tick()
+        #expect(starts == 1)
+    }
+
+    @Test(arguments: [CallParticipation.idle, .preparing])
+    func confirmedCallStateSuppressesRawMicrophoneAutostart(_ participation: CallParticipation) {
+        var now = Date(timeIntervalSince1970: 1_800_000_000)
+        var settings = Config.AutoRecordSettings()
+        settings.calendar = false
+        let process = AudioProcesses.Process(object: 1, pid: 100,
+            bundleID: "kontur.talk.helper", name: "Толк Helper",
+            runningInput: true, runningOutput: false)
+        var starts = 0
+        let controller = AutoRecordController(settings: settings, calendar: nil, loadSettings: { settings },
+            checkMic: {
+                MicActivityMonitor.evaluate(processes: [process], callApps: $0.callApps, ignoring: $0.ignoreApps)
+            }, now: { now }, callObservations: { [self.observation(participation, date: now)] })
+        controller.startRecording = { _, _ in starts += 1; return true }
+        controller.tick()
+        now.addTimeInterval(settings.startDelay)
+        controller.tick()
+        #expect(starts == 0)
     }
 
     @Test func ordinaryCaptureIgnoresCallMuteButHonoursSessionPause() throws {
