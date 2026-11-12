@@ -41,3 +41,43 @@
 - For changes to the Windows app, run the relevant build and tests on Windows. When behavior depends on the Windows graphical interface, launch the app there and verify the actual flow with Computer Use when available.
 - Mac-only checks or CI results do not establish that the Windows app works. Report which checks ran on the Windows host and any checks that could not run.
 - If the current chat runs on another host, use the connected Windows host or arrange a handoff of the chat to it before Windows-specific validation. If the host is unavailable, state the blocker instead of claiming Windows verification.
+
+## Swift and macOS development
+
+- Follow the deployment target and toolchain requirements in `Package.swift` and
+  CI, using the existing SwiftPM/Makefile build route. Before adopting an API,
+  verify its availability on the minimum supported macOS and the compiler
+  actually in use; the manifest's tools version does not identify that compiler.
+- Preserve the current AppKit/SwiftUI split: AppKit owns editing, selection, menus
+  and command routing. Reuse existing bridges, controls, `StudioStyle` and
+  `localised` helpers.
+- Keep UI state on `MainActor` and respect actor and `Sendable` boundaries. Prefer
+  `async`/`await` for ordinary asynchronous work. New `@unchecked Sendable` or
+  other concurrency escape hatches require a documented safety invariant, not
+  just suppression of a diagnostic.
+- Preserve audio callback, queue and buffer-lifetime contracts documented in the
+  audio code. Keep blocking native recognition on `DedicatedThread.run`, with
+  its callers' cancellation handling and error propagation intact.
+- Prefer Observation for suitable new SwiftUI state. Existing `ObservableObject`
+  integration is valid; migrate it only for a concrete benefit with regression
+  coverage.
+- Use semantic controls with accessible names and keyboard operation. For changed
+  UI, verify narrow windows, light and dark appearances, and applicable VoiceOver
+  behavior; reuse the existing layout and accessibility tests.
+- Handle recoverable failures from files, network and user input explicitly;
+  avoid forced unwraps and `try!` on external data. Follow existing component
+  boundaries and injectable dependencies to keep logic testable.
+- Use Swift Testing and isolated fixtures. Run root tests with
+  `swift test --no-parallel`: `.serialized` alone does not isolate shared AppKit
+  state across suites. When `Packages/CallIntegrations` changes, also run its
+  separate package and transport checks from `.github/workflows/ci.yml`.
+  Follow `docs/ci.md` for build/test scope and `docs/pitfalls.md` for runtime
+  checks. Report automated, UI and real-audio validation separately.
+
+## Swift code navigation
+
+- When Serena is available, use its symbol overview, declarations and references
+  to narrow Swift code reads. Setup and troubleshooting: `docs/agent-code-navigation.md`.
+- Cross-check references with `rg` before changing shared APIs or removing code.
+  An empty reference or diagnostic result does not establish that indexing is
+  complete or that the code builds. Follow the existing build/test requirements.

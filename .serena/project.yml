@@ -1,0 +1,40 @@
+# Defaults stay explicit so Serena does not expand this file on startup.
+project_name: verbemo
+language_servers:
+- swift
+agent_interface: tools
+read_only: true
+default_modes:
+- no-memories
+fixed_tools:
+- initial_instructions
+- get_current_config
+- get_symbols_overview
+- find_symbol
+- find_referencing_symbols
+- find_declaration
+- find_implementations
+- get_diagnostics_for_file
+added_modes: null
+included_apis: []
+excluded_apis: []
+excluded_tools: []
+included_optional_tools: []
+symbol_info_budget: null
+language_backend: null
+line_ending: null
+read_only_memory_patterns: []
+ignored_memory_patterns: []
+ls_specific_settings:
+  swift:
+    initializationOptions:
+      backgroundPreparationMode: build
+ignored_paths: []
+ls_workspace_folders:
+- .
+ls_additional_workspace_folders: []
+ignore_all_files_in_gitignore: true
+initial_prompt: ''
+encoding: utf-8
+activation_command: null
+activation_command_timeout: 180.0

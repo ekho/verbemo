@@ -1,0 +1,22 @@
+[mcp_servers.serena]
+command = "uv"
+args = [
+  "tool", "run", "--isolated", "--python", "3.13",
+  "--from", "serena-agent==2.1.0",
+  "serena", "start-mcp-server", "--context", "codex", "--project", ".",
+  "--enable-web-dashboard", "false", "--enable-gui-log-window", "false",
+]
+# MCP cwd is relative to the Codex task directory; open the worktree root.
+cwd = "."
+startup_timeout_sec = 180
+tool_timeout_sec = 180
+enabled_tools = [
+  "initial_instructions", "get_current_config", "get_symbols_overview",
+  "find_symbol", "find_referencing_symbols", "find_declaration",
+  "find_implementations", "get_diagnostics_for_file",
+]
+
+[mcp_servers.serena.env]
+SERENA_HOME = ".build/serena/home"
+UV_CACHE_DIR = ".build/serena/uv-cache"
+UV_PYTHON_INSTALL_DIR = ".build/serena/python"
