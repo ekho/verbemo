@@ -728,7 +728,7 @@ final class RecordingSession {
             var meta: [String: Any] = [
                 "started": iso.string(from: started ?? ended),
                 "ended": iso.string(from: ended),
-                "duration_seconds": Int(ended.timeIntervalSince(started ?? ended)),
+                "duration_seconds": manifest["call_audio"] == nil ? Int(ended.timeIntervalSince(started ?? ended)) : Int(ceil(ended.timeIntervalSince(started ?? ended))),
                 "files": files,
                 "start_offset_ms": manifest["start_offset_ms"] as? [String: Int] ?? [:],
                 "trigger": manifest["trigger"] as? String ?? Trigger.manual.rawValue,
@@ -740,6 +740,8 @@ final class RecordingSession {
             if let calendar = manifest["calendar"] as? [String: Any] {
                 meta["calendar"] = calendar
             }
+            if let call = manifest["call"] { meta["call"] = call }
+            if let callAudio = manifest["call_audio"] { meta["call_audio"] = callAudio }
             // A stop that could not write meta.json kept what it would have
             // written here, and that is a better account than one rebuilt
             // from file dates: it knows why the recording ended and what the

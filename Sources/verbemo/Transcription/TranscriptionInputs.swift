@@ -312,7 +312,7 @@ struct TranscriptionInputs {
 /// The slice of meta.json the coordinator needs: which files exist, who they
 /// represent, and how far each track started after the earliest one.
 struct SessionMeta {
-    struct Track {
+    struct Track: Equatable {
         let file: String
         let speaker: String
         let offsetMs: Int

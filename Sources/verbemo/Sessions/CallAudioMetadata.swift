@@ -43,7 +43,8 @@ struct CallAudioMetadata: Codable, Sendable, Equatable {
                       && !track.sourceID.isEmpty && !track.participantID.isEmpty
                       && track.name.utf8.count <= 4096 && track.generation > 0 && track.missingFrames >= 0
                       && (8000...192000).contains(track.sampleRate) && offset >= 0
-                      && !file.isEmpty && file == URL(fileURLWithPath: file).lastPathComponent
+                      && [track.fileKey + ".caf", track.fileKey + ".m4a"].contains(file)
+                      && file == URL(fileURLWithPath: file).lastPathComponent
                       && file != "." && file != ".." && !file.contains("\\")
               }) else { throw CocoaError(.fileReadCorruptFile) }
         return result
