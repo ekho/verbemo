@@ -127,6 +127,61 @@ HTTP/WebSocket transport tests, and three JavaScript audio-capture tests.
 The full root `swift test --no-parallel` run also passed again: 1482 tests /
 201 suites in 298.335 seconds.
 
+## Installed build 740 call checks — 2026-11-13
+
+`make app MACOS_PREVIEW=1` passed again from commit `422ecef`, producing
+Verbemo 0.23.0 (740), universal x86_64/arm64. Bundle signatures, macOS 14.2
+compatibility and the Nemotron helper checks passed. This local build replaced
+736; the previous bundle remains at
+`.build/installed-backups/Verbemo-0.23.0-736-before-unnamed-call.app`.
+The installed executable matches the built executable, and the configuration
+hash still matches the pre-test configuration.
+
+The first native UI check joined an unnamed room with KTalk's microphone and
+camera off. Verbemo automatically entered direct capture and displayed the
+KTalk source badges. No participant track was produced in this muted-from-start
+room. On exit, capture attempted its fallback, which failed because the new
+ad-hoc build initially lacked its microphone grant. The 74-second session ended
+as `capture-failed`; a running timer alone was not treated as audio acceptance.
+
+After invoking Verbemo's microphone permission action, its UI showed microphone
+and calendar access granted again, without another permission reset. A fresh
+system-audio tone probe passed on November 13. Calendar recording was not tested.
+
+With the microphone enabled in KTalk, ordinary recording automatically started
+while the prejoin integration observation was unknown. The call was then joined
+and left through the native UI. Verbemo stopped automatically with
+`stop_reason: call-ended`, duration 118 seconds, and no capture failure. The
+saved two-channel AAC file decoded successfully: microphone peak -35.47 dBFS,
+RMS -58.95 dBFS; the other channel was effectively silent without a remote
+speaker. This confirms the prejoin fallback tradeoff also occurs on the installed
+client; it is not merely a hypothetical limitation.
+
+A recording that already started through the ordinary path did not switch to
+direct capture when the integration subsequently recognized the call. To verify
+direct audio separately, that test recording was stopped and a new recording
+was started manually inside the recognized call, with the user's permission to
+transmit microphone audio into the otherwise empty room. The camera remained off.
+
+The installed UI showed separate KTalk participant tracks, and the manifest
+contained one growing participant file. Closing the room disconnected the CDP
+socket; Verbemo switched to ordinary microphone/system capture. Its source label
+changed to fallback and the physical microphone file grew. The recording was
+then stopped manually and saved without a capture failure. Its 141-second
+metadata contains a direct period from 213 to 116,671 ms and a fallback period
+from 116,766 to 140,900 ms, retaining the participant track.
+
+Both saved compressed tracks decoded successfully: the direct KTalk track had
+5,587,456 samples, peak -53.23 dBFS and RMS -77.13 dBFS; the physical microphone
+fallback had 1,147,200 samples, peak -51.20 dBFS and RMS -64.64 dBFS. These are
+nonzero input signals, not confirmation of intelligible speech. The user did not
+confirm speaking the requested test phrase before this probe ended. No remote
+participant joined, and the system track had no audio samples. The native test
+therefore establishes direct local audio persistence and fallback after room
+closure, not remote speech or continuity after a transport failure mid-call.
+The direct track metadata identifies it as local, with a 48 kHz sample rate and
+512 missing frames; this probe does not establish gap-free capture.
+
 ## Limits
 
 Direct participant audio requires KTalk's explicitly enabled local diagnostic
@@ -134,6 +189,8 @@ port. The code fix does not open that port or change KTalk or user settings;
 the separate user-approved local restart is recorded above.
 Permission renewal after installation is described above. Ordinary detection
 can treat prejoin microphone use as a call when exact participation is
-unavailable. Remote participant speech and a forced transition from direct
-capture to physical-device fallback remain unverified. The muted direct-audio
-probe does not establish audible direct capture. Windows is unchanged.
+unavailable, and that recording retains its ordinary source after recognition.
+Remote participant speech, intelligibility of local speech and fallback
+continuity during an ongoing call remain unverified. Native direct autostart was
+observed in a muted room; nonzero direct audio was verified in a separate manual
+recording. Windows is unchanged.
