@@ -76,8 +76,20 @@
 
 ## Swift code navigation
 
-- When Serena is available, use its symbol overview, declarations and references
-  to narrow Swift code reads. Setup and troubleshooting: `docs/agent-code-navigation.md`.
-- Cross-check references with `rg` before changing shared APIs or removing code.
-  An empty reference or diagnostic result does not establish that indexing is
-  complete or that the code builds. Follow the existing build/test requirements.
+- Before implementing or changing Swift code, investigate the affected
+  code through Serena.
+- On first use in a session, call `initial_instructions` and
+  `get_current_config`; verify the active project.
+- Use `get_symbols_overview` or `find_symbol` to inspect relevant existing
+  symbols, then follow declarations and references as needed.
+  A connection check alone does not satisfy this requirement.
+- Before the first code edit, briefly summarize the relevant symbols,
+  callers and existing patterns found during this investigation.
+- If Serena is unavailable or queries fail, troubleshoot using
+  `docs/agent-code-navigation.md`. If unresolved, report the blocker
+  and pause implementation until the user explicitly permits a fallback.
+- Supplement Serena with targeted file reads and `rg`. Cross-check
+  references before changing shared APIs or removing code.
+  Empty reference or diagnostic results do not establish that indexing is
+  complete, that a symbol is unused, or that the code builds.
+  Follow the existing build/test requirements.
