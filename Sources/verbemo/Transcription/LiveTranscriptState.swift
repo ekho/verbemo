@@ -29,19 +29,28 @@ enum LiveTranscriptionLanguage {
 }
 
 struct LiveTranscriptState: Sendable {
-    enum Speaker: String, Sendable, Hashable {
-        case you
-        case them
+    struct Speaker: Sendable, Hashable {
+        let id: String
+        private var displayName: String?
+        static let you = Speaker(id: "you")
+        static let them = Speaker(id: "them")
+
+        static func participant(id: String, name: String) -> Speaker {
+            Speaker(id: "participant:" + id, displayName: name.isEmpty ? "?" : name)
+        }
+
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
         /// Who said it, in the window's language rather than the meeting's:
         /// this names the two microphones, not the two languages.
         var label: String {
-            self == .you ? localised("You", "Вы") : localised("Them", "Они")
+            displayName ?? (self == .you ? localised("You", "Вы") : localised("Them", "Они"))
         }
     }
 
     struct Block: Sendable, Equatable {
-        let speaker: Speaker
+        var speaker: Speaker
         var text: String
         let startMilliseconds: Int
         var isProvisional: Bool
@@ -94,6 +103,7 @@ struct LiveTranscriptState: Sendable {
         if let index = provisionalIndex[speaker], entries.indices.contains(index),
            case .speech(var block) = entries[index] {
             block.text = text
+            block.speaker = speaker
             entries[index] = .speech(block)
             return
         }
@@ -316,5 +326,10 @@ struct CumulativePartials: Sendable {
     mutating func reset() {
         latest.removeAll(keepingCapacity: true)
         closed.removeAll(keepingCapacity: true)
+    }
+
+    mutating func remove(_ speaker: LiveTranscriptState.Speaker) {
+        latest.removeValue(forKey: speaker)
+        closed.removeValue(forKey: speaker)
     }
 }

@@ -9,6 +9,7 @@ import os.lock
 actor LiveTranscriptionCoordinator {
     private struct AudioPacket: @unchecked Sendable {
         var buffer: AVAudioPCMBuffer
+        var milliseconds: Int? = nil
     }
 
     enum Status: Sendable, Equatable {
@@ -32,15 +33,23 @@ actor LiveTranscriptionCoordinator {
     struct SessionSinks: Sendable {
         let mic: LiveAudioBufferRelay.Sink
         let system: LiveAudioBufferRelay.Sink
+        var participants: ParticipantAudioRecorder.Sink? = nil
     }
 
     private enum Source: Sendable, Hashable {
         case mic
         case system
+        case participant(id: String, name: String)
 
         var speaker: LiveTranscriptState.Speaker {
-            self == .mic ? .you : .them
+            switch self {
+            case .mic: .you
+            case .system: .them
+            case .participant(let id, let name): .participant(id: id, name: name)
+            }
         }
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.speaker == rhs.speaker }
+        func hash(into hasher: inout Hasher) { hasher.combine(speaker) }
     }
 
     private let modelStore: NemotronModelStore
@@ -71,6 +80,12 @@ actor LiveTranscriptionCoordinator {
     private var managers: [Source: StreamingNemotronMultilingualAsrManager] = [:]
     private var sharedModels: SharedNemotronMultilingualModels?
     private var sharedModelDirectory: URL?
+    private var participantMode = false
+    private var participantContinuation: AsyncStream<ParticipantAudioRecorder.LiveEvent>.Continuation?
+    private var participantQueues: [Source: AsyncStream<AudioPacket>.Continuation] = [:]
+    private var participantConsumers: [Source: Task<Void, Never>] = [:]
+    private var participantLabels: [Source: LiveTranscriptState.Speaker] = [:]
+    private var sourceTimes: [Source: Int] = [:]
 
     init(modelStore: NemotronModelStore = .init(),
          preload: @escaping @Sendable (URL) async throws -> SharedNemotronMultilingualModels = {
@@ -92,13 +107,16 @@ actor LiveTranscriptionCoordinator {
     func beginRecording(
         enabled: Bool,
         language: String,
+        participants: Bool = false,
+        startedAt: Date = Date(),
         update: @escaping @Sendable (Snapshot) -> Void,
         attach: @escaping @Sendable (SessionSinks?) -> Void
     ) {
         stopPipeline(releaseSharedModels: true)
         self.update = update
         self.attach = attach
-        startedAt = Date()
+        self.startedAt = startedAt
+        participantMode = participants
         isRecording = true
         status = enabled ? .loading : .paused
         let epoch = transcript.beginRecording(enabled: enabled)
@@ -118,6 +136,16 @@ actor LiveTranscriptionCoordinator {
         publish()
         guard enabled else { return }
         startPipeline(language: language, epoch: epoch, allowDownload: true)
+    }
+
+    func useOrdinarySources(language: String) {
+        guard isRecording, participantMode else { return }
+        stopPipeline(releaseSharedModels: false)
+        participantMode = false
+        transcript.invalidateActiveEpoch()
+        status = transcript.isEnabled ? .loading : .paused
+        publish()
+        if transcript.isEnabled { startPipeline(language: language, epoch: transcript.epoch, allowDownload: false) }
     }
 
     func finishRecording() async {
@@ -173,8 +201,10 @@ actor LiveTranscriptionCoordinator {
         pendingSinks = SessionSinks(
             mic: makeSink(continuation: micPair.continuation, epoch: epoch),
             system: makeSink(continuation: systemPair.continuation, epoch: epoch))
+        let previous = retirement
         loadTask = Task { [weak self] in
-            guard let self else { return }
+            await previous?.value
+            guard !Task.isCancelled, let self else { return }
             await self.loadAndConsume(
                 mic: micPair.stream,
                 system: systemPair.stream,
@@ -231,6 +261,27 @@ actor LiveTranscriptionCoordinator {
             guard transcript.epoch == epoch, transcript.isEnabled else { return }
             sharedModels = shared
             sharedModelDirectory = directory
+
+            if participantMode {
+                let pair = Self.participantStream { [weak self] in
+                    Task { await self?.fail(localised("Participant preview queue is full", "Очередь онлайн-расшифровки участников заполнена"), epoch: epoch) }
+                }
+                participantContinuation = pair.continuation
+                consumerTasks = [Task { [weak self] in
+                    for await event in pair.stream {
+                        guard !Task.isCancelled else { return }
+                        await self?.receiveParticipant(event, language: language, epoch: epoch)
+                    }
+                }]
+                if var sinks = pendingSinks {
+                    pendingSinks = nil
+                    sinks.participants = pair.sink
+                    status = .live
+                    publish()
+                    attach?(sinks)
+                }
+                return
+            }
 
             let micManager = StreamingNemotronMultilingualAsrManager()
             let systemManager = StreamingNemotronMultilingualAsrManager()
@@ -298,6 +349,9 @@ actor LiveTranscriptionCoordinator {
             do {
                 for await packet in stream {
                     guard !Task.isCancelled else { return }
+                    if let milliseconds = packet.milliseconds {
+                        await self?.markTime(milliseconds, source: source, epoch: epoch)
+                    }
                     let seconds = Double(packet.buffer.frameLength)
                         / packet.buffer.format.sampleRate
                     _ = try await manager.process(audioBuffer: packet.buffer)
@@ -317,11 +371,12 @@ actor LiveTranscriptionCoordinator {
     }
 
     private func received(_ text: String, from source: Source, epoch: Int) {
-        guard transcript.epoch == epoch else { return }
-        guard let text = partials.text(from: text, for: source.speaker) else { return }
-        let milliseconds = Int(Date().timeIntervalSince(startedAt) * 1000)
+        guard transcript.epoch == epoch, managers[source] != nil else { return }
+        let speaker = participantLabels[source] ?? source.speaker
+        guard let text = partials.text(from: text, for: speaker) else { return }
+        let milliseconds = sourceTimes[source] ?? Int(Date().timeIntervalSince(startedAt) * 1000)
         transcript.applyPartial(
-            speaker: source.speaker,
+            speaker: speaker,
             text: text,
             startMilliseconds: milliseconds,
             epoch: epoch
@@ -341,7 +396,7 @@ actor LiveTranscriptionCoordinator {
     private func decoded(
         seconds: Double, spoken: Bool, from source: Source, epoch: Int
     ) async {
-        guard transcript.epoch == epoch else { return }
+        guard transcript.epoch == epoch, managers[source] != nil else { return }
         guard !spoken else {
             silentSeconds[source] = 0
             return
@@ -417,12 +472,88 @@ actor LiveTranscriptionCoordinator {
         loadTask = nil
         continuations.forEach { $0.finish() }
         continuations.removeAll(keepingCapacity: false)
-        let oldConsumers = consumerTasks
+        participantContinuation?.finish()
+        participantContinuation = nil
+        participantQueues.values.forEach { $0.finish() }
+        participantQueues.removeAll()
+        let oldConsumers = consumerTasks + Array(participantConsumers.values)
+        participantConsumers.removeAll()
+        participantLabels.removeAll()
+        sourceTimes.removeAll()
         oldConsumers.forEach { $0.cancel() }
         consumerTasks.removeAll(keepingCapacity: false)
         let oldManagers = Array(managers.values)
         managers.removeAll(keepingCapacity: false)
         return (oldLoad, oldConsumers, oldManagers)
+    }
+
+    nonisolated static func participantStream(onOverflow: @escaping @Sendable () -> Void) -> (
+        stream: AsyncStream<ParticipantAudioRecorder.LiveEvent>,
+        continuation: AsyncStream<ParticipantAudioRecorder.LiveEvent>.Continuation,
+        sink: ParticipantAudioRecorder.Sink
+    ) {
+        let pair = AsyncStream<ParticipantAudioRecorder.LiveEvent>.makeStream(bufferingPolicy: .bufferingOldest(256))
+        return (pair.stream, pair.continuation, { event in
+            if case .dropped = pair.continuation.yield(event) { onOverflow() }
+        })
+    }
+
+    private func markTime(_ milliseconds: Int, source: Source, epoch: Int) {
+        guard transcript.epoch == epoch, managers[source] != nil else { return }
+        sourceTimes[source] = milliseconds
+    }
+
+    private func receiveParticipant(_ event: ParticipantAudioRecorder.LiveEvent, language: String, epoch: Int) async {
+        guard transcript.epoch == epoch, transcript.isEnabled, participantMode, let sharedModels else { return }
+        switch event {
+        case .track(let track):
+            let source = Source.participant(id: track.fileKey, name: track.name)
+            participantLabels[source] = source.speaker
+            guard managers[source] == nil else { return }
+            guard participantQueues.count < 256 else { fail("Too many live participant streams", epoch: epoch); return }
+            let manager = StreamingNemotronMultilingualAsrManager()
+            do {
+                try await manager.loadFromShared(sharedModels)
+                await manager.setLanguage(language)
+                decodedSomething[source] = .init(initialState: false)
+                await installCallback(on: manager, source: source, epoch: epoch)
+                guard transcript.epoch == epoch, transcript.isEnabled, participantMode else {
+                    await manager.cleanup(); return
+                }
+                let pair = AsyncStream<AudioPacket>.makeStream(bufferingPolicy: .bufferingOldest(48))
+                managers[source] = manager
+                participantQueues[source] = pair.continuation
+                participantConsumers[source] = consume(pair.stream, from: source, with: manager,
+                                                       spoken: decodedSomething[source], epoch: epoch)
+            } catch {
+                await manager.cleanup()
+                fail(error.localizedDescription, epoch: epoch)
+            }
+        case .audio(let track, let buffer, let milliseconds):
+            let source = Source.participant(id: track.fileKey, name: track.name)
+            if case .dropped = participantQueues[source]?.yield(AudioPacket(buffer: buffer, milliseconds: milliseconds)) {
+                pipelineOverloaded(epoch: epoch)
+            }
+        case .removed(let id):
+            let source = Source.participant(id: id, name: "")
+            participantQueues.removeValue(forKey: source)?.finish()
+            // Drain queued preview audio, then flush while the callback is still admitted.
+            if let consumer = participantConsumers[source] { await consumer.value }
+            guard transcript.epoch == epoch else { return }
+            participantConsumers.removeValue(forKey: source)
+            if let manager = managers[source], let final = try? await manager.finish() {
+                received(final, from: source, epoch: epoch)
+            }
+            guard transcript.epoch == epoch else { return }
+            _ = transcript.endSegment(speaker: source.speaker, epoch: epoch)
+            partials.remove(source.speaker)
+            publish()
+            if let manager = managers.removeValue(forKey: source) { await manager.cleanup() }
+            participantLabels.removeValue(forKey: source)
+            decodedSomething.removeValue(forKey: source)
+            silentSeconds.removeValue(forKey: source)
+            sourceTimes.removeValue(forKey: source)
+        }
     }
 
     private func publish() {
