@@ -79,16 +79,53 @@ test passed and the installed UI showed `Звук системы: недавня
 пройдена`. This verifies the built-in system-audio tone probe on build 736;
 a new real call is still needed for end-to-end recording acceptance.
 
-Calendar remains enabled in System Settings, but its old grant does not match
-this binary; no calendar reset was performed. Calendar-triggered recording is
-disabled in the inspected configuration.
+No calendar reset was performed. During the later call check the installed UI
+also showed calendar access granted. Calendar-triggered recording is disabled
+in the inspected configuration and was not tested.
 
 KTalk was verified outside a call, quit and relaunched through LaunchServices
 with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9333`.
 `lsof` confirms a listener bound only to `127.0.0.1:9333`; `/json/version` and
 `/json/list` respond. This establishes endpoint availability, not participant
 capture during a real call. The flags apply to this KTalk launch only.
-No additional integration-state or participant-capture probe was performed.
+The initial endpoint check did not inspect participation or capture audio; the
+subsequent live checks are recorded below.
+
+## Live call follow-up
+
+A new single-participant room was created in the installed KTalk 3.8.0.13562.
+Before joining, Verbemo 736 automatically started ordinary microphone/system
+recording, with `trigger: mic-activity` and no call metadata. Its microphone
+meter showed a signal, and readback of the completed two-channel AAC file found
+channel 1 peak -32.21 dBFS (RMS -60.41 dBFS). Channel 2 was effectively silent,
+as expected without a remote speaker. Capture had no failure; after the test
+recording was paused for diagnosis, it eventually ended with reason `silence`.
+
+The KTalk call was joined with its microphone and camera off. The native
+integration probe still returned `unknown` twice despite the joined UI, a
+working loopback endpoint and matching space origin. A minimal check asserting
+`inCall` failed in 0.205 seconds. A read-only projection of field types showed
+`joined: true`, valid participant fields, and an absent `roomInfo.title`.
+The production expression returned `unsupported_schema` solely because the
+room title was not a string; the other same-space window had no conference.
+
+The title is already optional in `CallInfo`. The follow-up fix makes it optional
+in both the shared JavaScript projection and the Swift room decoder, preserving
+the required participation, room identity and participant validation. The same
+expression is used by observation and direct-audio startup verification.
+
+`unnamedRoomPreservesParticipationThroughProjection` executes the actual
+JavaScript expression with JavaScriptCore, then decodes it with `KTalkModel`.
+Both prejoin and joined cases failed before the fix (`unknown`, missing call)
+and passed after it in 0.008 seconds. Repeating the native probe against the same
+live call then returned `inCall` with source `application`. A bounded direct-audio
+probe completed successfully with one track, a heartbeat and four PCM chunks
+(16,384 samples, zero peak while KTalk was muted), and cleaned up its capture.
+
+Follow-up package verification passed: 13 Swift tests / 4 suites, six native
+HTTP/WebSocket transport tests, and three JavaScript audio-capture tests.
+The full root `swift test --no-parallel` run also passed again: 1482 tests /
+201 suites in 298.335 seconds.
 
 ## Limits
 
@@ -97,5 +134,6 @@ port. The code fix does not open that port or change KTalk or user settings;
 the separate user-approved local restart is recorded above.
 Permission renewal after installation is described above. Ordinary detection
 can treat prejoin microphone use as a call when exact participation is
-unavailable. No new live multi-person call or
-physical-device fallback acceptance has been performed. Windows is unchanged.
+unavailable. Remote participant speech and a forced transition from direct
+capture to physical-device fallback remain unverified. The muted direct-audio
+probe does not establish audible direct capture. Windows is unchanged.
