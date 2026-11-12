@@ -310,3 +310,29 @@ before using this example offline.
   example, `{"executable":"notepad.exe","arguments":["{session}\\summary.md"]}`
   opens the summary after processing. It runs once per session and does not
   wait for the launched application to close.
+
+## Call integrations (macOS)
+
+`call_integrations.ktalk.enabled` (default `false`) enables the native KTalk
+adapter. `call_integrations.ktalk.space_url` (default empty) is the exact
+`https://SPACE.ktalk.ru` origin. It enables reading an already open loopback CDP
+port **9333**. Verbemo never opens that port or restarts KTalk.
+`call_integrations.ktalk.accessibility` (default `true`) permits the fallback
+reader to use existing Accessibility permission; no system prompt is raised.
+These three settings take effect after restarting Verbemo.
+
+While enabled, the microphone gate applies to all recordings, including manual
+recordings and other call apps, so a later KTalk join cannot bypass protection.
+Before associating a call, fresh confirmed idle state permits the mic; unknown
+KTalk state blocks local audio even in an unrelated recording.
+For an integration-associated recording, only a fresh explicit **unmuted**
+reading permits local microphone audio. Muted, unknown or stale state writes
+silence on that track; remote audio continues. AX alone cannot reliably identify
+local mute, so it keeps the local microphone track silent. A two-second in-memory
+holdback covers ordinary observation delay; pending audio is replaced by silence
+on mute, uncertainty, pause or stop. This can remove the last two seconds before
+those transitions. Local audio passes through this filter before live ASR, adding
+about two seconds of latency. A short mute/unmute entirely between observations
+can be missed; use Verbemo's own pause when guaranteed privacy is required.
+
+See [the module contract and verification notes](call-integrations.md).

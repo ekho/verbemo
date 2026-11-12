@@ -110,6 +110,11 @@ final class MicRecorder: @unchecked Sendable {
 
     private var engine = AVAudioEngine()
     private let liveAudio = LiveAudioBufferRelay()
+    private let privacy = OSAllocatedUnfairLock<MicrophonePrivacyFilter?>(initialState: nil)
+    var privacyGate: MicrophonePrivacyGate? {
+        get { privacy.withLock { $0?.gate } }
+        set { privacy.withLock { $0 = newValue.map(MicrophonePrivacyFilter.init) } }
+    }
     private var url: URL?
     private(set) var isRecording = false
     private var requestedVoiceProcessing = false
@@ -192,7 +197,8 @@ final class MicRecorder: @unchecked Sendable {
 
     var audioLevel: AudioMeter.Reading {
         let running = isRecording
-        return state.withLock { $0.meter.read(running: running, paused: $0.muted) }
+        let blocked = privacyGate.map { !$0.ticket().allowed } ?? false
+        return state.withLock { $0.meter.read(running: running, paused: $0.muted || blocked) }
     }
 
     /// Every route change this session survived, in order. Read on stop, for
@@ -204,7 +210,10 @@ final class MicRecorder: @unchecked Sendable {
     /// after the pause stay true, and nothing said in the room is recorded.
     var isMuted: Bool {
         get { state.withLock { $0.muted } }
-        set { state.withLock { $0.muted = newValue; $0.meter.reset() } }
+        set {
+            state.withLock { $0.muted = newValue; $0.meter.reset() }
+            if newValue { privacy.withLock { $0?.silencePending() } }
+        }
     }
 
     // Main-thread only: the observer is registered on the main queue and
@@ -359,6 +368,12 @@ final class MicRecorder: @unchecked Sendable {
         stopListeningForDefaultInputChanges()
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
+        if let writer, let filter = privacy.withLock({ $0 }) {
+            for output in filter.finish() {
+                writer.write(output.buffer, after: output.padding)
+                liveAudio.forward(output.buffer)
+            }
+        }
         // Whatever a gap left queued belongs in the file before it is let go,
         // and with the tap removed nothing more can be added.
         writer?.drain()
@@ -542,25 +557,24 @@ final class MicRecorder: @unchecked Sendable {
     /// pause and the level tracking can't diverge between the two paths.
     private func writeTracked(_ buffer: AVAudioPCMBuffer, to writer: TrackWriter) {
         let silence = pendingGap(before: buffer, rate: writer.file.processingFormat.sampleRate)
-        let peak = AudioLevel.peak(of: buffer)
-        let hasFrames = buffer.frameLength > 0
-        let muted: Bool = state.withLock { s in
-            if !s.muted, hasFrames { s.meter.record(peak: peak) }
-            if let peak {
-                if peak >= AudioLevel.speechThreshold { s.lastSoundAt = Date() }
-            } else {
-                s.levelMeasurable = false
-            }
-            return s.muted
-        }
-
         var outgoing = buffer
-        if muted {
+        if isMuted {
             guard let silent = AudioLevel.silence(like: buffer) else { return }
             outgoing = silent
         }
-        writer.write(outgoing, after: silence)
-        liveAudio.forward(outgoing)
+        let outputs = privacy.withLock { $0 }?.process(outgoing, padding: silence)
+            ?? [MicrophonePrivacyFilter.Output(buffer: outgoing, padding: silence)]
+        for output in outputs {
+            let peak = AudioLevel.peak(of: output.buffer)
+            state.withLock { s in
+                if output.buffer.frameLength > 0 { s.meter.record(peak: peak) }
+                if let peak {
+                    if peak >= AudioLevel.speechThreshold { s.lastSoundAt = Date() }
+                } else { s.levelMeasurable = false }
+            }
+            writer.write(output.buffer, after: output.padding)
+            liveAudio.forward(output.buffer)
+        }
     }
 
     /// Raw path: tap at the device's native format and downmix to mono. Same

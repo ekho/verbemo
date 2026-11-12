@@ -152,6 +152,12 @@ jobs:
           # them run here whether or not they are found: a missing asset is
           # a failure on CI rather than the skip it is on a fresh checkout.
           VERBEMO_REQUIRE_LOCALVQE: "1"
+      - name: Call integration package and transport tests
+        if: needs.changes.outputs.macos_test == 'true'
+        run: |
+          swift test --package-path Packages/CallIntegrations
+          swift build --package-path Packages/CallIntegrations --product call-integration-probe
+          python3 Packages/CallIntegrations/Tests/test_transport.py Packages/CallIntegrations/.build/debug/call-integration-probe
       - name: macOS packaging script tests
         if: needs.changes.outputs.macos_scripts == 'true'
         run: |

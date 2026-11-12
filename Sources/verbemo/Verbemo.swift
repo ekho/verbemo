@@ -287,6 +287,7 @@ final class AppController {
     private let liveTranscription = LiveTranscriptionCoordinator()
     private let calendar: CalendarWatcher
     private let autoRecord: AutoRecordController
+    private let callIntegrations = CallIntegrationMonitor()
     private var session: RecordingSession?
     /// Whether a meeting is being recorded. The session itself stays private —
     /// four things need this one fact about it (the settings form, the setup
@@ -401,7 +402,8 @@ final class AppController {
         // whether or not the event is what started the recording.
         self.autoRecord = watcher ?? AutoRecordController(
             settings: settings, calendar: calendar,
-            canStartRecording: { SetupPermissions.microphone() == .granted })
+            canStartRecording: { SetupPermissions.microphone() == .granted },
+            callObservations: { [callIntegrations] in callIntegrations.observations })
         sweeps = SweepScheduler(
             waitForQueue: { [transcription] in await transcription.waitUntilIdle() },
             sweep: { [weak self] in
@@ -471,6 +473,7 @@ final class AppController {
         if Config.showWindowAtLaunch(), !SetupState.isPending { window.show() }
 
         autoRecord.currentSession = { [weak self] in self?.session }
+        callIntegrations.onChange = { [weak self] in self?.session?.updateCallObservation($0) }
         autoRecord.startRecording = { [weak self] trigger, context in
             self?.startSession(trigger: trigger, context: context) ?? false
         }
@@ -550,6 +553,7 @@ final class AppController {
         // permission sent an existing installation back to setup. Watching a
         // call must not wait for that window or for a calendar permission
         // prompt. The watcher itself waits for an already-granted microphone.
+        callIntegrations.start(providers: CallIntegrationMonitor.configuredProviders())
         autoRecord.start()
         showAutoRecord()
         if SetupState.isPending {
@@ -755,6 +759,7 @@ final class AppController {
             await liveTranscription.finishRecording()
         }, finishServices: { [self] in
             await mcp.stop()
+            await callIntegrations.stop()
             await importStop?.value
             await mediaImportTask?.value
             for task in uiCleanup { await task.value }
@@ -769,6 +774,7 @@ final class AppController {
         mcp.stopAdmission()
         ticker?.invalidate(); ticker = nil
         autoRecord.stop()
+        callIntegrations.stopAdmission()
         network?.stop(); network = nil
         settingsApplier = nil
         configDiskWatch = nil
@@ -936,11 +942,15 @@ final class AppController {
         let mic = MicActivityMonitor.check(
             callApps: settings.callApps, ignoring: settings.ignoreApps
         )
-        return MeetingContext(
+        var context = MeetingContext(
             meeting: meeting,
             app: mic.names.first,
             appFamilies: mic.families
         )
+        let signal = CallIntegrationBridge.signal(microphone: mic, observations: callIntegrations.observations,
+            settings: settings, now: Date())
+        context.applyCall(signal.observation ?? callIntegrations.observations.first(where: { mic.families.contains($0.application.bundleID) }))
+        return context
     }
 
     /// Whether a recording is running once this returns. The auto-record
@@ -950,7 +960,16 @@ final class AppController {
         guard !isStopping else { return false }
         guard session == nil else { return true }
         do {
-            let newSession = try RecordingSession(root: root, context: context, trigger: trigger, title: title)
+            var context = context
+            // Privacy also applies to manual/calendar starts before the first
+            // observation, independently of the automatic-trigger whitelist.
+            if context.callObservation == nil,
+               let pending = callIntegrations.observations.first(where: { $0.participation != .idle }) {
+                context.applyCall(pending)
+            }
+            let newSession = try RecordingSession(root: root, context: context, trigger: trigger, title: title,
+                                                 callObservations: callIntegrations.observations)
+            newSession.updateCallObservation(callIntegrations.observations)
             try newSession.start()
             session = newSession
             updates.activityDidChange()

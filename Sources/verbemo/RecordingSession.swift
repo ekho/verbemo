@@ -1,4 +1,5 @@
 import Foundation
+import CallIntegrations
 import Darwin
 
 /// A session that is being recorded, as far as the filesystem can tell: the
@@ -54,7 +55,54 @@ final class RecordingSession {
     let trigger: Trigger
 
     private var editedTitle: String?
-    var title: String? { editedTitle ?? context.title }
+    var title: String? { editedTitle ?? context.title ?? context.callObservation?.call?.title ?? integrationCall?.call?.title }
+    var callIntegrationID: String? { integrationCall?.integrationID }
+    private var integrationCall: CallObservation?
+    private let privacyIntegrationIDs: Set<String>
+    private var callPrivacyGate: MicrophonePrivacyGate?
+
+    func updateCallObservation(_ observations: [CallObservation], now: Date = Date()) {
+        guard let gate = callPrivacyGate else { return }
+        let monitored = observations.filter { privacyIntegrationIDs.contains($0.integrationID) }
+        let complete = Set(monitored.map(\.integrationID)) == privacyIntegrationIDs
+            && monitored.allSatisfy { (0...MicrophonePrivacyGate.maximumAge).contains(now.timeIntervalSince($0.observedAt)) }
+        if integrationCall == nil {
+            let joined = monitored.filter { $0.participation == .inCall }
+            if complete, joined.count == 1 {
+                integrationCall = joined[0]
+                context.applyCall(joined[0])
+            } else {
+                let ages = monitored.map { now.timeIntervalSince($0.observedAt) }
+                let idle = complete && !monitored.isEmpty && monitored.allSatisfy { $0.participation == .idle }
+                gate.update(unmuted: idle && ages.allSatisfy { $0 >= 0 },
+                            validFor: MicrophonePrivacyGate.maximumAge - (ages.max() ?? .infinity))
+                return
+            }
+        }
+        guard let original = integrationCall else { return }
+        guard let current = observations.first(where: { $0.integrationID == original.integrationID }),
+              complete, monitored.allSatisfy({ $0.integrationID == original.integrationID || $0.participation == .idle }),
+              current.participation == .inCall,
+              original.call == nil || original.call?.id == current.call?.id
+                || (original.source != current.source && original.call?.url != nil && original.call?.url == current.call?.url) else {
+            gate.update(unmuted: false, validFor: 0)
+            context.callObservation = .init(integrationID: original.integrationID, application: original.application,
+                                           observedAt: now, participation: .unknown)
+            return
+        }
+        let age = now.timeIntervalSince(current.observedAt)
+        gate.update(unmuted: current.call?.microphoneMuted == false && age >= 0,
+                    validFor: MicrophonePrivacyGate.maximumAge - age)
+        if (0...5).contains(age) {
+            context.callObservation = current
+            if original.call == nil || (original.source == .accessibility && current.source == .application) {
+                integrationCall = current
+            }
+        } else {
+            context.callObservation = .init(integrationID: original.integrationID, application: original.application,
+                                           observedAt: now, participation: .unknown)
+        }
+    }
 
     func rename(to title: String) throws {
         let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -70,7 +118,8 @@ final class RecordingSession {
 
     func associateCalendar(_ meeting: CalendarWatcher.Meeting?) throws {
         if let meeting, !meeting.hasPersistentID || meeting.id.isEmpty { throw CalendarSelectionError.missingEvent }
-        let updated = MeetingContext(meeting: meeting, app: context.app, appFamilies: context.appFamilies)
+        var updated = MeetingContext(meeting: meeting, app: context.app, appFamilies: context.appFamilies)
+        updated.callObservation = context.callObservation
         let updatedTitle = meeting != nil && (title == nil || title == context.title) ? meeting?.title : title
         let marker = dir.appendingPathComponent(Self.manifestFile)
         guard var manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: marker)) as? [String: Any] else {
@@ -150,23 +199,31 @@ final class RecordingSession {
         title: String? = nil,
         mic: MicTrackRecorder? = nil,
         system: SystemTrackRecorder? = nil,
+        callObservations: [CallObservation] = [],
         writeFile: @escaping FileWriter = RecordingSession.durableWrite
     ) throws {
         let cleanedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleanedTitle?.isEmpty != true else { throw CocoaError(.validationMissingMandatoryProperty) }
         self.editedTitle = cleanedTitle
         self.context = context
+        self.integrationCall = context.callObservation?.call == nil ? nil : context.callObservation
+        self.privacyIntegrationIDs = Set(callObservations.map(\.integrationID) + [context.callObservation?.integrationID].compactMap { $0 })
         self.trigger = trigger
         self.tapFamilies = context.appFamilies
         // Built here rather than as default arguments: a default argument is
         // evaluated in the caller's isolation, and these are only ever made
         // for the session that owns them.
         self.mic = mic ?? MicRecorder()
+        if !privacyIntegrationIDs.isEmpty {
+            let gate = MicrophonePrivacyGate()
+            self.callPrivacyGate = gate
+            self.mic.privacyGate = gate
+        }
         self.system = system ?? SystemAudioRecorder()
         self.writeFile = writeFile
 
         var base = Self.folderFormat.string(from: startedAt)
-        if let suffix = MeetingContext(title: cleanedTitle ?? context.title, app: context.app).folderSuffix {
+        if let suffix = MeetingContext(title: cleanedTitle ?? context.title ?? context.callObservation?.call?.title, app: context.app).folderSuffix {
             base += " " + suffix
         }
         var candidate = root.appendingPathComponent(base, isDirectory: true)

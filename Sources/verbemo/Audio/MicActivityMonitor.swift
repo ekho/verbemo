@@ -128,7 +128,7 @@ enum MicActivityMonitor {
         var families: [String] = []
         for holder in holders {
             if alwaysIgnored.contains(holder.bundleID) { continue }
-            if ignoring.contains(holder.bundleID) || ignoring.contains(holder.name) { continue }
+            if !ignoring.isEmpty && AudioProcesses.belongs(holder, to: ignoring) { continue }
             if !callApps.isEmpty && !AudioProcesses.belongs(holder, to: callApps) { continue }
             names.append(holder.name)
             if let family = AudioProcesses.family(of: holder, knownApps: callApps),

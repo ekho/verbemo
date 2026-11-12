@@ -330,6 +330,12 @@ enum Config {
 
     // MARK: - auto-record
 
+    static func ktalkIntegration() -> (enabled: Bool, space: String, accessibility: Bool) {
+        let json = load()
+        return (flag(.ktalkEnabled, in: json) && !settingsUnknown,
+                text(.ktalkSpace, in: json) ?? "", flag(.ktalkAccessibility, in: json))
+    }
+
     /// When and how verbemo starts recording by itself.
     ///
     /// The defaults encode one asymmetry: a missed meeting costs a click, an

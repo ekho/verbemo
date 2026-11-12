@@ -1,4 +1,5 @@
 import Foundation
+import CallIntegrations
 
 /// Everything verbemo knows about a meeting at the moment it starts recording:
 /// what the calendar calls it, who else is invited, and which app is holding
@@ -15,6 +16,15 @@ import Foundation
 /// no recognizable app is still a perfectly good recording; it just gets a
 /// folder named after the time, exactly as before.
 struct MeetingContext {
+    var callObservation: CallObservation?
+
+    mutating func applyCall(_ observation: CallObservation?) {
+        guard let observation else { return }
+        callObservation = observation
+        app = observation.application.name
+        if !appFamilies.contains(observation.application.bundleID) { appFamilies.append(observation.application.bundleID) }
+        // Calendar identities remain calendar identities; observed names are not invitees.
+    }
     /// The calendar event's title.
     var title: String?
     /// Display name of the app holding the mic — "zoom.us", "Google Chrome",
@@ -83,7 +93,7 @@ struct MeetingContext {
     /// the app in brackets after it, and on its own when there's no title —
     /// "which app was this" beats a bare timestamp every time.
     var folderSuffix: String? {
-        let name = Self.sanitize(title, limit: 60)
+        let name = Self.sanitize(title ?? callObservation?.call?.title, limit: 60)
         let app = Self.sanitize(self.app, limit: 24)
         switch (name, app) {
         case let (name?, app?): return "\(name) (\(app))"
@@ -97,6 +107,13 @@ struct MeetingContext {
     /// calendar it came from — which may since have changed or been deleted.
     var metaFields: [String: Any] {
         var fields: [String: Any] = [:]
+        if let callObservation {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.keyEncodingStrategy = .convertToSnakeCase
+            if let bytes = try? encoder.encode(callObservation),
+               let object = try? JSONSerialization.jsonObject(with: bytes) { fields["call"] = object }
+        }
         if let app { fields["app"] = app }
 
         var calendar: [String: Any] = [:]

@@ -219,6 +219,20 @@ enum SettingsSchema {
     // defaults for display, which a global constant can't be under strict
     // concurrency checking, and building the list is free.
     static var sections: [Section] { [
+        Section(title: localised("KTalk integration", "Интеграция с Толком"), entries: [
+            Entry(["call_integrations", "ktalk", "enabled"], localised("Observe KTalk calls", "Определять звонки Толка"),
+                  localised("Use call state instead of microphone activity. Protection applies to all recordings while enabled: unknown KTalk state silences local audio. Polling can miss brief mute/unmute; use Verbemo's pause for guaranteed privacy. Restart Verbemo after changing this.",
+                            "Использовать состояние звонка. Защита действует на все записи: неизвестное состояние Толка блокирует ваш звук. Короткое выключение и включение можно пропустить; для гарантированной приватности используйте паузу Verbemo. После изменения перезапустите Verbemo."),
+                  .toggle, default: false, needsRestart: true),
+            Entry(["call_integrations", "ktalk", "space_url"], localised("KTalk space URL", "Адрес пространства Толка"),
+                  localised("https://SPACE.ktalk.ru. Detailed call data needs KTalk's explicitly enabled local diagnostic port 9333; Verbemo does not open it.",
+                            "https://SPACE.ktalk.ru. Подробные данные требуют явно включённого локального порта диагностики 9333 у Толка; Verbemo его не открывает."),
+                  .text, describedAs: localised("Without CDP (Accessibility only)", "Без CDP (только Универсальный доступ)"), needsRestart: true),
+            Entry(["call_integrations", "ktalk", "accessibility"], localised("Use Accessibility fallback", "Резерв через Универсальный доступ"),
+                  localised("Uses an existing permission. Can identify a call, but cannot safely identify local mute; your microphone stays silent without direct call data.",
+                            "Использует уже выданное разрешение. Определяет звонок, но не собственный mute: без прямых данных звук вашего микрофона не записывается."),
+                  .toggle, default: true, needsRestart: true),
+        ]),
         Section(title: localised("Local MCP access", "Локальный доступ MCP"), entries: [
             Entry(["mcp", "enabled"], localised("Local MCP access", "Локальный доступ MCP"),
                   localised("Allow authenticated local clients to read this meeting library and download audio.", "Разрешить локальным клиентам с токеном читать библиотеку встреч и скачивать аудио."), .toggle, default: false),
