@@ -6,8 +6,14 @@ actor KTalkCDP {
     struct Target: Decodable {
         let id: String
         let type: String
-        let url: URL
+        let url: String
         let webSocketDebuggerUrl: URL?
+
+        func belongs(to space: URL) -> Bool {
+            guard type == "page", let page = URL(string: url) else { return false }
+            return page.scheme == "https" && page.host == space.host && page.port == nil
+                && page.user == nil && page.password == nil
+        }
     }
     private let space: URL?
     private let port: Int
@@ -22,7 +28,7 @@ actor KTalkCDP {
         self.space = space; self.port = port
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 0.7
-        config.timeoutIntervalForResource = 0.7
+        // The polling deadline must not expire a reused WebSocket's whole lifetime.
         config.connectionProxyDictionary = [:]
         session = URLSession(configuration: config, delegate: KTalkNoRedirects(), delegateQueue: nil)
     }
@@ -41,8 +47,7 @@ actor KTalkCDP {
             let (data, response) = try await session.data(from: endpoint)
             guard (response as? HTTPURLResponse)?.statusCode == 200, data.count < 1_048_576 else { throw KTalkModel.InvalidModel() }
             let all = try JSONDecoder().decode([Target].self, from: data)
-            let targets = all.filter { $0.type == "page" && $0.url.scheme == "https"
-                && $0.url.host == space.host && $0.url.port == nil && $0.url.user == nil && $0.url.password == nil }
+            let targets = all.filter { $0.belongs(to: space) }
             guard targets.count <= 8 else { throw KTalkModel.InvalidModel() }
             let ids = Set(targets.map(\.id))
             let closedCall = !joinedTargets.subtracting(ids).isEmpty

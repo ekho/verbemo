@@ -84,6 +84,7 @@ test('a clone born muted becomes audible after unmute; pause gates buffered fram
   assert.ok(f.copies.every(c => c.stopped));
   assert.equal(f.context.state, 'closed');
   assert.equal(f.window.__verbemoCapture_test, undefined);
+  assert.equal(f.window.__verbemoAudio_test, undefined);
 });
 
 test('lease expiry cleans up an abandoned capture without ending original audio', async () => {
@@ -92,6 +93,7 @@ test('lease expiry cleans up an abandoned capture without ending original audio'
   assert.ok(f.copies.every(c => c.stopped));
   assert.equal(f.original.stops, 0);
   assert.equal(f.context.state, 'closed');
+  assert.equal(f.window.__verbemoAudio_test, undefined);
 });
 
 test('call exit is explicit and replacing a track advances its generation', async () => {

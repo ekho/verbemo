@@ -1,6 +1,6 @@
 # KTalk Participant Audio Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Record separate KTalk participant audio into ordinary Verbemo meetings, transcribe it with known speaker identities, and fall back automatically to ordinary capture when necessary.
 
@@ -49,11 +49,11 @@
 - `CallAudioIntegration: CallIntegration`: `func makeAudioCapture(for callID: String) async throws -> any CallAudioCapture`.
 - KTalk conforms to the optional audio capability. Metadata-only providers remain valid.
 
-- [ ] Write failing tests for validated PCM (`[0, 0.5, -0.5]` accepted; NaN, negative frame, unknown generation and oversized payload rejected), origin/debugger validation and target/call-ID matching.
-- [ ] Run `swift test --package-path Packages/CallIntegrations`; confirm new cases fail for the intended missing behavior.
-- [ ] Implement the contract and a bounded single receiver for audio commands/events. Preserve the metadata observer. Resource JS uses one AudioContext, clones participant/output tracks, reconciles local mute including clones born disabled, and emits frame positions rather than arrival timestamps.
-- [ ] Cover lease expiry and explicit cleanup, participant removal versus transport failure, replacement generation and event/reply interleaving. Verify the fixture never calls `getUserMedia` or stops original tracks.
-- [ ] Run package tests plus the expanded loopback transport test. Commit `feat(ktalk): stream participant audio through the call integration`.
+- [x] Write failing tests for validated PCM (`[0, 0.5, -0.5]` accepted; NaN, negative frame, unknown generation and oversized payload rejected), origin/debugger validation and target/call-ID matching.
+- [x] Run `swift test --package-path Packages/CallIntegrations`; confirm new cases fail for the intended missing behavior.
+- [x] Implement the contract and a bounded single receiver for audio commands/events. Preserve the metadata observer. Resource JS uses one AudioContext, clones participant/output tracks, reconciles local mute including clones born disabled, and emits frame positions rather than arrival timestamps.
+- [x] Cover lease expiry and explicit cleanup, participant removal versus transport failure, replacement generation and event/reply interleaving. Verify the fixture never calls `getUserMedia` or stops original tracks.
+- [x] Run package tests plus the expanded loopback transport test. Commit `feat(ktalk): stream participant audio through the call integration`.
 
 ### Task 2: Durable participant audio and metadata
 
@@ -67,10 +67,10 @@
 - `ParticipantAudioRecorder` consumes Task 1 events, writes mono CAF, exposes thread-safe snapshots and an installable live sink keyed by track ID. Append/update/pause operations are serialized; pause is checked before persistence and live forwarding.
 - `SessionMeta` gains known-participant track data while retaining existing initializer defaults and legacy `mic/system/source` decoding. Ordinary tracks remain distinguishable in hybrid sessions.
 
-- [ ] Add tests that decode actual CAF samples: a late first packet, a frame gap and a replacement preserve duration; pause writes zeros; names containing paths never become filenames. Reject unsupported metadata versions and broken references instead of returning an empty track list.
-- [ ] Run `swift test --filter 'ParticipantAudioRecorder|CallAudioMetadata'` and verify expected failures.
-- [ ] Implement generated file IDs, finite/sample-size validation, bounded gap writes and metadata snapshots. Keep departed participant history. One replaced stream retains its connection identity; rejoin with a new participant ID does not merge by name.
-- [ ] Run the focused tests and legacy `TranscriptionInputs` tests. Commit `feat(recording): persist participant audio on a shared timeline`.
+- [x] Add tests that decode actual CAF samples: a late first packet, a frame gap and a replacement preserve duration; pause writes zeros; names containing paths never become filenames. Reject unsupported metadata versions and broken references instead of returning an empty track list.
+- [x] Run `swift test --filter 'ParticipantAudioRecorder|CallAudioMetadata'` and verify expected failures.
+- [x] Implement generated file IDs, finite/sample-size validation, bounded gap writes and metadata snapshots. Keep departed participant history. One replaced stream retains its connection identity; rejoin with a new participant ID does not merge by name.
+- [x] Run the focused tests and legacy `TranscriptionInputs` tests. Commit `feat(recording): persist participant audio on a shared timeline`.
 
 ### Task 3: Known-speaker final transcription
 
@@ -84,11 +84,11 @@
 - Ordinary `mic/system` inputs in the same session retain the configured existing path. A combined result is sorted on the shared session timeline.
 - Add `.integration` speaker-name provenance below manual corrections and above automatic guesses; preserve names in retranscription and archived versions.
 
-- [ ] With a fake engine, assert two known tracks get independent ASR calls, bogus engine speaker labels are ignored, offsets are applied, and the diarizer factory is never called for a direct-only session.
-- [ ] Add hybrid tests: known tracks plus fallback mic/system retain all text and correct time; only fallback is eligible for ordinary diarization/echo processing. Same-name participants remain distinct. Manual speaker correction survives retry.
-- [ ] Run `swift test --filter 'ParticipantTranscription|SpeakerNamer|TranscriptVersions'` to establish intended failures.
-- [ ] Implement per-source policy and include the transcription mode in cloud/cache fingerprints. Disable cloud speaker-label flags where supported. Preserve configured OpenAI model and document its internal diarizing-model exception; do not silently change providers/models.
-- [ ] Verify no local diarization preparation/model download for known-only audio, no model renaming of integration identities, and summary input contains the resulting names. Run focused engine and pipeline tests. Commit `feat(transcription): transcribe known participant tracks directly`.
+- [x] With a fake engine, assert two known tracks get independent ASR calls, bogus engine speaker labels are ignored, offsets are applied, and the diarizer factory is never called for a direct-only session.
+- [x] Add hybrid tests: known tracks plus fallback mic/system retain all text and correct time; only fallback is eligible for ordinary diarization/echo processing. Same-name participants remain distinct. Manual speaker correction survives retry.
+- [x] Run `swift test --filter 'ParticipantTranscription|SpeakerNamer|TranscriptVersions'` to establish intended failures.
+- [x] Implement per-source policy and include the transcription mode in cloud/cache fingerprints. Disable cloud speaker-label flags where supported. Preserve configured OpenAI model and document its internal diarizing-model exception; do not silently change providers/models.
+- [x] Verify no local diarization preparation/model download for known-only audio, no model renaming of integration identities, and summary input contains the resulting names. Run focused engine and pipeline tests. Commit `feat(transcription): transcribe known participant tracks directly`.
 
 ### Task 4: Multiple live speakers
 
@@ -102,10 +102,10 @@
 - Live attachment accepts dynamic track registration/removal and a keyed sink, using shared model weights with per-source streaming state.
 - A fallback transition closes direct preview streams before attaching ordinary sinks; already displayed entries remain on the same meeting clock.
 
-- [ ] Test independent partials for two equal names, late participant registration, ended streams, stale callbacks after stop and fallback, and bounded queue overflow.
-- [ ] Run existing live tests and the new cases before implementation.
-- [ ] Generalize the existing two-source coordinator without a second ASR implementation. Release departed managers; do not block authoritative file writing on live inference.
-- [ ] Run live state/transition/relay tests. Commit `feat(transcription): show live text for individual call participants`.
+- [x] Test independent partials for two equal names, late participant registration, ended streams, stale callbacks after stop and fallback, and bounded queue overflow.
+- [x] Run existing live tests and the new cases before implementation.
+- [x] Generalize the existing two-source coordinator without a second ASR implementation. Release departed managers; do not block authoritative file writing on live inference.
+- [x] Run live state/transition/relay tests. Commit `feat(transcription): show live text for individual call participants`.
 
 ### Task 5: Session source selection and automatic fallback
 
@@ -119,11 +119,11 @@
 - The monitor exposes the configured provider's optional audio capability without spreading KTalk types into the application.
 - Session manifests/meta merge participant recorder snapshots with ordinary `files`/offsets and capture periods. Pause covers both modes; normal fallback explicitly omits the KTalk privacy gate.
 
-- [ ] Assert direct start invokes neither `MicTrackRecorder.start` nor `SystemTrackRecorder.start`, including without OS microphone permission. Assert muted PCM/heartbeat does not trigger fallback.
-- [ ] Assert setup failure and mid-recording transport error start the ordinary pair once, retain direct files, record a transition and ignore KTalk mute. Permission/start failure preserves partial files and yields a visible stopped/error state.
-- [ ] Assert Stop/quit during preparation and fallback prevents late capture; confirmed call end does not start fallback; pause remains effective through transition; next session retries direct.
-- [ ] Run affected lifecycle suites to establish failing cases, implement transitions, then rerun them. Preserve existing automatic/manual-stop ownership and shutdown cleanup ordering.
-- [ ] Commit `feat(recording): switch KTalk sessions to ordinary capture on failure`.
+- [x] Assert direct start invokes neither `MicTrackRecorder.start` nor `SystemTrackRecorder.start`, including without OS microphone permission. Assert muted PCM/heartbeat does not trigger fallback.
+- [x] Assert setup failure and mid-recording transport error start the ordinary pair once, retain direct files, record a transition and ignore KTalk mute. Permission/start failure preserves partial files and yields a visible stopped/error state.
+- [x] Assert Stop/quit during preparation and fallback prevents late capture; confirmed call end does not start fallback; pause remains effective through transition; next session retries direct.
+- [x] Run affected lifecycle suites to establish failing cases, implement transitions, then rerun them. Preserve existing automatic/manual-stop ownership and shutdown cleanup ordering.
+- [x] Commit `feat(recording): switch KTalk sessions to ordinary capture on failure`.
 
 ### Task 6: Archive, recovery, playback and consumers
 
@@ -135,9 +135,9 @@
 - `files` remains authoritative for physical audio. Participant archives retain one file per track with the original offsets and speaker mapping.
 - Old two-channel archives remain readable. New metadata is atomically published before original files are removed.
 
-- [ ] Test real encoded audio from three participant tracks plus a fallback pair; every source survives compression, reloading and playback with its offset. Test interrupted archive write and crash recovery without final meta.
-- [ ] Test `keep_audio=false`, recording-only mode and retained audio for incomplete processing. MCP returns only validated referenced files; no filename derived from participant text.
-- [ ] Run those tests, implement the new archive branch and recovery metadata preservation, then rerun. Commit `feat(storage): preserve participant tracks across meeting processing`.
+- [x] Test real encoded audio from three participant tracks plus a fallback pair; every source survives compression, reloading and playback with its offset. Test interrupted archive write and crash recovery without final meta.
+- [x] Test `keep_audio=false`, recording-only mode and retained audio for incomplete processing. MCP returns only validated referenced files; no filename derived from participant text.
+- [x] Run those tests, implement the new archive branch and recovery metadata preservation, then rerun. Commit `feat(storage): preserve participant tracks across meeting processing`.
 
 ### Task 7: Dedicated KTalk settings and visible capture mode
 
@@ -149,16 +149,18 @@
 - Dedicated `.ktalk` destination, titled exactly «Интеграция с KTalk» / “KTalk integration”. Existing keys live there, not duplicated on General/Advanced.
 - Readiness and source status distinguish direct KTalk, ordinary fallback and unavailable capture. Fallback explicitly states device mic is independent of KTalk mute.
 
-- [ ] Test page routing, preserving existing enabled/address settings, restart indication and both language labels. Test direct readiness without mic permission and actionable fallback failure.
-- [ ] Implement with existing AppKit/schema components. Keep diagnostic startup explicit and avoid extra configuration switches.
-- [ ] Run settings/navigation/activity/documentation tests. Commit `feat(settings): add the KTalk integration page`.
+- [x] Test page routing, preserving existing enabled/address settings, restart indication and both language labels. Test direct readiness without mic permission and actionable fallback failure.
+- [x] Implement with existing AppKit/schema components. Keep diagnostic startup explicit and avoid extra configuration switches.
+- [x] Run settings/navigation/activity/documentation tests. Commit `feat(settings): add the KTalk integration page`.
 
 ### Task 8: Integrated verification and delivery
 
 **Files:** Add `docs/testing/2026-11-12-ktalk-participant-audio.md`; update this plan's checkboxes with actual evidence.
 
-- [ ] Run package tests, native loopback transport fixture, focused app suites and then the root macOS suite/build once integrated.
-- [ ] Build an isolated local app and inspect the native KTalk settings page and source-status flow. Do not replace the user's installed app or real recordings as a test fixture.
-- [ ] In a controlled KTalk room, use artificial media to verify multiple speakers, own track, mute/unmute including capture begun muted, participant replacement, minimized audio and final transcription/name association. Exercise CDP loss and fallback using controlled audio and verify saved samples, timestamps and visible status.
-- [ ] Verify shutdown leaves no injected capture or test CDP listener; restore the ordinary KTalk launch after the test. Record genuine runtime limits separately from synthetic test results.
+- [x] Run package tests, native loopback transport fixture, focused app suites and then the root macOS suite/build once integrated.
+- [x] Build an isolated local app and inspect the native KTalk settings page and source-status flow. Do not replace the user's installed app or real recordings as a test fixture.
+- [x] In a controlled KTalk room, use artificial media to verify multiple speakers, own track, mute/unmute including capture begun muted, participant replacement, minimized audio and final transcription/name association. Exercise CDP loss and fallback using controlled audio and verify saved samples, timestamps and visible status.
+- [x] Verify shutdown leaves no injected capture or test CDP listener; restore the ordinary KTalk launch after the test. Record genuine runtime limits separately from synthetic test results.
 - [ ] Obtain independent whole-branch review, resolve findings, rerun only impacted checks, and report implementation, evidence and limits. Do not merge, publish or install a release without further instruction.
+
+Runtime scope adjustment: the final app run used the local artificial track; remote multi-participant and successful ordinary fallback cases use controlled tests. See the explicit limits and measured PCM/ASR evidence in `docs/testing/2026-11-12-ktalk-participant-audio.md`.

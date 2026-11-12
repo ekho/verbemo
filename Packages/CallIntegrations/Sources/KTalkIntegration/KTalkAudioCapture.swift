@@ -48,8 +48,7 @@ actor KTalkAudioCapture: CallAudioCapture {
             guard !stopping, !stopped, (response as? HTTPURLResponse)?.statusCode == 200,
                   data.count <= 1_048_576 else { throw CallAudioFailure.unavailable }
             let all = try JSONDecoder().decode([KTalkCDP.Target].self, from: data)
-            let targets = all.filter { $0.type == "page" && $0.url.scheme == "https"
-                && $0.url.host == space.host && $0.url.port == nil && $0.url.user == nil && $0.url.password == nil }
+            let targets = all.filter { $0.belongs(to: space) }
             let candidates = targets.filter { callID.hasPrefix($0.id + ":") }
             guard targets.count <= 8, candidates.count == 1, let target = candidates.first,
                   let url = target.webSocketDebuggerUrl, KTalkModel.validDebugger(url, port: port)

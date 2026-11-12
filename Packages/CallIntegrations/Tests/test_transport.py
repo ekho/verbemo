@@ -24,7 +24,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == '/json/list':
             port = self.server.server_port
             body = json.dumps([{'id': 'window', 'type': 'page', 'url': 'https://synthetic.ktalk.ru/probe',
-                                'webSocketDebuggerUrl': f'ws://127.0.0.1:{port}/devtools/page/window'}]).encode()
+                                'webSocketDebuggerUrl': f'ws://127.0.0.1:{port}/devtools/page/window'},
+                               # Real KTalk exposes anonymous workers beside its page targets.
+                               {'id': 'worker', 'type': 'worker', 'url': ''}]).encode()
             self.send_response(200)
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
@@ -62,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def messages(self, request):
         index = len(self.server.requests)
-        if index == 3:
+        if index == 3 and not getattr(self.server, 'continuous', False):
             return [{'id': request['id'], 'error': {'code': -1, 'message': 'synthetic disconnect'}}]
         value = {'kind': 'conference', 'joined': True,
                  'room': {'key': 'probe', 'title': 'Synthetic room', 'conference_id': 'c'},
@@ -116,6 +118,20 @@ class AudioHandler(Handler):
 
 
 class TransportTest(unittest.TestCase):
+    def test_observation_socket_lives_across_polling_deadlines(self):
+        with ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
+            server.daemon_threads = True
+            server.requests = []
+            server.continuous = True
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                run = subprocess.run([BINARY, 'https://synthetic.ktalk.ru', str(server.server_port), '10'],
+                                     text=True, capture_output=True, timeout=8, check=True)
+                rows = [json.loads(line) for line in run.stdout.splitlines()]
+                self.assertEqual([r['participation'] for r in rows], ['inCall'] * 10)
+            finally:
+                server.shutdown()
+
     def test_snapshot_mute_loss_and_reconnect(self):
         with ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
             server.daemon_threads = True

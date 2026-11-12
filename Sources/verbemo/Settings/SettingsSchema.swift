@@ -221,8 +221,8 @@ enum SettingsSchema {
     static var sections: [Section] { [
         Section(title: localised("KTalk integration", "Интеграция с KTalk"), entries: [
             Entry(["call_integrations", "ktalk", "enabled"], localised("Enable KTalk integration", "Включить интеграцию с KTalk"),
-                  localised("Detect calls and transcribe separate participant tracks, including your own. Direct recording follows mute in KTalk. Changes apply after restarting Verbemo.",
-                            "Обнаруживать звонки и расшифровывать отдельные дорожки участников, включая вашу. Прямая запись учитывает mute в KTalk. Изменения применяются после перезапуска Verbemo."),
+                  localised("Detect calls and transcribe separate participant tracks, including your own. Direct recording follows mute in KTalk.",
+                            "Обнаруживать звонки и расшифровывать отдельные дорожки участников, включая вашу. Прямая запись учитывает mute в KTalk."),
                   .toggle, default: false, needsRestart: true),
             Entry(["call_integrations", "ktalk", "space_url"], localised("KTalk space URL", "Адрес пространства KTalk"),
                   localised("https://SPACE.ktalk.ru. Direct audio needs KTalk's local diagnostic port 9333. Enable it explicitly; Verbemo does not restart KTalk or open the port.",

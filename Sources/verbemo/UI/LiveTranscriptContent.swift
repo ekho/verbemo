@@ -91,8 +91,8 @@ final class LiveTranscriptContent {
         let heading = NSTextField(wrappingLabelWithString: localised("Real-time transcription", "Расшифровка в реальном времени"))
         heading.font = .systemFont(ofSize: 17, weight: .semibold)
         let sourceNote = NSTextField(wrappingLabelWithString: localised(
-            "You and Them describe audio sources, not verified participant names.",
-            "«Вы» и «Они» — источники звука, а не подтверждённые имена участников."))
+            "KTalk names identify participant tracks. You and Them label microphone and computer audio.",
+            "Имена из KTalk относятся к дорожкам участников. «Вы» и «Они» обозначают микрофон и системный звук."))
         sourceNote.font = .systemFont(ofSize: 10)
         sourceNote.textColor = StudioStyle.muted
         liveSection.setViews([heading, liveHeader, sourceNote, liveScroll, emptySpace], in: .top)

@@ -21,6 +21,7 @@
       closed = true; clearInterval(timer);
       for (const entry of tracks.values()) detach(entry);
       tracks.clear();
+      delete window[config.binding];
       try { await context.close(); } finally {
         if (window[config.control] === state) delete window[config.control];
       }
