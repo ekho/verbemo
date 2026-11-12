@@ -50,29 +50,44 @@ struct CallIntegrationRecordingTests {
         #expect(starts == 2)
     }
 
-    @Test func sessionMuteDoesNotPauseSystemTrackAndCannotBeUndoneByResume() throws {
+    @Test func asynchronousCaptureFailureUsesTheAutomaticStartBackoff() {
+        let h = AutoRecordHarness()
+        h.micActive = true
+        h.run(for: 15)
+        #expect(h.starts.count == 1)
+        h.controller.noteCaptureFailure()
+        h.session = nil
+        h.run(for: 20)
+        #expect(h.starts.count == 1)
+        h.run(for: 15)
+        #expect(h.starts.count == 2)
+    }
+
+    @Test func ordinaryCaptureIgnoresCallMuteButHonoursSessionPause() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         var context = MeetingContext()
         context.applyCall(observation())
         let mic = FakeMicRecorder(), system = FakeSystemRecorder()
         let session = try RecordingSession(root: root, context: context, mic: mic, system: system)
-        let gate = try #require(mic.privacyGate)
-        #expect(!gate.ticket().allowed)
+        #expect(mic.privacyGate == nil)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([observation(muted: false)])
-        #expect(gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([observation(muted: true)])
-        session.pause(); session.resume()
-        #expect(!gate.ticket().allowed)
+        session.pause()
+        #expect(mic.isMuted && system.isMuted)
+        session.resume()
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         #expect(!system.isMuted)
         session.updateCallObservation([observation(muted: false, date: Date().addingTimeInterval(-10))])
-        #expect(!gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([observation(muted: false, id: "other-call")])
-        #expect(!gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([observation(muted: false)])
-        #expect(gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([])
-        #expect(!gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
     }
 
     @Test func callParticipantsAreNotFabricatedCalendarInvitees() throws {
@@ -86,22 +101,22 @@ struct CallIntegrationRecordingTests {
         #expect((fields["call"] as? [String: Any])?["integration_id"] as? String == "ktalk")
     }
 
-    @Test func recordingStartedBeforeTheCallStillClosesTheMicrophoneWhenItArrivesMuted() throws {
+    @Test func ordinaryCaptureKeepsRawMicrophoneWhenCallArrivesMuted() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         var idle = observation(.idle); idle.call = nil
         let mic = FakeMicRecorder()
         let session = try RecordingSession(root: root, mic: mic, system: FakeSystemRecorder(), callObservations: [idle])
         session.updateCallObservation([idle])
-        let gate = try #require(mic.privacyGate)
-        #expect(gate.ticket().allowed)
+        #expect(mic.privacyGate == nil)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([observation(muted: true)])
-        #expect(!gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         #expect(session.callIntegrationID == "ktalk")
         session.updateCallObservation([observation(muted: false)])
-        #expect(gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([])
-        #expect(!gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
     }
 
     @Test func manuallyStartedCallKeepsItsStopHoldWhenObserverDisappears() {
@@ -128,7 +143,7 @@ struct CallIntegrationRecordingTests {
         #expect(controller.phase == .standingDown(.manualStop))
     }
 
-    @Test func aDifferentCDPCallAtTheSameRoomURLCannotReopenTheGate() throws {
+    @Test func aDifferentCDPCallAtTheSameRoomURLCannotReplaceSessionIdentity() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         var original = observation(muted: false)
@@ -137,15 +152,15 @@ struct CallIntegrationRecordingTests {
         let mic = FakeMicRecorder()
         let session = try RecordingSession(root: root, context: context, mic: mic, system: FakeSystemRecorder())
         session.updateCallObservation([original])
-        let gate = try #require(mic.privacyGate)
-        #expect(gate.ticket().allowed)
+        #expect(mic.privacyGate == nil)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         var other = original; other.call?.id = "another-conference"
         session.updateCallObservation([other])
-        #expect(!gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         #expect(session.context.callObservation?.call == nil)
     }
 
-    @Test func unknownAtStartupCanBecomeIdleWithoutPermanentlyMutingManualNotes() throws {
+    @Test func unknownAtStartupDoesNotMuteOrdinaryCapture() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         var unknown = observation(.unknown); unknown.call = nil
@@ -153,12 +168,12 @@ struct CallIntegrationRecordingTests {
         let mic = FakeMicRecorder()
         let session = try RecordingSession(root: root, context: context, mic: mic,
                                           system: FakeSystemRecorder(), callObservations: [unknown])
-        let gate = try #require(mic.privacyGate)
-        #expect(!gate.ticket().allowed)
+        #expect(mic.privacyGate == nil)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         var idle = observation(.idle); idle.call = nil
         session.updateCallObservation([idle])
-        #expect(gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
         session.updateCallObservation([observation(muted: true)])
-        #expect(!gate.ticket().allowed)
+        #expect(!mic.isMuted && mic.privacyGate == nil)
     }
 }

@@ -1090,8 +1090,10 @@ actor TranscriptionCoordinator {
         }
 
         do {
+            let knownSpeakers = Set(currentMeta.tracks.compactMap { $0.participant?.speakerID })
             let hadRemoteWords = provisional.segments.contains {
-                $0.speaker != "me" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                $0.speaker != "me" && !knownSpeakers.contains($0.speaker)
+                    && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
             if result.segments.isEmpty && hadRemoteWords {
                 state.status = .partial
@@ -1099,7 +1101,7 @@ actor TranscriptionCoordinator {
                 try state.write(to: dir)
                 throw DiarizationUnavailable(reason: state.reason!)
             }
-            let unchangedLocal = provisional.segments.filter { $0.speaker == "me" }
+            let unchangedLocal = provisional.segments.filter { $0.speaker == "me" || knownSpeakers.contains($0.speaker) }
             let segments = (unchangedLocal + result.segments).sorted { $0.start_ms < $1.start_ms }
             let created = ISO8601DateFormatter().string(from: Date())
             let final = Transcript(engine: provisional.engine, model: provisional.model,
@@ -1191,11 +1193,14 @@ actor TranscriptionCoordinator {
 
         var meta = try SessionMeta.read(from: dir)
         let recordedMeta = meta
+        let known = meta.selecting(known: true)
+        meta = meta.selecting(known: false)
+        let hasOrdinary = !meta.tracks.isEmpty
         let replacingTranscript = TranscriptVersions.isRequested(dir)
         let request = try TranscriptVersions.readRequest(dir)
         // Upgrade legacy text markers before an await can observe changed settings.
         try request?.write(to: dir)
-        if let selected = request?.diarization {
+        if hasOrdinary, let selected = request?.diarization {
             guard Platform.supportsLocalModels,
                   (Config.localEngines.contains(selected.engine) || selected.engine == "auto") else {
                 throw DiarizationUnavailable(reason: localised(
@@ -1211,19 +1216,20 @@ actor TranscriptionCoordinator {
         var diarization = replacingTranscript
             ? request?.diarization.map { DiarizationState(request: $0, status: .pending) }
             : DiarizationState.read(dir)
+        if !hasOrdinary { diarization = nil }
         let engine: TranscriptionEngine
         if let given { engine = given }
         else if let diarization, diarization.request.explicit, !replacingTranscript {
             engine = try await engines.local(named: diarization.request.engine,
                                              wordTimings: true)
         } else {
-            let wordTimings = replacingTranscript ? diarization != nil
-                : Config.localDiarizationEnabled() || diarization != nil
+            let wordTimings = hasOrdinary && (replacingTranscript ? diarization != nil
+                : Config.localDiarizationEnabled() || diarization != nil)
             engine = try await engines.engine(for: dir,
                 wordTimings: wordTimings)
         }
         current = engine
-        if request?.engine == "auto", let selected = request?.diarization,
+        if hasOrdinary, request?.engine == "auto", let selected = request?.diarization,
            Config.localEngines.contains(engine.name) {
             do { _ = try await modelFingerprint(selected.model) }
             catch is CancellationError { throw CancellationError() }
@@ -1244,7 +1250,7 @@ actor TranscriptionCoordinator {
             diarization = requested
             if !replacingTranscript { try requested.write(to: dir) }
         }
-        if !replacingTranscript && diarization == nil && Config.localDiarizationEnabled() {
+        if hasOrdinary && !replacingTranscript && diarization == nil && Config.localDiarizationEnabled() {
             let applicable = Config.localEngines.contains(engine.name) && Platform.supportsLocalModels
             diarization = DiarizationState(
                 request: .init(engine: engine.name, threshold: Config.diarizationThreshold(),
@@ -1270,7 +1276,7 @@ actor TranscriptionCoordinator {
             SessionState.update(dir, with: ["audio_echo_cancellation": nil])
         }
 
-        if engine.name == "gigaam", let state = diarization, state.status == .pending {
+        if known.tracks.isEmpty, engine.name == "gigaam", let state = diarization, state.status == .pending {
             let giga = try await transcribeGigaAfterTurns(
                dir: dir, audio: audioDirectory, meta: meta, engine: engine,
                state: state, cleaned: cleaned != nil,
@@ -1278,7 +1284,7 @@ actor TranscriptionCoordinator {
             if giga.completed { return engine }
             diarization = giga.state
         }
-        if !replacingTranscript { diarization = DiarizationState.read(dir) }
+        if hasOrdinary && !replacingTranscript { diarization = DiarizationState.read(dir) }
 
         let inputs = TranscriptionInputs(
             session: dir, audio: audioDirectory, meta: meta, engine: engine)
@@ -1304,7 +1310,8 @@ actor TranscriptionCoordinator {
         var rawTracks: [TranscriptionInputs.PerTrackResult] = []
         var echoFilterRan = false
         var echoesDropped = 0
-        switch engine.input {
+        if !hasOrdinary { merged = [] }
+        else { switch engine.input {
         case .perTrack:
             if diarization?.retainsAudio == true {
                 rawTracks = try await inputs.perTrackDetailed(prepared: preparedSources)
@@ -1343,6 +1350,12 @@ actor TranscriptionCoordinator {
             merged = MultichannelSpeakerLabels.collapseSingleSides(merged)
         case .mixed:
             merged = try await inputs.mixed()
+            merged.sort { $0.start_ms < $1.start_ms }
+        }
+        }
+
+        if !known.tracks.isEmpty {
+            merged += try await TranscriptionInputs(session: dir, audio: dir, meta: known, engine: engine).perTrack()
             merged.sort { $0.start_ms < $1.start_ms }
         }
 
@@ -1403,7 +1416,8 @@ actor TranscriptionCoordinator {
         }
         var metadata: [String: Any?] = [
             StopHook.key: StopHook.owed,
-            "transcription_input": engine.input.metadataName,
+            "transcription_input": known.tracks.isEmpty ? engine.input.metadataName
+                : (hasOrdinary ? "participant-tracks+\(engine.input.metadataName)" : "participant-tracks"),
             "echo_filter": [
                 "ran": echoFilterRan,
                 "dropped_segments": echoesDropped,
@@ -1413,7 +1427,7 @@ actor TranscriptionCoordinator {
         if let diarization {
             metadata[DiarizationState.key] = try JSONSerialization.jsonObject(
                 with: DiarizationArtifacts.encode(diarization))
-        } else if replacingTranscript {
+        } else if replacingTranscript || !hasOrdinary {
             metadata.updateValue(nil, forKey: DiarizationState.key)
         }
         if let request {

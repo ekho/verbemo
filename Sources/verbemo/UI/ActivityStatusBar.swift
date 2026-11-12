@@ -36,15 +36,16 @@ struct ActivityAccess {
     var micActivity = true
     var autoCalendar = false
     var hasSelectedCalendar = true
+    var directCallReady = false
 
     var denied: Bool {
         if microphone == .denied || calendar == .denied { return true }
         if case .refused = systemAudio { return true }
         return false
     }
-    var ready: Bool { microphone == .granted && systemAudio == .heard && (calendar == nil || calendar == .granted) }
+    var ready: Bool { (directCallReady || (microphone == .granted && systemAudio == .heard)) && (calendar == nil || calendar == .granted) }
     var automaticBlockReason: String? {
-        if microphone != .granted { return localised("Microphone access needed", "Нужен доступ к микрофону") }
+        if microphone != .granted && !directCallReady { return localised("Microphone access needed", "Нужен доступ к микрофону") }
         if !micActivity && !autoCalendar { return localised("Enable microphone or calendar triggering", "Включите запуск по микрофону или календарю") }
         if !micActivity && calendar != .granted { return localised("Calendar access needed", "Нужен доступ к календарю") }
         if !micActivity && !hasSelectedCalendar { return localised("Choose a calendar", "Выберите календарь") }
@@ -275,7 +276,7 @@ final class ActivityStatusBar: NSStackView {
 
     func updateAccess(_ state: ActivityAccess) {
         let changed = accessState.microphone != state.microphone || accessState.systemAudio != state.systemAudio
-            || accessState.calendar != state.calendar
+            || accessState.calendar != state.calendar || accessState.directCallReady != state.directCallReady
         accessState = state
         automaticDestination = state.automaticDestination
         if changed || microphoneAccess.image == nil { refreshSources() }
@@ -296,6 +297,10 @@ final class ActivityStatusBar: NSStackView {
                detail: systemDenied ? localised("System audio access denied", "Доступ к звуку системы запрещён")
                    : systemLost ? localised("System audio signal unavailable", "Сигнал звука системы недоступен") : parts[1],
                caution: SetupPermissions.needsSystemAudioTest(accessState.systemAudio) || systemLost)
+        if accessState.directCallReady {
+            source(microphoneAccess, symbol: "person.wave.2", detail: localised("Your audio comes from KTalk; device access is only needed for fallback.", "Ваш звук поступает из KTalk; доступ к устройству нужен только для резерва."), caution: false)
+            source(systemAccess, symbol: "person.2.wave.2", detail: localised("Participant audio comes from KTalk; system capture is only needed for fallback.", "Звук участников поступает из KTalk; системный захват нужен только для резерва."), caution: false)
+        }
         calendarAccess.isHidden = accessState.calendar == nil
         if let calendar = accessState.calendar {
             let unavailable = calendar != .granted
@@ -343,6 +348,8 @@ final class ActivityStatusBar: NSStackView {
         case .idle: title = localised("Not recording", "Нет записи"); symbol = "circle"
         case .recording: title = localised("Recording", "Запись"); symbol = "circle.fill"
         case .paused: title = localised("Paused", "Пауза"); symbol = "pause.fill"
+        case .preparing: title = localised("Preparing audio…", "Подготовка звука…"); symbol = "hourglass"
+        case .waiting: title = localised("Call ended — finish recording", "Звонок завершён — завершите запись"); symbol = "stop.circle"
         }
         recording.title = state == .idle ? "" : elapsed ?? "0:00"
         recording.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)

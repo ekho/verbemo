@@ -10,6 +10,8 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     var mcp: MCPController? {
         didSet { mcpSettings.controller = mcp }
     }
+    private let ktalkStatus = NSTextField(wrappingLabelWithString: localised("Waiting for call information", "Ожидание сведений о звонке"))
+    func updateKTalkStatus(_ text: String) { ktalkStatus.stringValue = text }
     private let mcpSettings = MCPSettingsView()
     private var mcpNotice = ""
     private let panel: NSWindow
@@ -150,10 +152,10 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             rare.spacing = 16
             for entry in entries {
                 let content = makeRow(for: entry)
-                let row = destination == .general ? SetupLayout.box([SetupLayout.row(title: content)]) : content
-                if destination == .general { content.widthAnchor.constraint(equalTo: row.widthAnchor, constant: -38).isActive = true }
+                let row = (destination == .general || destination == .ktalk) ? SetupLayout.box([SetupLayout.row(title: content)]) : content
+                if destination == .general || destination == .ktalk { content.widthAnchor.constraint(equalTo: row.widthAnchor, constant: -38).isActive = true }
                 providerRows.append((entry, row))
-                let container = common.contains(entry.path.joined(separator: ".")) ? form : rare
+                let container = destination == .ktalk || common.contains(entry.path.joined(separator: ".")) ? form : rare
                 container.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: container.widthAnchor, constant: container === form ? -48 : 0).isActive = true
                 if entry.path == Config.Key.calendar.path {
@@ -186,6 +188,21 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 box.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
                 // Include the row's gap before its trailing spacer.
                 content.widthAnchor.constraint(equalTo: box.widthAnchor, constant: -38).isActive = true
+            }
+            if destination == .ktalk {
+                ktalkStatus.identifier = .init("ktalk.status")
+                ktalkStatus.font = SetupLayout.titleFont
+                ktalkStatus.maximumNumberOfLines = 0
+                let fallback = NSTextField(wrappingLabelWithString: localised(
+                    "If direct audio is unavailable or disconnects, this recording switches to microphone and system audio until it ends. Your device microphone is recorded independently of mute in KTalk. Verbemo's pause silences all sources. Allow device access in Recording settings to make fallback available.",
+                    "Если прямой звук недоступен или связь пропала, до конца записи используются микрофон и системный звук. Микрофон устройства записывается независимо от mute в KTalk. Пауза Verbemo отключает все источники. Для резерва разрешите доступ к устройствам в разделе «Запись»."))
+                fallback.font = SetupLayout.detailFont
+                fallback.textColor = StudioStyle.muted
+                fallback.maximumNumberOfLines = 0
+                let help = SetupLayout.box([SetupLayout.row(title: ktalkStatus), SetupLayout.row(title: fallback)])
+                for view in [ktalkStatus, fallback] { view.widthAnchor.constraint(equalTo: help.widthAnchor, constant: -38).isActive = true }
+                form.addArrangedSubview(help)
+                help.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             }
             if destination == .mcp {
                 let box = SetupLayout.box([mcpSettings])

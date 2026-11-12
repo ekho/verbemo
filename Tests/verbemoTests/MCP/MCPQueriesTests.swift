@@ -227,6 +227,24 @@ import Darwin
         try put(dir, "meta.json", #"{"files":{"source":"source.m4a"}}"#)
         #expect(throws: MCPFailure(.dataUnreadable)) { try call("get_meeting_audio", root, ["meeting_id": .string(meeting)]) }
     }
+    @Test func participantAudioIsIndexedOnlyThroughValidatedMetadata() throws {
+        let root = try fixture(), dir = root.appendingPathComponent("meeting")
+        let source = try ParticipantStorageTests.session()
+        defer { try? FileManager.default.removeItem(at: source) }
+        let original = try SessionMeta.read(from: source)
+        try FileManager.default.removeItem(at: dir)
+        try FileManager.default.moveItem(at: source, to: dir)
+        let meeting = try id(root)
+        let audio = try call("get_meeting_audio", root, ["meeting_id": .string(meeting)])
+        #expect(audio["items"]?.array?.count == 5)
+        let key = try #require(original.callAudio?.tracks.first?.fileKey)
+        var metadata = try #require(SessionState.read(dir))
+        var files = metadata["files"] as! [String: String]
+        files[key] = "../private.m4a"; metadata["files"] = files
+        try Data(JSONSerialization.data(withJSONObject: metadata)).write(to: dir.appendingPathComponent("meta.json"))
+        #expect(throws: MCPFailure(.dataUnreadable)) { try call("get_meeting_audio", root, ["meeting_id": .string(meeting)]) }
+    }
+
     @Test func fileAndDirectoryReplacementDuringReadFailClosed() throws {
         let root = try fixture(), dir = try MCPFiles.Directory.root(root.appendingPathComponent("meeting"))
         let before = try tree(root)

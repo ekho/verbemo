@@ -297,7 +297,9 @@ enum MCPTextArtifacts {
         try reader.end()
         return (result, reader.hash.finalize().map { String(format: "%02x", $0) }.joined())
     }
-    private enum Projection { case meta, calendar, participants, attendees, person, names, speakers, speaker, files, offsets, diarization, timeline, scalar, status }
+    private enum Projection {
+        case callAudio, callTracks, callTrack, callPeriods, callPeriod
+        case meta, calendar, participants, attendees, person, names, speakers, speaker, files, offsets, diarization, timeline, scalar, status }
     /// A private token scanner for the saved transcript schema, with a 64 KiB input buffer.
     private final class Reader {
         let file: MCPFiles.AudioHandle
@@ -474,11 +476,11 @@ enum MCPTextArtifacts {
                 guard bytes.count <= MCPContract.hardResponseBytes - output.count else { throw MCPFailure(.responseTooLarge) }
                 output.append(bytes)
             }
-            if policy == .participants || policy == .attendees {
+            if [.participants, .attendees, .callTracks, .callPeriods].contains(policy) {
                 try append(Data("[".utf8)); var first = true
                 try array {
                     if !first { try append(Data(",".utf8)) }; first = false
-                    try append(project(policy == .participants ? .person : .scalar)); return true
+                    try append(project(policy == .participants ? .person : policy == .callTracks ? .callTrack : policy == .callPeriods ? .callPeriod : .scalar)); return true
                 }
                 try append(Data("]".utf8)); return output
             }
@@ -488,7 +490,11 @@ enum MCPTextArtifacts {
                 fields = ["title": .scalar, "trigger": .scalar, "started": .scalar, "ended": .scalar, "duration_seconds": .scalar,
                           "summary_stale": .scalar, "summary_status": .status, "speakers_status": .status,
                           "transcription_failed": .scalar, "transcription_deferred": .scalar, "calendar": .calendar,
-                          "files": .files, "start_offset_ms": .offsets, "diarization": .diarization]
+                          "files": .files, "start_offset_ms": .offsets, "diarization": .diarization, "call_audio": .callAudio]
+            case .callAudio: fields = ["version": .scalar, "integrationID": .scalar, "callID": .scalar, "tracks": .callTracks, "periods": .callPeriods]
+            case .callTrack: fields = ["fileKey": .scalar, "sourceID": .scalar, "speakerID": .scalar, "participantID": .scalar,
+                "name": .scalar, "isLocal": .scalar, "generation": .scalar, "sampleRate": .scalar, "missingFrames": .scalar]
+            case .callPeriod: fields = ["mode": .scalar, "startMs": .scalar, "endMs": .scalar]
             case .calendar:
                 fields = ["title": .scalar, "event_id": .scalar, "association": .scalar, "calendar_title": .scalar, "agenda": .scalar,
                           "scheduled_start": .scalar, "scheduled_end": .scalar, "time_zone": .scalar, "participants": .participants, "attendees": .attendees]
@@ -511,7 +517,8 @@ enum MCPTextArtifacts {
                     try skip(); return
                 }
                 if policy == .speakers, let selectedLabels, !selectedLabels.contains(key) { try skip(); return }
-                let selected = policy == .speakers ? Projection.speaker : fields[key]
+                let selected = policy == .speakers ? Projection.speaker
+                    : ([.files, .offsets].contains(policy) && key.hasPrefix("call_")) ? .scalar : fields[key]
                 guard let selected else { try skip(); return }
                 guard keys.insert(key).inserted else { throw MCPFailure(.dataUnreadable) }
                 if !first { try append(Data(",".utf8)) }; first = false

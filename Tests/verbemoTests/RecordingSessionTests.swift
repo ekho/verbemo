@@ -11,6 +11,7 @@ final class FakeMicRecorder: MicTrackRecorder {
     var startError: Error?
     var writesFile = true
     private(set) var started = false
+    private(set) var startCount = 0
     private(set) var stopped = false
     var firstBufferAt: Date?
     var lastSoundAt: Date?
@@ -25,6 +26,7 @@ final class FakeMicRecorder: MicTrackRecorder {
     var restarts: [MicRecorder.Restart] = []
 
     func start(writingTo url: URL, callApps: [String]) throws {
+        startCount += 1
         if let startError { throw startError }
         started = true
         if writesFile { try Data(repeating: 1, count: 64).write(to: url) }
@@ -40,6 +42,7 @@ final class FakeSystemRecorder: SystemTrackRecorder {
     var startError: Error?
     var writesFile = true
     private(set) var started = false
+    private(set) var startCount = 0
     private(set) var stopped = false
     var scope: SystemAudioRecorder.Scope = .everything
     var firstBufferAt: Date?
@@ -49,6 +52,7 @@ final class FakeSystemRecorder: SystemTrackRecorder {
     var isMuted = false
 
     func start(writingTo url: URL, scope: SystemAudioRecorder.Scope) throws {
+        startCount += 1
         if let startError { throw startError }
         started = true
         if writesFile { try Data(repeating: 1, count: 64).write(to: url) }

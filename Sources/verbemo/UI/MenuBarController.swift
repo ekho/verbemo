@@ -15,6 +15,8 @@ final class MenuBarController {
         case idle
         case recording
         case paused
+        case preparing
+        case waiting
     }
 
     let menu: NSMenu
@@ -211,6 +213,13 @@ final class MenuBarController {
             // The elapsed time next to the icon is the difference between
             // "something is recording" and "I know it's recording" at a glance.
             statusItem?.button?.title = " \(elapsed ?? "0:00")"
+        case .preparing, .waiting:
+            stateLabel.title = state == .preparing
+                ? localised("Preparing audio…", "Подготовка звука…")
+                : localised("Call ended — finish recording", "Звонок завершён — завершите запись")
+            pauseItem.title = localised("Pause", "Пауза")
+            pauseItem.isEnabled = state == .preparing
+            statusItem?.button?.title = " " + stateLabel.title
         case .paused:
             stateLabel.title = localised("Ⅱ Recording paused · ", "Ⅱ Запись на паузе · ") + (elapsed ?? "0:00")
             pauseItem.title = localised("Resume", "Продолжить")

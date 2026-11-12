@@ -122,6 +122,7 @@ app: build $(ICON)
 		$(NEMOTRON_BUNDLE)/bin $(NEMOTRON_BUNDLE)/lib
 	@scripts/build-app-icon.sh $(ADAPTIVE_ICON) $(ICON) $(BUILT_ICON) $(MINIMUM_MACOS)
 	@cp $(BUILT) $(APP)/Contents/MacOS/$(APP_NAME)
+	@cp -R "$(dir $(BUILT))CallIntegrations_KTalkIntegration.bundle" $(APP)/Contents/Resources/
 	@cp $(LOCALVQE_LIB) $(APP)/Contents/Frameworks/liblocalvqe.dylib
 	@cp $(LOCALVQE_MODEL) $(APP)/Contents/Resources/Models/
 	@cp $(LOCALVQE_ROOT)/verification.json $(APP)/Contents/Resources/LocalVQE-verification.json

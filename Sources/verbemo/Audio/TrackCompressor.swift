@@ -63,6 +63,7 @@ enum TrackCompressor {
         var freed: Int64 = 0
         var removed = 0
         for name in candidates.sorted() {
+            guard name == URL(fileURLWithPath: name).lastPathComponent, !name.contains("\\") else { continue }
             let url = dir.appendingPathComponent(name)
             guard fm.fileExists(atPath: url.path) else { continue }
             let bytes = size(of: url)
@@ -94,6 +95,12 @@ enum TrackCompressor {
             let files = meta["files"] as? [String: String]
         else {
             log("compression skipped — can't read meta.json")
+            return
+        }
+
+        if meta["call_audio"] != nil {
+            do { try compressParticipantTracks(sessionDir: dir) }
+            catch { log("participant archive failed, keeping the originals: \(error)") }
             return
         }
 
@@ -182,6 +189,73 @@ enum TrackCompressor {
         try? FileManager.default.removeItem(
             at: dir.appendingPathComponent("multichannel.tmp.m4a"))
         log("archived mic left + system right → audio.m4a (\(saved))")
+    }
+
+    /// Each source keeps its offset; metadata publication commits all replacements together.
+    static func compressParticipantTracks(sessionDir dir: URL,
+        publish: (([String: Any]) throws -> Void)? = nil) throws {
+        let parsed = try SessionMeta.read(from: dir)
+        guard let info = parsed.callAudio, let meta = SessionState.read(dir),
+              let files = meta["files"] as? [String: String],
+              Set(files.keys).isSubset(of: Set(info.tracks.map(\.fileKey)).union(["mic", "system"]))
+        else { throw CocoaError(.fileReadCorruptFile) }
+        let fm = FileManager.default
+        var updated = files
+        var created: [URL] = []
+        var temporary: URL?
+        defer { if let temporary { try? fm.removeItem(at: temporary) } }
+        do {
+            for (key, name) in files.sorted(by: { $0.key < $1.key }) {
+                guard name == URL(fileURLWithPath: name).lastPathComponent, !name.contains("\\"),
+                      ["caf", "m4a"].contains((name as NSString).pathExtension) else { throw CocoaError(.fileReadCorruptFile) }
+                let source = dir.appendingPathComponent(name)
+                let probe = try AVAudioFile(forReading: source)
+                if source.pathExtension == "m4a", probe.length == 0 { throw CompressionError.noUsableTracks }
+                // No frames is legitimate for a participant who left before sending audio.
+                guard probe.length > 0, source.pathExtension == "caf" else { continue }
+                let archive = source.deletingPathExtension().appendingPathExtension("m4a")
+                let scratch = dir.appendingPathComponent(".archive-" + UUID().uuidString + ".m4a")
+                temporary = scratch
+                try encodeParticipant(source, to: scratch)
+                if fm.fileExists(atPath: archive.path) {
+                    _ = try fm.replaceItemAt(archive, withItemAt: scratch)
+                } else { try fm.moveItem(at: scratch, to: archive) }
+                created.append(archive); temporary = nil
+                updated[key] = archive.lastPathComponent
+            }
+            let changes: [String: Any] = ["files": updated, "archived_from": meta["archived_from"] ?? files, "compressed": true]
+            if let publish { try publish(changes) } else { try SessionState.amend(dir, with: changes) }
+        } catch {
+            for file in created where !files.values.contains(file.lastPathComponent) { try? fm.removeItem(at: file) }
+            throw error
+        }
+        let originals = meta["archived_from"] as? [String: String] ?? files
+        for name in Set(originals.values) where !updated.values.contains(name) {
+            guard name == URL(fileURLWithPath: name).lastPathComponent, name.hasSuffix(".caf") else { continue }
+            try? fm.removeItem(at: dir.appendingPathComponent(name))
+        }
+        for name in ["mixed.m4a", "mixed.tmp.m4a", "multichannel.m4a", "multichannel.tmp.m4a"] {
+            try? fm.removeItem(at: dir.appendingPathComponent(name))
+        }
+        appendSessionLog("archived \(updated.count) independent audio tracks", to: dir)
+    }
+
+    private static func encodeParticipant(_ source: URL, to destination: URL) throws {
+        let probe = try AudioTrackReader(url: source)
+        let rate = MediaNormalizer.outputSampleRate(for: probe.sourceRate)
+        let reader = try AudioTrackReader(url: source, rate: rate)
+        func write() throws {
+            let file = try AVAudioFile(forWriting: destination, settings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate,
+                AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: rate < 32000 ? 32000 : 64000,
+            ], commonFormat: .pcmFormatFloat32, interleaved: false)
+            while let buffer = try reader.next(AVAudioFrameCount(rate)) { try file.write(from: buffer) }
+        }
+        try write()
+        let encoded = try AVAudioFile(forReading: destination)
+        guard encoded.processingFormat.channelCount == 1, Double(encoded.length) >= Double(reader.length) * 0.99 else {
+            throw CompressionError.tooShort(source: reader.length, encoded: encoded.length)
+        }
     }
 
     /// Finish a compression that was interrupted after meta.json had been

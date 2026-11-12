@@ -360,10 +360,19 @@ enum MCPLibrary {
                            names: names, namesSource: namesSource, namesError: namesError, summary: summary, summaryError: summaryError, meta: meta, revision: revision)
         }
         func audio(meetingID: String, meta: [String: MCPJSON], pin: Bool) throws -> [Audio] {
-            let allowed = ["mic": Set(["mic.caf", "audio.m4a"]), "system": Set(["system.caf", "audio.m4a"]), "source": Set(["source.m4a"])]
+            var allowed = ["mic": Set(["mic.caf", "mic.m4a", "audio.m4a"]), "system": Set(["system.caf", "system.m4a", "audio.m4a"]), "source": Set(["source.m4a"])]
             guard let files = meta["files"]?.object else {
                 if meta["files"] != nil { throw MCPFailure(.dataUnreadable) }
                 return []
+            }
+            if let value = meta["call_audio"] {
+                do {
+                    let foundation = try JSONSerialization.jsonObject(with: value.encoded())
+                    let physical = try JSONDecoder().decode([String: String].self, from: MCPJSON.object(files).encoded())
+                    let offsets = try JSONDecoder().decode([String: Int].self, from: (meta["start_offset_ms"] ?? .object([:])).encoded())
+                    let info = try CallAudioMetadata.read(foundation, files: physical, offsets: offsets)
+                    for track in info.tracks { allowed[track.fileKey] = [track.fileKey + ".caf", track.fileKey + ".m4a"] }
+                } catch { throw MCPFailure(.dataUnreadable) }
             }
             var rolesByName: [String: [String]] = [:]
             for (role, value) in files {
@@ -386,7 +395,7 @@ enum MCPLibrary {
                 let id = "a_" + MCPContract.hash(MCPContract.framed([meetingID, roles.joined(separator: ","), filename, handle.stamp.revision]))
                 audio.append(Audio(id: id, roles: roles, filename: filename, offsets: offsets, stamp: handle.stamp, handle: pin ? handle : nil))
             }
-            if let archive = audio.first(where: { $0.filename == "audio.m4a" }) { return [archive] }
+            if meta["call_audio"] == nil, let archive = audio.first(where: { $0.filename == "audio.m4a" }) { return [archive] }
             return audio
         }
     }

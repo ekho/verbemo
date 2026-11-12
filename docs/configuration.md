@@ -313,26 +313,34 @@ before using this example offline.
 
 ## Call integrations (macOS)
 
-`call_integrations.ktalk.enabled` (default `false`) enables the native KTalk
-adapter. `call_integrations.ktalk.space_url` (default empty) is the exact
-`https://SPACE.ktalk.ru` origin. It enables reading an already open loopback CDP
-port **9333**. Verbemo never opens that port or restarts KTalk.
-`call_integrations.ktalk.accessibility` (default `true`) permits the fallback
-reader to use existing Accessibility permission; no system prompt is raised.
+The separate **KTalk integration** / **Интеграция с KTalk** settings page uses the
+existing `call_integrations.ktalk.enabled` flag (default `false`). It enables call
+detection and separate audio tracks for each participant, including your own
+outgoing track. `call_integrations.ktalk.space_url` (default empty) is the exact
+`https://SPACE.ktalk.ru` origin. Direct audio requires an explicitly enabled
+loopback diagnostic (CDP) port **9333**. Verbemo does not open the port or restart
+KTalk. `call_integrations.ktalk.accessibility` (default `true`) permits call
+observation through existing Accessibility permission; it cannot supply audio.
 These three settings take effect after restarting Verbemo.
 
-While enabled, the microphone gate applies to all recordings, including manual
-recordings and other call apps, so a later KTalk join cannot bypass protection.
-Before associating a call, fresh confirmed idle state permits the mic; unknown
-KTalk state blocks local audio even in an unrelated recording.
-For an integration-associated recording, only a fresh explicit **unmuted**
-reading permits local microphone audio. Muted, unknown or stale state writes
-silence on that track; remote audio continues. AX alone cannot reliably identify
-local mute, so it keeps the local microphone track silent. A two-second in-memory
-holdback covers ordinary observation delay; pending audio is replaced by silence
-on mute, uncertainty, pause or stop. This can remove the last two seconds before
-those transitions. Local audio passes through this filter before live ASR, adding
-about two seconds of latency. A short mute/unmute entirely between observations
-can be missed; use Verbemo's own pause when guaranteed privacy is required.
+Direct mode captures KTalk's existing tracks without starting Verbemo's microphone
+or system-audio capture. Your track follows mute in KTalk; mute means silence,
+not a lost connection. Live and final transcription use participant identity from
+the call and skip Verbemo's speaker diarization for these tracks. The selected
+recognizer/model and summary settings stay in effect.
+
+If direct capture is unavailable or disconnects, the same recording switches to
+ordinary microphone and system audio. The fallback microphone is recorded
+**independently of mute in KTalk**, including when KTalk's state is unknown.
+Fallback requires the usual device permissions. If it cannot start, Verbemo stops
+and marks the saved recording incomplete. Earlier audio is kept. Fallback lasts
+until this recording ends; the next recording tries direct capture again.
+Ordinary recordings of other apps also use the device microphone independently
+of KTalk. Verbemo's own pause writes silence in every mode.
+
+Participant files, names and timestamps survive playback, compression and repeat
+transcription. Hybrid meetings retain both the direct tracks and the fallback
+pair; only the latter uses ordinary diarization settings. `keep_audio` and the
+recording-only retention policy apply to all tracks.
 
 See [the module contract and verification notes](call-integrations.md).

@@ -42,6 +42,10 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         return view
     }()
     var isProcessing: (() -> Bool)?
+    func updateCaptureSource(_ source: RecordingSession.CaptureSource) {
+        liveView.captureSource = source
+        recordingBar.toolTip = source.title
+    }
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
     var onRenameRecording: ((String) throws -> Void)?
     private var settingsBuilt = false
@@ -601,7 +605,7 @@ private final class WorkspaceSurface: JournalSurface {
 
 @MainActor
 private final class JournalSettingsNavigation: NSStackView {
-    private let destinations: [ApplicationNavigationState.Destination] = [.general, .recording, .transcription, .summary, .calendar, .storage, .mcp, .about]
+    private let destinations: [ApplicationNavigationState.Destination] = [.general, .recording, .ktalk, .transcription, .summary, .calendar, .storage, .mcp, .about]
     private var buttons: [NSButton] = []
     private var widths: [NSLayoutConstraint] = []
     var selectedButton: NSButton? { buttons.first { $0.state == .on } }

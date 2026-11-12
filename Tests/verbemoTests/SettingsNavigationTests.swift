@@ -172,13 +172,13 @@ struct SettingsNavigationTests {
         let sidebar = try #require(views.first { $0 is SidebarView })
         #expect(categories.isDescendant(of: sidebar))
         let tabButtons = categories.arrangedSubviews.compactMap { $0 as? NSButton }
-        #expect(tabButtons.count == 8)
+        #expect(tabButtons.count == 9)
         #expect(tabButtons.allSatisfy { $0.image != nil && !$0.isBordered })
         #expect(tabButtons[0].state == .on)
-        let transcription = tabButtons[2]
+        let transcription = try #require(tabButtons.first { $0.identifier?.rawValue == "settings.tab.transcription" })
         _ = NSApplication.shared.sendAction(try #require(transcription.action), to: transcription.target, from: transcription)
         #expect(app.navigation.destination == .transcription)
-        #expect(tabButtons[2].state == .on)
+        #expect(transcription.state == .on)
 
         app.panel.setContentSize(NSSize(width: 760, height: 680))
         app.panel.contentView?.layoutSubtreeIfNeeded()
@@ -190,10 +190,10 @@ struct SettingsNavigationTests {
         #expect(allCategories.sendAction(allCategories.action, to: allCategories.target))
         #expect(categories.window === app.panel && !categories.isHiddenOrHasHiddenAncestor)
         #expect(!categories.isDescendant(of: sidebar))
-        let calendar = tabButtons[4]
+        let calendar = try #require(tabButtons.first { $0.identifier?.rawValue == "settings.tab.calendar" })
         #expect(calendar.sendAction(calendar.action, to: calendar.target))
         #expect(app.navigation.destination == .calendar)
-        #expect(tabButtons[4].state == .on)
+        #expect(calendar.state == .on)
         #expect(tabButtons.filter { $0.state == .on }.count == 1)
         app.navigate(.general)
         let general = try #require(app.panel.contentView).allDescendants
