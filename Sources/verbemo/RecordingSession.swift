@@ -63,6 +63,7 @@ final class RecordingSession {
     typealias CallAudioFactory = @Sendable () async throws -> any CallAudioCapture
     enum CaptureSource: Equatable {
         case ordinary, preparing, direct, fallback, ended, failed
+        var usesParticipantAudio: Bool { self == .preparing || self == .direct }
         var title: String {
             switch self {
             case .ordinary: localised("Microphone and computer audio", "Микрофон и звук компьютера")
@@ -197,6 +198,7 @@ final class RecordingSession {
     /// is deliberate silence.
     private var pausedFor: TimeInterval = 0
     private var pausedSince: Date?
+    private var preparingPauses: [DateInterval] = []
 
     private static let folderFormat: DateFormatter = {
         let f = DateFormatter()
@@ -327,8 +329,10 @@ final class RecordingSession {
                 let origin = await capture.clockOrigin ?? preparingAt
                 guard !recordingStopped, !Task.isCancelled else { await capture.stop(); return }
                 let offset = max(0, Int(origin.timeIntervalSince(startedAt) * 1000))
-                let recorder = ParticipantAudioRecorder(directory: dir, offsetMs: offset)
-                recorder.isPaused = isPaused
+                let recorder = ParticipantAudioRecorder(directory: dir, offsetMs: offset,
+                    clockOrigin: origin, pauses: preparingPauses)
+                preparingPauses.removeAll()
+                recorder.setPaused(isPaused, at: pausedSince ?? Date())
                 recorder.installLiveSink(participantSink)
                 participantRecorder = recorder
                 callAudio?.periods.append(.init(mode: .direct, startMs: offset))
@@ -558,8 +562,8 @@ final class RecordingSession {
     func pause() {
         guard !isPaused else { return }
         isPaused = true
-        participantRecorder?.isPaused = true
         pausedSince = Date()
+        participantRecorder?.setPaused(true, at: pausedSince!)
         mic.setLiveAudioPaused(true)
         system.setLiveAudioPaused(true)
         mic.isMuted = true
@@ -569,8 +573,14 @@ final class RecordingSession {
     func resume() {
         guard isPaused else { return }
         isPaused = false
-        participantRecorder?.isPaused = false
-        if let since = pausedSince { pausedFor += Date().timeIntervalSince(since) }
+        let now = Date()
+        participantRecorder?.setPaused(false, at: now)
+        if let since = pausedSince {
+            pausedFor += now.timeIntervalSince(since)
+            if participantRecorder == nil, callAudio != nil {
+                preparingPauses.append(DateInterval(start: since, end: max(since, now)))
+            }
+        }
         pausedSince = nil
         mic.isMuted = false
         system.isMuted = false

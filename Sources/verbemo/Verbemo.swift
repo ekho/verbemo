@@ -1018,7 +1018,7 @@ final class AppController {
             await liveTranscription.beginRecording(
                 enabled: liveEnabled,
                 language: liveLanguage,
-                participants: newSession.captureSource == .preparing,
+                participants: newSession.captureSource.usesParticipantAudio,
                 startedAt: newSession.startedAt,
                 update: { [weak self] snapshot in
                     Task { @MainActor in self?.showLive(snapshot) }

@@ -1,10 +1,47 @@
 import AVFoundation
 import CallIntegrations
 import Foundation
+import os
 import Testing
 @testable import verbemo
 
 struct ParticipantAudioRecorderTests {
+    @Test func delayedAudioAfterResumeRedactsPauseIntervalsInFileAndLiveSink() throws {
+        let dir = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let origin = Date(timeIntervalSince1970: 0)
+        let recorder = ParticipantAudioRecorder(directory: dir, offsetMs: 500, clockOrigin: origin)
+        let live = OSAllocatedUnfairLock(initialState: [[Float]]())
+        recorder.installLiveSink { event in
+            if case .audio(_, let buffer, _) = event {
+                let samples = Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+                live.withLock { $0.append(samples) }
+            }
+        }
+        try recorder.consume(.track(Self.descriptor()))
+        recorder.setPaused(true, at: origin.addingTimeInterval(1.0 / 64))
+        recorder.setPaused(false, at: origin.addingTimeInterval(2.0 / 64))
+        recorder.setPaused(true, at: origin.addingTimeInterval(3.0 / 64))
+        recorder.setPaused(false, at: origin.addingTimeInterval(3.5 / 64))
+        // A new participant may deliver the same delayed timeline after Resume.
+        try recorder.consume(.track(Self.descriptor("p2")))
+        for id in ["p1", "p2"] {
+            try recorder.consume(.audio(.init(trackID: id, generation: 1, frameStart: 0,
+                sampleRate: 48000, samples: Array(repeating: 0.5, count: 3000))))
+        }
+        recorder.close()
+        var expected = Array(repeating: Float(0.5), count: 3000)
+        expected.replaceSubrange(750..<1500, with: repeatElement(0, count: 750))
+        expected.replaceSubrange(2250..<2625, with: repeatElement(0, count: 375))
+        #expect(live.withLock { $0 } == [expected, expected])
+        for filename in recorder.snapshot.files.values {
+            let file = try AVAudioFile(forReading: dir.appendingPathComponent(filename))
+            let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 3000))
+            try file.read(into: buffer)
+            #expect(Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: 3000)) == expected)
+        }
+    }
+
     static func folder() throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

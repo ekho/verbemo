@@ -10,14 +10,14 @@ No Windows source, installed Verbemo application, user recordings, model choice,
 
 ## Automated evidence
 
-- Root `swift test --no-parallel`: 1477 tests / 201 suites passed before final runtime corrections; a second full run covers the final corrections (result recorded below).
+- Root `swift test --no-parallel`: **1480 tests / 201 suites passed after the review fixes in 316.802 seconds**. The preceding runtime-qualified revision also passed (1477 tests /201 suites, 328.365 seconds).
 - `swift test --package-path Packages/CallIntegrations`: 12 tests / 4 suites passed.
 - Native Foundation HTTP/WebSocket fixture: 6 tests passed, including anonymous worker targets, sustained polling, source replacement, error, installation timeout, changed-call refusal, and cleanup.
 - AudioWorklet fixture: 3 tests passed, including a clone created muted then unmuted, generation replacement, call end, lease expiry, and removal of the injected binding.
 - Focused stages exercised actual CAF writing, PCM gap/pause handling, known-speaker ASR routing, hybrid diarization, live epoch/queue cleanup, late-start/Stop races, fallback/device failures, recovery, AAC archive/reload, filename validation, and MCP projection.
 - `swift build` passed. The isolated arm64 `.app` was ad-hoc signed; its existing native frameworks/helpers came from the installed app. This is development runtime evidence, not a universal release or notarization check.
 
-The root suite includes intentionally skipped optional hardware/model and gallery tests. A passing suite is not evidence that those skipped paths ran. No paid cloud ASR request was made.
+The root run reports 28 intentionally skipped tests and six skipped suites, including optional hardware/model and gallery coverage. A passing suite is not evidence that those skipped paths ran. No paid cloud ASR request was made.
 
 ## Native application and real KTalk runtime
 
@@ -32,7 +32,7 @@ Observed in native UI:
 - Live text appears under the KTalk participant's name; final text retains that name and timestamps with `speaker_names` disabled.
 - Mute gives silence; unmute restores the same cloned track. Verbemo pause silences the recording. Audio continues with the KTalk call window minimized.
 - Changing the fake input creates a second physical track generation while keeping one stable speaker identity.
-- Saved audio is playable by the normal meeting player; the UI exposes playback and timestamp seek controls. No audible playback was needed for the numeric PCM checks.
+- Saved audio appears in the normal meeting player with playback and timestamp seek controls. The files were decoded for numeric PCM checks; audible player output was not listened to in this run.
 - An abrupt KTalk process loss closes direct capture. Missing fallback microphone permission produces a visible explanation in the attention list; saved partial audio is still transcribed.
 - The corrected test app exits normally after recording. KTalk was restarted normally; its UI showed Online, and an independent loopback check confirmed port 9333 closed. The isolated Verbemo process no longer existed.
 
@@ -76,4 +76,16 @@ Numeric intervals avoid mute/pause boundaries and are not a claim of zero-latenc
 
 ## Final verification and independent review
 
-Pending final full-suite result and independent whole-branch review. Results will be appended before delivery.
+At `ae7456b`, the final root suite passed (1477 tests / 201 suites, 328.365 seconds); final package, native transport and AudioWorklet checks passed. A fresh independent reviewer completed a read-only whole-branch review at that revision and found two Important defects, with no Critical or Minor findings: delayed PCM could escape a completed pause, and a delayed live start could mistake an already-direct capture for ordinary audio. Both were accepted for the single fix pass; regression and final-suite results follow below.
+
+The reviewer explicitly set aside real-device fallback/multiple remote participants, cloud requests/long load/large conferences, and Windows/Intel/install/publication runtime validation. These remain the documented evidence limits, not implied successful checks.
+
+
+### Review fixes
+
+- **P1, delayed pause audio:** recorder redaction now intersects completed pause intervals with the PCM capture-frame timeline before writing files or forwarding live buffers. The session also preserves pauses completed during async preparation. Regression tests reproduced nonzero paused samples in both CAF and live output before the fix; afterward the matching samples were zero, including late participant registration and buffered audio delivered after preparation.
+- **P2, delayed live start:** source selection accepts both preparing and already-direct capture. A regression holds the previous live transition, lets the new session reach direct, then releases the queue; it failed before and passed after the fix.
+
+The single fix pass passed 44 related tests /7 suites in 1.301 seconds. No findings were deferred. The reviewer was not asked to re-review; fixes are verified by regressions and the post-fix full suite, following the agreed inline workflow. The real KTalk runtime evidence above predates these two fixes; their boundary/race cases were verified deterministically in tests.
+
+Post-review full verification: `swift test --no-parallel` passed **1480 tests /201 suites in 316.802 seconds**, with the same 28 intentional test skips and six suite skips. Both Important findings are fixed; no Critical/Important finding or Minor was deferred. No second reviewer pass was performed.

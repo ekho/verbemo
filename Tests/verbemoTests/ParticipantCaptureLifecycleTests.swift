@@ -1,3 +1,4 @@
+import AVFoundation
 import CallIntegrations
 import Foundation
 import Testing
@@ -8,14 +9,17 @@ actor FakeCallAudioCapture: CallAudioCapture {
     nonisolated let continuation: AsyncThrowingStream<CallAudioEvent, Error>.Continuation
     let error: CallAudioFailure?
     let stopGate: Gate?
+    let startGate: Gate?
+    let clockOrigin: Date?
     private(set) var starts = 0
     private(set) var stops = 0
-    init(error: CallAudioFailure? = nil, stopGate: Gate? = nil) {
+    init(error: CallAudioFailure? = nil, stopGate: Gate? = nil, startGate: Gate? = nil, clockOrigin: Date? = nil) {
         let pair = AsyncThrowingStream<CallAudioEvent, Error>.makeStream()
         events = pair.stream; continuation = pair.continuation
         self.error = error; self.stopGate = stopGate
+        self.startGate = startGate; self.clockOrigin = clockOrigin
     }
-    func start() async throws { starts += 1; if let error { throw error } }
+    func start() async throws { starts += 1; await startGate?.pass(); if let error { throw error } }
     func stop() async {
         guard stops == 0 else { return }
         stops += 1
@@ -26,6 +30,51 @@ actor FakeCallAudioCapture: CallAudioCapture {
 
 @MainActor
 struct ParticipantCaptureLifecycleTests {
+    @Test func pauseCompletedDuringPreparationRedactsQueuedAudio() async throws {
+        let root = try ParticipantAudioRecorderTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = try RecordingSession(root: root, mic: FakeMicRecorder(), system: FakeSystemRecorder())
+        let ready = Gate(), origin = session.startedAt
+        let capture = FakeCallAudioCapture(startGate: ready, clockOrigin: origin)
+        try session.start(callAudio: { capture }, fallbackPermission: { false })
+        session.pause()
+        let frame = Int64(Date().timeIntervalSince(origin) * 48000) + 480
+        capture.continuation.yield(.track(ParticipantAudioRecorderTests.descriptor()))
+        capture.continuation.yield(.audio(.init(trackID: "p1", generation: 1, frameStart: frame,
+            sampleRate: 48000, samples: Array(repeating: 0.5, count: 200))))
+        try await Task.sleep(for: .milliseconds(30))
+        session.resume()
+        ready.open()
+        try await wait { session.participantSnapshot?.offsets.values.first.map { $0 > 0 } == true }
+        session.stop(); await session.finishCapture()
+        let meta = try SessionMeta.read(from: session.dir)
+        let track = try #require(meta.tracks.first)
+        let file = try AVAudioFile(forReading: session.dir.appendingPathComponent(track.file))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 200))
+        try file.read(into: buffer)
+        #expect(buffer.frameLength == 200)
+        #expect(Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: 200)).allSatisfy { $0 == 0 })
+    }
+
+    @Test func queuedLiveStartKeepsParticipantModeWhenCaptureBecomesDirect() async throws {
+        let root = try ParticipantAudioRecorderTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = try RecordingSession(root: root, mic: FakeMicRecorder(), system: FakeSystemRecorder())
+        let capture = FakeCallAudioCapture(), transitions = LiveTranscriptionTransitions()
+        let retiring = Gate(), retired = Gate()
+        transitions.append { retiring.open(); await retired.pass() }
+        await retiring.pass()
+        try session.start(callAudio: { capture }, fallbackPermission: { false })
+        #expect(session.captureSource == .preparing)
+        var participants = false
+        let begin = transitions.append { participants = session.captureSource.usesParticipantAudio }
+        try await wait { session.captureSource == .direct }
+        retired.open()
+        await begin.value
+        session.stop(); await session.finishCapture()
+        #expect(participants)
+    }
+
     private func wait(_ condition: () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }

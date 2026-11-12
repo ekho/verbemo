@@ -27,6 +27,8 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
         var snapshot = Snapshot()
         var entries: [String: Entry] = [:]
         var paused = false
+        var pausedSince: Date?
+        var pauses: [DateInterval] = []
         var closed = false
         var sink: Sink?
         var localMeter = AudioMeter()
@@ -37,16 +39,32 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
     private let state = OSAllocatedUnfairLock(initialState: State())
     private let directory: URL
     private let offsetMs: Int
+    private let clockOrigin: Date
 
-    init(directory: URL, offsetMs: Int) {
+    init(directory: URL, offsetMs: Int, clockOrigin: Date = Date(), pauses: [DateInterval] = []) {
         self.directory = directory
         self.offsetMs = max(0, offsetMs)
+        self.clockOrigin = clockOrigin
+        state.withLock { $0.pauses = pauses }
     }
 
     var snapshot: Snapshot { state.withLock { $0.snapshot } }
     var isPaused: Bool {
         get { state.withLock { $0.paused } }
-        set { state.withLock { $0.paused = newValue } }
+        set { setPaused(newValue) }
+    }
+
+    func setPaused(_ paused: Bool, at date: Date = Date()) {
+        state.withLock { state in
+            guard !state.closed, state.paused != paused else { return }
+            state.paused = paused
+            if paused {
+                state.pausedSince = date
+            } else if let since = state.pausedSince {
+                state.pauses.append(DateInterval(start: since, end: max(since, date)))
+                state.pausedSince = nil
+            }
+        }
     }
 
     var audioLevels: (mic: AudioMeter.Reading, system: AudioMeter.Reading) {
@@ -128,7 +146,16 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
                     try write(Array(repeating: 0, count: count), to: entry.file)
                     gap -= Int64(count)
                 }
-                let samples = state.paused ? Array(repeating: Float(0), count: chunk.samples.count) : chunk.samples
+                var samples = state.paused ? Array(repeating: Float(0), count: chunk.samples.count) : chunk.samples
+                // Delivery may lag Resume; redact by the capture clock before disk and live ASR.
+                if !state.paused {
+                    let rate = Double(chunk.sampleRate), frame = Double(chunk.frameStart), count = Double(samples.count)
+                    for pause in state.pauses {
+                        let start = Int(max(0, min(count, floor(pause.start.timeIntervalSince(clockOrigin) * rate - frame))))
+                        let end = Int(max(0, min(count, ceil(pause.end.timeIntervalSince(clockOrigin) * rate - frame))))
+                        if start < end { samples.replaceSubrange(start..<end, with: repeatElement(0, count: end - start)) }
+                    }
+                }
                 let buffer = try write(samples, to: entry.file)
                 let peak = samples.reduce(Float(0)) { max($0, abs($1)) }
                 if entry.descriptor.participant.isLocal {

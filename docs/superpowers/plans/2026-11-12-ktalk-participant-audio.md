@@ -161,6 +161,6 @@
 - [x] Build an isolated local app and inspect the native KTalk settings page and source-status flow. Do not replace the user's installed app or real recordings as a test fixture.
 - [x] In a controlled KTalk room, use artificial media to verify multiple speakers, own track, mute/unmute including capture begun muted, participant replacement, minimized audio and final transcription/name association. Exercise CDP loss and fallback using controlled audio and verify saved samples, timestamps and visible status.
 - [x] Verify shutdown leaves no injected capture or test CDP listener; restore the ordinary KTalk launch after the test. Record genuine runtime limits separately from synthetic test results.
-- [ ] Obtain independent whole-branch review, resolve findings, rerun only impacted checks, and report implementation, evidence and limits. Do not merge, publish or install a release without further instruction.
+- [x] Obtain independent whole-branch review, resolve findings, rerun only impacted checks, and report implementation, evidence and limits. Do not merge, publish or install a release without further instruction.
 
 Runtime scope adjustment: the final app run used the local artificial track; remote multi-participant and successful ordinary fallback cases use controlled tests. See the explicit limits and measured PCM/ASR evidence in `docs/testing/2026-11-12-ktalk-participant-audio.md`.
