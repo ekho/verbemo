@@ -221,8 +221,8 @@ enum SettingsSchema {
     static var sections: [Section] { [
         Section(title: localised("KTalk integration", "Интеграция с Толком"), entries: [
             Entry(["call_integrations", "ktalk", "enabled"], localised("Observe KTalk calls", "Определять звонки Толка"),
-                  localised("Use call state instead of microphone activity. Unknown mute silences local audio. Polling can miss brief mute/unmute; use Verbemo's pause for guaranteed privacy. Restart Verbemo after changing this.",
-                            "Использовать состояние звонка. Неизвестное состояние микрофона блокирует ваш звук. Короткое выключение и включение можно пропустить; для гарантированной приватности используйте паузу Verbemo. После изменения перезапустите Verbemo."),
+                  localised("Use call state instead of microphone activity. Protection applies to all recordings while enabled: unknown KTalk state silences local audio. Polling can miss brief mute/unmute; use Verbemo's pause for guaranteed privacy. Restart Verbemo after changing this.",
+                            "Использовать состояние звонка. Защита действует на все записи: неизвестное состояние Толка блокирует ваш звук. Короткое выключение и включение можно пропустить; для гарантированной приватности используйте паузу Verbemo. После изменения перезапустите Verbemo."),
                   .toggle, default: false, needsRestart: true),
             Entry(["call_integrations", "ktalk", "space_url"], localised("KTalk space URL", "Адрес пространства Толка"),
                   localised("https://SPACE.ktalk.ru. Detailed call data needs KTalk's explicitly enabled local diagnostic port 9333; Verbemo does not open it.",

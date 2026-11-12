@@ -321,6 +321,10 @@ port **9333**. Verbemo never opens that port or restarts KTalk.
 reader to use existing Accessibility permission; no system prompt is raised.
 These three settings take effect after restarting Verbemo.
 
+While enabled, the microphone gate applies to all recordings, including manual
+recordings and other call apps, so a later KTalk join cannot bypass protection.
+Before associating a call, fresh confirmed idle state permits the mic; unknown
+KTalk state blocks local audio even in an unrelated recording.
 For an integration-associated recording, only a fresh explicit **unmuted**
 reading permits local microphone audio. Muted, unknown or stale state writes
 silence on that track; remote audio continues. AX alone cannot reliably identify

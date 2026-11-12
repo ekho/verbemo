@@ -45,9 +45,13 @@ observation time. It is separate from calendar invitees and does not automatical
 assign speaker identities. Context is refreshed during an associated recording;
 loss of observation clears the currently reported roster.
 
-For an associated recording (including manual/calendar starts), the local mic
-gets a **1.5-second permission lease**, renewed only by explicit fresh unmuted
-observations of the same call. The audio callback checks expiry independently of
+While an integration is enabled, every recording has a microphone gate, including
+manual/calendar recordings and recordings of other apps. This covers recordings
+started before joining a call. Before a call is associated, fresh confirmed idle
+state permits the mic; unknown state blocks it even in an unrelated recording.
+For an associated call, the local mic gets a **1.5-second permission lease**,
+renewed only by explicit fresh unmuted observations of the same call.
+The audio callback checks expiry independently of
 the UI thread. CDP requests are bounded to 700 ms and the monitor waits 200 ms
 between samples; these are polling intervals, not guaranteed mute-event times.
 
