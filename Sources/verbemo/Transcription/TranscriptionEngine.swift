@@ -130,9 +130,13 @@ protocol TranscriptionEngine: AnyObject, Sendable {
     var input: TranscriptionInput { get }
     func prepare() async throws
     func transcribe(_ audio: URL) async throws -> [TranscriptSegment]
+    func transcribe(_ audio: URL, knownSpeaker: Bool) async throws -> [TranscriptSegment]
     func release() async
 }
 
 extension TranscriptionEngine {
     var optionsFingerprint: String { "" }
+    func transcribe(_ audio: URL, knownSpeaker: Bool) async throws -> [TranscriptSegment] {
+        try await transcribe(audio)
+    }
 }

@@ -55,6 +55,10 @@ actor ElevenLabsEngine: TranscriptionEngine {
     func release() async {}
 
     func transcribe(_ audio: URL) async throws -> [TranscriptSegment] {
+        try await transcribe(audio, knownSpeaker: false)
+    }
+
+    func transcribe(_ audio: URL, knownSpeaker: Bool) async throws -> [TranscriptSegment] {
         let duration = try await AVURLAsset(url: audio).load(.duration).seconds
         guard duration.isFinite, duration > 0 else {
             throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: audio.path])
@@ -64,7 +68,7 @@ actor ElevenLabsEngine: TranscriptionEngine {
         var all: [TranscriptSegment] = []
         for index in 0..<channels {
             let channel: Int? = channels > 1 ? index : nil
-            let cache = cacheURL(for: audio, channel: channel)
+            let cache = cacheURL(for: audio, channel: channel, knownSpeaker: knownSpeaker)
             let response: Response
             if let cached = try? Data(contentsOf: cache),
                let decoded = try? JSONDecoder().decode(Response.self, from: cached) {
@@ -90,7 +94,7 @@ actor ElevenLabsEngine: TranscriptionEngine {
                     if channel != nil { try? FileManager.default.removeItem(at: upload) }
                 }
                 let data = try await http.sendMultipart(
-                    to: Self.endpoint, fields: Self.requestFields(), file: upload,
+                    to: Self.endpoint, fields: Self.requestFields(knownSpeaker: knownSpeaker), file: upload,
                     key: apiKey, what: "transcription", timeout: 1800)
                 response = try http.decode(Response.self, from: data, what: "transcription")
                 try? data.write(to: cache, options: .atomic)
@@ -103,20 +107,20 @@ actor ElevenLabsEngine: TranscriptionEngine {
 
     /// Where one channel's response is cached: named for the audio, the
     /// model and every field sent with it.
-    func cacheURL(for audio: URL, channel: Int?) -> URL {
+    func cacheURL(for audio: URL, channel: Int?, knownSpeaker: Bool = false) -> URL {
         ProviderCache.url(
             in: audio.deletingLastPathComponent(), provider: .elevenLabs,
             parts: [audio.lastPathComponent, model]
-                + Self.requestFields().map { "\($0.0)=\($0.1)" },
+                + Self.requestFields(knownSpeaker: knownSpeaker).map { "\($0.0)=\($0.1)" },
             suffix: channel.map { "channel\($0 + 1)" })
     }
 
-    static func requestFields() -> [(String, String)] {
+    static func requestFields(knownSpeaker: Bool = false) -> [(String, String)] {
         [
             ("model_id", "scribe_v2"),
             ("timestamps_granularity", "word"),
             ("tag_audio_events", "false"),
-            ("diarize", "true"),
+            ("diarize", knownSpeaker ? "false" : "true"),
         ]
     }
 

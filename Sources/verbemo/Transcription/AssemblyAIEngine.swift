@@ -119,13 +119,17 @@ actor AssemblyAIEngine: TranscriptionEngine {
     func release() async {}
 
     func transcribe(_ audio: URL) async throws -> [TranscriptSegment] {
+        try await transcribe(audio, knownSpeaker: false)
+    }
+
+    func transcribe(_ audio: URL, knownSpeaker: Bool) async throws -> [TranscriptSegment] {
         let audioDuration = try await Self.audioDuration(of: audio)
         // Read, not guessed: a file AVFoundation cannot open used to be taken
         // for mono, which turned channel-qualified labels into bare "A" and
         // "B" and quietly switched off the echo filter downstream.
         let channels = try AVAudioFile(forReading: audio).processingFormat.channelCount
         let multichannel = channels > 1
-        let cache = cacheURL(for: audio, multichannel: multichannel)
+        let cache = cacheURL(for: audio, multichannel: multichannel, knownSpeaker: knownSpeaker)
         let job = cache.deletingPathExtension().appendingPathExtension("job.json")
 
         let response: TranscriptResponse
@@ -135,7 +139,7 @@ actor AssemblyAIEngine: TranscriptionEngine {
             note("reusing cached \(cache.lastPathComponent)")
             response = decoded
         } else {
-            let (decoded, raw) = try await result(of: audio, multichannel: multichannel, job: job)
+            let (decoded, raw) = try await result(of: audio, multichannel: multichannel, knownSpeaker: knownSpeaker, job: job)
             try? raw.write(to: cache, options: .atomic)
             try? FileManager.default.removeItem(at: job)
             response = decoded
@@ -144,6 +148,11 @@ actor AssemblyAIEngine: TranscriptionEngine {
         // utterances is the diarized view; text is the flat fallback for a
         // recording where diarization found nothing to split.
         guard let utterances = response.utterances, !utterances.isEmpty else {
+            if knownSpeaker, let words = response.words, !words.isEmpty {
+                return Self.boundedSegments(words.map {
+                    TranscriptSegment(start: Double($0.start) / 1000, end: Double($0.end) / 1000, text: $0.text)
+                }, duration: audioDuration)
+            }
             let text = (response.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { throw EngineError.empty }
             return [TranscriptSegment(
@@ -173,7 +182,7 @@ actor AssemblyAIEngine: TranscriptionEngine {
     /// key and is dropped when the key has changed; and a resumed poll the
     /// service refuses or no longer knows is taken for a job that is gone.
     private func result(
-        of audio: URL, multichannel: Bool, job: URL
+        of audio: URL, multichannel: Bool, knownSpeaker: Bool, job: URL
     ) async throws -> (TranscriptResponse, Data) {
         if let submitted = Self.submittedJob(at: job) {
             if let key = submitted.keyDigest, key != Self.digest(of: apiKey) {
@@ -193,7 +202,7 @@ actor AssemblyAIEngine: TranscriptionEngine {
             }
         }
         let uploadURL = try await upload(audio)
-        let id = try await submit(audioURL: uploadURL, multichannel: multichannel)
+        let id = try await submit(audioURL: uploadURL, multichannel: multichannel, knownSpeaker: knownSpeaker)
         note("submitted \(id)")
         // Written before the first poll, which is the whole point of it: the
         // transcript is being paid for from this moment on.
@@ -259,13 +268,13 @@ actor AssemblyAIEngine: TranscriptionEngine {
     }
 
     /// Where the response for this audio, under these settings, is cached.
-    func cacheURL(for audio: URL, multichannel: Bool) -> URL {
+    func cacheURL(for audio: URL, multichannel: Bool, knownSpeaker: Bool = false) -> URL {
         ProviderCache.url(
             in: audio.deletingLastPathComponent(), provider: .assemblyAI,
             parts: [
                 "code-switching-v1", audio.lastPathComponent, speechModel ?? "universal",
                 expected.joined(separator: "+"), multichannel ? "multichannel" : "mono",
-            ])
+            ] + (knownSpeaker ? ["known-speaker"] : []))
     }
 
     // MARK: - API
@@ -286,12 +295,12 @@ actor AssemblyAIEngine: TranscriptionEngine {
         return try http.decode(UploadResponse.self, from: data, what: "upload").upload_url
     }
 
-    private func submit(audioURL: String, multichannel: Bool) async throws -> String {
+    private func submit(audioURL: String, multichannel: Bool, knownSpeaker: Bool) async throws -> String {
         let body = Self.requestBody(
             audioURL: audioURL,
             expectedLanguages: expected,
             speechModel: speechModel,
-            multichannel: multichannel)
+            multichannel: multichannel, knownSpeaker: knownSpeaker)
 
         var request = URLRequest(url: Self.base.appendingPathComponent("transcript"))
         request.httpMethod = "POST"
@@ -309,11 +318,12 @@ actor AssemblyAIEngine: TranscriptionEngine {
         audioURL: String,
         expectedLanguages: [String],
         speechModel: String?,
-        multichannel: Bool = true
+        multichannel: Bool = true,
+        knownSpeaker: Bool = false
     ) -> [String: Any] {
         var body: [String: Any] = [
             "audio_url": audioURL,
-            "speaker_labels": true,
+            "speaker_labels": !knownSpeaker,
             "punctuate": true,
             "format_text": true,
             "language_detection": true,
@@ -405,5 +415,6 @@ actor AssemblyAIEngine: TranscriptionEngine {
         let text: String?
         let audio_duration: Double?
         let utterances: [Utterance]?
+        let words: [Utterance]?
     }
 }

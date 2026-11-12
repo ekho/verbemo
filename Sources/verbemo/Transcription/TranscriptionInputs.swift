@@ -21,6 +21,12 @@ struct TranscriptionInputs {
     let engine: TranscriptionEngine
 
     func segments() async throws -> [Transcript.Segment] {
+        if meta.tracks.contains(where: { $0.participant != nil }) {
+            let known = try await Self(session: session, audio: audio, meta: meta.selecting(known: true), engine: engine).perTrack()
+            let ordinary = meta.selecting(known: false)
+            let rest = ordinary.tracks.isEmpty ? [] : try await Self(session: session, audio: audio, meta: ordinary, engine: engine).segments()
+            return (known + rest).sorted { $0.start_ms < $1.start_ms }
+        }
         switch engine.input {
         case .perTrack: return try await perTrack()
         case .multichannel: return try await multichannel()
@@ -133,6 +139,9 @@ struct TranscriptionInputs {
             $0.channel == nil
                 && !FileManager.default.fileExists(atPath: dir.appendingPathComponent($0.file).path)
         }
+        if let gone = missing.first(where: { $0.participant != nil }) {
+            throw CocoaError(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: dir.appendingPathComponent(gone.file).path])
+        }
         let heard = meta.tracks.contains { track in
             let url = dir.appendingPathComponent(track.file)
             return FileManager.default.fileExists(atPath: url.path)
@@ -166,6 +175,7 @@ struct TranscriptionInputs {
                 log("\(track.file) holds no audio — \(track.speaker) is silent in this recording")
                 continue
             }
+            if track.participant != nil, try Self.isSilent(storedAudio) { continue }
 
             var file = prepared[track.speaker]?.url ?? storedAudio
             var temporary: URL?
@@ -192,9 +202,10 @@ struct TranscriptionInputs {
             // successful completion allows the original audio to be discarded.
             let segments: [TranscriptSegment]
             do {
-                segments = try await engine.transcribe(file)
+                segments = try await engine.transcribe(file, knownSpeaker: track.participant != nil)
             } catch {
                 if let temporary { try? FileManager.default.removeItem(at: temporary) }
+                if track.participant != nil, Self.isNoSpeech(error) { continue }
                 log("could not transcribe \(track.file): \(error)")
                 throw error
             }
@@ -203,6 +214,29 @@ struct TranscriptionInputs {
                                           offsetApplied: prepared[track.speaker] != nil))
         }
         return results
+    }
+
+    private static func isNoSpeech(_ error: any Error) -> Bool {
+        if case AssemblyAIEngine.EngineError.empty = error { return true }
+        if case ElevenLabsEngine.EngineError.empty = error { return true }
+        if case OpenAITranscriptionEngine.EngineError.empty = error { return true }
+        return false
+    }
+
+    private static func isSilent(_ url: URL) throws -> Bool {
+        let file = try AVAudioFile(forReading: url)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 8192) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        while file.framePosition < file.length {
+            try file.read(into: buffer)
+            guard buffer.frameLength > 0 else { break }
+            guard let channels = buffer.floatChannelData else { throw CocoaError(.fileReadCorruptFile) }
+            for channel in 0..<Int(buffer.format.channelCount) {
+                if UnsafeBufferPointer(start: channels[channel], count: Int(buffer.frameLength)).contains(where: { abs($0) > 0.00001 }) { return false }
+            }
+        }
+        return true
     }
 
     /// A track that exists but has nothing in it: no bytes at all, or a
@@ -302,6 +336,11 @@ struct SessionMeta {
 
     func track(for speaker: String) -> Track? {
         tracks.first { $0.speaker == speaker }
+    }
+
+    func selecting(known: Bool) -> SessionMeta {
+        SessionMeta(tracks: tracks.filter { ($0.participant != nil) == known }, title: title,
+                    attendees: attendees, app: app, callAudio: callAudio)
     }
 
     enum MetaError: Error, CustomStringConvertible {

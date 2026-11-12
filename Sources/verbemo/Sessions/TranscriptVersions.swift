@@ -210,11 +210,18 @@ enum TranscriptVersions {
             if oldJSON == json, !isRequested(dir), sidecars.isEmpty, metadata.isEmpty { return }
 
             let archive = try archiveCurrent(dir)
-            let manual = SpeakerNames.read(from: dir)?.manual ?? [:]
-            let retained = (preserveRemoteNames ? manual : manual.filter { $0.key == "me" }).compactMapValues { entry -> SpeakerNames.Entry? in
-                guard entry.participantID != nil else { return entry }
-                // Raw speaker IDs may refer to different people in the new generation.
-                return entry.manualName.map { SpeakerNames.Entry(name: $0, source: .manual) }
+            let manual = SpeakerNames.read(from: dir)?.speakers.filter {
+                $0.value.source == .manual || $0.value.source == .integration
+            } ?? [:]
+            let integrated = Set(try (SessionState.read(dir)?["call_audio"] == nil ? [] : SessionMeta.read(from: dir).tracks)
+                .compactMap { $0.participant?.speakerID })
+            let retained = (preserveRemoteNames ? manual : manual.filter { $0.key == "me" || integrated.contains($0.key) }).reduce(into: [String: SpeakerNames.Entry]()) { result, pair in
+                let (label, entry) = pair
+                if integrated.contains(label) { result[label] = entry; return }
+                let retained: SpeakerNames.Entry?
+                if entry.participantID == nil { retained = entry }
+                else { retained = entry.manualName.map { SpeakerNames.Entry(name: $0, source: .manual) } }
+                result[label] = retained
             }
             let names = retained.isEmpty ? nil : SpeakerNames(speakers: retained)
             let title = SessionState.value(dir, "transcript_session_name") as? String

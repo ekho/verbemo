@@ -20,6 +20,7 @@ struct SpeakerNames: Codable {
         case config
         /// The naming pass.
         case model
+        case integration
         /// Typed by a person. Outranks the model permanently — a re-run leaves
         /// it alone, because someone who corrected a name once should not have
         /// to correct it again after every retry.
@@ -33,6 +34,7 @@ struct SpeakerNames: Codable {
             case .account: return localised("account", "учётка")
             case .config: return localised("config", "конфиг")
             case .model: return localised("model", "модель")
+            case .integration: return localised("call integration", "интеграция со звонком")
             case .manual: return localised("manual", "вручную")
             }
         }
@@ -102,6 +104,11 @@ struct SpeakerNames: Codable {
 
     private func resolvingParticipants(in dir: URL) -> SpeakerNames {
         var result = self
+        for track in (try? SessionMeta.read(from: dir).callAudio?.tracks) ?? [] where speakers[track.speakerID]?.source != .manual {
+            let name = track.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            result.speakers[track.speakerID] = Entry(name: name.isEmpty ? "?" : name, source: .integration,
+                                                    participantID: track.participantID)
+        }
         let root = dir.deletingLastPathComponent().lastPathComponent == "transcripts"
             ? dir.deletingLastPathComponent().deletingLastPathComponent() : dir
         let calendar = MeetingCalendarMetadata.read(from: root)
@@ -201,7 +208,7 @@ struct SpeakerNames: Codable {
     func merged(with fresh: SpeakerNames) -> SpeakerNames {
         var result = fresh
         for (label, entry) in speakers {
-            if entry.source == .manual {
+            if entry.source == .manual || (entry.source == .integration && fresh.speakers[label]?.source != .manual) {
                 result.speakers[label] = entry
             } else if entry.name != nil, result.speakers[label]?.name == nil {
                 result.speakers[label] = entry

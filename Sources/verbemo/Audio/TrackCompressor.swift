@@ -22,6 +22,8 @@ enum TrackCompressor {
     /// that recording is the only copy of the meeting and a later attempt is
     /// all it has.
     static func settle(sessionDir dir: URL) {
+        // Participant files must remain separate; the stereo path only owns ordinary sessions.
+        guard SessionState.read(dir)?["call_audio"] == nil else { return }
         guard !DiarizationState.persisted(in: dir).retainsAudio else { return }
         if Config.keepAudio() {
             compress(sessionDir: dir)
