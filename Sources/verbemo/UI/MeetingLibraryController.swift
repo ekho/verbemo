@@ -1498,6 +1498,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     static func diarizationLine(_ state: DiarizationState) -> String {
         let stage: String
         switch state.status {
+        case .pending where state.hasFailedAttempt:
+            stage = localised("last attempt failed — retry or skip", "последняя попытка не удалась — повторите или пропустите")
         case .pending: stage = localised("pending", "ожидает")
         case .running: stage = localised("running", "выполняется")
         case .deferred: stage = localised("waiting for model", "ожидает модель")
@@ -2178,7 +2180,7 @@ private extension MeetingLibraryController {
             } else if item.unreadableDiarization {
                 message = localised("The saved speaker analysis could not be read. See meeting details.",
                                     "Не удалось прочитать сохранённый анализ говорящих. Откройте детали встречи.")
-            } else if let state = item.diarization, [.failed, .deferred, .partial].contains(state.status) {
+            } else if let state = item.diarization, state.hasFailedAttempt || [.deferred, .partial].contains(state.status) {
                 message = Self.diarizationLine(state)
             }
             if !message.isEmpty, versions.contains(where: { !$0.isRequest }) || item.summary == .done {

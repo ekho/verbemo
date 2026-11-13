@@ -69,7 +69,7 @@ enum MeetingPresentation {
         }
         if item.unreadableDiarization {
             add(localised("Speaker separation state could not be read", "Не удалось прочитать состояние диаризации"), reason: nil)
-        } else if let diarization = item.diarization, diarization.status == .failed {
+        } else if let diarization = item.diarization, diarization.hasFailedAttempt {
             add(localised("Speaker separation failed", "Сбой диаризации"), reason: diarization.reason)
         }
         if case .failed(let reason) = item.speakers {

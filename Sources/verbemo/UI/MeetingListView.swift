@@ -64,7 +64,7 @@ final class MeetingListView: NSTableCellView {
         }
         let status = stages.first { $0.state == .failed } ?? (naming?.state == .failed ? naming : nil)
             ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending } ?? naming
-        let failed = status?.state == .failed || item.unreadableDiarization || item.diarization?.status == .failed
+        let failed = status?.state == .failed || item.unreadableDiarization || item.diarization?.hasFailedAttempt == true
         let symbol = failed ? "exclamationmark.triangle" : status.map {
             switch $0.state {
             case .active: $0.symbol == "mic" ? "record.circle" : "arrow.triangle.2.circlepath"

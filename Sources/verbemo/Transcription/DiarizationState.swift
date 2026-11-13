@@ -70,6 +70,10 @@ struct DiarizationState: Codable, Equatable {
     var confirmedSpeakers = 0
     var hasUnknown = false
 
+    var hasFailedAttempt: Bool {
+        status == .failed || (status == .pending && attempts > 0 && reason?.isEmpty == false)
+    }
+
     var isOutstanding: Bool {
         switch status {
         case .pending, .running, .deferred, .partial: true

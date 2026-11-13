@@ -455,6 +455,53 @@ struct DiarizationLifecycleTests {
         #expect(echo?["dropped_segments"] as? Int == 1)
     }
 
+    @Test("No speech on a nonzero remote track requires a decision and preserves the speaking mic")
+    func quietRemoteFailureThenSkip() async throws {
+        let model = FakeModel("claude-cli", answer: "## Summary\nLocal fixture.")
+        let home = Home.withModels([model])
+        defer { try? FileManager.default.removeItem(at: home.url) }
+        try home.writeConfig(["offline_echo_cancellation": false, "keep_audio": true,
+            "transcription": ["local_diarization": true], "speaker_names": ["enabled": false],
+            "summary": ["enabled": true, "backend": "claude-cli"]])
+        try await Home.$scoped.withValue(home) {
+            let recordings = try TestRecordings()
+            defer { recordings.remove() }
+            let dir = try recordings.session("quiet-remote")
+            try SessionState.amend(dir, with: [SessionState.Key.summaryStatus: nil])
+            try TestAudio.write(to: dir.appendingPathComponent("system.caf"), seconds: 1) { _, _ in 1 / 32768 }
+            let engine = FakeEngine("parakeet", answer: { audio, _ in
+                guard audio.lastPathComponent.contains("me") else { return [] }
+                return [TranscriptSegment(start: 0, end: 1, text: "local",
+                    words: [TranscriptWord(start: 0, end: 1, text: "local")])]
+            })
+            let coordinator = TranscriptionCoordinator(engine: engine, diarizerFactory: { _ in SilenceRuntime() },
+                                                       modelFingerprint: { _ in "test-model" })
+            try await coordinator.transcribeNow(dir)
+            let transcript = try Data(contentsOf: dir.appendingPathComponent("transcript.json"))
+            let source = try Data(contentsOf: dir.appendingPathComponent("diarization-source-them.caf"))
+            #expect(DiarizationState.read(dir)?.hasFailedAttempt == true)
+            #expect(PostProcessor.readTranscript(dir)?.segments.map(\.speaker) == ["me"])
+            #expect(model.callCount == 0)
+
+            await #expect(throws: LocalDiarizationRuntimeError.noSpeechDetected) {
+                try await coordinator.diarizeNow(dir)
+            }
+            #expect(try Data(contentsOf: dir.appendingPathComponent("transcript.json")) == transcript)
+            #expect(try Data(contentsOf: dir.appendingPathComponent("diarization-source-them.caf")) == source)
+            #expect(DiarizationState.read(dir)?.attempts == 2)
+            #expect(model.callCount == 0)
+
+            // A fresh coordinator exercises the saved request after reopening the app.
+            try await TranscriptionCoordinator(engine: engine).skipDiarization(dir)
+            #expect(DiarizationState.read(dir)?.status == .skipped)
+            #expect(try Data(contentsOf: dir.appendingPathComponent("transcript.json")) == transcript)
+            #expect(PostProcessor.hasCurrentSummary(dir))
+            #expect(model.callCount == 1)
+            #expect(SessionInventory.item(for: dir)?.hasAudio == true)
+            #expect(!SessionClaim.isHeld(dir))
+        }
+    }
+
     @Test("A proven silent remote side completes a speaking-mic session")
     func silentRemoteSideCompletes() async throws {
         let recordings = try TestRecordings()
