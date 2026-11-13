@@ -111,8 +111,10 @@ export async function prepareRelease(root, releases, prerelease = false, macosOn
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    const releases = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp',
-      'repos/ekho/verbemo/releases?per_page=100'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })).flat();
+    // Keep notes and assets out of Node's output buffer, with one compact JSON array per page.
+    const pages = execFileSync('gh', ['api', '--paginate', 'repos/ekho/verbemo/releases?per_page=100',
+      '--jq', 'map({tag_name, draft}) | @json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const releases = pages.trim().split('\n').flatMap(page => JSON.parse(page));
     const plan = await prepareRelease(process.cwd(), releases, process.argv.includes('--prerelease'),
       process.argv.includes('--macos-only'));
     if (process.env.GITHUB_OUTPUT) {
