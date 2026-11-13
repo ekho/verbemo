@@ -28,6 +28,11 @@ struct SettingsNavigationTests {
                 app.navigate(destination)
                 app.panel.contentView?.layoutSubtreeIfNeeded()
                 app.panel.layoutIfNeeded()
+                let showsSectionHeading = app.panel.contentView?.allDescendants.contains {
+                    $0.identifier?.rawValue == "journal.section-heading" && !$0.isHiddenOrHasHiddenAncestor
+                } == true
+                #expect(showsSectionHeading == (destination.isMeetings && destination != .allMeetings),
+                        "Unexpected toolbar heading visibility for \(destination.rawValue) at width \(width)")
                 #expect(abs(app.panel.contentLayoutRect.width - width) < 2,
                         "\(destination.rawValue) must preserve the requested width \(width)")
                 if destination == .calendar {
@@ -258,6 +263,11 @@ struct SettingsNavigationTests {
         app.panel.contentView?.layoutSubtreeIfNeeded()
         let categories = try #require(app.panel.contentView?.allDescendants.first { $0.identifier?.rawValue == "settings.categories" })
         #expect(!categories.isHiddenOrHasHiddenAncestor)
+        let heading = try #require(app.panel.contentView?.allDescendants.first {
+            $0.identifier?.rawValue == "journal.section-heading"
+        } as? NSTextField)
+        #expect(!heading.isHiddenOrHasHiddenAncestor)
+        #expect(heading.stringValue == "/  " + localised("Settings", "Настройки"))
         app.navigate(.mcp)
         app.panel.contentView?.layoutSubtreeIfNeeded()
         #expect(app.navigation.destination == .mcp)

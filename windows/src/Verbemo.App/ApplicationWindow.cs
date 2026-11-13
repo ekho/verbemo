@@ -241,7 +241,7 @@ internal sealed class ApplicationWindow : Window
         }
         toolbar.Visibility = Visibility.Visible;
         heading.Content = destination is >= ApplicationDestination.General and <= ApplicationDestination.Storage
-            ? T("Settings", "Настройки") + "  /  " + Label(destination) : T("Meetings", "Встречи");
+            ? T("Settings", "Настройки") : T("Meetings", "Встречи");
         heading.IsEnabled = destination is ApplicationDestination.AllMeetings or ApplicationDestination.Processing or ApplicationDestination.Attention or ApplicationDestination.Live;
         UpdateSettingsNavigation();
         setupNotice.Visibility = !runtime.IsSetupComplete && destination is >= ApplicationDestination.General and <= ApplicationDestination.Storage ? Visibility.Visible : Visibility.Collapsed;
