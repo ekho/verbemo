@@ -1,4 +1,5 @@
 import Foundation
+import JavaScriptCore
 import Testing
 import CallIntegrations
 @testable import KTalkIntegration
@@ -16,6 +17,25 @@ struct KTalkModelTests {
         #expect(result.call?.localParticipantID == "self")
         #expect(result.call?.participants?.map(\.name) == ["Test Host", "Test Guest"])
         #expect(result.call?.participants?.last?.microphoneMuted == false)
+    }
+    @Test(arguments: [false, true])
+    func unnamedRoomPreservesParticipationThroughProjection(_ joined: Bool) throws {
+        let context = try #require(JSContext())
+        context.evaluateScript("""
+        const person = {id:'self',name:'Test Host',local:true,isAnonymous:false,audioMuted:true};
+        const window = {$conf:{joined:\(joined),roomInfo:{roomName:'probe',conferenceId:'meeting-a'},
+          participants:[person],localParticipant:person,isAudioMuted:true}};
+        """)
+        let json = try #require(context.evaluateScript("JSON.stringify(\(KTalkCDP.expression))")?.toString())
+        #expect(context.exception == nil)
+        let result = try KTalkModel.reading(Data(json.utf8), targetID: "window", space: space)
+        #expect(result.participation == (joined ? .inCall : .preparing))
+        let call = try #require(result.call)
+        #expect(call.title == nil)
+        #expect(call.id == "window:meeting-a")
+        #expect(call.localParticipantID == "self")
+        #expect(call.microphoneMuted == true)
+        #expect(call.participants?.map(\.name) == ["Test Host"])
     }
     @Test func prejoinAndSchemaFailureCannotPretendToBeJoined() throws {
         let preparing = joined.replacingOccurrences(of: #""joined":true"#, with: #""joined":false"#)

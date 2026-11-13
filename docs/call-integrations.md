@@ -35,9 +35,14 @@ The adapter depends on internal KTalk 3.8 web objects and UI labels.
 
 ## Recording and privacy
 
-Enabled integrations replace their own application's raw microphone trigger.
+Fresh, known integration observations replace their own application's raw
+microphone trigger. If the integration is unavailable or its observation is
+older than five seconds, ordinary microphone-based detection remains available
+for that application, so automatic recording can start with fallback capture.
+This fallback has the same limits as ordinary detection: microphone use in a
+prejoin screen can look like a call when exact participation is unavailable.
 Other call apps keep the existing detection. A muted call remains in progress;
-prejoin does not start recording. Unknown observation suspends the end-of-call
+confirmed prejoin does not start recording. Unknown observation suspends the end-of-call
 clock for a tracked call and cannot release the manual-stop hold. Existing
 duration and silence backstops remain active.
 

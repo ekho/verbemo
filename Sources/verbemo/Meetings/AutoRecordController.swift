@@ -314,7 +314,10 @@ final class AutoRecordController {
 
         let observations = callObservations()
         var micSettings = settings
-        micSettings.ignoreApps += observations.map(\.application.bundleID)
+        // Unavailable integration data must leave ordinary call detection usable.
+        micSettings.ignoreApps += observations.filter {
+            $0.participation != .unknown && (0...5).contains(now.timeIntervalSince($0.observedAt))
+        }.map(\.application.bundleID)
         let signal = CallIntegrationBridge.signal(microphone: checkMic(micSettings),
             observations: observations, settings: settings, now: now)
         let mic = signal.microphone

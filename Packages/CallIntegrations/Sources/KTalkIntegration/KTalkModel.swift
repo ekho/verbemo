@@ -40,7 +40,7 @@ enum KTalkModel {
         var camera_muted: Bool?
         var participants: [Participant]?
     }
-    private struct Room: Decodable { let key: String; let title: String; var conference_id: String? }
+    private struct Room: Decodable { let key: String; let title: String?; var conference_id: String? }
     private struct Participant: Decodable {
         let id: String; let name: String; let local: Bool; let guest: Bool
         var microphone_muted: Bool?; var camera_muted: Bool?

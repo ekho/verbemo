@@ -128,13 +128,13 @@ actor KTalkCDP {
       if (!c) return {kind:'no_conference'};
       const r = c.roomInfo, ps = c.participants;
       if (typeof c.joined !== 'boolean' || !r || typeof r.roomName !== 'string' ||
-          typeof r.title !== 'string' || !Array.isArray(ps) || ps.some(p => !p ||
+          !Array.isArray(ps) || ps.some(p => !p ||
           typeof p.id !== 'string' || typeof p.name !== 'string' || typeof p.local !== 'boolean' ||
           typeof p.isAnonymous !== 'boolean')) return {kind:'unsupported_schema'};
       const bool = v => typeof v === 'boolean' ? v : null;
       const text = v => typeof v === 'string' ? v : null;
       return {kind:'conference', joined:c.joined,
-        room:{key:r.roomName,title:r.title,conference_id:text(r.conferenceId)},
+        room:{key:r.roomName,title:text(r.title),conference_id:text(r.conferenceId)},
         local_participant_id:text(c.localParticipant?.id),
         microphone_muted:bool(c.isAudioMuted), camera_muted:bool(c.isCameraMuted),
         participants:ps.map(p => ({id:p.id,
