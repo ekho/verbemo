@@ -286,7 +286,7 @@ enum SetupLayout {
 /// `LayerTinted`.
 @MainActor
 final class Box: NSStackView, LayerTinted {
-    func tintLayer() { layer?.borderColor = NSColor.separatorColor.cgColor }
+    func tintLayer() { layer?.borderColor = StudioStyle.line.cgColor }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

@@ -9,7 +9,7 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
         case settings
     }
     let panel: NSPanel
-    let name = NSTextField(string: "")
+    let name = StudioTextField(string: "")
     let calendarPicker = CalendarEventPicker()
     var date: NSDatePicker { calendarPicker.date }
     private let note = NSTextField(wrappingLabelWithString: "")
@@ -48,9 +48,6 @@ final class NewRecordingSheet: NSObject, NSTextFieldDelegate {
         name.placeholderString = localised("Meeting title", "Название встречи")
         name.setAccessibilityLabel(localised("Meeting title", "Название встречи"))
         name.identifier = .init("recording.new-title")
-        name.font = .systemFont(ofSize: 14)
-        name.bezelStyle = .roundedBezel
-        name.heightAnchor.constraint(equalToConstant: 30).isActive = true
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let fields = NSStackView(views: [heading, detail, name])
         fields.orientation = .vertical

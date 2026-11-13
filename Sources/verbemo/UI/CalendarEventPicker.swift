@@ -11,7 +11,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
     var onError: ((Error) -> Void)?
     let button = NSButton()
     let clear = NSButton()
-    let search = NSSearchField()
+    let search = StudioSearchField()
     let date = NSDatePicker()
     let status = NSTextField(wrappingLabelWithString: "")
     let table = NSTableView()
@@ -26,6 +26,9 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         super.init(frame: .zero)
         spacing = 6
         button.bezelStyle = .rounded
+        button.isBordered = false
+        button.font = .systemFont(ofSize: 13)
+        button.contentTintColor = StudioStyle.ink
         button.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
         button.imagePosition = .imageTrailing
         button.alignment = .left
@@ -36,6 +39,8 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         button.setContentHuggingPriority(.defaultLow, for: .horizontal)
         button.target = self; button.action = #selector(open)
         clear.bezelStyle = .rounded
+        clear.isBordered = false
+        clear.contentTintColor = StudioStyle.muted
         clear.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
         clear.imagePosition = .imageOnly
         clear.identifier = .init("calendar.clear")
@@ -43,9 +48,9 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         clear.setAccessibilityLabel(clear.toolTip)
         clear.target = self; clear.action = #selector(clearSelection)
         addArrangedSubview(button); addArrangedSubview(clear)
-        button.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        clear.widthAnchor.constraint(equalToConstant: 30).isActive = true
-        clear.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        button.heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+        clear.widthAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+        clear.heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
         setSelection(nil)
 
         search.placeholderString = localised("Title or date (DD.MM.YYYY)", "Название или дата (ДД.ММ.ГГГГ)")
@@ -55,10 +60,21 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         search.sendsSearchStringImmediately = true
         date.datePickerStyle = .textFieldAndStepper
         date.datePickerElements = .yearMonthDay
+        date.isBezeled = false
+        date.isBordered = false
+        date.drawsBackground = false
+        date.textColor = StudioStyle.ink
+        date.font = .systemFont(ofSize: 13)
         date.setAccessibilityLabel(localised("Event date", "Дата события"))
         date.identifier = .init("calendar.date")
         date.target = self; date.action = #selector(dateChanged)
-        let dateRow = NSStackView(views: [NSTextField(labelWithString: localised("Date", "Дата")), SetupLayout.spacer(), date])
+        let dateFrame = Box(views: [date])
+        dateFrame.wantsLayer = true
+        dateFrame.layer?.borderWidth = 1
+        dateFrame.layer?.cornerRadius = 4
+        dateFrame.retint()
+        dateFrame.heightAnchor.constraint(greaterThanOrEqualToConstant: StudioStyle.inputHeight).isActive = true
+        let dateRow = NSStackView(views: [NSTextField(labelWithString: localised("Date", "Дата")), SetupLayout.spacer(), dateFrame])
         let column = NSTableColumn(identifier: .init("event"))
         table.addTableColumn(column)
         table.headerView = nil
@@ -73,6 +89,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         let scroller = NSScrollView()
         scroller.documentView = table
         scroller.hasVerticalScroller = true
+        scroller.autohidesScrollers = true
         scroller.drawsBackground = false
         scroller.heightAnchor.constraint(equalToConstant: 240).isActive = true
         status.font = .systemFont(ofSize: 11)

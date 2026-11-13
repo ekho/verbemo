@@ -38,7 +38,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let measuringListTitle = MeetingListView.titleLabel("")
     private let resultPicker = NSStackView()
     let meetingHeaderState = StudioMeetingHeaderState()
-    private let meetingSearch = MeetingSearchField()
+    private let meetingSearch = StudioSearchField()
     private var meetingHeader: NSHostingView<StudioMeetingHeader>?
     func focusMeetingSearch() -> Bool {
         guard !contentView.isHiddenOrHasHiddenAncestor, meetingSearch.isEnabled, panel.attachedSheet == nil else { return false }
@@ -100,7 +100,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
     private var allItems: [SessionInventory.Item] = []
     private var meetingFilter: ApplicationNavigationState.Destination = .allMeetings
-    private let search = MeetingSearchField()
+    private let search = StudioSearchField()
     private let librarySearchStatus = NSTextField(labelWithString: "")
     private var librarySearchTask: Task<Void, Never>?
     private var librarySearchTasks: [Int: Task<Void, Never>] = [:]
@@ -2256,31 +2256,6 @@ extension MeetingLibraryController {
     }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         JournalMeetingRow()
-    }
-}
-
-@MainActor
-private final class MeetingSearchField: NSSearchField {
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        focusRingType = .default
-        backgroundColor = StudioStyle.paper
-        textColor = StudioStyle.ink
-        font = .systemFont(ofSize: 13)
-        heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override class var cellClass: AnyClass? {
-        get { Cell.self }
-        set {}
-    }
-
-    private final class Cell: NSSearchFieldCell {
-        override func draw(withFrame frame: NSRect, in controlView: NSView) {
-            // The native bezel ignores backgroundColor.
-            StudioStyle.drawInputBezel(in: frame)
-            super.drawInterior(withFrame: frame, in: controlView)
-        }
     }
 }
 

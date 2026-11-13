@@ -1274,13 +1274,13 @@ struct SetupTests {
         let box = SetupLayout.box([SetupLayout.title("First"), SetupLayout.title("Second")])
         let hairline = try #require(box.subviews.compactMap { $0 as? Hairline }.first)
 
-        box.appearance = NSAppearance(named: .darkAqua)
-        #expect(box.layer?.borderColor == separator(in: .darkAqua))
-        #expect(hairline.layer?.backgroundColor == separator(in: .darkAqua))
-
-        box.appearance = NSAppearance(named: .aqua)
-        #expect(box.layer?.borderColor == separator(in: .aqua))
-        #expect(hairline.layer?.backgroundColor == separator(in: .aqua))
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            box.appearance = NSAppearance(named: appearance)
+            var line: CGColor?
+            box.effectiveAppearance.performAsCurrentDrawingAppearance { line = StudioStyle.line.cgColor }
+            #expect(box.layer?.borderColor == line)
+            #expect(hairline.layer?.backgroundColor == line)
+        }
     }
 
     /// What `separatorColor` comes to under a named appearance — the value a

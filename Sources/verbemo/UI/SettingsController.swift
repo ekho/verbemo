@@ -634,6 +634,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
 
         case .choice(let options):
             let popup = NSPopUpButton()
+            popup.isBordered = false
             popup.addItems(withTitles: options)
             for item in popup.itemArray {
                 let raw = item.title
@@ -653,7 +654,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             return popup
 
         case .number, .text, .list:
-            let field = NSTextField()
+            let field = StudioTextField()
             // The grey text in an empty field is the default itself: where
             // it is a real value it can be read and copied, and where it is a
             // sentence ("the language of the meeting") that sentence is the
