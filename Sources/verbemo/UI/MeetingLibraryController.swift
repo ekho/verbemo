@@ -2084,7 +2084,7 @@ private extension MeetingLibraryController {
             document.topAnchor.constraint(equalTo: documentHost.topAnchor), document.bottomAnchor.constraint(equalTo: documentHost.bottomAnchor),
         ])
         documentHost.identifier = .init("meeting.document")
-        let divider = NSBox(); divider.boxType = .separator
+        let divider = JournalSurface(StudioStyle.line)
         divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
         let columns = JournalColumns(views: [documentHost, divider, inspectorSurface])
         columns.identifier = .init("meeting.columns")

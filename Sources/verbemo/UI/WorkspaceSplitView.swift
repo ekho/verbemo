@@ -30,6 +30,7 @@ final class WorkspaceSplitController: NSSplitViewController {
 
 @MainActor
 final class WorkspaceSplitView: NSSplitView {
+    override var dividerColor: NSColor { StudioStyle.line }
     private var maximumWidth: CGFloat { max(220, min(480, bounds.width - 420 - dividerThickness)) }
     override var acceptsFirstResponder: Bool { true }
     override func mouseDown(with event: NSEvent) {
