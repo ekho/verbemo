@@ -1,5 +1,5 @@
 [mcp_servers.serena]
-required = true
+required = false
 command = "uv"
 args = [
   "tool", "run", "--isolated", "--python", "3.13",
