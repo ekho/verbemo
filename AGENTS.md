@@ -22,7 +22,8 @@
   `Verbemo <VERSION>` release and one `verbemo-v<VERSION>` tag in `ekho/verbemo`.
 - Windows installers must use `Verbemo-<VERSION>-windows-x64-Setup.exe`; portable
   archives use `Verbemo-<VERSION>-windows-x64-Portable.zip`. The Velopack channel
-  can remain `stable`. Preserve already published assets and tags.
+  can remain `stable`. Never overwrite published assets; old releases may be
+  deleted only under the retention policy in `docs/releasing.md`. Preserve Git tags.
 - Follow `docs/releasing.md` for the common release CLI and its validation
   limits. No own public release is established by source changes or local builds.
   Historical manifests under `docs/history/` are provenance, not active routes.

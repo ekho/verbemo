@@ -14,7 +14,8 @@ silently reduce the release scope.
 
 Earlier macOS-only unsigned prereleases published during the temporary
 [Issue #19](https://github.com/ekho/verbemo/issues/19) pause retain their explicit
-`platforms: ["macos"]` scope. Keep their existing files and tags unchanged.
+`platforms: ["macos"]` scope. Never replace their files or tags; the release
+retention policy below may remove old releases and their files.
 Verification and resume still support them. The CLI's `--prerelease --macos-only`
 option remains available for recovering those historical sets, outside the active
 cross-platform workflow. macOS-only stable releases are rejected.
@@ -130,11 +131,12 @@ excludes inherited Amanu history and tags. For example, a feature since the own
 `windows-v*` tags. A manually changed version after an own release requires
 explicit reconciliation instead of guessing the intended number.
 
-Version preparation and publication share the `verbemo-release` concurrency
-group. When changes arrive during a build, successful publication explicitly
-dispatches another `auto` run to process the newer `master`. GitHub may replace
-an older pending run with a newer one; the next run reads current `master` and
-includes all changes since the last release. Only one release runs at a time.
+Version preparation, publication and release cleanup share the `verbemo-release`
+concurrency group with `queue: max`, so waiting runs do not replace each other.
+When changes arrive during a build, successful publication explicitly
+dispatches another `auto` run to process the newer `master`. Queued runs read
+current `master` and include all changes since the last release. Only one
+release or cleanup runs at a time. GitHub limits the queue to 100 waiting runs.
 
 The bot needs Actions write permissions enabled for `GITHUB_TOKEN`, with
 `contents: write` for the version commit and publisher, and `actions: write`
@@ -165,6 +167,37 @@ including paginated release metadata larger than Node's output buffer.
 ```sh
 npm --prefix scripts/release-automation test
 ```
+
+## Release retention
+
+[Release cleanup](../.github/workflows/release-cleanup.yml) runs every Monday at
+03:17 UTC (06:17 Europe/Moscow). It keeps the **10 most recently published
+releases**, sorting by `published_at` rather than version or commit date. A tie
+uses the higher release ID first. The current GitHub `latest` release is always
+kept, even outside those ten, and drafts do not count toward the limit.
+Every older release, stable or preview, is deleted with its attached files.
+Git tags remain intact. This policy also covers historical releases; retained
+assets must never be overwritten.
+
+The workflow uses the built-in `GITHUB_TOKEN` with `contents: write` only in
+`ekho/verbemo` on `master`. It shares the publication queue and rechecks the
+complete paginated release list and `latest` before each deletion. Changed
+retention decisions, invalid metadata or API failures stop the run without
+automatic retries. Tools outside this workflow must also respect the shared
+queue: GitHub has no atomic check-and-delete operation across these API calls.
+The Actions log records the deletion plan and each successful deletion.
+
+Manual runs default to a dry-run. To inspect the plan:
+
+```sh
+gh workflow run release-cleanup.yml --repo ekho/verbemo --ref master -f dry_run=true
+```
+
+Set `dry_run=false` to apply the same policy immediately. For a local read-only
+preview, securely supply `GH_TOKEN` and run `python3 scripts/cleanup_releases.py`.
+The CLI deletes only with `--apply`; scheduled runs set that flag automatically.
+
+## Manual release preparation
 
 Manual workflow `ref`, `version`, `operation`, `distribution` inputs resolve a source ref once and check out
 the exact SHA on both platforms. `prepare` is the default: it builds/tests both

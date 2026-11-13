@@ -302,6 +302,33 @@ class ReleaseStateTests(unittest.TestCase):
         self.assertFalse(any(e[0] in ('POST', 'PATCH', 'upload') for e in self.api.events))
 
 class TransportTests(unittest.TestCase):
+    def test_latest_rejects_malformed_success_instead_of_treating_it_as_absent(self):
+        from release_github import GitHub
+        from io import BytesIO
+        from urllib.response import addinfourl
+        for data in (None, [], False, 'release'):
+            class Opener:
+                def open(self, req, timeout):
+                    return addinfourl(BytesIO(json.dumps(data).encode()), {}, req.full_url, code=200)
+            with self.subTest(data=data):
+                api = GitHub(token='fixture', opener=Opener())
+                with self.assertRaisesRegex(ValueError, 'latest'):
+                    api.latest()
+
+    def test_delete_accepts_empty_no_content_response_without_retry(self):
+        from release_github import BASE, GitHub
+        from io import BytesIO
+        from urllib.response import addinfourl
+        requests = []
+        class Opener:
+            def open(self, req, timeout):
+                requests.append(req)
+                return addinfourl(BytesIO(b''), {}, req.full_url, code=204)
+        api = GitHub(token='fixture', opener=Opener(), sleep=lambda _: None)
+        self.assertIsNone(api.api('/releases/12', 'DELETE'))
+        self.assertEqual([(req.method, req.full_url) for req in requests],
+                         [('DELETE', BASE + '/releases/12')])
+
     def test_repository_identity_accepts_app_metadata_without_user_permissions(self):
         from release_github import GitHub
         for repo in ({'full_name': 'ekho/verbemo'},
