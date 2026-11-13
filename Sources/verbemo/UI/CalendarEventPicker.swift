@@ -69,6 +69,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         date.identifier = .init("calendar.date")
         date.target = self; date.action = #selector(dateChanged)
         let dateFrame = Box(views: [date])
+        dateFrame.edgeInsets = .init(top: 4, left: 8, bottom: 4, right: 6)
         dateFrame.wantsLayer = true
         dateFrame.layer?.borderWidth = 1
         dateFrame.layer?.cornerRadius = 4
@@ -92,6 +93,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         scroller.autohidesScrollers = true
         scroller.drawsBackground = false
         scroller.heightAnchor.constraint(equalToConstant: 240).isActive = true
+        let eventsFrame = SetupLayout.box([scroller])
         status.font = .systemFont(ofSize: 11)
         status.textColor = JournalStyle.muted
         status.identifier = .init("calendar.search-status")
@@ -100,13 +102,13 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         access.target = self; access.action = #selector(openPermissions)
         access.isHidden = true
         let heading = NSTextField(labelWithString: localised("Choose a calendar event", "Выбрать событие календаря"))
-        heading.font = JournalStyle.titleFont(18)
+        heading.font = .systemFont(ofSize: 14, weight: .semibold)
         heading.textColor = JournalStyle.ink
-        let fields = NSStackView(views: [heading, search, dateRow, scroller, status, access])
+        let fields = NSStackView(views: [heading, search, dateRow, eventsFrame, status, access])
         fields.orientation = .vertical; fields.alignment = .leading; fields.spacing = 10
         fields.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
         fields.widthAnchor.constraint(equalToConstant: 410).isActive = true
-        for view in [heading, search, dateRow, scroller, status] as [NSView] {
+        for view in [heading, search, dateRow, eventsFrame, status] as [NSView] {
             view.widthAnchor.constraint(equalTo: fields.widthAnchor, constant: -28).isActive = true
         }
         let surface = JournalSurface(JournalStyle.paper)
