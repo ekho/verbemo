@@ -1,0 +1,101 @@
+Window: "Verbemo — Calendar acceptance (synthetic)", App: Verbemo Cosmetic Review.
+0 standard window Verbemo — Calendar acceptance (synthetic), Secondary Actions: Raise
+    1 button Description: Hide meeting list, Value: 1, ID: workspace.toggle-library
+    2 button Verbemo, Description: All meetings, ID: journal.breadcrumb
+    3 button New recording, ID: journal.new-recording
+    4 button Import, ID: journal.import
+    5 button Settings, ID: journal.settings
+    6 split group Description: Meeting library width, Help: Drag the divider or use left/right arrows, ID: workspace.library-split
+        7 container Meeting library
+            8 search text field (settable) Description: Search the library: titles, transcripts and summaries, Value: Приёмка, Placeholder: Title, transcript, summary, ID: library.search
+                9 button Search the library: titles, transcripts and summaries
+                10 button cancel
+            11 toggle button Description: Filter meetings: All meetings, Value: off, ID: library.filter
+            12 scroll area
+                13 table
+                    14 row (selected)
+                        15 cell (selected)
+                            16 text Приёмка календаря 2026-10-21 · 00:12
+                            17 image Description: Preparing summary, ID: meeting.list-status
+        18 splitter (disabled, settable, float) 248
+        19 text 21.10.2026 13:00 · 0 min
+        20 text Help: Приёмка календаря, ID: meeting.title
+        21 button Copy, Description: copy, ID: meeting.copy
+        22 button Description: Meeting actions, ID: meeting.actions
+        23 button Description: Show or hide meeting details, Value: 1, ID: meeting.inspector
+        24 button Description: Play meeting, ID: playback.play
+        25 button (disabled) Description: Stop and return to the beginning, ID: playback.stop
+        26 slider (settable, float) Description: Meeting position, Value: 0, Details: 00:00, ID: playback.timeline
+            27 value indicator (settable, float) 0
+        28 text 00:00 / 00:12
+        29 image volume high
+        30 slider (settable, float) Description: Playback volume, Value: 1
+            31 value indicator (settable, float) 1
+        32 pop up button Description: Playback speed, Value: 1×
+        33 container meeting.studio-header
+            34 text Version
+            35 pop up button Description: Transcript version, Value: 2 · Whisper · Oct 21, 2026 at 2:00:00 PM, ID: transcript-versions
+            36 search text field (settable) Description: Search selected transcript and summary version, Placeholder: Find in this meeting, ID: meeting.search
+                37 button Search selected transcript and summary version
+            38 radio button Summary, Value: 0, ID: meeting.result.summary
+            39 radio button Transcript, Value: 1, ID: meeting.result.transcript
+            40 radio button Participants, Value: 0, ID: meeting.result.participants
+        41 scroll area
+            42 table Transcript and speaker assignments
+                43 row (selectable)
+                    44 cell
+                        45 text Help: Александра Тестовая — длинное имя, ID: transcript.speaker-name
+                        46 button Description: Change speaker: Александра Тестовая — длинное имя, ID: speaker.edit
+                        47 button 00:00, Description: Play from 00:00, ID: transcript.playFrom
+                        48 text Value: Привет! Фёдор, слышно меня?, ID: transcript.words
+                49 row (selected)
+                    50 cell (selected)
+                        51 text Help: Имя вручную, ID: transcript.speaker-name
+                        52 button Description: Change speaker: Имя вручную, ID: speaker.edit
+                        53 button 00:03, Description: Play from 00:03, ID: transcript.playFrom
+                        54 text Value: Да, слышно отлично., ID: transcript.words
+                55 row (selectable)
+                    56 cell
+                        57 text Help: Speaker 3, ID: transcript.speaker-name
+                        58 button Description: Change speaker: Speaker 3, ID: speaker.edit
+                        59 button 00:06, Description: Play from 00:06, ID: transcript.playFrom
+                        60 text Value: И меня тоже, привет., ID: transcript.words
+        61 container Description: Meeting details, ID: meeting.inspector-content
+            62 scroll area
+                63 button Choose event…, Description: Choose calendar event, ID: calendar.choose
+                64 button Description: Close meeting details, ID: meeting.inspector-close
+                65 text PROCESSING
+                66 image Recording saved
+                    67 image microphone
+                    68 image selected
+                69 text Recording saved
+                70 image Transcript ready · diarization enabled
+                    71 image plain text document
+                    72 image
+                    73 image selected
+                74 text Transcript ready · diarization enabled
+                75 button (disabled) Description: Transcribe again, Help: Enable transcription in settings., ID: meeting.retranscribe
+                76 image Preparing summary
+                    77 image
+                    78 image clock
+                79 text Waiting: Preparing summary
+                80 button Description: Generate summary, ID: meeting.generate-summary
+                81 button Finish processing, Description: play
+                82 text PROCESSING SETTINGS Transcription: Disabled
+Diarization: Disabled
+Summary: Ollama
+                83 button Settings →, Description: edit, ID: meeting.processing-settings
+    84 toggle button Value: off, ID: navigation.auto-record, Description: Auto-record off
+Right-click for settings
+    85 button (disabled) Description: Not recording, ID: activity.recording
+    86 button Description: Microphone access needed, ID: activity.microphone-access
+    87 button Description: System audio needs a sound test; macOS does not expose its permission state, ID: activity.system-access
+    88 button 0 · 0, Description: Running: 0. Waiting: 0. Open task queue., Help: Running: 0 · Waiting: 0, ID: activity.queue
+    89 close button
+    90 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+    91 minimize button
+92 menu bar
+    93 Verbemo Cosmetic Review
+    94 Edit
+
+The focused UI element is 5 button Settings, ID: journal.settings

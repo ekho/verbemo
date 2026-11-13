@@ -1,0 +1,167 @@
+Window: "Verbemo — Calendar acceptance (synthetic)", App: Verbemo Cosmetic Review.
+0 standard window Verbemo — Calendar acceptance (synthetic), Secondary Actions: Raise
+    1 button Description: Скрыть список встреч, Value: 1, ID: workspace.toggle-library
+    2 button Verbemo, Description: Все встречи, ID: journal.breadcrumb
+    3 button Новая запись, ID: journal.new-recording
+    4 button Импорт, ID: journal.import
+    5 button Настройки, ID: journal.settings
+    6 split group Description: Ширина библиотеки встреч, Help: Перетащите разделитель или используйте стрелки влево/вправо, ID: workspace.library-split
+        7 container Библиотека встреч
+            8 search text field (settable) Description: Поиск в библиотеке: названия, расшифровки и сводки, Placeholder: Название, расшифровка, сводка, ID: library.search
+                9 button Поиск в библиотеке: названия, расшифровки и сводки
+            10 toggle button Description: Фильтр встреч: Все встречи, Value: off, ID: library.filter
+            11 scroll area Secondary Actions: Scroll Up, Scroll Down
+                12 table
+                    13 row (selectable)
+                        14 cell
+                            15 text Длинное название встречи 9 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            16 image Description: Готово, ID: meeting.list-status
+                    17 row (selectable)
+                        18 cell
+                            19 text Длинное название встречи 8 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            20 image Description: Готово, ID: meeting.list-status
+                    21 row (selectable)
+                        22 cell
+                            23 text Длинное название встречи 7 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            24 image Description: Готово, ID: meeting.list-status
+                    25 row (selectable)
+                        26 cell
+                            27 text Длинное название встречи 6 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            28 image Description: Готово, ID: meeting.list-status
+                    29 row (selectable)
+                        30 cell
+                            31 text Длинное название встречи 5 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            32 image Description: Готово, ID: meeting.list-status
+                    33 row (selectable)
+                        34 cell
+                            35 text Длинное название встречи 4 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            36 image Description: Готово, ID: meeting.list-status
+                    37 row (selectable)
+                        38 cell
+                            39 text Длинное название встречи 3 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            40 image Description: Готово, ID: meeting.list-status
+                    41 row (selectable)
+                        42 cell
+                            43 text Длинное название встречи 20 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            44 image Description: Готово, ID: meeting.list-status
+                    45 row (selectable)
+                        46 cell
+                            47 text Длинное название встречи 2 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            48 image Description: Готово, ID: meeting.list-status
+                    49 row (selectable)
+                        50 cell
+                            51 text Длинное название встречи 19 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            52 image Description: Готово, ID: meeting.list-status
+                    53 row (selectable)
+                        54 cell
+                            55 text Длинное название встречи 18 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            56 image Description: Готово, ID: meeting.list-status
+                    57 row (selectable)
+                        58 cell
+                            59 text Длинное название встречи 17 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            60 image Description: Готово, ID: meeting.list-status
+                    61 row (selectable)
+                        62 cell
+                            63 text Длинное название встречи 16 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            64 image Description: Готово, ID: meeting.list-status
+                    65 row (selectable)
+                        66 cell
+                            67 text Длинное название встречи 15 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            68 image Description: Готово, ID: meeting.list-status
+                    69 row (selectable)
+                        70 cell
+                            71 text Длинное название встречи 14 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            72 image Description: Готово, ID: meeting.list-status
+                    73 row (selectable)
+                        74 cell
+                            75 text Длинное название встречи 13 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            76 image Description: Готово, ID: meeting.list-status
+                    77 row (selectable)
+                        78 cell
+                            79 text Длинное название встречи 12 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            80 image Description: Готово, ID: meeting.list-status
+                    81 row (selectable)
+                        82 cell
+                            83 text Длинное название встречи 11 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            84 image Description: Готово, ID: meeting.list-status
+                    85 row (selectable)
+                        86 cell
+                            87 text Длинное название встречи 10 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            88 image Description: Готово, ID: meeting.list-status
+                    89 row (selectable)
+                        90 cell
+                            91 text Длинное название встречи 1 — обсуждение материалов и сроков учебного проекта 2026-10-20
+                            92 image Description: Готово, ID: meeting.list-status
+                    93 row (selected)
+                        94 cell (selected)
+                            95 text Приёмка календаря 2026-10-21 · 00:12
+                            96 image Description: Готово, ID: meeting.list-status
+                97 scroll bar (settable, float) 0.5124153498871332
+                    98 value indicator (settable, float) 0.5124153498871332
+                    99 increment arrow button
+                    100 decrement arrow button
+                    101 increment page button
+                    102 decrement page button
+        103 splitter (disabled, settable, float) 248
+        104 text 21.10.2026 13:00 · 0 мин
+        105 text Help: Приёмка календаря, ID: meeting.title
+        106 button Копировать, Description: copy, ID: meeting.copy
+        107 button Description: Действия со встречей, ID: meeting.actions
+        108 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector
+        109 button Description: Воспроизвести встречу, ID: playback.play
+        110 button (disabled) Description: Остановить и вернуться к началу, ID: playback.stop
+        111 slider (settable, float) Description: Позиция во встрече, Value: 0, Details: 00:00, ID: playback.timeline
+            112 value indicator (settable, float) 0
+        113 text 00:00 / 00:12
+        114 image volume high
+        115 slider (settable, float) Description: Громкость воспроизведения, Value: 1
+            116 value indicator (settable, float) 1
+        117 pop up button Description: Скорость воспроизведения, Value: 1×
+        118 container meeting.studio-header
+            119 text Версия
+            120 pop up button Description: Версия расшифровки, Value: 2 · Whisper · 21 окт. 2026 г., 14:00:00, ID: transcript-versions
+            121 search text field (settable) Description: Поиск в выбранной версии расшифровки и сводки, Placeholder: Найти в этой встрече, ID: meeting.search
+                122 button Поиск в выбранной версии расшифровки и сводки
+            123 radio button Сводка, Value: 0, ID: meeting.result.summary
+            124 radio button Расшифровка, Value: 1, ID: meeting.result.transcript
+            125 radio button Участники, Value: 0, ID: meeting.result.participants
+        126 scroll area Secondary Actions: Scroll Up, Scroll Down
+            127 table Расшифровка и сопоставление участников
+                128 row (selectable)
+                    129 cell
+                        130 text Help: Александра Тестовая — проверка клавиатуры, ID: transcript.speaker-name
+                        131 button Description: Изменить говорящего: Александра Тестовая — проверка клавиатуры, ID: speaker.edit
+                        132 button 00:00, Description: Воспроизвести с 00:00, ID: transcript.playFrom
+                        133 text Value: Привет! Фёдор, слышно меня?, ID: transcript.words
+                134 row (selectable)
+                    135 cell
+                        136 text Help: Имя вручную, ID: transcript.speaker-name
+                        137 button Description: Изменить говорящего: Имя вручную, ID: speaker.edit
+                        138 button 00:03, Description: Воспроизвести с 00:03, ID: transcript.playFrom
+                        139 text Value: Да, слышно отлично., ID: transcript.words
+                140 row (selectable)
+                    141 cell
+                        142 text Help: Говорящий 3, ID: transcript.speaker-name
+                        143 button Description: Изменить говорящего: Говорящий 3, ID: speaker.edit
+                        144 button 00:06, Description: Воспроизвести с 00:06, ID: transcript.playFrom
+                        145 text Value: И меня тоже, привет., ID: transcript.words
+            146 scroll bar (settable, float) 0
+                147 value indicator (settable, float) 0
+                148 increment arrow button
+                149 decrement arrow button
+                150 increment page button
+                151 decrement page button
+    152 toggle button Value: off, ID: navigation.auto-record, Description: Автозапись выключена
+Правый клик открывает настройки
+    153 button (disabled) Description: Нет записи, ID: activity.recording
+    154 button Description: Нужен доступ к микрофону, ID: activity.microphone-access
+    155 button Description: Звук системы нужно проверить звуком: macOS не сообщает состояние этого разрешения, ID: activity.system-access
+    156 button 0 · 0, Description: Выполняется: 0. Ожидают: 0. Открыть очередь задач., Help: Выполняется: 0 · Ожидают: 0, ID: activity.queue
+    157 close button
+    158 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+    159 minimize button
+160 menu bar
+    161 Verbemo Cosmetic Review
+    162 Edit
+
+The focused UI element is 108 button Description: Показать или скрыть детали встречи, Value: 0, ID: meeting.inspector

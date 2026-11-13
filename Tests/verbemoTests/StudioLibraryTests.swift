@@ -63,12 +63,14 @@ struct StudioLibraryTests {
         #expect(table.numberOfRows == 2)
     }
 
-    @Test(.speaking(.russian))
-    func longMeetingTitlesWrapAndResizeWithoutClipping() async throws {
+    @Test(.speaking(.russian), arguments: [NSScroller.Style.overlay, .legacy])
+    func longMeetingTitlesWrapAndResizeWithoutClipping(scrollerStyle: NSScroller.Style) async throws {
         let root = Home.current.url.appendingPathComponent("meetings")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let title = "Атлас — обсуждение материалов, сроков и подготовки первого запуска учебного проекта"
-        try FileManager.default.moveItem(at: SessionFixture.make(meta: ["title": title]), to: root.appendingPathComponent("2026-10-31"))
+        for index in 0..<12 {
+            try FileManager.default.moveItem(at: SessionFixture.make(meta: ["title": title]), to: root.appendingPathComponent("meeting-\(index)"))
+        }
         let app = ApplicationWindow()
         defer { app.hide() }
         let library = MeetingLibraryController(root: root, hostWindow: app.panel)
@@ -77,6 +79,9 @@ struct StudioLibraryTests {
         app.show()
         let split = try #require(app.panel.contentView?.allDescendants.first { $0 is WorkspaceSplitView } as? NSSplitView)
         let table = try #require(library.listContentView.allDescendants.first { $0 is MeetingTableView } as? NSTableView)
+        let scroll = try #require(table.enclosingScrollView)
+        scroll.scrollerStyle = scrollerStyle
+        let sidebar = try #require(app.panel.contentView?.allDescendants.first { $0 is SidebarView })
         var heights: [CGFloat] = []
         for width in [220.0, 400, 220] {
             split.setPosition(width, ofDividerAt: 0)
@@ -90,10 +95,17 @@ struct StudioLibraryTests {
             #expect(label.bounds.height > 25, "A multi-line title must not collapse to the old single line")
             let frame = label.convert(label.bounds, to: row)
             #expect(row.bounds.insetBy(dx: 0, dy: -1).contains(frame))
+            #expect(abs(scroll.convert(scroll.bounds, to: sidebar).maxX - sidebar.bounds.maxX) <= 1)
+            let scroller = try #require(scroll.verticalScroller)
+            let textRight = label.convert(label.bounds, to: scroll).maxX
+            #expect(textRight <= scroller.convert(scroller.bounds, to: scroll).minX)
             heights.append(table.rect(ofRow: 0).height)
         }
         #expect(heights[0] > heights[1])
         #expect(abs(heights[0] - heights[2]) <= 1)
+        table.selectRowIndexes([11], byExtendingSelection: false)
+        table.scrollRowToVisible(11)
+        #expect(table.selectedRow == 11 && scroll.documentVisibleRect.minY > 0)
     }
 
     @Test(.speaking(.english))

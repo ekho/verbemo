@@ -98,7 +98,7 @@ final class MeetingListView: NSTableCellView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
             title.widthAnchor.constraint(equalTo: stack.widthAnchor), metaRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -106,8 +106,8 @@ final class MeetingListView: NSTableCellView {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layout() {
-        title.preferredMaxLayoutWidth = max(1, bounds.width - 20)
-        snippet?.preferredMaxLayoutWidth = max(1, bounds.width - 20)
+        title.preferredMaxLayoutWidth = max(1, bounds.width - 30)
+        snippet?.preferredMaxLayoutWidth = max(1, bounds.width - 30)
         super.layout()
     }
     static func icon(_ stage: MeetingPresentation.Stage) -> NSView {

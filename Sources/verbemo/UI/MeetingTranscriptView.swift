@@ -129,7 +129,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
         measuringText.stringValue = segments[row].text
         measuringText.preferredMaxLayoutWidth = width
         let height = ceil(measuringText.fittingSize.height)
-        return (available >= 590 ? max(52, height) : height + 60) + 24
+        return (available >= 590 ? max(54, height) : height + 62) + 24
     }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("utterance")
@@ -201,7 +201,7 @@ final class MeetingTranscriptView: NSScrollView, NSTableViewDataSource, NSTableV
 
 @MainActor
 private final class SegmentCell: NSTableCellView {
-    let time = NSButton(title: "", target: nil, action: nil)
+    let time = StudioActionButton(title: "", target: nil, action: nil)
     let body = NSTextField(wrappingLabelWithString: "")
     let name = NSTextField(labelWithString: "")
     var color = StudioStyle.paper { didSet { needsDisplay = true } }
@@ -214,11 +214,11 @@ private final class SegmentCell: NSTableCellView {
     init() {
         super.init(frame: .zero)
         time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        time.isBordered = false
         time.image = NSImage(systemSymbolName: "play", accessibilityDescription: nil)
         time.imagePosition = .imageLeading
         time.contentTintColor = StudioStyle.muted
         time.identifier = .init("transcript.playFrom")
+        time.heightAnchor.constraint(equalToConstant: 24).isActive = true
         name.font = .systemFont(ofSize: 13, weight: .semibold)
         name.identifier = .init("transcript.speaker-name")
         name.textColor = StudioStyle.ink
@@ -229,7 +229,7 @@ private final class SegmentCell: NSTableCellView {
         body.identifier = .init("transcript.words")
         let identity = NSStackView(views: [name, edit])
         identity.spacing = 6
-        identity.alignment = .top
+        identity.alignment = .centerY
         metadata.orientation = .vertical
         metadata.setViews([identity, time], in: .top)
         metadata.alignment = .leading

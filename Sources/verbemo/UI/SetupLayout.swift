@@ -286,7 +286,7 @@ enum SetupLayout {
 /// `LayerTinted`.
 @MainActor
 final class Box: NSStackView, LayerTinted {
-    func tintLayer() { layer?.borderColor = NSColor.separatorColor.cgColor }
+    func tintLayer() { layer?.borderColor = StudioStyle.line.cgColor }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -297,7 +297,7 @@ final class Box: NSStackView, LayerTinted {
 /// One of the lines between a box's rows, for the same reason.
 @MainActor
 final class Hairline: NSView, LayerTinted {
-    func tintLayer() { layer?.backgroundColor = NSColor.separatorColor.cgColor }
+    func tintLayer() { layer?.backgroundColor = StudioStyle.line.cgColor }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

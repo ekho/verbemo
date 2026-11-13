@@ -38,7 +38,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let measuringListTitle = MeetingListView.titleLabel("")
     private let resultPicker = NSStackView()
     let meetingHeaderState = StudioMeetingHeaderState()
-    private let meetingSearch = MeetingSearchField()
+    private let meetingSearch = StudioSearchField()
     private var meetingHeader: NSHostingView<StudioMeetingHeader>?
     func focusMeetingSearch() -> Bool {
         guard !contentView.isHiddenOrHasHiddenAncestor, meetingSearch.isEnabled, panel.attachedSheet == nil else { return false }
@@ -100,7 +100,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
     private var allItems: [SessionInventory.Item] = []
     private var meetingFilter: ApplicationNavigationState.Destination = .allMeetings
-    private let search = MeetingSearchField()
+    private let search = StudioSearchField()
     private let librarySearchStatus = NSTextField(labelWithString: "")
     private var librarySearchTask: Task<Void, Never>?
     private var librarySearchTasks: [Int: Task<Void, Never>] = [:]
@@ -1968,9 +1968,6 @@ private extension MeetingLibraryController {
         filterPopover.animates = false
         filterButton.toolTip = localised("Filter meetings: ", "Фильтр встреч: ") + meetingFilter.title
         filterButton.setAccessibilityLabel(filterButton.toolTip)
-        let listHeading = NSTextField(labelWithString: localised("Library", "Библиотека"))
-        listHeading.font = .systemFont(ofSize: 12)
-        listHeading.textColor = StudioStyle.muted
         let searchRow = NSStackView(views: [search, filterButton])
         searchRow.spacing = 8
         emptyLabel.identifier = .init("meeting-list.empty")
@@ -1994,13 +1991,19 @@ private extension MeetingLibraryController {
         librarySearchStatus.textColor = StudioStyle.muted
         librarySearchStatus.lineBreakMode = .byTruncatingTail
         librarySearchStatus.isHidden = true
-        let list = NSStackView(views: [listHeading, searchRow, scroll, emptyView])
+        let list = NSStackView(views: [searchRow, scroll, emptyView])
         list.orientation = .vertical
         list.distribution = .fill
         list.alignment = .leading
         list.spacing = 10
-        for view in list.arrangedSubviews { view.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true }
+        list.edgeInsets = .init(top: 0, left: 16, bottom: 0, right: 0)
+        for view in list.arrangedSubviews {
+            view.widthAnchor.constraint(equalTo: list.widthAnchor, constant: view === scroll ? -16 : -32).isActive = true
+        }
         listContentView = Self.frameOwnedPane(list)
+        listContentView.setAccessibilityElement(true)
+        listContentView.setAccessibilityRole(.group)
+        listContentView.setAccessibilityLabel(localised("Meeting library", "Библиотека встреч"))
 
         let copy = NSButton(title: localised("Copy", "Копировать"), target: self, action: #selector(showCopyMenu(_:)))
         copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
@@ -2044,16 +2047,19 @@ private extension MeetingLibraryController {
         settings.isBordered = false
         settings.alignment = .left
         settings.font = .systemFont(ofSize: 11)
-        let closeDetails = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(closeInspector))
+        let closeDetails = StudioActionButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(closeInspector))
         closeDetails.identifier = .init("meeting.inspector-close")
-        closeDetails.isBordered = false
+        closeDetails.widthAnchor.constraint(equalToConstant: 26).isActive = true
+        closeDetails.heightAnchor.constraint(equalToConstant: 26).isActive = true
         closeDetails.toolTip = localised("Close meeting details", "Закрыть детали встречи")
         closeDetails.setAccessibilityLabel(closeDetails.toolTip)
-        let inspectorHeading = NSStackView(views: [StudioStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")), NSView(), closeDetails])
+        calendarPicker.button.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
+        calendarPicker.button.imagePosition = .imageLeading
+        let inspectorHeading = NSStackView(views: [calendarPicker, closeDetails])
+        inspectorHeading.alignment = .centerY
+        inspectorHeading.spacing = 8
         let inspector = FlippedStackView(views: [
-            inspectorHeading,
-            StudioStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
-            calendarPicker,
+            inspectorHeading, calendarView,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
             diarizationLabel, diarizationActions, finishButton, cancelProcessingButton,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
@@ -2061,7 +2067,7 @@ private extension MeetingLibraryController {
         inspector.orientation = .vertical
         inspector.alignment = .leading
         inspector.spacing = 18
-        inspector.edgeInsets = NSEdgeInsets(top: 30, left: 22, bottom: 24, right: 22)
+        inspector.edgeInsets = NSEdgeInsets(top: 12, left: 22, bottom: 24, right: 22)
         for view in inspector.arrangedSubviews { view.widthAnchor.constraint(equalTo: inspector.widthAnchor, constant: -44).isActive = true }
         diarizationActions.orientation = .vertical
         diarizationActions.alignment = .leading
@@ -2069,6 +2075,9 @@ private extension MeetingLibraryController {
         let inspectorScroll = SetupLayout.scroller(around: inspector)
         let inspectorSurface = JournalSurface(StudioStyle.inset)
         inspectorSurface.identifier = .init("meeting.inspector-content")
+        inspectorSurface.setAccessibilityElement(true)
+        inspectorSurface.setAccessibilityRole(.group)
+        inspectorSurface.setAccessibilityLabel(localised("Meeting details", "Детали встречи"))
         inspectorScroll.translatesAutoresizingMaskIntoConstraints = false
         inspectorSurface.addSubview(inspectorScroll)
         NSLayoutConstraint.activate([
@@ -2084,7 +2093,7 @@ private extension MeetingLibraryController {
             document.topAnchor.constraint(equalTo: documentHost.topAnchor), document.bottomAnchor.constraint(equalTo: documentHost.bottomAnchor),
         ])
         documentHost.identifier = .init("meeting.document")
-        let divider = NSBox(); divider.boxType = .separator
+        let divider = JournalSurface(StudioStyle.line)
         divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
         let columns = JournalColumns(views: [documentHost, divider, inspectorSurface])
         columns.identifier = .init("meeting.columns")
@@ -2228,9 +2237,20 @@ private extension MeetingLibraryController {
         let diarization = [choice.cloud ? localised("Built into ", "Встроенная в ") + RecordingsEngineName.name(choice.provider) : nil,
                            choice.local && Config.localDiarizationEnabled() ? Config.diarizationModel().title : nil].compactMap { $0 }
         let disabled = localised("Disabled", "Отключена")
-        route.stringValue = localised("Transcription: ", "Расшифровка: ") + (transcription.isEmpty ? disabled : transcription.joined(separator: " → "))
-            + "\n" + localised("Diarization: ", "Диаризация: ") + (diarization.isEmpty ? disabled : diarization.joined(separator: " / "))
-            + "\n" + localised("Summary: ", "Сводка: ") + (Config.summary().enabled ? Self.summaryMethodName(Config.summary().backend) : disabled)
+        let configuration = [
+            (localised("Transcription: ", "Расшифровка: "), transcription.isEmpty ? disabled : transcription.joined(separator: " → ")),
+            (localised("Diarization: ", "Диаризация: "), diarization.isEmpty ? disabled : diarization.joined(separator: " / ")),
+            (localised("Summary: ", "Сводка: "), Config.summary().enabled ? Self.summaryMethodName(Config.summary().backend) : disabled),
+        ]
+        let text = NSMutableAttributedString(string: "")
+        for (label, value) in configuration {
+            if text.length > 0 { text.append(NSAttributedString(string: "\n")) }
+            text.append(NSAttributedString(string: label, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]))
+            text.append(NSAttributedString(string: value, attributes: [.font: NSFont.systemFont(ofSize: 11)]))
+        }
+        text.addAttribute(.foregroundColor, value: StudioStyle.muted, range: NSRange(location: 0, length: text.length))
+        route.attributedStringValue = text
+        route.setAccessibilityLabel(text.string)
     }
 
 }
@@ -2239,7 +2259,7 @@ extension MeetingLibraryController {
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         guard items.indices.contains(row) else { return 62 }
         measuringListTitle.stringValue = items[row].title ?? items[row].name
-        measuringListTitle.preferredMaxLayoutWidth = max(1, tableView.tableColumns[0].width - 20)
+        measuringListTitle.preferredMaxLayoutWidth = max(1, tableView.tableColumns[0].width - 30)
         let titleHeight = ceil(measuringListTitle.fittingSize.height)
         if let hit = libraryHits?[items[row].dir], hit.source != .title {
             let snippet = MeetingListView.snippetLabel(hit)
@@ -2253,31 +2273,6 @@ extension MeetingLibraryController {
     }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         JournalMeetingRow()
-    }
-}
-
-@MainActor
-private final class MeetingSearchField: NSSearchField {
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        focusRingType = .default
-        backgroundColor = StudioStyle.paper
-        textColor = StudioStyle.ink
-        font = .systemFont(ofSize: 13)
-        heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override class var cellClass: AnyClass? {
-        get { Cell.self }
-        set {}
-    }
-
-    private final class Cell: NSSearchFieldCell {
-        override func draw(withFrame frame: NSRect, in controlView: NSView) {
-            // The native bezel ignores backgroundColor.
-            StudioStyle.drawInputBezel(in: frame)
-            super.drawInterior(withFrame: frame, in: controlView)
-        }
     }
 }
 

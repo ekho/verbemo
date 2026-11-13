@@ -187,12 +187,12 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         trackingMode: .selectOne, target: nil, action: nil)
     private let summaryKey = NSSecureTextField()
     private let summaryKeyStatus = NSTextField(labelWithString: "")
-    private let summaryOpenAIBaseURL = NSTextField()
-    private let summaryOpenAIModel = NSTextField()
+    private let summaryOpenAIBaseURL = StudioTextField()
+    private let summaryOpenAIModel = StudioTextField()
     private let summaryOpenAIOptions = NSStackView()
     private var summaryOpenAIBaseURLRow: NSView?
-    private let summaryOllamaBaseURL = NSTextField()
-    private let summaryOllamaModel = NSTextField()
+    private let summaryOllamaBaseURL = StudioTextField()
+    private let summaryOllamaModel = StudioTextField()
     private lazy var summaryKeyLink = link(
         localised("Get a key", "Получить ключ"),
         "https://console.anthropic.com/settings/keys")

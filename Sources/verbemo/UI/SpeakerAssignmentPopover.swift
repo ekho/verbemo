@@ -70,7 +70,7 @@ final class SpeakerAssignmentPopover: NSViewController {
 }
 
 @MainActor
-final class SpeakerEditButton: NSButton, NSPopoverDelegate {
+final class SpeakerEditButton: StudioActionButton, NSPopoverDelegate {
     var makeEditor: (() -> SpeakerAssignmentPopover?)?
     var onRestoreFocus: (() -> Void)?
     private var popover: NSPopover?
@@ -78,8 +78,9 @@ final class SpeakerEditButton: NSButton, NSPopoverDelegate {
     private var restoreFocusRequested = false
     init() {
         super.init(frame: .zero)
-        image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
-        isBordered = false
+        image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)?.withSymbolConfiguration(
+            .init(pointSize: 13, weight: .semibold))
+        imagePosition = .imageOnly
         target = self
         action = #selector(openEditor)
         identifier = .init("speaker.edit")

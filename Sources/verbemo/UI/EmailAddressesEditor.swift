@@ -3,7 +3,7 @@ import AppKit
 @MainActor
 final class EmailAddressesEditor: NSControl {
     private let list = NSStackView()
-    private let input = NSTextField()
+    private let input = StudioTextField()
     private let message = NSTextField(wrappingLabelWithString: "")
     private let lookup = NSButton(title: localised("Get from calendars", "Взять из календарей"), target: nil, action: nil)
     private var addresses: [String] = []

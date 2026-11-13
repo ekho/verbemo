@@ -6,10 +6,14 @@ import Testing
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["VERBEMO_CALENDAR_ACCEPTANCE"] != nil))
 @MainActor
 struct CalendarAcceptanceTests {
+    @Test(.speaking(.english)) func interactiveJournalEnglish() async throws {
+        try await interactiveJournal()
+    }
+
     @Test(.speaking(.russian)) func interactiveJournal() async throws {
         let output = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["VERBEMO_CALENDAR_ACCEPTANCE"]))
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        try Home.process.writeConfig(["interface_language": "ru", "interface_theme": "dark", "calendar": true,
+        try Home.process.writeConfig(["interface_language": InterfaceLanguage.current.rawValue, "interface_theme": "dark", "calendar": true,
             "summary": ["enabled": false], "speaker_names": ["enabled": false], "transcription": ["enabled": false]])
         let root = Home.process.url.appendingPathComponent("meetings")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -24,8 +28,18 @@ struct CalendarAcceptanceTests {
         }
         let events = [event("planning", "Планирование интерфейса"), event("review", "Проверка календаря", day: 1),
                       event("deleted", "Удалённое событие")]
+            + (1...20).map { event("event-\($0)", "Длинное название события \($0) — обсуждение материалов и сроков учебного проекта") }
         let dir = root.appendingPathComponent("2026.10.21-1300 Приёмка календаря")
-        try FileManager.default.moveItem(at: SessionFixture.make(meta: ["title": "Приёмка календаря", "started": "2026-10-21T10:00:00Z", "duration_seconds": 600]), to: dir)
+        try FileManager.default.moveItem(at: SessionFixture.make(meta: ["title": "Приёмка календаря", "started": "2026-10-21T10:00:00Z", "duration_seconds": 12,
+            "files": ["mic": "mic.caf"], "start_offset_ms": ["mic": 0]]), to: dir)
+        try TestAudio.write(to: dir.appendingPathComponent("mic.caf"), seconds: 12) { _, _ in 0 }
+        for index in 1...20 {
+            try FileManager.default.moveItem(at: SessionFixture.make(meta: [
+                "title": "Длинное название встречи \(index) — обсуждение материалов и сроков учебного проекта",
+                "started": "2026-10-20T10:00:00Z",
+            ]), to: root.appendingPathComponent("meeting-\(index)"))
+        }
+        PostProcessor.rename("me", to: "Александра Тестовая — длинное имя", in: dir)
         PostProcessor.rename("them A", to: "Имя вручную", in: dir)
         _ = try TranscriptVersions.archiveCurrent(dir)
         try Transcript(engine: "whisper", model: "test-current", created_at: "2026-10-21T11:00:00Z", segments: SessionFixture.meeting).write(to: dir)

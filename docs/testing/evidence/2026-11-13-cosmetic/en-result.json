@@ -1,0 +1,21 @@
+{
+  "drafts" : [
+    {
+      "event_id" : "review",
+      "title" : "Cosmetic acceptance — synthetic meeting"
+    }
+  ],
+  "manualName" : "Имя вручную",
+  "metadata" : {
+    "duration_seconds" : 12,
+    "files" : {
+      "mic" : "mic.caf"
+    },
+    "start_offset_ms" : {
+      "mic" : 0
+    },
+    "started" : "2026-10-21T10:00:00Z",
+    "title" : "Приёмка календаря"
+  },
+  "versions" : 2
+}

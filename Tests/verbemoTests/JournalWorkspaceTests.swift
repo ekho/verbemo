@@ -372,6 +372,7 @@ struct JournalWorkspaceTests {
             await library.settled()
             let available = Config.cloudEngines.contains(engine) || Platform.supportsLocalModels
             #expect(settings.stringValue == "Расшифровка: \(available ? model : "Отключена")\nДиаризация: \(available ? diarization : "Отключена")\nСводка: Codex")
+            #expect(settings.accessibilityLabel() == settings.stringValue)
         }
         #expect(Config.update(path: ["transcription", "engine"], value: "auto"))
         library.refresh()

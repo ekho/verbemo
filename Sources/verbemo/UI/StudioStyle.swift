@@ -99,6 +99,68 @@ enum StudioStyle {
 }
 
 @MainActor
+class StudioActionButton: NSButton {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        bezelStyle = .accessoryBarAction
+        showsBorderOnlyWhileMouseInside = true
+        focusRingType = .exterior
+        contentTintColor = StudioStyle.muted
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if isEnabled { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+}
+
+@MainActor
+final class StudioSearchField: NSSearchField {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        focusRingType = .default
+        backgroundColor = StudioStyle.paper
+        textColor = StudioStyle.ink
+        font = .systemFont(ofSize: 13)
+        heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override class var cellClass: AnyClass? {
+        get { Cell.self }
+        set {}
+    }
+    private final class Cell: NSSearchFieldCell {
+        override func draw(withFrame frame: NSRect, in controlView: NSView) {
+            // The native bezel ignores backgroundColor.
+            StudioStyle.drawInputBezel(in: frame)
+            super.drawInterior(withFrame: frame, in: controlView)
+        }
+    }
+}
+
+@MainActor
+final class StudioTextField: NSTextField {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        backgroundColor = StudioStyle.paper
+        textColor = StudioStyle.ink
+        font = .systemFont(ofSize: 13)
+        heightAnchor.constraint(equalToConstant: StudioStyle.inputHeight).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override class var cellClass: AnyClass? {
+        get { Cell.self }
+        set {}
+    }
+    private final class Cell: NSTextFieldCell {
+        override func draw(withFrame frame: NSRect, in controlView: NSView) {
+            StudioStyle.drawInputBezel(in: frame)
+            super.drawInterior(withFrame: frame, in: controlView)
+        }
+    }
+}
+
+@MainActor
 private final class CenteredVoiceBadge: NSTextField {
     override func draw(_ dirtyRect: NSRect) {
         // Centering the cell's text must not shrink the badge background.

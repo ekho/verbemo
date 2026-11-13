@@ -200,7 +200,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         settingsBackRow.setViews([allSettings, SetupLayout.spacer()], in: .center)
         settingsBackRow.edgeInsets = .init(top: 8, left: 24, bottom: 0, right: 24)
         settingsBackRow.isHidden = true
-        let divider = NSBox(); divider.boxType = .separator
+        let divider = SetupLayout.hairline()
         let right = NSStackView(views: [settingsBackRow, contentHost])
         right.orientation = .vertical
         right.distribution = .fill
@@ -213,8 +213,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         let root = workspaceSplit.view
         let container = WorkspaceSurface(JournalStyle.paper)
         root.setContentHuggingPriority(.init(1), for: .vertical)
-        let statusDivider = NSBox()
-        statusDivider.boxType = .separator
+        let statusDivider = SetupLayout.hairline()
         let stack = NSStackView(views: [toolbar, divider, root, statusDivider, activityBar])
         stack.orientation = .vertical
         stack.distribution = .fill
@@ -660,7 +659,7 @@ private final class JournalSettingsNavigation: NSStackView {
         }
     }
     func presentOverview(_ value: Bool) {
-        let inset: CGFloat = value ? 24 : 0
+        let inset: CGFloat = value ? 24 : 16
         edgeInsets = .init(top: 12, left: inset, bottom: 12, right: inset)
         for width in widths { width.constant = -2 * inset }
     }

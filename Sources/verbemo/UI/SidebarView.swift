@@ -10,8 +10,8 @@ final class SidebarView: JournalSurface {
         libraryHost.translatesAutoresizingMaskIntoConstraints = false
         addSubview(libraryHost)
         NSLayoutConstraint.activate([
-            libraryHost.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            libraryHost.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            libraryHost.leadingAnchor.constraint(equalTo: leadingAnchor),
+            libraryHost.trailingAnchor.constraint(equalTo: trailingAnchor),
             libraryHost.topAnchor.constraint(equalTo: topAnchor, constant: 12),
             libraryHost.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
         ])
