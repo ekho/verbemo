@@ -32,12 +32,15 @@ outside Git.
 
 ## Automated local checks
 
-- Shared Python release and selector tests: 114 passed. Fixture Git commits used
+- Shared Python release and selector tests: 128 passed. Fixture Git commits used
   a per-process `commit.gpgSign=false` override; host Git settings were unchanged.
-- Python workflow checks under `windows/tests`: 18 passed with PyYAML 6.0.3.
+- Python workflow checks under `windows/tests`: 20 passed with PyYAML 6.0.3,
+  including cleanup dry-run/apply execution with macOS `/bin/bash` 3.2.
 - Native macOS signing checks: 6 passed, including preview library-loading mode
   and rejection of preview flags for Developer ID releases.
 - `bash -n scripts/build-macos-preview.sh` passed.
+- The actual preview signing branch and receipt command were also executed with
+  tool stubs under `/bin/bash` 3.2: both absent and present signing arguments passed.
 
 These workflow tests ran on macOS and do not establish Windows GUI behavior.
 Full application builds and suites are delegated to the actual CI/release runs;

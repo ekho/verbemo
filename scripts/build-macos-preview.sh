@@ -28,10 +28,10 @@ trap 'rm -rf "$WORK"' EXIT
 VERBEMO_SPARKLE_PUBLIC_KEY='' make app VERSION="$VERSION_ARG" BUILD="$BUILD" SIGN_ID="${VERBEMO_PREVIEW_SIGN_ID:--}" RELEASE_SIGNING=0 MACOS_PREVIEW=1
 APP="$ROOT/.build/Verbemo.app"
 codesign --verify --deep --strict "$APP"
-RECEIPT_SIGNING=()
+set --
 if [ -n "${VERBEMO_PREVIEW_SIGN_ID:-}" ]; then
     FINGERPRINT=$(python3 scripts/preview_signing.py verify "$APP")
-    RECEIPT_SIGNING=(--preview-certificate-sha256 "$FINGERPRINT")
+    set -- --preview-certificate-sha256 "$FINGERPRINT"
 else
     DETAILS=$(codesign -dvv "$APP" 2>&1)
     grep -q '^Signature=adhoc$' <<<"$DETAILS" || die 'expected ad-hoc app signature'
@@ -48,7 +48,7 @@ PY
 NAME="Verbemo-$VERSION_ARG-macos-universal.dmg"
 bash scripts/build-dmg.sh "$APP" "Verbemo $VERSION_ARG Preview" "$WORK/$NAME" --preview
 python3 scripts/release_manifest.py receipt --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
-    --build-number "$BUILD" --output "$WORK" --prerelease "${RECEIPT_SIGNING[@]}"
+    --build-number "$BUILD" --output "$WORK" --prerelease "$@"
 python3 scripts/release_manifest.py validate-macos --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
     --build-number "$BUILD" --output "$WORK" --prerelease
 python3 scripts/release_manifest.py preflight --root "$ROOT" --version "$VERSION_ARG" \

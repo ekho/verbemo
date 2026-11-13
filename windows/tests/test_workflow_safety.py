@@ -4,6 +4,7 @@ import re
 import json
 import importlib.util
 import subprocess
+import sys
 import tempfile
 import unittest
 import yaml
@@ -402,7 +403,8 @@ class ReleaseCleanupWorkflowTests(unittest.TestCase):
             (root / 'scripts/cleanup_releases.py').write_text('import json, sys; print(json.dumps(sys.argv[1:]))\n')
             for apply, arguments in (('true', ['--apply']), ('false', [])):
                 with self.subTest(apply=apply):
-                    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=root,
+                    shell = '/bin/bash' if sys.platform == 'darwin' else 'bash'
+                    result = subprocess.run([shell, '-euo', 'pipefail', '-c', step['run']], cwd=root,
                                             env={**os.environ, 'APPLY': apply}, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(json.loads(result.stdout), arguments)
