@@ -12,6 +12,18 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
     }
     private let ktalkStatus = NSTextField(wrappingLabelWithString: localised("Waiting for call information", "Ожидание сведений о звонке"))
     func updateKTalkStatus(_ text: String) { ktalkStatus.stringValue = text }
+    var requestAccessibility: () -> Void = { SetupPermissions.requestAccessibility() }
+    private let accessibilityAccess = AccessRow(
+        title: localised("Accessibility", "Универсальный доступ"),
+        detail: localised("Recognizes KTalk's join screen when direct call information is unavailable.",
+                          "Позволяет распознавать экран подключения KTalk, когда прямые данные о звонке недоступны."),
+        action: localised("Allow…", "Разрешить…"))
+
+    func updateAccessibility(_ state: SetupPermissions.State) {
+        accessibilityAccess.update(state,
+            note: state == .granted ? nil : localised("not granted", "не разрешено"),
+            action: state == .granted ? nil : localised("Allow…", "Разрешить…"))
+    }
     private let mcpSettings = MCPSettingsView()
     private var mcpNotice = ""
     private let panel: NSWindow
@@ -46,6 +58,8 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         setup = SetupForm(mode: .settings, calendar: calendar)
         calendarSelection = CalendarSettingsView(calendar: calendar)
         super.init()
+        accessibilityAccess.identifier = .init("access.accessibility")
+        accessibilityAccess.onAct = { [weak self] in self?.requestAccessibility() }
         serviceNotice.textColor = .systemOrange
         serviceNotice.font = .systemFont(ofSize: 11)
         serviceNotice.lineBreakMode = .byTruncatingTail
@@ -62,6 +76,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         setup.onStateChange = { [weak self] in
             self?.refreshModels()
             self?.calendarSelection.refresh()
+            self?.updateAccessibility(SetupPermissions.accessibility())
         }
         refresh()
     }
@@ -190,6 +205,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 content.widthAnchor.constraint(equalTo: box.widthAnchor, constant: -38).isActive = true
             }
             if destination == .ktalk {
+                let permission = SetupLayout.box([accessibilityAccess])
+                form.addArrangedSubview(permission)
+                permission.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
                 ktalkStatus.identifier = .init("ktalk.status")
                 ktalkStatus.font = SetupLayout.titleFont
                 ktalkStatus.maximumNumberOfLines = 0
@@ -665,6 +683,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
 
     /// Redraw every control from the config file.
     private func refresh() {
+        updateAccessibility(SetupPermissions.accessibility())
         let config = Config.raw()
         for row in rows {
             if let editor = row.control as? EmailAddressesEditor {

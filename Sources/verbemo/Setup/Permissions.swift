@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import ApplicationServices
 import EventKit
 import Foundation
 
@@ -45,6 +46,20 @@ enum SetupPermissions {
         let answer = microphone()
         Analytics.track(answer == .granted ? .micGranted : .micDenied)
         return answer
+    }
+
+    // MARK: - Accessibility
+
+    static func accessibility() -> State {
+        AXIsProcessTrusted() ? .granted : .denied
+    }
+
+    static func requestAccessibility() {
+        guard accessibility() != .granted else { return }
+        // The SDK imports the equivalent kAXTrustedCheckOptionPrompt as a mutable, nonisolated C global.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        openSettings(.accessibility)
     }
 
     // MARK: - calendar
@@ -209,6 +224,7 @@ enum SetupPermissions {
     /// is unhelpful but harmless.
     enum Pane: String {
         case microphone = "Privacy_Microphone"
+        case accessibility = "Privacy_Accessibility"
         /// "Screen & System Audio Recording" — the pane that contains
         /// "System Audio Recording Only".
         case systemAudio = "Privacy_ScreenCapture"

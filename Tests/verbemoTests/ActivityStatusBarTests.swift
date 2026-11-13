@@ -26,6 +26,8 @@ struct ActivityStatusBarTests {
         let app = ApplicationWindow()
         defer { _ = app.stopForTermination() }
         app.navigate(.general)
+        app.updateActivity([], access: .init(microphone: .granted, systemAudio: .heard,
+            calendar: .granted, accessibility: .denied))
         app.updateConfigProblem("Synthetic configuration problem\nMore detail")
         var result = MediaImportCoordinator.Result()
         result.failures = [.init(source: URL(fileURLWithPath: "/tmp/fixture.wav"),

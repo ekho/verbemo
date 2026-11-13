@@ -846,6 +846,8 @@ final class AppController {
 
     private func showAutoRecord() {
         let automatic = Config.autoRecord()
+        let ktalk = Config.ktalkIntegration()
+        let accessibility = SetupPermissions.accessibility()
         let calendarPermission = SetupPermissions.calendar()
         let access = ActivityAccess(
             microphone: SetupPermissions.microphone(),
@@ -854,8 +856,10 @@ final class AppController {
                 ? (calendarPermission == .notAsked && calendar.authorized ? .granted : calendarPermission) : nil,
             micActivity: automatic.micActivity, autoCalendar: automatic.calendar,
             hasSelectedCalendar: !automatic.calendar || automatic.micActivity || !calendar.selectedCalendars().isEmpty,
-            directCallReady: session.map { $0.captureSource == .direct } ?? callIntegrations.directCallReady)
+            directCallReady: session.map { $0.captureSource == .direct } ?? callIntegrations.directCallReady,
+            accessibility: ktalk.enabled && ktalk.accessibility ? accessibility : nil)
         window.settings.updateKTalkStatus(session?.captureSource.title ?? callIntegrations.statusText)
+        window.settings.updateAccessibility(accessibility)
         let decision = autoRecord.enabled ? access.automaticBlockReason ?? autoRecord.notice?.title ?? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, notice: autoRecord.notice)
         let activity = operations.snapshot()

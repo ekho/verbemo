@@ -18,10 +18,19 @@ Providers own their transport lifecycle and must return unknown on failure.
 
 Set `call_integrations.ktalk.enabled` to true and, for CDP, set `space_url` to an
 exact HTTPS space origin. Settings have their own **KTalk integration** /
-**Интеграция с KTalk** page and require restarting Verbemo. Existing Accessibility permission is optional. The adapter never opens
-a debug port, changes installed KTalk files, reads session tokens, joins a call,
-or requests system permission. To use CDP, fully quit KTalk and explicitly start
-it with the diagnostic flags used in the research:
+**Интеграция с KTalk** page and require restarting Verbemo. Accessibility
+permission is optional. Its permission row shows the current macOS grant and
+provides an **Allow…** action that requests access and opens the appropriate
+System Settings pane. Grant the permission there; Verbemo refreshes the state
+when returning to the app and during its regular status updates.
+
+When KTalk integration and Accessibility detection are enabled, the status bar
+also shows an Accessibility icon. Missing access is highlighted; clicking it
+opens KTalk settings. Checking or displaying the state never requests access.
+The adapter never opens a debug port, changes installed KTalk files, reads session
+tokens, joins a call, or requests system permission automatically. To use CDP,
+fully quit KTalk and explicitly start it with the diagnostic flags used in the
+research:
 
 ```sh
 open -a '/Applications/Толк.app' --args --remote-debugging-address=127.0.0.1 --remote-debugging-port=9333

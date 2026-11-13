@@ -37,6 +37,7 @@ struct ActivityAccess {
     var autoCalendar = false
     var hasSelectedCalendar = true
     var directCallReady = false
+    var accessibility: SetupPermissions.State? = nil
 
     var denied: Bool {
         if microphone == .denied || calendar == .denied { return true }
@@ -88,6 +89,7 @@ final class ActivityStatusBar: NSStackView {
     private let microphoneAccess = NSButton()
     private let systemAccess = NSButton()
     private let calendarAccess = NSButton()
+    private let accessibilityAccess = NSButton()
     private let messages = NSButton()
     private let messagePopover = NSPopover()
     private var serviceViews: [NSView] = []
@@ -133,6 +135,7 @@ final class ActivityStatusBar: NSStackView {
             (microphoneAccess, "activity.microphone-access", #selector(microphoneClicked)),
             (systemAccess, "activity.system-access", #selector(systemClicked)),
             (calendarAccess, "activity.calendar-access", #selector(calendarSettings)),
+            (accessibilityAccess, "activity.accessibility-access", #selector(ktalkSettings)),
             (messages, "activity.messages", #selector(showMessages)),
             (recording, "activity.recording", #selector(recordingClicked)),
             (queue, "activity.queue", #selector(queueClicked)),
@@ -163,7 +166,7 @@ final class ActivityStatusBar: NSStackView {
         automatic.menu = menu
         automatic.target = self
         automatic.action = #selector(automaticClicked)
-        levels.setViews([microphoneAccess, mic, systemAccess, system, calendarAccess], in: .center)
+        levels.setViews([microphoneAccess, mic, systemAccess, system, calendarAccess, accessibilityAccess], in: .center)
         levels.spacing = 4
         levels.setHuggingPriority(.required, for: .horizontal)
         for meter in [mic, system] { meter.widthAnchor.constraint(equalToConstant: 32).isActive = true }
@@ -277,12 +280,21 @@ final class ActivityStatusBar: NSStackView {
     func updateAccess(_ state: ActivityAccess) {
         let changed = accessState.microphone != state.microphone || accessState.systemAudio != state.systemAudio
             || accessState.calendar != state.calendar || accessState.directCallReady != state.directCallReady
+            || accessState.accessibility != state.accessibility
         accessState = state
         automaticDestination = state.automaticDestination
         if changed || microphoneAccess.image == nil { refreshSources() }
     }
 
     private func refreshSources() {
+        accessibilityAccess.isHidden = accessState.accessibility == nil
+        if let accessibility = accessState.accessibility {
+            source(accessibilityAccess, symbol: "accessibility",
+                detail: accessibility == .granted
+                    ? localised("Accessibility allowed for KTalk. Open KTalk settings.", "Универсальный доступ для KTalk разрешён. Открыть настройки KTalk.")
+                    : localised("KTalk needs Accessibility access to recognize its join screen. Open KTalk settings.", "KTalk: нужен Универсальный доступ для распознавания экрана подключения. Открыть настройки KTalk."),
+                caution: accessibility != .granted)
+        }
         let parts = accessState.detail.components(separatedBy: "\n")
         let micNeedsAccess = accessState.microphone != .granted
         let systemDenied: Bool
@@ -596,6 +608,7 @@ final class ActivityStatusBar: NSStackView {
         else { onAccess?(.recording) }
     }
     @objc private func calendarSettings() { onAccess?(.calendar) }
+    @objc private func ktalkSettings() { onAccess?(.ktalk) }
     @objc private func recordingClicked() { onRecording?() }
     @objc private func queueClicked() { queuePopover.toggle(from: queue) }
     @objc private func jobClicked() { onJob?(currentSession) }
