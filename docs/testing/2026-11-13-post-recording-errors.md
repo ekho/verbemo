@@ -61,3 +61,75 @@ a clock, including when there is no active queue entry.
 Before the fix, the focused presentation tests failed ten assertions. Coverage
 also checks actual manual summary generation and cancellation with a retained
 previous summary, for current and archived transcript versions.
+
+## #126: unavailable participant editor
+
+The UI disables both free text and the dropdown while the selected transcript's
+diarization is nonfinal. The save path independently enforces the same rule,
+plus meeting ownership, queued retranscription and transcript freshness. The
+original pending failure therefore explains the unavailable `me` field; it
+does not establish a focus or persistence regression.
+
+The Participants tab now explains the actual blocker (processing, queued
+retranscription, unreadable state, or unfinished diarization). The same reason
+is attached to the disabled field's tooltip/accessibility help. The existing
+write guards are shared with this explanation and remain in force.
+
+The regression test failed for missing explanation with `pending` and `failed`
+states before the fix. `completed` and `skipped` already allowed editing. The
+test covers both `me` and an ordinary speaker without a calendar, attempted
+writes while blocked, preserved prior names, skipping, Return to save, Escape
+to discard, and reopening. Existing tests cover calendar menus, selected
+versions, one-to-one mapping, stale writes and save failures.
+
+## Validation
+
+On 2026-11-14, the complete standard root suite passed: **1493 tests in 203
+suites**, 260.583 seconds, exit 0. Command:
+
+```sh
+swift test --build-system native --scratch-path .build/index-build --no-parallel
+```
+
+The first full run exposed one existing assertion for the old Russian summary
+label; it was updated to require the explicit unstarted state, then the entire
+suite was rerun successfully. Environment-gated native/model-download, calendar
+acceptance and screenshot-gallery tests remained skipped by their normal gates.
+
+Focused tests passed: 63 for the diarization/recovery change, 95 for summary
+presentation/lifecycle, and 54 for participant editing and its existing callers.
+The new tests were first run against the previous behavior and reproduced the
+missing failure/blocked-state explanations.
+
+Computer Use exercised the real `ApplicationWindow` and
+`MeetingLibraryController` in an isolated native AppKit host loading the test
+bundle. It used disposable synthetic audio, an injected no-speech diarizer and
+a gated local summary backend; no external AI provider or real account was used.
+The native host was needed because nesting AppKit's event loop inside the test
+runner prevented asynchronous UI actions from progressing.
+
+Observed through actual clicks and the accessibility tree:
+
+- Pending failed attempt: explicit retry/skip guidance, static summary waiting
+  state, empty queue, and disabled participant field with the same explanation.
+- Retry: attempt count increased from one to two and the failure remained
+  actionable. Skip: diarization became skipped, the real summary operation
+  appeared as one running task, and participant editing explained the active
+  processing lock.
+- Completing the injected backend: summary became ready, queue returned to
+  zero, and participant editing became available.
+- Without a calendar: the `me` field accepted a name; Return saved it, Escape
+  restored it after an unsaved edit, and the dropdown opened with “Not matched”.
+- A new process reopened the same fixture and displayed the saved name and
+  summary. Light appearance at 1100 points wide and dark appearance at 760
+  points wide were visually checked. Accessibility names, disabled states and
+  help were inspected; spoken VoiceOver output was not tested.
+
+The fixture's prepared diarization sources and transcript remained byte-for-byte
+unchanged after skip and naming. Normal successful cleanup compressed its raw
+tracks into `audio.m4a`, retaining both channels and their metadata.
+
+Limitations: no new hardware recording/call, no real cloud summary request,
+no Windows runtime verification, no installed-app replacement or stable
+release. Real-audio evidence is the isolated offline native diarizer probe
+described above, separate from the deterministic UI/test backends.
