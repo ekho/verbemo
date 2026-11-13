@@ -62,6 +62,8 @@ class GitHub:
         try:
             with self.opener.open(Request(url, data=data, headers=headers, method=method), timeout=120) as response:
                 content = response.read()
+                if method == 'DELETE' and response.status == 204:
+                    return None, response.headers
                 return (content if binary else json.loads(content)), response.headers
         except HTTPError as error:
             # Never print response bodies or signed redirect URLs.
@@ -94,7 +96,10 @@ class GitHub:
 
     def latest(self):
         try:
-            return self.api('/releases/latest')
+            release = self.api('/releases/latest')
+            if not isinstance(release, dict):
+                raise ValueError('invalid latest release response')
+            return release
         except ApiError as error:
             if error.status != 404:
                 raise

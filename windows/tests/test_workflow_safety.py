@@ -238,7 +238,8 @@ else:
         data = workflow('release.yml')
         self.assertEqual(data['on']['workflow_dispatch']['inputs']['operation']['default'], 'prepare')
         self.assertEqual(data['permissions'], {'contents': 'read'})
-        self.assertEqual(data['concurrency'], {'group': 'verbemo-release', 'cancel-in-progress': 'false'})
+        self.assertEqual(data['concurrency'], {'group': 'verbemo-release', 'cancel-in-progress': 'false',
+                                               'queue': 'max'})
         writers = {name for name, job in data['jobs'].items() if job.get('permissions', {}).get('contents') == 'write'}
         self.assertEqual(writers, {'resolve', 'publish', 'resume'})
         self.assertFalse((ROOT / '.github/workflows/windows-beta.yml').exists())
@@ -361,6 +362,39 @@ else:
                          ['python3 scripts/update-readme-downloads.py --check --public'])
         self.assertNotIn('secrets.', str(data))
         self.assertNotIn('contents: write', str(data))
+
+
+class ReleaseCleanupWorkflowTests(unittest.TestCase):
+    def test_weekly_cleanup_uses_trusted_source_and_preserves_queued_publications(self):
+        data = workflow('release-cleanup.yml')
+        self.assertEqual(set(data['on']), {'schedule', 'workflow_dispatch'})
+        self.assertEqual(data['on']['schedule'], [{'cron': '17 3 * * 1'}])
+        dry_run = data['on']['workflow_dispatch']['inputs']['dry_run']
+        self.assertEqual((dry_run['type'], dry_run['default']), ('boolean', 'true'))
+        self.assertEqual(data['permissions'], {'contents': 'read'})
+        self.assertEqual(data['concurrency'], workflow('release.yml')['concurrency'])
+        self.assertEqual(data['concurrency']['queue'], 'max')
+        job = data['jobs']['cleanup']
+        self.assertEqual(job['if'], "github.repository == 'ekho/verbemo' && github.ref == 'refs/heads/master'")
+        self.assertEqual(job['permissions'], {'contents': 'write'})
+        checkout = next(s for s in job['steps'] if s.get('uses', '').startswith('actions/checkout@'))
+        self.assertEqual(checkout['with'], {'ref': 'master', 'persist-credentials': 'false'})
+        step = next(s for s in job['steps'] if 'run' in s)
+        self.assertEqual(step['env']['GH_TOKEN'], '${{ github.token }}')
+        self.assertEqual(step['env']['APPLY'], "${{ github.event_name == 'schedule' || !inputs.dry_run }}")
+
+    def test_cleanup_command_deletes_only_when_apply_is_true(self):
+        step = next(s for s in workflow('release-cleanup.yml')['jobs']['cleanup']['steps'] if 'run' in s)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'scripts').mkdir()
+            (root / 'scripts/cleanup_releases.py').write_text('import json, sys; print(json.dumps(sys.argv[1:]))\n')
+            for apply, arguments in (('true', ['--apply']), ('false', [])):
+                with self.subTest(apply=apply):
+                    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=root,
+                                            env={**os.environ, 'APPLY': apply}, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout), arguments)
 
 
 if __name__ == '__main__':
