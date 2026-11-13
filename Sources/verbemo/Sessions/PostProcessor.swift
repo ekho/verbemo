@@ -107,6 +107,7 @@ enum PostProcessor {
     }
 
     private static func regenerateSummaryWork(_ dir: URL, root: URL, policy: Policy, request: SummaryRequest?) async throws {
+        ProcessingOperations.shared.stage(.postProcessing, artifactDirectory: dir)
         func validate() throws -> Transcript {
             if request == nil, let reason = Config.unreadableReason {
                 throw Refusal.configUnreadable(reason)
@@ -141,8 +142,8 @@ enum PostProcessor {
             context.append("Participants: " + attendees.joined(separator: ", "))
         }
         let names = SpeakerNames.read(from: dir)
-        ProcessingOperations.shared.stage(.summary)
-        defer { ProcessingOperations.shared.stage(.postProcessing) }
+        ProcessingOperations.shared.stage(.summary, artifactDirectory: dir)
+        defer { ProcessingOperations.shared.stage(.postProcessing, artifactDirectory: dir) }
         let generated = await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir, request: request)
         guard generated != nil else {
             try Task.checkCancellation()
@@ -270,7 +271,7 @@ enum PostProcessor {
     }
 
     private static func finishWork(_ dir: URL, policy: Policy, retryFailed: Bool) async throws -> Work {
-        ProcessingOperations.shared.stage(.postProcessing)
+        ProcessingOperations.shared.stage(.postProcessing, artifactDirectory: dir)
         try Task.checkCancellation()
         if let reason = Config.unreadableReason { throw Refusal.configUnreadable(reason) }
         let root = try validatedSessionRoot(for: dir)
@@ -316,8 +317,8 @@ enum PostProcessor {
 
         try Task.checkCancellation()
         if work.summary {
-            ProcessingOperations.shared.stage(.summary)
-            defer { ProcessingOperations.shared.stage(.postProcessing) }
+            ProcessingOperations.shared.stage(.summary, artifactDirectory: dir)
+            defer { ProcessingOperations.shared.stage(.postProcessing, artifactDirectory: dir) }
             var context = ["Meeting: \(title ?? dir.lastPathComponent)"]
             if !attendees.isEmpty {
                 context.append("Participants: " + attendees.joined(separator: ", "))

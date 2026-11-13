@@ -52,6 +52,7 @@ final class ProcessingOperations: @unchecked Sendable {
         let session: URL?
         let kind: Kind
         let state: State
+        var artifactDirectory: URL? = nil
         fileprivate let result: ResultHandle
         fileprivate let generation: Generation?
         fileprivate let generationToken: UUID?
@@ -59,12 +60,13 @@ final class ProcessingOperations: @unchecked Sendable {
         var completion: Completion? { result.completed }
 
         fileprivate func capturingGeneration() -> Self {
-            Self(id: id, session: session, kind: kind, state: state, result: result,
+            Self(id: id, session: session, kind: kind, state: state, artifactDirectory: artifactDirectory, result: result,
                  generation: generation, generationToken: generation?.current)
         }
 
-        fileprivate func updating(kind: Kind? = nil, state: State? = nil) -> Self {
-            Self(id: id, session: session, kind: kind ?? self.kind, state: state ?? self.state, result: result,
+        fileprivate func updating(kind: Kind? = nil, state: State? = nil, artifactDirectory: URL? = nil) -> Self {
+            Self(id: id, session: session, kind: kind ?? self.kind, state: state ?? self.state,
+                 artifactDirectory: kind == nil ? self.artifactDirectory : artifactDirectory, result: result,
                  generation: generation, generationToken: generationToken)
         }
     }
@@ -127,20 +129,21 @@ final class ProcessingOperations: @unchecked Sendable {
            let state = lock.withLock({ entries[context.id]?.snapshot.state }) {
             if state == .cancelling { throw CancellationError() }
             try Task.checkCancellation()
-            let previous = lock.withLock { entries[context.id]?.snapshot.kind }
+            let previous = lock.withLock { entries[context.id]?.snapshot }
             stage(kind)
-            defer { if let previous { stage(previous) } }
+            defer { if let previous { stage(previous.kind, artifactDirectory: previous.artifactDirectory) } }
             return try await operation()
         }
         return try await register(session: session, kind: kind).run(operation)
     }
 
-    func stage(_ kind: Kind, state: State = .running) {
+    func stage(_ kind: Kind, state: State = .running, artifactDirectory: URL? = nil) {
         guard let context = Self.context, context.owner === self else { return }
         lock.withLock {
             guard var entry = entries[context.id] else { return }
             entry.snapshot = entry.snapshot.updating(kind: kind,
-                state: entry.snapshot.state == .cancelling ? .cancelling : state)
+                state: entry.snapshot.state == .cancelling ? .cancelling : state,
+                artifactDirectory: Self.canonical(artifactDirectory))
             entries[context.id] = entry
         }
     }

@@ -111,7 +111,7 @@ struct StudioLibraryTests {
     @Test(.speaking(.english))
     func everyMeetingHasAnAccurateCompactStatusAndDuration() throws {
         _ = NSApplication.shared
-        for (step, label) in [(SessionInventory.Step.done, "Ready"), (.pending, "Transcription"), (.failed("Model unavailable"), "Model unavailable")] {
+        for (step, label) in [(SessionInventory.Step.done, "Ready"), (.pending, "Transcript not created"), (.failed("Model unavailable"), "Model unavailable")] {
             let item = SessionInventory.Item(dir: Home.current.url, name: "fixture", title: "Planning", started: nil,
                 duration: 183, trigger: nil, engine: nil, transcript: step, diarization: nil, unreadableDiarization: false,
                 speakers: .off, summary: .off, namedSpeakers: nil, sizeBytes: 0, hasAudio: true)

@@ -51,6 +51,10 @@ struct BackgroundSummaryLifecycleTests {
             #expect(entry.kind == .summary)
             #expect(SessionClaim.isHeld(root))
             let item = try #require(SessionInventory.item(for: root))
+            #expect(entry.artifactDirectory == dir.standardizedFileURL.resolvingSymlinksInPath())
+            for version in TranscriptVersions.read(root) {
+                #expect((MeetingPresentation.stages(item, version: version).last?.state == .active) == (version.dir.resolvingSymlinksInPath().path == dir.resolvingSymlinksInPath().path))
+            }
             #expect(MeetingPresentation.stages(item).last?.state == .active)
             let stop = Task {
                 await ProcessingOperations.shared.cancelAndWait(session: root)
@@ -67,6 +71,7 @@ struct BackgroundSummaryLifecycleTests {
             }
             #expect(!stopped.isRaised)
             #expect(ProcessingOperations.shared.snapshot().first { $0.id == entry.id }?.state == .cancelling)
+            #expect(ProcessingOperations.shared.snapshot().first { $0.id == entry.id }?.artifactDirectory == entry.artifactDirectory)
             #expect(MeetingPresentation.stages(item).last?.state == .waiting)
             #expect(MeetingPresentation.stages(item).last?.title == localised("Cancelling summary", "Создание сводки отменяется"))
             release.open()
