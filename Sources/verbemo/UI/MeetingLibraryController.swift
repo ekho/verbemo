@@ -1968,9 +1968,6 @@ private extension MeetingLibraryController {
         filterPopover.animates = false
         filterButton.toolTip = localised("Filter meetings: ", "Фильтр встреч: ") + meetingFilter.title
         filterButton.setAccessibilityLabel(filterButton.toolTip)
-        let listHeading = NSTextField(labelWithString: localised("Library", "Библиотека"))
-        listHeading.font = .systemFont(ofSize: 12)
-        listHeading.textColor = StudioStyle.muted
         let searchRow = NSStackView(views: [search, filterButton])
         searchRow.spacing = 8
         emptyLabel.identifier = .init("meeting-list.empty")
@@ -1994,13 +1991,16 @@ private extension MeetingLibraryController {
         librarySearchStatus.textColor = StudioStyle.muted
         librarySearchStatus.lineBreakMode = .byTruncatingTail
         librarySearchStatus.isHidden = true
-        let list = NSStackView(views: [listHeading, searchRow, scroll, emptyView])
+        let list = NSStackView(views: [searchRow, scroll, emptyView])
         list.orientation = .vertical
         list.distribution = .fill
         list.alignment = .leading
         list.spacing = 10
         for view in list.arrangedSubviews { view.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true }
         listContentView = Self.frameOwnedPane(list)
+        listContentView.setAccessibilityElement(true)
+        listContentView.setAccessibilityRole(.group)
+        listContentView.setAccessibilityLabel(localised("Meeting library", "Библиотека встреч"))
 
         let copy = NSButton(title: localised("Copy", "Копировать"), target: self, action: #selector(showCopyMenu(_:)))
         copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
