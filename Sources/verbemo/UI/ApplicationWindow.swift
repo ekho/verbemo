@@ -659,7 +659,7 @@ private final class JournalSettingsNavigation: NSStackView {
         }
     }
     func presentOverview(_ value: Bool) {
-        let inset: CGFloat = value ? 24 : 0
+        let inset: CGFloat = value ? 24 : 16
         edgeInsets = .init(top: 12, left: inset, bottom: 12, right: inset)
         for width in widths { width.constant = -2 * inset }
     }

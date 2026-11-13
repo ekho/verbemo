@@ -1996,7 +1996,10 @@ private extension MeetingLibraryController {
         list.distribution = .fill
         list.alignment = .leading
         list.spacing = 10
-        for view in list.arrangedSubviews { view.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true }
+        list.edgeInsets = .init(top: 0, left: 16, bottom: 0, right: 0)
+        for view in list.arrangedSubviews {
+            view.widthAnchor.constraint(equalTo: list.widthAnchor, constant: view === scroll ? -16 : -32).isActive = true
+        }
         listContentView = Self.frameOwnedPane(list)
         listContentView.setAccessibilityElement(true)
         listContentView.setAccessibilityRole(.group)
@@ -2239,7 +2242,7 @@ extension MeetingLibraryController {
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         guard items.indices.contains(row) else { return 62 }
         measuringListTitle.stringValue = items[row].title ?? items[row].name
-        measuringListTitle.preferredMaxLayoutWidth = max(1, tableView.tableColumns[0].width - 20)
+        measuringListTitle.preferredMaxLayoutWidth = max(1, tableView.tableColumns[0].width - 30)
         let titleHeight = ceil(measuringListTitle.fittingSize.height)
         if let hit = libraryHits?[items[row].dir], hit.source != .title {
             let snippet = MeetingListView.snippetLabel(hit)
