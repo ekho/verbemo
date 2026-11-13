@@ -99,6 +99,22 @@ enum StudioStyle {
 }
 
 @MainActor
+class StudioActionButton: NSButton {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        bezelStyle = .accessoryBarAction
+        showsBorderOnlyWhileMouseInside = true
+        focusRingType = .exterior
+        contentTintColor = StudioStyle.muted
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if isEnabled { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+}
+
+@MainActor
 private final class CenteredVoiceBadge: NSTextField {
     override func draw(_ dirtyRect: NSRect) {
         // Centering the cell's text must not shrink the badge background.

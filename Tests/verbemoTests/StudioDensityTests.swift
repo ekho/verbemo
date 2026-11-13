@@ -4,6 +4,44 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct StudioDensityTests {
+    @Test(arguments: [420.0, 900.0]) func transcriptActionsStayAlignedAndOperable(width: Double) throws {
+        _ = NSApplication.shared
+        let view = MeetingTranscriptView()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: width, height: 400),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.orderOut(nil) }
+        var played: TimeInterval?
+        view.onPlayFrom = { played = $0 }
+        view.update(transcript: .init(engine: "test", model: "test", created_at: "", segments: [
+            .init(speaker: "them A", start_ms: 12_000, end_ms: 15_000, text: "A synthetic transcript."),
+        ]), names: nil, participants: [], canEdit: true, canPlay: true)
+        view.layoutSubtreeIfNeeded()
+        let table = try #require(view.documentView as? NSTableView)
+        let row = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        let name = try #require(row.allDescendants.compactMap { $0 as? NSTextField }
+            .first { $0.identifier?.rawValue == "transcript.speaker-name" })
+        name.stringValue = "Александра Тестовая — длинное имя участника"
+        row.layoutSubtreeIfNeeded()
+        let edit = try #require(row.allDescendants.compactMap { $0 as? SpeakerEditButton }.first)
+        let time = try #require(row.allDescendants.compactMap { $0 as? NSButton }
+            .first { $0.identifier?.rawValue == "transcript.playFrom" })
+        #expect(abs(name.convert(name.bounds, to: row).midY - edit.convert(edit.bounds, to: row).midY) <= 1)
+        #expect(edit.bounds.width >= 24 && edit.bounds.height >= 24)
+        #expect(edit.convert(edit.bounds, to: row).minX > name.convert(name.bounds, to: row).maxX)
+        for button in [edit, time] {
+            #expect(button.accessibilityLabel()?.isEmpty == false)
+            #expect(window.makeFirstResponder(button))
+        }
+        time.performClick(nil)
+        #expect(played == 12)
+        played = nil
+        time.isEnabled = false
+        time.performClick(nil)
+        #expect(played == nil)
+        #expect(edit.makeEditor?()?.editor.choice.isEnabled == true)
+    }
+
     @Test(.freshHome, .speaking(.english)) func transcriptUsesOneGutterAndStartsNearTabs() async throws {
         _ = NSApplication.shared
         let root = Home.current.url.appendingPathComponent("meetings")
@@ -44,7 +82,7 @@ struct StudioDensityTests {
             #expect(abs(surfaceRect.minX - title.convert(title.bounds, to: document).minX) <= 2)
             #expect(abs(nameRect.minX - surfaceRect.minX - 12) <= 2, "Name is padded inside the utterance surface")
             #expect(abs(transcript.bounds.width - (document.bounds.width - 48)) <= 1)
-            #expect((0...20).contains(tabsRect.minY - nameRect.maxY), "Text starts directly below the tab strip at width \(width), library hidden \(hideLibrary)")
+            #expect((0...26).contains(tabsRect.minY - nameRect.maxY), "The name, centered in its edit control, starts directly below the tabs at width \(width), library hidden \(hideLibrary)")
         }
     }
 
