@@ -62,27 +62,14 @@ final class MeetingListView: NSTableCellView {
         case .pending, .deferred: .init(symbol: "person", title: localised("Speaker names pending", "Имена говорящих ожидают обработки"), state: .pending)
         case .done, .off: nil
         }
-        let status = stages.first { $0.state == .failed } ?? (naming?.state == .failed ? naming : nil)
+        var status = stages.first { $0.state == .active || $0.state == .paused }
+            ?? stages.first { $0.state == .failed } ?? (naming?.state == .failed ? naming : nil)
             ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending || $0.state == .waiting } ?? naming
-        let failed = status?.state == .failed || item.unreadableDiarization || item.diarization?.hasFailedAttempt == true
-        let symbol = failed ? "exclamationmark.triangle" : status.map {
-            switch $0.state {
-            case .active: $0.symbol == "mic" ? "record.circle" : "arrow.triangle.2.circlepath"
-            case .paused: "pause.circle"
-            case .pending, .waiting: "clock"
-            default: "checkmark.circle"
-            }
-        } ?? "checkmark.circle"
-        let image = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil) ?? NSImage())
+        if status?.state != .active && (item.unreadableDiarization || item.diarization?.hasFailedAttempt == true) {
+            status = .init(symbol: "person.wave.2", title: localised("Speaker separation needs attention", "Диаризация требует внимания"), state: .failed)
+        }
+        let image = Self.icon(status ?? .init(symbol: "checkmark.circle", title: localised("Ready", "Готово"), state: .done))
         image.identifier = .init("meeting.list-status")
-        image.contentTintColor = failed ? .systemRed : status?.state == .active ? StudioStyle.accent : StudioStyle.muted
-        image.toolTip = failed && status?.state != .failed ? localised("Speaker separation needs attention", "Диаризация требует внимания")
-            : status?.title ?? localised("Ready", "Готово")
-        image.setAccessibilityElement(true)
-        image.setAccessibilityRole(.image)
-        image.setAccessibilityLabel(image.toolTip)
-        image.widthAnchor.constraint(equalToConstant: 16).isActive = true
-        image.heightAnchor.constraint(equalToConstant: 16).isActive = true
         let metaRow = NSStackView(views: [meta, image, NSView()])
         metaRow.spacing = 6
         let stack = NSStackView(views: [title, metaRow])
@@ -110,7 +97,7 @@ final class MeetingListView: NSTableCellView {
         snippet?.preferredMaxLayoutWidth = max(1, bounds.width - 30)
         super.layout()
     }
-    static func icon(_ stage: MeetingPresentation.Stage) -> NSView {
+    static func icon(_ stage: MeetingPresentation.Stage, reduceMotion: Bool? = nil) -> NSView {
         let host = NSView()
         host.widthAnchor.constraint(equalToConstant: 22).isActive = true
         host.heightAnchor.constraint(equalToConstant: 22).isActive = true
@@ -118,9 +105,17 @@ final class MeetingListView: NSTableCellView {
         host.setAccessibilityElement(true)
         host.setAccessibilityRole(.image)
         host.setAccessibilityLabel(stage.title)
-        let image = NSImageView(image: NSImage(systemSymbolName: stage.symbol, accessibilityDescription: nil) ?? NSImage())
+        let symbol = stage.activitySymbol ?? stage.symbol
+        let image = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil) ?? NSImage())
+        image.identifier = .init("stage.symbol.\(symbol)")
         image.symbolConfiguration = .init(pointSize: 14, weight: .regular)
-        image.contentTintColor = stage.state == .off || stage.state == .waiting ? StudioStyle.muted : stage.state == .failed ? .systemOrange : .controlAccentColor
+        image.contentTintColor = switch stage.state {
+        case .done: .systemGreen
+        case .failed: .systemRed
+        case .pending, .waiting, .paused: .systemOrange
+        case .active: StudioStyle.accent
+        case .off: StudioStyle.muted
+        }
         image.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(image)
         NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 16), image.heightAnchor.constraint(equalToConstant: 16), image.centerXAnchor.constraint(equalTo: host.centerXAnchor), image.centerYAnchor.constraint(equalTo: host.centerYAnchor)])
@@ -133,11 +128,11 @@ final class MeetingListView: NSTableCellView {
             NSLayoutConstraint.activate([badge.widthAnchor.constraint(equalToConstant: 10), badge.heightAnchor.constraint(equalToConstant: 9), badge.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: 2), left ? badge.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: -2) : badge.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: 1)])
         }
         if stage.diarized { badge("person.2.fill", left: true) }
-        if stage.state == .done && stage.symbol != "calendar" { badge("checkmark", left: false) }
+        if stage.state == .done && stage.symbol != "calendar" && stage.symbol != "checkmark.circle" { badge("checkmark", left: false) }
         if stage.state == .paused { badge("pause.fill", left: false) }
         if stage.state == .pending || stage.state == .waiting { badge("clock", left: false) }
         if stage.state == .failed { badge("exclamationmark.circle", left: false) }
-        if stage.state == .active && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if stage.state == .active && !(reduceMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) {
             image.wantsLayer = true
             let pulse = CABasicAnimation(keyPath: "opacity")
             pulse.fromValue = 1

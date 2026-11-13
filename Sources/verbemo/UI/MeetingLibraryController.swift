@@ -394,7 +394,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         buildTable()
         displayChanges = ConfigWatch.Token(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.table.reloadData() } }, center: NSWorkspace.shared.notificationCenter)
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.table.reloadData(); self?.updateInspector() } }, center: NSWorkspace.shared.notificationCenter)
         contentView = buildLayout()
         meetingTranscript.onPlayFrom = { [weak self] seconds in self?.audioPlayer.play(from: seconds) }
         meetingTranscript.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
@@ -2288,9 +2288,9 @@ extension MeetingLibraryController {
         if let hit = libraryHits?[items[row].dir], hit.source != .title {
             let snippet = MeetingListView.snippetLabel(hit)
             snippet.preferredMaxLayoutWidth = measuringListTitle.preferredMaxLayoutWidth
-            return max(62, titleHeight + 44 + ceil(snippet.fittingSize.height))
+            return max(62, titleHeight + 50 + ceil(snippet.fittingSize.height))
         }
-        return max(62, titleHeight + 40)
+        return max(62, titleHeight + 46)
     }
     func tableViewColumnDidResize(_ notification: Notification) {
         table.needsLayout = true

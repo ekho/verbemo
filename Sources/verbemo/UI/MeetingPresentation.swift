@@ -36,6 +36,7 @@ enum MeetingPresentation {
         var title: String
         var state: StageState
         var diarized = false
+        var activitySymbol: String? = nil
     }
     static func date(_ date: Date?, timeZone: TimeZone = .current) -> String {
         guard let date else { return "" }
@@ -125,7 +126,27 @@ enum MeetingPresentation {
         result.append(Stage(symbol: "mic", title: incomplete ? localised("Recording incomplete", "Запись неполная")
             : localised("Recording saved", "Запись сохранена"), state: incomplete ? .failed : .done))
         var transcript = stage(item.transcript, symbol: "doc.text", label: localised("Transcription", "Расшифровка"),
-            done: localised("Transcript ready", "Расшифровка готова"), active: busy && !ready)
+            done: localised("Transcript ready", "Расшифровка готова"), active: false)
+        if let operation, [.transcription, .diarization, .postProcessing].contains(operation.kind) {
+            let action: String
+            switch operation.kind {
+            case .diarization:
+                action = localised("Diarization", "Диаризация")
+                transcript.activitySymbol = "person.wave.2"
+            case .postProcessing:
+                action = item.speakers.isOutstanding ? localised("Speaker naming", "Определение имён")
+                    : localised("Finishing processing", "Завершение обработки")
+                transcript.activitySymbol = "person.text.rectangle"
+            default: action = localised("Transcription", "Расшифровка")
+            }
+            transcript.state = operation.state == .running ? .active : .waiting
+            transcript.title = operation.state == .cancelling
+                ? localised("Cancelling: ", "Отмена: ") + action
+                : operation.state == .waiting ? localised("Queued: ", "В очереди: ") + action : action
+        } else if busy && !ready {
+            transcript.state = .waiting
+            transcript.title = localised("Transcription waits for other processing to finish", "Расшифровка ожидает завершения другой обработки")
+        }
         transcript.diarized = item.diarization.map { $0.status != .skipped && $0.status != .notApplicable } ?? item.isDiarized
         if transcript.diarized { transcript.title += localised(" · diarization enabled", " · диаризация включена") }
         result.append(transcript)
