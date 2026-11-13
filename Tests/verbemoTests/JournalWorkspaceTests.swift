@@ -553,7 +553,7 @@ struct JournalWorkspaceTests {
     }
 
     @Test(.freshHome(config: #"{"summary":{"backend":"ollama"}}"#), .speaking(.russian))
-    func pendingSummaryIsVisiblyWaiting() async throws {
+    func pendingSummaryIsVisiblyNotStarted() async throws {
         let root = Home.current.url.appendingPathComponent("meetings")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try FileManager.default.moveItem(at: SessionFixture.make(), to: root.appendingPathComponent("meeting"))
@@ -565,6 +565,6 @@ struct JournalWorkspaceTests {
         await library.settled()
         let inspector = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "meeting.inspector-content" })
         let labels = inspector.allDescendants.compactMap { ($0 as? NSTextField)?.stringValue }
-        #expect(labels.contains("Ожидание: Подготовка сводки"))
+        #expect(labels.contains("Сводка ещё не запущена"))
     }
 }

@@ -4,6 +4,67 @@ import Testing
 
 @Suite(.serialized, .freshHome) @MainActor
 struct SpeakerAssignmentTests {
+    @Test("Participants explain unfinished diarization and preserve names through skip and keyboard editing",
+          arguments: ["pending", "failed", "completed", "skipped"])
+    func diarizationEditingAvailability(status: String) async throws {
+        let root = Home.current.url.appendingPathComponent("meetings")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let dir = root.appendingPathComponent("meeting")
+        try FileManager.default.moveItem(at: SessionFixture.make(), to: dir)
+        try PostProcessor.setSpeakerParticipant("me", participant: nil, name: "Previous name", in: dir)
+        var state = DiarizationState(request: .init(engine: "nemotron", threshold: 0.6),
+                                    status: try #require(DiarizationState.Status(rawValue: status)))
+        try state.write(to: dir)
+        let app = ApplicationWindow()
+        let library = MeetingLibraryController(root: root, hostWindow: app.panel)
+        app.libraryProvider = { library }
+        app.show()
+        await library.settled()
+        defer { _ = library.stopForTermination(); app.hide() }
+        let tabs = try #require(library.contentView.allDescendants.compactMap { $0 as? NSTabView }.first)
+        tabs.selectTabViewItem(withIdentifier: "participants")
+        app.panel.contentView?.layoutSubtreeIfNeeded()
+        func editor(_ speaker: String) throws -> SpeakerAssignmentEditor {
+            let row = try #require(library.contentView.allDescendants.first { $0.identifier?.rawValue == "speaker-row.\(speaker)" })
+            return try #require(row.allDescendants.compactMap { $0 as? SpeakerAssignmentEditor }.first)
+        }
+        if !state.isFinal {
+            let hint = try #require(library.contentView.allDescendants.first {
+                $0.identifier?.rawValue == "speaker.editing-help"
+            } as? NSTextField)
+            #expect(!hint.isHiddenOrHasHiddenAncestor)
+            #expect(hint.stringValue.contains("finish or skip diarization"))
+            for speaker in ["me", "them A"] {
+                let field = try editor(speaker).choice
+                #expect(!field.isEnabled)
+                #expect(!field.accessibilityPerformShowMenu())
+                #expect(field.toolTip == hint.stringValue)
+                #expect(throws: (any Error).self) {
+                    try library.assignSpeaker(speaker, participant: nil, name: "Blocked", session: dir, version: dir)
+                }
+            }
+            #expect(SpeakerNames.read(from: dir)?.speakers["me"]?.name == "Previous name")
+            state.status = .skipped
+            try state.write(to: dir)
+            library.refresh(); await library.settled()
+        }
+        for speaker in ["me", "them A"] {
+            let current = try editor(speaker)
+            #expect(current.choice.isEnabled)
+            current.choice.stringValue = "Saved \(speaker)"
+            #expect(current.control(current.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.insertNewline(_:))))
+            for _ in 0..<4 { await Task.yield() }
+            #expect(SpeakerNames.read(from: dir)?.speakers[speaker]?.name == "Saved \(speaker)")
+            let reopened = try editor(speaker)
+            reopened.choice.stringValue = "Discarded draft"
+            #expect(reopened.control(reopened.choice, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+            #expect(reopened.choice.stringValue == "Saved \(speaker)")
+        }
+        library.refresh(); await library.settled()
+        #expect(try editor("me").choice.stringValue == "Saved me")
+        #expect(try editor("them A").choice.stringValue == "Saved them A")
+    }
+
     @Test("Participant fields keep their width when their value changes", arguments: [180.0, 500.0])
     func choiceWidthDoesNotFollowItsValue(width: Double) throws {
         let participant = CalendarParticipant(id: "anna", name: "Anna", email: "anna@example.test")

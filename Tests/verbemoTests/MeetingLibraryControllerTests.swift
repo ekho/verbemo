@@ -276,6 +276,25 @@ struct MeetingLibraryControllerTests {
         #expect(!MeetingLibraryController.diarizationLine(state).contains("audio kept for retry"))
     }
 
+    @Test("A retryable inference failure is not presented as an unstarted job")
+    func retryableDiarizationFailureNeedsAction() throws {
+        let dir = try SessionFixture.make()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var state = DiarizationState(request: .init(engine: "nemotron", threshold: 0.6), status: .pending)
+        #expect(MeetingLibraryController.diarizationLine(state).contains("pending"))
+        state.beginInference(fingerprint: "fixture")
+        state.failInference("inference failed: noSpeechDetected")
+        try state.write(to: dir)
+        let line = MeetingLibraryController.diarizationLine(state)
+        #expect(line.contains("last attempt failed"))
+        #expect(line.contains("retry or skip"))
+        #expect(line.contains("audio kept for retry"))
+        let item = try #require(SessionInventory.item(for: dir))
+        #expect(MeetingPresentation.attention(for: item) != nil)
+        // Presentation must not spend attempts or turn a recoverable failure into completion.
+        #expect(DiarizationState.read(dir) == state)
+    }
+
     @Test("An unreadable saved speaker request shows a blocked status in English",
           .freshHome, .speaking(.english))
     func unreadableDiarizationEnglish() throws {

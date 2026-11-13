@@ -160,7 +160,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let generation: MeetingSearchContext?
         let names: [String: SpeakerNames.Entry]?
         let participants: [CalendarParticipant]
-        let canEdit: Bool
+        let editingBlocker: String?
         let canPlay: Bool
         let canMatch: Bool
     }
@@ -1311,8 +1311,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let diarized = DiarizationState.read(dir).map { $0.status == .completed }
             ?? (!Config.localEngines.contains(transcript.engine) || Set(transcript.segments.map(\.speaker)).count > 2)
         let participantChoices = calendar?.isConfirmed == true ? calendar!.participants : []
-        let canEdit = !isBusy(item.dir) && !TranscriptVersions.isRequested(item.dir)
-            && DiarizationState.persisted(in: dir).isFinal
+        let editingBlocker = speakerEditingBlocker(session: item.dir, version: dir)
+        let canEdit = editingBlocker == nil
         meetingTranscript.onAssign = { [weak self] speaker, participant, name in
             guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
             try self.assignSpeaker(speaker, participant: participant, name: name, session: item.dir, version: dir, expectedTranscript: transcriptData)
@@ -1321,19 +1321,21 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
                                  canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatchParticipants: diarized)
         speakerRowsHandled = true
         let speakerContext = SpeakerRowsContext(generation: currentSearchContext, names: names?.speakers,
-            participants: participantChoices, canEdit: canEdit, canPlay: !audioPlayer.isHidden, canMatch: diarized)
+            participants: participantChoices, editingBlocker: editingBlocker, canPlay: !audioPlayer.isHidden, canMatch: diarized)
         if renderedSpeakerRows != speakerContext {
             clearSpeakerRows()
-            let hint = NSTextField(wrappingLabelWithString: localised(
+            let hint = NSTextField(wrappingLabelWithString: editingBlocker ?? localised(
                 "Listen to a voice, then choose a participant or type a name. The assignment applies to all their lines in this transcript version.",
                 "Прослушайте голос, затем выберите участника или введите имя. Сопоставление применяется ко всем его репликам в этой версии расшифровки."))
             hint.font = .systemFont(ofSize: 12)
             hint.textColor = StudioStyle.muted
+            hint.identifier = .init("speaker.editing-help")
             speakersStack.addArrangedSubview(hint)
             hint.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
             for sample in SessionInventory.samples(transcript: transcript, names: names) {
                 let row = speakerRow(sample, in: dir, transcript: transcript, transcriptData: transcriptData, names: names,
-                                     participants: diarized || sample.label == "me" ? participantChoices : [])
+                                     participants: diarized || sample.label == "me" ? participantChoices : [],
+                                     editingBlocker: editingBlocker)
                 speakersStack.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: speakersStack.widthAnchor).isActive = true
             }
@@ -1342,14 +1344,34 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         updateButtons()
     }
 
+    private func speakerEditingBlocker(session: URL, version: URL) -> String? {
+        if isBusy(session) {
+            return localised("Participants cannot be edited while this meeting is being processed. Wait or cancel processing.",
+                             "Участники недоступны для редактирования, пока запись обрабатывается. Дождитесь завершения или отмените обработку.")
+        }
+        if TranscriptVersions.isRequested(session) {
+            return localised("Participants cannot be edited while a new transcript is queued. Wait or cancel it.",
+                             "Участники недоступны для редактирования: новая расшифровка в очереди. Дождитесь её или отмените.")
+        }
+        let diarization = DiarizationState.persisted(in: version)
+        if diarization.isUnreadable {
+            return localised("Participant editing is unavailable because the saved diarization state cannot be read.",
+                             "Редактирование участников недоступно: не удалось прочитать сохранённое состояние диаризации.")
+        }
+        if !diarization.isFinal {
+            return localised("To edit participants, finish or skip diarization in meeting details. Saved names are preserved.",
+                             "Чтобы редактировать участников, завершите или пропустите диаризацию в сведениях о встрече. Сохранённые имена не потеряются.")
+        }
+        return nil
+    }
+
     func assignSpeaker(_ speaker: String, participant: CalendarParticipant?, name: String?, session: URL, version: URL, expectedTranscript: Data? = nil) throws {
         let unavailable = CocoaError(.fileWriteNoPermission, userInfo: [NSLocalizedDescriptionKey: localised(
             "The meeting or transcript has changed, or editing is temporarily unavailable. Reopen the speaker editor.",
             "Встреча или расшифровка изменилась либо редактирование сейчас недоступно. Откройте редактор говорящего заново.")])
         guard selected?.dir.standardizedFileURL.path == session.standardizedFileURL.path,
               artifactDirectory?.standardizedFileURL.path == version.standardizedFileURL.path, selectedVersion?.isRequest != true,
-              !isBusy(session), !TranscriptVersions.isRequested(session),
-              DiarizationState.persisted(in: version).isFinal, !SpeakerNames.isUnknown(speaker) else {
+              speakerEditingBlocker(session: session, version: version) == nil, !SpeakerNames.isUnknown(speaker) else {
             throw unavailable
         }
         if let expectedTranscript {
@@ -1377,14 +1399,14 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             }
         }
     }
-    private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, transcriptData: Data?, names: SpeakerNames?, participants: [CalendarParticipant]) -> NSView {
+    private func speakerRow(_ sample: SessionInventory.Sample, in dir: URL, transcript: Transcript, transcriptData: Data?, names: SpeakerNames?, participants: [CalendarParticipant], editingBlocker: String?) -> NSView {
         let title = MeetingTranscriptView.speakerTitle(sample.label, in: transcript.segments)
         let session = selected?.dir ?? dir
-        let canEdit = !isBusy(session)
-            && !TranscriptVersions.isRequested(session) && DiarizationState.persisted(in: dir).isFinal
         let editor = SpeakerAssignmentEditor(speaker: sample.label, title: title,
             entry: SpeakerNames.isUnknown(sample.label) ? nil : names?.speakers[sample.label],
-            participants: participants, canEdit: canEdit, inline: false)
+            participants: participants, canEdit: editingBlocker == nil, inline: false)
+        editor.choice.toolTip = editingBlocker
+        editor.choice.setAccessibilityHelp(editingBlocker)
         editor.onError = { [weak self] error in self?.showServiceError(error.localizedDescription) }
         editor.onAssign = { [weak self] participant, name in
             guard let self, let transcriptData else { throw CocoaError(.fileWriteNoPermission) }
@@ -1498,6 +1520,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     static func diarizationLine(_ state: DiarizationState) -> String {
         let stage: String
         switch state.status {
+        case .pending where state.hasFailedAttempt:
+            stage = localised("last attempt failed — retry or skip", "последняя попытка не удалась — повторите или пропустите")
         case .pending: stage = localised("pending", "ожидает")
         case .running: stage = localised("running", "выполняется")
         case .deferred: stage = localised("waiting for model", "ожидает модель")
@@ -2178,7 +2202,7 @@ private extension MeetingLibraryController {
             } else if item.unreadableDiarization {
                 message = localised("The saved speaker analysis could not be read. See meeting details.",
                                     "Не удалось прочитать сохранённый анализ говорящих. Откройте детали встречи.")
-            } else if let state = item.diarization, [.failed, .deferred, .partial].contains(state.status) {
+            } else if let state = item.diarization, state.hasFailedAttempt || [.deferred, .partial].contains(state.status) {
                 message = Self.diarizationLine(state)
             }
             if !message.isEmpty, versions.contains(where: { !$0.isRequest }) || item.summary == .done {
@@ -2203,7 +2227,7 @@ private extension MeetingLibraryController {
             for stage in MeetingPresentation.stages(item, active: activeRecording).filter({ $0.symbol != "calendar" }) {
                 let image = MeetingListView.icon(stage)
                 let title = stage.symbol == "mic" && activeRecording?.dir != item.dir && !item.hasAudio ? localised("Audio not retained", "Аудио не сохранено") : stage.title
-                let label = NSTextField(wrappingLabelWithString: (stage.state == .pending ? localised("Waiting: ", "Ожидание: ") : "") + title)
+                let label = NSTextField(wrappingLabelWithString: (stage.state == .pending && stage.symbol != "checklist" ? localised("Waiting: ", "Ожидание: ") : "") + title)
                 label.font = .systemFont(ofSize: 11)
                 label.setContentHuggingPriority(.init(1), for: .horizontal)
                 label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

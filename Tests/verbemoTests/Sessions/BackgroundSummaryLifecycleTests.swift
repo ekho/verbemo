@@ -50,6 +50,8 @@ struct BackgroundSummaryLifecycleTests {
             })
             #expect(entry.kind == .summary)
             #expect(SessionClaim.isHeld(root))
+            let item = try #require(SessionInventory.item(for: root))
+            #expect(MeetingPresentation.stages(item).last?.state == .active)
             let stop = Task {
                 await ProcessingOperations.shared.cancelAndWait(session: root)
                 stopped.raise()
@@ -65,11 +67,14 @@ struct BackgroundSummaryLifecycleTests {
             }
             #expect(!stopped.isRaised)
             #expect(ProcessingOperations.shared.snapshot().first { $0.id == entry.id }?.state == .cancelling)
+            #expect(MeetingPresentation.stages(item).last?.state == .waiting)
+            #expect(MeetingPresentation.stages(item).last?.title == localised("Cancelling summary", "Создание сводки отменяется"))
             release.open()
             await stop.value
             do { try await task.value; Issue.record("Cancelled summary reported success") }
             catch is CancellationError {}
             catch { Issue.record("Unexpected cancellation result: \(error)") }
+            #expect(MeetingPresentation.stages(item).last?.state != .active)
         }
 
         #expect(try Data(contentsOf: dir.appendingPathComponent("summary.md")) == previous)
