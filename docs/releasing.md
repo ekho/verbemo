@@ -39,7 +39,7 @@ Windows uses `-Development`. The publisher
 marks the common GitHub release as a prerelease, attaches a preview-build
 notice, verifies all public files and never promotes it to `latest`. These
 packages require manual installation; Gatekeeper/SmartScreen can warn or block
-them. The first move from ad-hoc to the persistent certificate requires granting
+them. The first move from ad-hoc to the persistent certificate can require granting
 permissions again; subsequent builds preserve the same signing identity. Local
 and PR builds without preview credentials remain ad-hoc and can require permission
 renewal on every update. Existing stable updates, README/site direct download links
@@ -62,9 +62,13 @@ can require another permission grant. This certificate is valid from
 runners. It checks the imported certificate against the pinned public certificate,
 imports the private key into a temporary keychain, grants code-signing trust for
 that certificate, and checks two different binaries, a native library and an app
-bundle before building. A smoke invocation also exercises cleanup before the full
-package build. Native signing and keychain commands time out after 60 seconds.
-It removes temporary trust and keychain material afterward. Missing or
+bundle before building. Native signing and keychain commands time out after 60
+seconds. It deletes the temporary keychain and private files afterward and
+restores the keychain search list. Public certificate trust remains until GitHub
+[destroys the job's VM](https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/use-github-hosted-runners).
+Explicit trust removal timed out on the hosted runner; see the
+[native test report](testing/2026-11-13-persistent-preview-signing.md).
+This is why the wrapper refuses persistent/self-hosted runners. Missing or
 mismatched credentials fail the published preview; there is no ad-hoc fallback.
 PR CI never receives these secrets and continues testing ad-hoc packaging.
 

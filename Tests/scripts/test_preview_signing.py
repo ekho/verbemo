@@ -48,12 +48,12 @@ class PreviewSigningTests(unittest.TestCase):
                 signing.signed_build(['build'])
             self.assertFalse(any('import' in str(call) or 'trusted-cert' in str(call) for call in run.call_args_list))
 
-    def test_failed_build_and_partial_trust_change_both_clean_up_without_logging_secrets(self):
+    def test_success_and_failures_remove_private_material_without_logging_secrets(self):
         password = 'fixture-password-never-log'
         secret = base64.b64encode(b'fixture-private-archive').decode()
         env = {'RUNNER_ENVIRONMENT': 'github-hosted', 'VERBEMO_PREVIEW_CERTIFICATE_BASE64': secret,
                'VERBEMO_PREVIEW_CERTIFICATE_PASSWORD': password}
-        for failure in ('build', 'add-trusted-cert', 'remove-trusted-cert'):
+        for failure in (None, 'build', 'add-trusted-cert', 'delete-keychain'):
             with self.subTest(failure=failure):
                 commands, security_commands = [], []
 
@@ -82,10 +82,13 @@ class PreviewSigningTests(unittest.TestCase):
                         patch.object(signing, 'certificate_der', return_value=b'pinned'), \
                         patch.object(signing, 'check_updates'), patch.object(signing.subprocess, 'run', side_effect=process), \
                         redirect_stdout(output):
-                    with self.assertRaises(ValueError):
+                    if failure is None:
                         signing.signed_build(['build'])
+                    else:
+                        with self.assertRaises(ValueError):
+                            signing.signed_build(['build'])
                 self.assertTrue(any(command[0] == 'import' for command in security_commands))
-                self.assertTrue(any(command[:5] == ['sudo', '-n', 'security', 'remove-trusted-cert', '-d'] for command in commands))
+                self.assertFalse(any('remove-trusted-cert' in command for command in commands))
                 deleted = next(command[-1] for command in commands if command[:2] == ['security', 'delete-keychain'])
                 self.assertFalse(Path(deleted).parent.exists())
                 self.assertEqual(commands[-1], ['security', 'list-keychains', '-d', 'user', '-s', '/fixture/login.keychain-db'])

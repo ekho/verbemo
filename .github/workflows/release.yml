@@ -148,7 +148,6 @@ jobs:
           VERBEMO_PREVIEW_CERTIFICATE_BASE64: ${{ secrets.VERBEMO_PREVIEW_CERTIFICATE_BASE64 }}
           VERBEMO_PREVIEW_CERTIFICATE_PASSWORD: ${{ secrets.VERBEMO_PREVIEW_CERTIFICATE_PASSWORD }}
         run: |
-          python3 scripts/preview_signing.py run true
           python3 scripts/preview_signing.py run bash scripts/build-macos-preview.sh --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --output "$RUNNER_TEMP/macos-artifacts"
       - name: Build signed macOS artifacts with temporary own credentials
         if: needs.resolve.outputs.prerelease != 'true'

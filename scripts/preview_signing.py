@@ -104,7 +104,6 @@ def signed_build(command):
             raise ValueError('preview signing: credentials do not match the pinned public certificate')
         keychain = directory / 'preview.keychain-db'
         keychain_password = secrets.token_hex(32)
-        trusted = False
 
         def security(*arguments):
             try:
@@ -122,7 +121,7 @@ def signed_build(command):
             security('import', str(archive_path), '-P', password, '-k', str(keychain), '-T', '/usr/bin/codesign')
             security('set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', keychain_password, str(keychain))
             run(['security', 'list-keychains', '-d', 'user', '-s', str(keychain), *original_search])
-            trusted = True
+            # shortcut: trust lasts until the hosted VM is destroyed; require explicit removal before supporting persistent runners.
             run(['sudo', '-n', 'security', 'add-trusted-cert', '-d', '-r', 'trustRoot', '-p', 'codeSign',
                  '-k', str(keychain), str(CERTIFICATE)])
             check_updates(directory, identity, keychain)
@@ -134,16 +133,11 @@ def signed_build(command):
                 raise ValueError(f'preview signing: build failed (exit {result.returncode})')
         finally:
             try:
-                if trusted:
-                    print('Removing temporary preview certificate trust.', flush=True)
-                    run(['sudo', '-n', 'security', 'remove-trusted-cert', '-d', str(CERTIFICATE)])
+                if keychain.exists():
+                    print('Deleting temporary preview keychain.', flush=True)
+                    run(['security', 'delete-keychain', str(keychain)])
             finally:
-                try:
-                    if keychain.exists():
-                        print('Deleting temporary preview keychain.', flush=True)
-                        run(['security', 'delete-keychain', str(keychain)])
-                finally:
-                    run(['security', 'list-keychains', '-d', 'user', '-s', *original_search])
+                run(['security', 'list-keychains', '-d', 'user', '-s', *original_search])
 
 
 def main():

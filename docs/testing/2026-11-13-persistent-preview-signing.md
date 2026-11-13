@@ -56,7 +56,13 @@ require a one-time permission renewal. Returning to ad-hoc builds changes it
 again.
 
 The hosted release wrapper additionally checks two different binaries, a native
-library and an app bundle with the imported identity before packaging. A smoke
-invocation exercises temporary keychain cleanup before the full build, and the
-finished app is verified against the pinned certificate. The preview remains unnotarized;
-this certificate does not provide Developer ID or Gatekeeper acceptance.
+library and an app bundle with the imported identity before packaging, and the
+finished app is verified against the pinned certificate. On GitHub run
+`43439065339`, the native checks passed but explicit admin trust removal timed
+out after 60 seconds. The wrapper therefore deletes private material explicitly
+and relies on destruction of the disposable hosted VM for public trust cleanup;
+persistent runners are rejected. The local Mac's temporary trust was removed
+separately and is not affected by this hosted-runner limitation.
+
+The preview remains unnotarized; this certificate does not provide Developer ID
+or Gatekeeper acceptance.
