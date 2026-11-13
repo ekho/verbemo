@@ -2047,16 +2047,19 @@ private extension MeetingLibraryController {
         settings.isBordered = false
         settings.alignment = .left
         settings.font = .systemFont(ofSize: 11)
-        let closeDetails = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(closeInspector))
+        let closeDetails = StudioActionButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) ?? NSImage(), target: self, action: #selector(closeInspector))
         closeDetails.identifier = .init("meeting.inspector-close")
-        closeDetails.isBordered = false
+        closeDetails.widthAnchor.constraint(equalToConstant: 26).isActive = true
+        closeDetails.heightAnchor.constraint(equalToConstant: 26).isActive = true
         closeDetails.toolTip = localised("Close meeting details", "Закрыть детали встречи")
         closeDetails.setAccessibilityLabel(closeDetails.toolTip)
-        let inspectorHeading = NSStackView(views: [StudioStyle.caption(localised("MEETING DETAILS", "ДЕТАЛИ ВСТРЕЧИ")), NSView(), closeDetails])
+        calendarPicker.button.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
+        calendarPicker.button.imagePosition = .imageLeading
+        let inspectorHeading = NSStackView(views: [calendarPicker, closeDetails])
+        inspectorHeading.alignment = .centerY
+        inspectorHeading.spacing = 8
         let inspector = FlippedStackView(views: [
-            inspectorHeading,
-            StudioStyle.caption(localised("CALENDAR", "КАЛЕНДАРЬ")), calendarView,
-            calendarPicker,
+            inspectorHeading, calendarView,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
             diarizationLabel, diarizationActions, finishButton, cancelProcessingButton,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
@@ -2064,7 +2067,7 @@ private extension MeetingLibraryController {
         inspector.orientation = .vertical
         inspector.alignment = .leading
         inspector.spacing = 18
-        inspector.edgeInsets = NSEdgeInsets(top: 30, left: 22, bottom: 24, right: 22)
+        inspector.edgeInsets = NSEdgeInsets(top: 12, left: 22, bottom: 24, right: 22)
         for view in inspector.arrangedSubviews { view.widthAnchor.constraint(equalTo: inspector.widthAnchor, constant: -44).isActive = true }
         diarizationActions.orientation = .vertical
         diarizationActions.alignment = .leading
@@ -2072,6 +2075,9 @@ private extension MeetingLibraryController {
         let inspectorScroll = SetupLayout.scroller(around: inspector)
         let inspectorSurface = JournalSurface(StudioStyle.inset)
         inspectorSurface.identifier = .init("meeting.inspector-content")
+        inspectorSurface.setAccessibilityElement(true)
+        inspectorSurface.setAccessibilityRole(.group)
+        inspectorSurface.setAccessibilityLabel(localised("Meeting details", "Детали встречи"))
         inspectorScroll.translatesAutoresizingMaskIntoConstraints = false
         inspectorSurface.addSubview(inspectorScroll)
         NSLayoutConstraint.activate([

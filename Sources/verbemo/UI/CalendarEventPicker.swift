@@ -134,7 +134,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
             search.stringValue = ""
         }
         button.title = snapshot?.title ?? localised("Choose event…", "Выбрать событие…")
-        button.toolTip = snapshot.map { $0.title + "\n" + MeetingCalendarView.dateLine($0) }
+        button.toolTip = snapshot.map { $0.title + "\n" + MeetingCalendarView.dateLine($0) } ?? button.accessibilityLabel()
         clear.isHidden = snapshot == nil
         button.isEnabled = enabled
         clear.isEnabled = enabled
@@ -143,6 +143,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
     func setSelection(_ meeting: CalendarWatcher.Meeting?) {
         selectedMeeting = meeting
         button.title = meeting?.title ?? localised("Choose event…", "Выбрать событие…")
+        button.toolTip = meeting?.title ?? button.accessibilityLabel()
         clear.isHidden = meeting == nil
     }
     @objc func open() {
