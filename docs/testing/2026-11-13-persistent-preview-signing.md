@@ -32,7 +32,7 @@ outside Git.
 
 ## Automated local checks
 
-- Shared Python release and selector tests: 128 passed. Fixture Git commits used
+- Shared Python release and selector tests: 129 passed. Fixture Git commits used
   a per-process `commit.gpgSign=false` override; host Git settings were unchanged.
 - Python workflow checks under `windows/tests`: 20 passed with PyYAML 6.0.3,
   including cleanup dry-run/apply execution with macOS `/bin/bash` 3.2.
@@ -55,7 +55,8 @@ transition from ad-hoc signing to this certificate changes identity and can
 require a one-time permission renewal. Returning to ad-hoc builds changes it
 again.
 
-The hosted release wrapper additionally checks two different binaries and a
-native library with the imported identity before packaging, and verifies the
-finished app against the pinned certificate. The preview remains unnotarized;
+The hosted release wrapper additionally checks two different binaries, a native
+library and an app bundle with the imported identity before packaging. A smoke
+invocation exercises temporary keychain cleanup before the full build, and the
+finished app is verified against the pinned certificate. The preview remains unnotarized;
 this certificate does not provide Developer ID or Gatekeeper acceptance.

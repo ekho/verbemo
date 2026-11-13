@@ -4,8 +4,10 @@ import base64
 import hashlib
 import os
 from pathlib import Path
+import plistlib
 import secrets
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,10 +16,14 @@ CERTIFICATE = Path(__file__).resolve().parents[1] / 'Packaging/preview-signing.p
 
 
 def run(arguments, *, data=None, env=None):
-    result = subprocess.run(arguments, input=data, capture_output=True, env=env)
+    try:
+        result = subprocess.run(arguments, input=data, capture_output=True, env=env, timeout=60)
+    except subprocess.TimeoutExpired as error:
+        raise ValueError(f'preview signing: {Path(arguments[0]).name} timed out') from error
     if result.returncode:
         # security's interactive diagnostics can echo its secret-bearing input.
-        raise ValueError(f'preview signing: {Path(arguments[0]).name} failed (exit {result.returncode})')
+        detail = result.stderr.decode(errors='replace').strip() if arguments[0] == 'codesign' else ''
+        raise ValueError(f'preview signing: {Path(arguments[0]).name} failed (exit {result.returncode}) {detail}'.strip())
     return result.stdout
 
 
@@ -32,7 +38,7 @@ def verify_signature(app):
     run(['codesign', '--verify', '--deep', '--strict', '-R', requirement, str(app)])
     with tempfile.TemporaryDirectory(prefix='verbemo-preview-verify-') as directory:
         prefix = Path(directory) / 'certificate'
-        run(['codesign', '--display', '--extract-certificates', str(prefix), str(app)])
+        run(['codesign', '--display', f'--extract-certificates={prefix}', str(app)])
         if prefix.with_name('certificate0').read_bytes() != expected:
             raise ValueError('preview signing: app certificate does not match the pinned certificate')
     return hashlib.sha256(expected).hexdigest().upper()
@@ -59,7 +65,17 @@ def check_updates(directory, identity, keychain):
         hashes.append(hashlib.sha256(binary.read_bytes()).digest())
     if requirements[0] != requirements[1] or hashes[0] == hashes[1]:
         raise ValueError('preview signing: different builds must share the same designated requirement')
-    print('Verified persistent preview identity across two binaries and a native library.', flush=True)
+    app = directory / 'Signing Check.app'
+    code = app / 'Contents/MacOS'
+    code.mkdir(parents=True)
+    shutil.copy2(binary, code / 'SigningCheck')
+    shutil.copy2(library, code / library.name)
+    (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+        'CFBundleIdentifier': 'name.ekho.verbemo', 'CFBundleExecutable': 'SigningCheck', 'CFBundlePackageType': 'APPL'}))
+    run(['codesign', '--force', '--sign', identity, '--keychain', str(keychain),
+         '--identifier', 'name.ekho.verbemo', '--options', '0', '--timestamp=none', str(app)])
+    verify_signature(app)
+    print('Verified persistent preview identity across two binaries, a native library, and an app bundle.', flush=True)
 
 
 def signed_build(command):
@@ -91,7 +107,11 @@ def signed_build(command):
         trusted = False
 
         def security(*arguments):
-            result = subprocess.run(['security', '-i'], input=(shlex.join(arguments) + '\n').encode(), capture_output=True)
+            try:
+                result = subprocess.run(['security', '-i'], input=(shlex.join(arguments) + '\n').encode(),
+                                        capture_output=True, timeout=60)
+            except subprocess.TimeoutExpired as error:
+                raise ValueError(f'preview signing: security {arguments[0]} timed out') from error
             if result.returncode or result.stderr.strip():
                 raise ValueError(f'preview signing: security {arguments[0]} failed')
 
@@ -115,10 +135,12 @@ def signed_build(command):
         finally:
             try:
                 if trusted:
+                    print('Removing temporary preview certificate trust.', flush=True)
                     run(['sudo', '-n', 'security', 'remove-trusted-cert', '-d', str(CERTIFICATE)])
             finally:
                 try:
                     if keychain.exists():
+                        print('Deleting temporary preview keychain.', flush=True)
                         run(['security', 'delete-keychain', str(keychain)])
                 finally:
                     run(['security', 'list-keychains', '-d', 'user', '-s', *original_search])

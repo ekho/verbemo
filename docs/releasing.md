@@ -61,8 +61,10 @@ can require another permission grant. This certificate is valid from
 `scripts/preview_signing.py run ...` is limited to disposable GitHub-hosted macOS
 runners. It checks the imported certificate against the pinned public certificate,
 imports the private key into a temporary keychain, grants code-signing trust for
-that certificate, and checks two different binaries plus a native library before
-building. It removes temporary trust and keychain material afterward. Missing or
+that certificate, and checks two different binaries, a native library and an app
+bundle before building. A smoke invocation also exercises cleanup before the full
+package build. Native signing and keychain commands time out after 60 seconds.
+It removes temporary trust and keychain material afterward. Missing or
 mismatched credentials fail the published preview; there is no ad-hoc fallback.
 PR CI never receives these secrets and continues testing ad-hoc packaging.
 

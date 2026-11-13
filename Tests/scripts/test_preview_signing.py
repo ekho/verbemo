@@ -18,6 +18,13 @@ spec.loader.exec_module(signing)
 
 
 class PreviewSigningTests(unittest.TestCase):
+    def test_native_tool_timeout_does_not_echo_secret_input(self):
+        with patch.object(signing.subprocess, 'run', side_effect=subprocess.TimeoutExpired(
+                ['security', '-i'], 60, output=b'secret-input')) as process:
+            with self.assertRaisesRegex(ValueError, '^preview signing: security timed out$'):
+                signing.run(['security', '-i'], data=b'secret-input')
+            self.assertEqual(process.call_args.kwargs['timeout'], 60)
+
     def test_credentials_are_never_imported_on_a_persistent_host(self):
         with patch.dict(os.environ, {}, clear=True), patch.object(signing, 'run') as run:
             with self.assertRaisesRegex(ValueError, 'disposable GitHub macOS runner'):
@@ -46,11 +53,11 @@ class PreviewSigningTests(unittest.TestCase):
         secret = base64.b64encode(b'fixture-private-archive').decode()
         env = {'RUNNER_ENVIRONMENT': 'github-hosted', 'VERBEMO_PREVIEW_CERTIFICATE_BASE64': secret,
                'VERBEMO_PREVIEW_CERTIFICATE_PASSWORD': password}
-        for failure in ('build', 'add-trusted-cert'):
+        for failure in ('build', 'add-trusted-cert', 'remove-trusted-cert'):
             with self.subTest(failure=failure):
                 commands, security_commands = [], []
 
-                def process(arguments, *, input=None, capture_output=False, env=None):
+                def process(arguments, *, input=None, capture_output=False, env=None, timeout=None):
                     commands.append(arguments)
                     self.assertNotIn(password, arguments)
                     self.assertNotIn(secret, arguments)
@@ -92,8 +99,9 @@ class PreviewSigningTests(unittest.TestCase):
 
                 def run(arguments, **kwargs):
                     calls.append(arguments)
-                    if '--extract-certificates' in arguments:
-                        prefix = Path(arguments[arguments.index('--extract-certificates') + 1])
+                    option = next((arg for arg in arguments if arg.startswith('--extract-certificates=')), None)
+                    if option:
+                        prefix = Path(option.split('=', 1)[1])
                         prefix.with_name(prefix.name + '0').write_bytes(actual)
                     return b''
 
