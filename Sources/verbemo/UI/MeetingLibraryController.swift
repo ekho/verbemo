@@ -2231,9 +2231,20 @@ private extension MeetingLibraryController {
         let diarization = [choice.cloud ? localised("Built into ", "Встроенная в ") + RecordingsEngineName.name(choice.provider) : nil,
                            choice.local && Config.localDiarizationEnabled() ? Config.diarizationModel().title : nil].compactMap { $0 }
         let disabled = localised("Disabled", "Отключена")
-        route.stringValue = localised("Transcription: ", "Расшифровка: ") + (transcription.isEmpty ? disabled : transcription.joined(separator: " → "))
-            + "\n" + localised("Diarization: ", "Диаризация: ") + (diarization.isEmpty ? disabled : diarization.joined(separator: " / "))
-            + "\n" + localised("Summary: ", "Сводка: ") + (Config.summary().enabled ? Self.summaryMethodName(Config.summary().backend) : disabled)
+        let configuration = [
+            (localised("Transcription: ", "Расшифровка: "), transcription.isEmpty ? disabled : transcription.joined(separator: " → ")),
+            (localised("Diarization: ", "Диаризация: "), diarization.isEmpty ? disabled : diarization.joined(separator: " / ")),
+            (localised("Summary: ", "Сводка: "), Config.summary().enabled ? Self.summaryMethodName(Config.summary().backend) : disabled),
+        ]
+        let text = NSMutableAttributedString(string: "")
+        for (label, value) in configuration {
+            if text.length > 0 { text.append(NSAttributedString(string: "\n")) }
+            text.append(NSAttributedString(string: label, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]))
+            text.append(NSAttributedString(string: value, attributes: [.font: NSFont.systemFont(ofSize: 11)]))
+        }
+        text.addAttribute(.foregroundColor, value: StudioStyle.muted, range: NSRange(location: 0, length: text.length))
+        route.attributedStringValue = text
+        route.setAccessibilityLabel(text.string)
     }
 
 }
