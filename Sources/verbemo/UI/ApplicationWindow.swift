@@ -139,6 +139,7 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         title.cell?.wraps = false
         title.cell?.lineBreakMode = .byTruncatingTail
         title.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        heading.identifier = .init("journal.section-heading")
         heading.font = .systemFont(ofSize: 12)
         heading.textColor = JournalStyle.muted
         heading.lineBreakMode = .byTruncatingTail
@@ -428,8 +429,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         title.font = .systemFont(ofSize: destination.isMeetings ? 17 : 12, weight: destination.isMeetings ? .semibold : .regular)
         title.setAccessibilityLabel(destination.isMeetings ? localised("All meetings", "Все встречи") : title.title)
         primarySettings.state = destination.isMeetings ? .off : .on
-        heading.stringValue = "/  " + (settingsOverview && compactSettings ? localised("Settings", "Настройки") : destination.title)
-        heading.isHidden = destination == .allMeetings
+        heading.stringValue = "/  " + (destination.isMeetings ? destination.title : localised("Settings", "Настройки"))
+        heading.isHidden = destination.isMeetings ? destination == .allMeetings : !(settingsOverview && compactSettings)
     }
     func presentSetup(_ setup: SetupPage) {
         guard !stopping else { return }
