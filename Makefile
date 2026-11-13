@@ -80,12 +80,18 @@ else
 SIGN_TIMESTAMP = --timestamp=none
 endif
 
-# Ad-hoc signatures have no Team ID for hardened runtime library validation.
-ifeq ($(strip $(SIGN_ID)),-)
+# Preview certificates have no Apple Team ID for hardened runtime library validation.
+ifeq ($(MACOS_PREVIEW),1)
+ifeq ($(RELEASE_SIGNING),1)
+$(error signed releases cannot use MACOS_PREVIEW=1)
+endif
+SIGN_OPTIONS = --options 0
+else ifeq ($(strip $(SIGN_ID)),-)
 SIGN_OPTIONS = --options 0
 else
 SIGN_OPTIONS = --options runtime
 endif
+SIGN_KEYCHAIN = $(if $(VERBEMO_SIGN_KEYCHAIN),--keychain "$(VERBEMO_SIGN_KEYCHAIN)",)
 
 .PHONY: all build localvqe verify-localvqe nemotron verify-nemotron app icon run-app identities verify clean release release-dry
 
@@ -216,9 +222,10 @@ app: build $(ICON)
 		$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate \
 		$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app \
 		$(APP)/Contents/Frameworks/Sparkle.framework ; do \
-		codesign --force --sign "$(SIGN_ID)" $(SIGN_OPTIONS) $(SIGN_TIMESTAMP) "$$nested" || exit $$? ; \
+		codesign --force --sign "$(SIGN_ID)" $(SIGN_KEYCHAIN) $(SIGN_OPTIONS) $(SIGN_TIMESTAMP) "$$nested" || exit $$? ; \
 	done
 	@codesign --force --sign "$(SIGN_ID)" \
+		$(SIGN_KEYCHAIN) \
 		--identifier name.ekho.verbemo \
 		$(SIGN_OPTIONS) \
 		--entitlements Packaging/Verbemo.entitlements \

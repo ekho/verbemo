@@ -157,7 +157,11 @@ def publish(directory, api, notes=None):
             platforms = ('this release contains macOS only. Windows builds are temporarily paused '
                          '([#19](https://github.com/ekho/verbemo/issues/19)). '
                          if data.get('platforms') == ['macos'] else 'Windows is unsigned. ')
-            notice = ('**Unsigned preview:** macOS is ad-hoc signed and not notarized; ' + platforms +
+            macos_signature = json.loads((directory / 'macos-build.json').read_text())['signature']['code_signing']
+            label = '**Preview:**' if macos_signature == 'self-signed' else '**Unsigned preview:**'
+            description = ('signed with a persistent self-signed certificate' if macos_signature == 'self-signed'
+                           else 'ad-hoc signed')
+            notice = (f'{label} macOS is {description} and not notarized; ' + platforms +
                       'These files are not delivered through stable automatic updates.\n\n')
             notes = notice + (notes or '')
         payload = {'tag_name': data['tag'],

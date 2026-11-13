@@ -20,5 +20,6 @@ windows/artifacts/
 *.pfx
 *.key
 *.pem
+!Packaging/preview-signing.pem
 *.cer
 *.cert
