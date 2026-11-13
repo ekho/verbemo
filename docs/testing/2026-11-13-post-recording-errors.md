@@ -40,3 +40,24 @@ checks a speaking microphone plus nonzero remote track: failure, explicit
 failed retry, unchanged transcript/source, reopening, explicit skip, retained
 audio and subsequent summary through an injected local test backend. Existing
 successful retry/version and cancellation tests remain in scope.
+
+## #125: summary state
+
+The original recording has no saved summary status or summary file. Its
+unfinished diarization prevents `PostProcessor.outstanding` from admitting
+summary work. The inspector previously described this as “Waiting: Preparing
+summary”. Separately, any live session claim with ready text could make that
+summary icon active, even during naming or diarization.
+
+Summary presentation now reads the shared operation registry, including direct
+operations outside the transcription queue. Only the running summary stage
+animates. Queued work, cancellation, unfinished transcription/diarization,
+speaker naming, an external writer, deferral and unstarted work have distinct
+labels. The registry enters the summary stage at the call to the summarizer
+and leaves it before cleanup; admission/access checks remain post-processing.
+The library and inspector share this presentation. Waiting library icons show
+a clock, including when there is no active queue entry.
+
+Before the fix, the focused presentation tests failed ten assertions. Coverage
+also checks actual manual summary generation and cancellation with a retained
+previous summary, for current and archived transcript versions.

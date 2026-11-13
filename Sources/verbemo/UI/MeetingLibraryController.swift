@@ -2205,7 +2205,7 @@ private extension MeetingLibraryController {
             for stage in MeetingPresentation.stages(item, active: activeRecording).filter({ $0.symbol != "calendar" }) {
                 let image = MeetingListView.icon(stage)
                 let title = stage.symbol == "mic" && activeRecording?.dir != item.dir && !item.hasAudio ? localised("Audio not retained", "Аудио не сохранено") : stage.title
-                let label = NSTextField(wrappingLabelWithString: (stage.state == .pending ? localised("Waiting: ", "Ожидание: ") : "") + title)
+                let label = NSTextField(wrappingLabelWithString: (stage.state == .pending && stage.symbol != "checklist" ? localised("Waiting: ", "Ожидание: ") : "") + title)
                 label.font = .systemFont(ofSize: 11)
                 label.setContentHuggingPriority(.init(1), for: .horizontal)
                 label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

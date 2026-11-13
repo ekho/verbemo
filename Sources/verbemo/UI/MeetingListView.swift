@@ -63,13 +63,13 @@ final class MeetingListView: NSTableCellView {
         case .done, .off: nil
         }
         let status = stages.first { $0.state == .failed } ?? (naming?.state == .failed ? naming : nil)
-            ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending } ?? naming
+            ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending || $0.state == .waiting } ?? naming
         let failed = status?.state == .failed || item.unreadableDiarization || item.diarization?.hasFailedAttempt == true
         let symbol = failed ? "exclamationmark.triangle" : status.map {
             switch $0.state {
             case .active: $0.symbol == "mic" ? "record.circle" : "arrow.triangle.2.circlepath"
             case .paused: "pause.circle"
-            case .pending: "clock"
+            case .pending, .waiting: "clock"
             default: "checkmark.circle"
             }
         } ?? "checkmark.circle"
@@ -135,7 +135,7 @@ final class MeetingListView: NSTableCellView {
         if stage.diarized { badge("person.2.fill", left: true) }
         if stage.state == .done && stage.symbol != "calendar" { badge("checkmark", left: false) }
         if stage.state == .paused { badge("pause.fill", left: false) }
-        if stage.state == .pending { badge("clock", left: false) }
+        if stage.state == .pending || stage.state == .waiting { badge("clock", left: false) }
         if stage.state == .failed { badge("exclamationmark.circle", left: false) }
         if stage.state == .active && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             image.wantsLayer = true

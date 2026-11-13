@@ -106,6 +106,10 @@ enum MeetingPresentation {
         }
         let busy = SessionClaim.isHeld(item.dir)
         let ready = item.transcript == .done && !TranscriptVersions.isRequested(item.dir)
+        let operations = ProcessingOperations.shared.snapshot().filter {
+            $0.session == item.dir.standardizedFileURL.resolvingSymlinksInPath()
+        }
+        let operation = operations.first { $0.state != .waiting } ?? operations.first
         func stage(_ step: SessionInventory.Step, symbol: String, label: String, done: String, active: Bool) -> Stage {
             if active { return Stage(symbol: symbol, title: label, state: .active) }
             switch step {
@@ -126,8 +130,36 @@ enum MeetingPresentation {
         if transcript.diarized { transcript.title += localised(" · diarization enabled", " · диаризация включена") }
         result.append(transcript)
         var summary = stage(item.summary, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),
-            done: localised("Summary ready", "Сводка готова"), active: busy && ready && item.summary != .off)
+            done: localised("Summary ready", "Сводка готова"), active: operation?.kind == .summary && operation?.state == .running)
         if summary.state == .failed { summary.title = localised("Summary creation failed", "Сбой создания сводки") }
+        if operation?.kind == .summary, operation?.state != .running {
+            summary.state = operation?.state == .cancelling ? .waiting : .pending
+            summary.title = operation?.state == .cancelling
+                ? localised("Cancelling summary", "Создание сводки отменяется")
+                : localised("Summary queued", "Сводка в очереди")
+        } else if summary.state != .active && item.summary.isOutstanding {
+            summary.state = .waiting
+            if !ready {
+                summary.title = localised("Summary waits for transcription", "Сводка ожидает расшифровки")
+            } else if item.unreadableDiarization {
+                summary.title = localised("Summary blocked: diarization state cannot be read", "Сводка заблокирована: не читается состояние диаризации")
+            } else if let diarization = item.diarization, !diarization.isFinal {
+                summary.title = diarization.hasFailedAttempt || diarization.status == .partial
+                    ? localised("Summary waits for diarization — retry or skip", "Сводка ожидает диаризацию — повторите или пропустите её")
+                    : diarization.status == .deferred
+                        ? localised("Summary waits for the diarization model — download or skip", "Сводка ожидает модель диаризации — скачайте её или пропустите этап")
+                        : localised("Summary waits for diarization", "Сводка ожидает диаризацию")
+            } else if operation?.kind == .postProcessing && item.speakers.isOutstanding {
+                summary.title = localised("Summary waits for speaker naming", "Сводка ожидает определения имён")
+            } else if operation != nil || busy {
+                summary.title = localised("Summary waits for other processing to finish", "Сводка ожидает завершения другой обработки")
+            } else if item.summary == .deferred {
+                summary.title = localised("Summary deferred — retry processing", "Сводка отложена — повторите обработку")
+            } else {
+                summary.state = .pending
+                summary.title = localised("Summary not started", "Сводка ещё не запущена")
+            }
+        }
         result.append(summary)
         return result
     }

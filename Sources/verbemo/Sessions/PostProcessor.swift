@@ -101,7 +101,7 @@ enum PostProcessor {
     /// Regenerate just this version's summary; keep the previous bytes on failure.
     static func regenerateSummary(_ dir: URL, policy: Policy = .configured, request: SummaryRequest? = nil) async throws {
         let root = try validatedSessionRoot(for: dir)
-        try await ProcessingOperations.shared.run(session: root, kind: .summary) {
+        try await ProcessingOperations.shared.run(session: root, kind: .postProcessing) {
             try await regenerateSummaryWork(dir, root: root, policy: policy, request: request)
         }
     }
@@ -141,6 +141,8 @@ enum PostProcessor {
             context.append("Participants: " + attendees.joined(separator: ", "))
         }
         let names = SpeakerNames.read(from: dir)
+        ProcessingOperations.shared.stage(.summary)
+        defer { ProcessingOperations.shared.stage(.postProcessing) }
         let generated = await Summarizer.summarize(transcript: transcript.named(with: names), context: context, into: dir, request: request)
         guard generated != nil else {
             try Task.checkCancellation()
@@ -268,6 +270,7 @@ enum PostProcessor {
     }
 
     private static func finishWork(_ dir: URL, policy: Policy, retryFailed: Bool) async throws -> Work {
+        ProcessingOperations.shared.stage(.postProcessing)
         try Task.checkCancellation()
         if let reason = Config.unreadableReason { throw Refusal.configUnreadable(reason) }
         let root = try validatedSessionRoot(for: dir)
@@ -314,6 +317,7 @@ enum PostProcessor {
         try Task.checkCancellation()
         if work.summary {
             ProcessingOperations.shared.stage(.summary)
+            defer { ProcessingOperations.shared.stage(.postProcessing) }
             var context = ["Meeting: \(title ?? dir.lastPathComponent)"]
             if !attendees.isEmpty {
                 context.append("Participants: " + attendees.joined(separator: ", "))
