@@ -166,8 +166,19 @@ enum MeetingPresentation {
         } else if requested && version?.isRequest != false && transcriptStep == .pending {
             transcript.title = localised("Transcription queued", "Расшифровка в очереди")
         }
-        transcript.diarized = item.diarization.map { $0.status != .skipped && $0.status != .notApplicable } ?? item.isDiarized
-        if transcript.diarized { transcript.title += localised(" · diarization enabled", " · диаризация включена") }
+        if transcript.state != .active, versionOperation == nil {
+            if item.unreadableDiarization {
+                transcript.state = .failed
+                transcript.title = localised("Transcript blocked: diarization state cannot be read", "Расшифровка заблокирована: не читается состояние диаризации")
+            } else if ready, let state = item.diarization, !state.isFinal {
+                transcript.state = state.hasFailedAttempt || state.status == .partial ? .failed : .waiting
+                transcript.activitySymbol = "person.wave.2"
+                transcript.title = transcript.state == .failed
+                    ? localised("Transcript needs a diarization decision", "Расшифровка требует решения по диаризации")
+                    : localised("Transcript waits for diarization", "Расшифровка ожидает диаризацию")
+            }
+        }
+        transcript.diarized = ready && (item.diarization.map { $0.status == .completed } ?? item.isDiarized)
         result.append(transcript)
         let summaryStep: SessionInventory.Step = version?.isRequest == true ? .pending : item.summary
         var summary = stage(summaryStep, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),

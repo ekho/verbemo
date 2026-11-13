@@ -62,12 +62,9 @@ final class MeetingListView: NSTableCellView {
         case .pending, .deferred: .init(symbol: "person", title: localised("Speaker names pending", "Имена говорящих ожидают обработки"), state: .pending)
         case .done, .off: nil
         }
-        var status = stages.first { $0.state == .active || $0.state == .paused }
+        let status = stages.first { $0.state == .active || $0.state == .paused }
             ?? stages.first { $0.state == .failed } ?? (naming?.state == .failed ? naming : nil)
             ?? stages.first { $0.state == .active || $0.state == .paused || $0.state == .pending || $0.state == .waiting } ?? naming
-        if status?.state != .active && (item.unreadableDiarization || item.diarization?.hasFailedAttempt == true) {
-            status = .init(symbol: "person.wave.2", title: localised("Speaker separation needs attention", "Диаризация требует внимания"), state: .failed)
-        }
         let image = Self.icon(status ?? .init(symbol: "checkmark.circle", title: localised("Ready", "Готово"), state: .done))
         image.identifier = .init("meeting.list-status")
         let metaRow = NSStackView(views: [meta, image, NSView()])

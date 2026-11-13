@@ -155,7 +155,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let titleDoubleClick = NSClickGestureRecognizer()
     private let detailError = NSTextField(labelWithString: "")
     private var renamingSession: URL?
-    private let diarizationLabel = NSTextField(labelWithString: "")
+    private let diarizationLabel = NSTextField(wrappingLabelWithString: "")
+    private let diarizationActions = NSStackView()
     private let retryDiarizationButton = NSButton()
     private let skipDiarizationButton = NSButton()
     private let speakersStack = FlippedStackView()
@@ -502,7 +503,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         diarizationLabel.font = .systemFont(ofSize: 11)
         diarizationLabel.textColor = .secondaryLabelColor
         diarizationLabel.lineBreakMode = .byWordWrapping
-        diarizationLabel.maximumNumberOfLines = 3
         diarizationLabel.identifier = .init("diarization.status")
         for (button, title, symbol, action) in [
             (retryDiarizationButton, localised("Retry diarization", "Повторить диаризацию"),
@@ -591,8 +591,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         versionSelector.target = self
         versionSelector.action = #selector(versionSelected(_:))
         versionSelector.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let diarizationActions = NSStackView(views: [retryDiarizationButton, skipDiarizationButton])
-        diarizationActions.orientation = .horizontal
+        diarizationActions.setViews([retryDiarizationButton, skipDiarizationButton], in: .top)
+        diarizationActions.orientation = .vertical
         diarizationActions.spacing = 8
         moreButton.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: localised("Meeting actions", "Действия со встречей"))
         moreButton.setAccessibilityLabel(localised("Meeting actions", "Действия со встречей"))
@@ -671,7 +671,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         NSLayoutConstraint.activate([
             detail.heightAnchor.constraint(greaterThanOrEqualToConstant: 260),
         ])
-        return buildJournal(detail: detail, diarizationActions: diarizationActions)
+        return buildJournal(detail: detail)
     }
 
     private func summaryContent() -> NSView {
@@ -1514,6 +1514,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let state = item.flatMap { DiarizationState.read($0.dir) }
         let actionable = !actions.isBusy && item?.unreadableDiarization != true
             && state?.retainsAudio == true && state?.status != .running
+            && artifactDirectory == item?.dir && selectedVersion?.isRequest != true
             && item.map { !TranscriptVersions.isRequested($0.dir) } == true
         retryDiarizationButton.isEnabled = actionable && onRetryDiarization != nil
         skipDiarizationButton.isEnabled = actionable && onSkipDiarization != nil
@@ -1536,7 +1537,22 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     private func updateDiarization(for item: SessionInventory.Item) {
-        if item.unreadableDiarization {
+        let dir = artifactDirectory ?? item.dir
+        let details = dir == item.dir ? item : SessionInventory.item(for: dir)
+        retryDiarizationButton.isHidden = true
+        skipDiarizationButton.isHidden = true
+        defer {
+            diarizationLabel.toolTip = diarizationLabel.stringValue
+            diarizationLabel.setAccessibilityLabel(diarizationLabel.stringValue)
+        }
+        if let version = selectedVersion, version.isRequest {
+            diarizationLabel.isHidden = false
+            diarizationLabel.stringValue = version.diarization == nil
+                ? localised("Diarization not requested", "Диаризация не запрошена")
+                : localised("Diarization waits for transcription", "Диаризация ожидает расшифровку")
+            return
+        }
+        if details?.unreadableDiarization == true {
             diarizationLabel.isHidden = false
             diarizationLabel.stringValue = localised(
                 "Diarization: saved model request cannot be read. Processing is blocked.",
@@ -1546,16 +1562,20 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             skipDiarizationButton.isHidden = true
             return
         }
-        guard let state = DiarizationState.read(item.dir) else {
-            diarizationLabel.isHidden = true
-            retryDiarizationButton.isHidden = true
-            skipDiarizationButton.isHidden = true
+        let count = details?.namedSpeakers.map { localised("Speakers: \($0.total)", "Говорящих: \($0.total)") }
+        guard let state = DiarizationState.read(dir) else {
+            diarizationLabel.isHidden = count == nil
+            diarizationLabel.stringValue = [details?.isDiarized == true
+                ? localised("Diarization: complete", "Диаризация: готова") : nil, count].compactMap { $0 }.joined(separator: " · ")
             return
         }
         diarizationLabel.isHidden = false
-        diarizationLabel.stringValue = Self.diarizationLine(state)
+        let running = dir == item.dir && operations.snapshot().contains {
+            $0.session == item.dir.standardizedFileURL.resolvingSymlinksInPath() && $0.kind == .diarization && $0.state == .running
+        }
+        diarizationLabel.stringValue = [Self.diarizationLine(state, running: running), count].compactMap { $0 }.joined(separator: "\n")
         diarizationLabel.toolTip = diarizationLabel.stringValue
-        let actions = state.retainsAudio && state.status != .running
+        let actions = dir == item.dir && state.retainsAudio && state.status != .running
             && !TranscriptVersions.isRequested(item.dir)
         retryDiarizationButton.isHidden = !actions
         let needsModel = !DiarizationModelStore.isReady(at: DiarizationModelStore.shared(for: state.request.model).directory, model: state.request.model)
@@ -1563,13 +1583,13 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         skipDiarizationButton.isHidden = !actions
     }
 
-    static func diarizationLine(_ state: DiarizationState) -> String {
+    static func diarizationLine(_ state: DiarizationState, running: Bool = false) -> String {
         let stage: String
         switch state.status {
         case .pending where state.hasFailedAttempt:
             stage = localised("last attempt failed — retry or skip", "последняя попытка не удалась — повторите или пропустите")
         case .pending: stage = localised("pending", "ожидает")
-        case .running: stage = localised("running", "выполняется")
+        case .running: stage = running ? localised("running", "выполняется") : localised("not finished", "не завершена")
         case .deferred: stage = localised("waiting for model", "ожидает модель")
         case .failed: stage = localised("failed", "ошибка")
         case .partial: stage = localised("incomplete", "не завершена")
@@ -1578,7 +1598,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         case .notApplicable: stage = localised("not applicable", "не применяется")
         }
         var parts = [localised("Diarization: ", "Диаризация: ") + stage]
-        if state.confirmedSpeakers > 0 {
+        if state.confirmedSpeakers > 0 || state.status == .completed {
             parts.append(localised("\(state.confirmedSpeakers) confirmed speakers",
                                    "подтверждённых говорящих: \(state.confirmedSpeakers)"))
         }
@@ -1993,7 +2013,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
 
 @MainActor
 private extension MeetingLibraryController {
-    func buildJournal(detail: NSStackView, diarizationActions: NSStackView) -> NSView {
+    func buildJournal(detail: NSStackView) -> NSView {
         search.identifier = .init("library.search")
         search.placeholderString = localised("Title, transcript, summary", "Название, расшифровка, сводка")
         search.setAccessibilityLabel(localised("Search the library: titles, transcripts and summaries", "Поиск в библиотеке: названия, расшифровки и сводки"))
@@ -2131,7 +2151,7 @@ private extension MeetingLibraryController {
         let inspector = FlippedStackView(views: [
             inspectorHeading, calendarView,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING", "ОБРАБОТКА")), pipeline,
-            diarizationLabel, diarizationActions, finishButton, cancelProcessingButton,
+            finishButton, cancelProcessingButton,
             SetupLayout.hairline(), StudioStyle.caption(localised("PROCESSING SETTINGS", "НАСТРОЙКИ ОБРАБОТКИ")), route, settings,
         ])
         inspector.orientation = .vertical
@@ -2279,15 +2299,30 @@ private extension MeetingLibraryController {
                 label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
                 let row = NSStackView(views: [image, label])
                 row.spacing = 10
+                var content: NSView = row
                 if stage.symbol == "doc.text" {
-                    row.identifier = .init("meeting.processing-transcript")
-                    if activeRecording?.dir != item.dir { row.addArrangedSubview(repeatButton) }
+                    let group = NSStackView(views: [row])
+                    group.identifier = .init("meeting.processing-transcript")
+                    group.orientation = .vertical
+                    group.alignment = .leading
+                    group.spacing = 6
+                    if activeRecording?.dir != item.dir {
+                        row.addArrangedSubview(repeatButton)
+                        // Move the existing controls; their recovery handlers and guards stay shared.
+                        for view in [diarizationLabel, diarizationActions] {
+                            (view.superview as? NSStackView)?.removeArrangedSubview(view)
+                            view.removeFromSuperview()
+                            group.addArrangedSubview(view)
+                        }
+                    }
+                    for view in group.arrangedSubviews { view.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true }
+                    content = group
                 } else if stage.symbol == "checklist" {
                     row.identifier = .init("meeting.processing-summary")
                     if activeRecording?.dir != item.dir { row.addArrangedSubview(regenerateButton) }
                 }
-                pipeline.addArrangedSubview(row)
-                row.widthAnchor.constraint(equalTo: pipeline.widthAnchor).isActive = true
+                pipeline.addArrangedSubview(content)
+                content.widthAnchor.constraint(equalTo: pipeline.widthAnchor).isActive = true
             }
         }
         if speakersStack.arrangedSubviews.isEmpty {
