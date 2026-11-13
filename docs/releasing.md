@@ -158,7 +158,9 @@ release state. Install their lockfile with Node 24 and
 `npm --prefix scripts/release-automation ci --legacy-peer-deps --ignore-scripts`.
 The Conventional Commits preset is pinned to 9.3.1: preset 10 requires a newer
 writer than release-notes-generator 14 currently uses. No package lifecycle
-scripts run. Tests use isolated local Git repositories and never publish:
+scripts run. Tests use isolated local Git repositories and never publish.
+The CLI regression also requires `gh` and points it at a local HTTP fixture,
+including paginated release metadata larger than Node's output buffer.
 
 ```sh
 npm --prefix scripts/release-automation test

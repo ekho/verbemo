@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { prepareRelease } from '../../scripts/release-automation/auto-release.mjs';
 
 function fixture(t, version = '0.1.0') {
@@ -28,6 +31,57 @@ function fixture(t, version = '0.1.0') {
   };
   return { root, git, commit, published };
 }
+
+test('release CLI handles large paginated metadata without losing drafts or published tags', async t => {
+  const f = fixture(t);
+  f.commit('feat: already released');
+  const published = { ...f.published('0.1.0'), prerelease: true };
+  f.commit('fix: unpublished patch');
+  const transport = mkdtempSync(join(tmpdir(), 'verbemo-release-api-'));
+  t.after(() => rmSync(transport, { recursive: true, force: true }));
+  const gh = execFileSync('which', ['gh'], { encoding: 'utf8' }).trim();
+  const pages = [
+    [{ tag_name: 'windows-v99.0.0', draft: false, body: 'x'.repeat(2 * 1024 * 1024) },
+      { tag_name: 'verbemo-v9.0.0', draft: true }],
+    [published],
+  ];
+  const requests = [];
+  let endpoint;
+  const server = createServer((request, response) => {
+    const page = new URL(request.url, endpoint).searchParams.get('page') === '2' ? 2 : 1;
+    requests.push(page);
+    response.setHeader('Content-Type', 'application/json');
+    if (page === 1) response.setHeader('Link', '<' + endpoint + '?page=2>; rel="next"');
+    response.end(JSON.stringify(pages[page - 1]));
+  });
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  endpoint = 'http://127.0.0.1:' + server.address().port + '/releases';
+  // Route the production CLI to a local API; the real gh still handles pagination and formatting.
+  writeFileSync(join(transport, 'gh'), [
+    '#!/usr/bin/env node',
+    "const args = process.argv.slice(2);",
+    "const index = args.indexOf('repos/ekho/verbemo/releases?per_page=100');",
+    'if (index < 0) process.exit(2);',
+    'args[index] = ' + JSON.stringify(endpoint) + ';',
+    "require('node:child_process').execFileSync(" + JSON.stringify(gh) + ", args, { stdio: 'inherit' });",
+  ].join('\n'), { mode: 0o755 });
+  const outputFile = join(transport, 'outputs');
+  const { stdout } = await promisify(execFile)(process.execPath,
+    [fileURLToPath(new URL('../../scripts/release-automation/auto-release.mjs', import.meta.url)), '--prerelease'], {
+      cwd: f.root, timeout: 10000,
+      env: { ...process.env, PATH: transport + delimiter + process.env.PATH,
+        GH_TOKEN: 'fixture-token', GH_ENTERPRISE_TOKEN: 'fixture-token',
+        GH_CONFIG_DIR: transport, GITHUB_OUTPUT: outputFile },
+    });
+  const plan = JSON.parse(stdout);
+  assert.deepEqual(requests, [1, 2]);
+  assert.equal(plan.version, '0.1.1');
+  assert.equal(plan.created, true);
+  assert.equal(plan.source_commit, f.git('rev-parse', 'HEAD'));
+  assert.match(readFileSync(outputFile, 'utf8'), /version=0\.1\.1\n/);
+  assert.equal(f.git('status', '--porcelain'), '');
+});
 
 for (const [message, expected] of [
   ['fix: preserve recording', '0.1.1'],
