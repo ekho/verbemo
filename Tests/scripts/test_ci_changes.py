@@ -49,6 +49,7 @@ class ChangesTests(unittest.TestCase):
             ('windows/tests/Test-ReleaseArtifacts.ps1', {'windows_test', 'scripts'}),
             ('windows/scripts/Build-Release.ps1', {'windows_test', 'windows_build', 'scripts'}),
             ('scripts/build-macos-preview.sh', {'macos_test', 'macos_build', 'macos_scripts', 'scripts'}),
+            ('scripts/preview_signing.py', {'macos_test', 'macos_build', 'macos_scripts', 'scripts'}),
             ('Package.resolved', {'macos_test', 'macos_build', 'scripts'}),
         ]
         for path, expected in cases:

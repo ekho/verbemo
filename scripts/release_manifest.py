@@ -112,10 +112,15 @@ def write_appcast(directory: Path, version: str, build_number: int, signature: s
     return target
 
 
-def write_macos_receipt(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False) -> Path:
+def write_macos_receipt(directory: Path, version: str, source_commit: str, build_number: int, prerelease=False,
+                        preview_certificate_sha256=None) -> Path:
     signature = ({'code_signing': 'ad-hoc', 'notarization': 'not-performed', 'sparkle': 'disabled'} if prerelease else
                  {'developer_id': 'verified', 'notarization': 'accepted', 'staple': 'verified',
                   'gatekeeper': 'accepted', 'sparkle_dmg': 'verified', 'sparkle_appcast': 'verified'})
+    if preview_certificate_sha256 is not None:
+        if not prerelease or not re.fullmatch(r'[A-F0-9]{64}', preview_certificate_sha256):
+            raise ValueError('preview certificate requires prerelease mode and a SHA-256 fingerprint')
+        signature.update(code_signing='self-signed', certificate_sha256=preview_certificate_sha256)
     names = (dmg_name(version),) if prerelease else (dmg_name(version), 'appcast.xml')
     receipt = {'platform': 'macos', 'version': version, 'source_commit': source_commit,
                'build_number': build_number, 'signature': signature,
@@ -147,7 +152,13 @@ def validate_macos_release(directory: Path, version: str, source_commit: str, bu
     required = ({'code_signing': 'ad-hoc', 'notarization': 'not-performed', 'sparkle': 'disabled'} if prerelease else
                 {'developer_id': 'verified', 'notarization': 'accepted', 'staple': 'verified',
                  'gatekeeper': 'accepted', 'sparkle_dmg': 'verified', 'sparkle_appcast': 'verified'})
-    if receipt.get('signature') != required:
+    signature = receipt.get('signature')
+    if prerelease and isinstance(signature, dict) and signature.get('code_signing') == 'self-signed':
+        fingerprint = signature.get('certificate_sha256')
+        if not isinstance(fingerprint, str) or not re.fullmatch(r'[A-F0-9]{64}', fingerprint):
+            raise ValueError('macOS preview certificate fingerprint missing or invalid')
+        required.update(code_signing='self-signed', certificate_sha256=fingerprint)
+    if signature != required:
         raise ValueError('macOS signature validation missing')
     if prerelease:
         return receipt
@@ -274,6 +285,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--build-number', type=int)
     parser.add_argument('--signature')
+    parser.add_argument('--preview-certificate-sha256')
     parser.add_argument('--minimum', default='14.2')
     parser.add_argument('--prerelease', action='store_true')
     parser.add_argument('--macos-only', action='store_true')
@@ -290,7 +302,8 @@ def main():
         elif args.command == 'appcast':
             write_appcast(args.output, args.version, args.build_number, args.signature, args.minimum)
         elif args.command == 'receipt':
-            write_macos_receipt(args.output, args.version, args.source_commit, args.build_number, args.prerelease)
+            write_macos_receipt(args.output, args.version, args.source_commit, args.build_number, args.prerelease,
+                                args.preview_certificate_sha256)
         elif args.command == 'validate-macos':
             validate_macos_release(args.output, args.version, args.source_commit, args.build_number, args.prerelease)
         else:

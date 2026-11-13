@@ -38,6 +38,35 @@ class PreviewReleaseTests(unittest.TestCase):
     def prepare(self):
         return release.prepare(self.root, '0.1.0', 'a' * 40, 12, prerelease=True)
 
+    def test_persistent_preview_signature_is_preserved_and_cannot_publish_as_stable(self):
+        (self.root / 'macos-build.json').unlink()
+        manifest.write_macos_receipt(self.root, '0.1.0', 'a' * 40, 12, prerelease=True,
+                                     preview_certificate_sha256='B' * 64)
+        receipt = json.loads((self.root / 'macos-build.json').read_text())
+        self.assertEqual(receipt['signature'], {
+            'code_signing': 'self-signed', 'certificate_sha256': 'B' * 64,
+            'notarization': 'not-performed', 'sparkle': 'disabled'})
+        with self.assertRaises(ValueError):
+            release.prepare(self.root, '0.1.0', 'a' * 40, 12)
+        self.prepare()
+        release.publish(self.root, self.api)
+        self.assertIn('self-signed', self.api.items[0]['body'])
+        self.assertNotIn('ad-hoc', self.api.items[0]['body'])
+        self.assertIs(self.api.items[0]['prerelease'], True)
+        self.assertEqual(self.api.items[0]['make_latest'], 'false')
+
+    def test_persistent_preview_requires_an_exact_certificate_fingerprint(self):
+        path = self.root / 'macos-build.json'
+        data = json.loads(path.read_text())
+        for fingerprint in ('', 'A' * 63, 'G' * 64, None):
+            with self.subTest(fingerprint=fingerprint):
+                data['signature'] = {'code_signing': 'self-signed',
+                                     'certificate_sha256': fingerprint,
+                                     'notarization': 'not-performed', 'sparkle': 'disabled'}
+                path.write_text(json.dumps(data))
+                with self.assertRaises(ValueError):
+                    self.prepare()
+
     def test_unsigned_receipts_require_explicit_prerelease_preparation(self):
         with self.assertRaises(ValueError):
             release.prepare(self.root, '0.1.0', 'a' * 40, 12)

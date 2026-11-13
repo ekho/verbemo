@@ -33,7 +33,7 @@ def select_checks(paths):
             selected.update(MACOS)
         elif path in ('Package.swift', 'Package.resolved'):
             selected.update(MACOS | {'scripts'})
-        elif path == 'Makefile' or path.startswith(('Resources/', 'Packaging/')) or path.startswith((
+        elif path in ('Makefile', 'scripts/preview_signing.py') or path.startswith(('Resources/', 'Packaging/')) or path.startswith((
                 'scripts/build-', 'scripts/verify-', 'scripts/localvqe-')) or path == 'scripts/make-icon.swift':
             selected.update(MACOS | {'scripts', 'macos_scripts'})
         elif path.startswith('landing/'):

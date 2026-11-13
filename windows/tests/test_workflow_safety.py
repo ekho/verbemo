@@ -4,6 +4,7 @@ import re
 import json
 import importlib.util
 import subprocess
+import sys
 import tempfile
 import unittest
 import yaml
@@ -16,7 +17,7 @@ def workflow(name):
 
 
 class CommonReleaseWorkflowTests(unittest.TestCase):
-    def test_preview_distribution_uses_no_release_credentials_and_keeps_signed_mode(self):
+    def test_preview_distribution_isolates_its_own_certificate_and_keeps_signed_mode(self):
         data = workflow('release.yml')
         distribution = data['on']['workflow_dispatch']['inputs'].get('distribution', {})
         self.assertEqual(distribution.get('default'), 'preview')
@@ -25,9 +26,17 @@ class CommonReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(jobs['resolve']['outputs']['prerelease'], '${{ steps.distribution.outputs.prerelease }}')
         for platform in ('macos', 'windows'):
             steps = jobs[platform]['steps']
-            preview = next(s for s in steps if s.get('name') == f'Build unsigned {platform} preview artifacts')
+            name = ('Build macos preview artifacts with persistent signing' if platform == 'macos'
+                    else 'Build unsigned windows preview artifacts')
+            preview = next(s for s in steps if s.get('name') == name)
             self.assertEqual(preview['if'], "needs.resolve.outputs.prerelease == 'true'")
-            self.assertNotIn('secrets.', str(preview))
+            if platform == 'macos':
+                self.assertEqual({value for value in preview['env'].values() if 'secrets.' in value}, {
+                    '${{ secrets.VERBEMO_PREVIEW_CERTIFICATE_BASE64 }}',
+                    '${{ secrets.VERBEMO_PREVIEW_CERTIFICATE_PASSWORD }}'})
+                self.assertIn('preview_signing.py run', preview['run'])
+            else:
+                self.assertNotIn('secrets.', str(preview))
             signed = next(s for s in steps if s.get('name', '').startswith('Build signed'))
             self.assertEqual(signed['if'], "needs.resolve.outputs.prerelease != 'true'")
 
@@ -273,7 +282,10 @@ else:
             for step in job['steps']:
                 if 'secrets.' in str(step):
                     self.assertIn(name, ('macos', 'windows'))
-                    self.assertIn('Build signed', step['name'])
+                    if step['name'] == 'Build macos preview artifacts with persistent signing':
+                        self.assertEqual(name, 'macos')
+                    else:
+                        self.assertIn('Build signed', step['name'])
                     self.assertIn('VERBEMO_', str(step['env']))
         mac = next(s for s in jobs['macos']['steps'] if 'Build signed' in s.get('name', ''))
         for key in ('MACOS_CERTIFICATE', 'NOTARY_KEY', 'SPARKLE_PRIVATE_KEY'):
@@ -391,7 +403,8 @@ class ReleaseCleanupWorkflowTests(unittest.TestCase):
             (root / 'scripts/cleanup_releases.py').write_text('import json, sys; print(json.dumps(sys.argv[1:]))\n')
             for apply, arguments in (('true', ['--apply']), ('false', [])):
                 with self.subTest(apply=apply):
-                    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=root,
+                    shell = '/bin/bash' if sys.platform == 'darwin' else 'bash'
+                    result = subprocess.run([shell, '-euo', 'pipefail', '-c', step['run']], cwd=root,
                                             env={**os.environ, 'APPLY': apply}, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(json.loads(result.stdout), arguments)

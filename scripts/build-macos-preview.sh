@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ad-hoc distributable for manual installation; no stable update feed is produced.
+# Preview for manual installation; no stable update feed is produced.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
@@ -25,11 +25,17 @@ for tool in make swift codesign hdiutil ditto; do
 done
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/verbemo-preview.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
-VERBEMO_SPARKLE_PUBLIC_KEY='' make app VERSION="$VERSION_ARG" BUILD="$BUILD" SIGN_ID=- RELEASE_SIGNING=0 MACOS_PREVIEW=1
+VERBEMO_SPARKLE_PUBLIC_KEY='' make app VERSION="$VERSION_ARG" BUILD="$BUILD" SIGN_ID="${VERBEMO_PREVIEW_SIGN_ID:--}" RELEASE_SIGNING=0 MACOS_PREVIEW=1
 APP="$ROOT/.build/Verbemo.app"
 codesign --verify --deep --strict "$APP"
-DETAILS=$(codesign -dvv "$APP" 2>&1)
-grep -q '^Signature=adhoc$' <<<"$DETAILS" || die 'expected ad-hoc app signature'
+set --
+if [ -n "${VERBEMO_PREVIEW_SIGN_ID:-}" ]; then
+    FINGERPRINT=$(python3 scripts/preview_signing.py verify "$APP")
+    set -- --preview-certificate-sha256 "$FINGERPRINT"
+else
+    DETAILS=$(codesign -dvv "$APP" 2>&1)
+    grep -q '^Signature=adhoc$' <<<"$DETAILS" || die 'expected ad-hoc app signature'
+fi
 python3 - "$APP/Contents/Info.plist" "$VERSION_ARG" "$BUILD" <<'PY'
 import plistlib, sys
 with open(sys.argv[1], 'rb') as stream:
@@ -42,7 +48,7 @@ PY
 NAME="Verbemo-$VERSION_ARG-macos-universal.dmg"
 bash scripts/build-dmg.sh "$APP" "Verbemo $VERSION_ARG Preview" "$WORK/$NAME" --preview
 python3 scripts/release_manifest.py receipt --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
-    --build-number "$BUILD" --output "$WORK" --prerelease
+    --build-number "$BUILD" --output "$WORK" --prerelease "$@"
 python3 scripts/release_manifest.py validate-macos --version "$VERSION_ARG" --source-commit "$SOURCE_COMMIT" \
     --build-number "$BUILD" --output "$WORK" --prerelease
 python3 scripts/release_manifest.py preflight --root "$ROOT" --version "$VERSION_ARG" \
@@ -64,4 +70,4 @@ except BaseException:
         path.unlink()
     raise
 PY
-printf 'Prepared unsigned preview assets for Verbemo %s (build %s). Nothing published.\n' "$VERSION_ARG" "$BUILD"
+printf 'Prepared preview assets for Verbemo %s (build %s). Nothing published.\n' "$VERSION_ARG" "$BUILD"

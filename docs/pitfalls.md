@@ -63,8 +63,17 @@ the original activity-policy fix adapted here.
 `make app SIGN_ID=-` is the local ad-hoc route. It does not require membership
 or release credentials and is not a notarized distribution. Ad-hoc native
 libraries cannot satisfy hardened library validation through a Team ID; the
-local route clears hardened runtime flags. Certificate signing retains them.
+local route clears hardened runtime flags. Self-signed previews also lack an Apple
+Team ID, so `MACOS_PREVIEW=1` clears these flags even with the preview certificate.
+Developer ID releases retain hardened runtime and reject preview mode.
 Nested code must be signed before its containing bundle.
+
+Published previews use a persistent self-signed identity, pinned in
+`Packaging/preview-signing.pem`; see [preview signing](releasing.md#persistent-preview-certificate).
+Do not regenerate its key on each build or switch installed builds back to ad-hoc
+signing: either changes the identity against which macOS stores permission grants.
+After the one-time migration, test actual permission preservation across two builds;
+matching signature metadata alone does not establish runtime permission acceptance.
 
 Signed macOS releases require the project's own Developer ID, notarization and
 Sparkle key material. Signed Windows packages require an own Authenticode

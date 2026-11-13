@@ -39,6 +39,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APPLY: ${{ github.event_name == 'schedule' || !inputs.dry_run }}
         run: |
-          arguments=()
-          if [ "$APPLY" = true ]; then arguments+=(--apply); fi
-          python3 scripts/cleanup_releases.py "${arguments[@]}"
+          set --
+          if [ "$APPLY" = true ]; then set -- --apply; fi
+          python3 scripts/cleanup_releases.py "$@"

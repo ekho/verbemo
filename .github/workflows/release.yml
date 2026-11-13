@@ -13,7 +13,7 @@ on:
         description: Stable version matching VERSION (ignored for auto)
         required: false
       distribution:
-        description: Unsigned cross-platform preview or signed stable release (resume reads the manifest)
+        description: Cross-platform preview or Developer ID signed stable release (resume reads the manifest)
         type: choice
         options: [preview, signed]
         default: preview
@@ -140,12 +140,15 @@ jobs:
           python3 -m unittest discover -s windows/tests -p 'test_*.py'
           python3 landing/tests/check.py
           python3 Tests/scripts/test_independent_product.py --all
-      - name: Build unsigned macos preview artifacts
+      - name: Build macos preview artifacts with persistent signing
         if: needs.resolve.outputs.prerelease == 'true'
         env:
           RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
           SOURCE_COMMIT: ${{ needs.resolve.outputs.source_commit }}
-        run: bash scripts/build-macos-preview.sh --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --output "$RUNNER_TEMP/macos-artifacts"
+          VERBEMO_PREVIEW_CERTIFICATE_BASE64: ${{ secrets.VERBEMO_PREVIEW_CERTIFICATE_BASE64 }}
+          VERBEMO_PREVIEW_CERTIFICATE_PASSWORD: ${{ secrets.VERBEMO_PREVIEW_CERTIFICATE_PASSWORD }}
+        run: |
+          python3 scripts/preview_signing.py run bash scripts/build-macos-preview.sh --version "$RELEASE_VERSION" --source-commit "$SOURCE_COMMIT" --output "$RUNNER_TEMP/macos-artifacts"
       - name: Build signed macOS artifacts with temporary own credentials
         if: needs.resolve.outputs.prerelease != 'true'
         shell: bash

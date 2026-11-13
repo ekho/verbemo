@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @unittest.skipUnless(sys.platform == "darwin" and shutil.which("xcrun"), "requires macOS and Xcode")
 class LocalSigningTests(unittest.TestCase):
-    def signing_option(self, identity):
+    def signing_option(self, identity, *options):
         completed = subprocess.run(
-            ["make", "--no-print-directory", "--dry-run", "app", f"SIGN_ID={identity}"],
+            ["make", "--no-print-directory", "--dry-run", "app", f"SIGN_ID={identity}", *options],
             cwd=ROOT, capture_output=True, text=True, check=True, timeout=60,
         )
         commands = completed.stdout.replace("\\\n", " ")
@@ -60,8 +60,19 @@ class LocalSigningTests(unittest.TestCase):
             "runtime",
         )
 
+    def test_self_signed_preview_can_load_libraries_without_an_apple_team_id(self):
+        self.assertEqual(self.signing_option('Verbemo Preview Code Signing', 'MACOS_PREVIEW=1'), '0')
+
 
 class ReleaseSigningModeTests(unittest.TestCase):
+    def test_release_rejects_preview_mode_before_build(self):
+        completed = subprocess.run(
+            ['make', '--no-print-directory', '--dry-run', 'app', 'RELEASE_SIGNING=1',
+             'SIGN_ID=Developer ID Application: Fixture (TESTTEAM)', 'MACOS_PREVIEW=1'],
+            cwd=ROOT, capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn('signed releases cannot use MACOS_PREVIEW=1', completed.stderr)
+
     def test_release_signing_has_no_timestamp_fallback(self):
         completed = subprocess.run(
             ['make', '--no-print-directory', '--dry-run', 'app', 'RELEASE_SIGNING=1',
