@@ -197,7 +197,7 @@ enum TrackCompressor {
         let parsed = try SessionMeta.read(from: dir)
         guard let info = parsed.callAudio, let meta = SessionState.read(dir),
               let files = meta["files"] as? [String: String],
-              Set(files.keys).isSubset(of: Set(info.tracks.map(\.fileKey)).union(["mic", "system"]))
+              Set(files.keys).isSubset(of: Set(info.tracks.map(\.fileKey)).union(["mic", "system", "source"]))
         else { throw CocoaError(.fileReadCorruptFile) }
         let fm = FileManager.default
         var updated = files

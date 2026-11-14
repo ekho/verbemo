@@ -395,6 +395,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var summarySheets: [URL: (version: URL, sheet: SummaryRegenerationSheet)] = [:]
     private var workByMeeting: [URL: String] = [:]
+    private var mergeTask: Task<Void, Never>?
     private let operations: ProcessingOperations
     private var displayedOperations: [ProcessingOperations.Snapshot] = []
     private var selectedWork: String? { selected.flatMap { workByMeeting[$0.dir] } }
@@ -479,6 +480,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         for task in scans { task.cancel() }
         scan = nil
         var cleanup = scans + processingCancellation.stopObserving()
+        if let mergeTask {
+            mergeTask.cancel()
+            if let sheet = panel.attachedSheet { panel.endSheet(sheet, returnCode: .abort) }
+            cleanup.append(mergeTask)
+        }
         for task in librarySearchTasks.values { task.cancel(); cleanup.append(task) }
         librarySearchTask = nil
         if let monitor { cleanup.append(monitor) }
@@ -2015,6 +2021,76 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         reload()
     }
 
+    private var mergeRefusal: String? {
+        if mergeTask != nil { return localised("Wait for the current merge to finish.", "Дождитесь завершения объединения.") }
+        if selectedMeetings.contains(where: { isBusy($0.dir) || activeRecording?.dir == $0.dir
+            || FileManager.default.fileExists(atPath: $0.dir.appendingPathComponent(".recording.json").path) }) {
+            return localised("Wait until all selected recordings are idle.", "Дождитесь, когда все выбранные записи освободятся.")
+        }
+        if selectedMeetings.contains(where: { !$0.hasAudio }) {
+            return localised("Every selected recording needs saved audio.", "Для каждой выбранной записи нужно сохранённое аудио.")
+        }
+        return nil
+    }
+
+    @objc private func mergeClicked() {
+        let selection = selectedMeetings
+        guard !terminating, selection.count >= 2, mergeRefusal == nil, panel.attachedSheet == nil else { return }
+        let dirs = selection.map(\.dir), root = root, home = Home.current, operations = operations
+        let language = InterfaceLanguage.current
+        for item in selection { setWorking(true, in: item.dir) }
+        mergeTask = Task { @MainActor [self] in
+            defer {
+                mergeTask = nil
+                for item in selection { setWorking(false, in: item.dir) }
+            }
+            do {
+                let inspection = Task.detached(priority: .userInitiated) {
+                    try Home.$scoped.withValue(home) {
+                        try InterfaceLanguage.$scoped.withValue(language) { try RecordingMerge.inspect(dirs) }
+                    }
+                }
+                let plan = try await withTaskCancellationHandler { try await inspection.value } onCancel: { inspection.cancel() }
+                try Task.checkCancellation()
+                let confirmation = NSAlert()
+                confirmation.messageText = localised("Merge \(selection.count) recordings?", "Объединить записи: \(selection.count)?")
+                confirmation.informativeText = localised(
+                    "A new recording joins these parts in start-time order, without gaps between them (overlaps play sequentially). All originals and their edits stay unchanged. Microphone/system audio is mixed in sync; participant tracks keep their source identities. Transcript and summary are created anew using your settings and normal processing actions. The calendar is kept only when every part has the same calendar context.\n\n",
+                    "Новая запись соединит части по времени начала без промежутков; перекрывающиеся части прозвучат последовательно. Все оригиналы и правки останутся. Микрофон и системный звук сводятся синхронно; дорожки участников сохраняют исходные идентификаторы. Расшифровка и сводка создаются заново по вашим настройкам и обычным командам обработки. Календарь переносится только при полном совпадении у всех частей.\n\n")
+                    + plan.parts.prefix(5).enumerated().map { "\($0.offset + 1). \(String($0.element.title.prefix(80)))" }.joined(separator: "\n")
+                    + (plan.parts.count > 5 ? localised("\n… and \(plan.parts.count - 5) more.", "\n… ещё \(plan.parts.count - 5).") : "")
+                confirmation.addButton(withTitle: localised("Merge", "Объединить"))
+                confirmation.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
+                guard await confirmation.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
+                try Task.checkCancellation()
+                let worker = Task.detached(priority: .utility) {
+                    try Home.$scoped.withValue(home) {
+                        try InterfaceLanguage.$scoped.withValue(language) {
+                            try RecordingMerge.create(dirs, in: root, operations: operations, expected: plan)
+                        }
+                    }
+                }
+                let progress = NSAlert()
+                progress.messageText = localised("Merging recordings…", "Объединение записей…")
+                progress.informativeText = localised("The originals are kept. You can cancel before the new recording is saved.",
+                    "Оригиналы сохраняются. Можно отменить операцию до сохранения новой записи.")
+                progress.addButton(withTitle: localised("Cancel merge", "Отменить объединение")).keyEquivalent = "\u{1b}"
+                progress.beginJournalSheetModal(for: panel) { response in
+                    if response == .alertFirstButtonReturn { worker.cancel() }
+                }
+                defer { if progress.window.sheetParent != nil { panel.endSheet(progress.window, returnCode: .abort) } }
+                let result = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+                guard !terminating else { return }
+                onRetranscribe?(result)
+                _ = await reveal(result)
+            } catch is CancellationError {
+                if !terminating { showServiceError(localised("Merge cancelled. Original recordings are unchanged.", "Объединение отменено. Оригиналы не изменены.")) }
+            } catch {
+                if !terminating { showServiceError(localised("Could not merge recordings. Originals are unchanged. ", "Не удалось объединить записи. Оригиналы не изменены. ") + error.localizedDescription) }
+            }
+        }
+    }
+
     /// Why a session cannot go to the Trash now, or nil when it can.
     ///
     /// A session being transcribed or summarised is a folder something is
@@ -2058,6 +2134,12 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
         guard menu === meetingMenu else { return }
         menu.removeAllItems()
         if selectedMeetings.count > 1 {
+            let merge = NSMenuItem(title: localised("Merge recordings…", "Объединить записи…"), action: #selector(mergeClicked), keyEquivalent: "")
+            merge.target = self
+            merge.toolTip = mergeRefusal
+            merge.isEnabled = merge.toolTip == nil
+            menu.addItem(merge)
+            menu.addItem(.separator())
             let item = NSMenuItem(title: localised("Delete \(selectedMeetings.count) recordings…", "Удалить записи: \(selectedMeetings.count)…"),
                 action: #selector(deleteClicked), keyEquivalent: "")
             item.target = self

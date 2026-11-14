@@ -86,6 +86,9 @@ private final class JournalAlertSurface: JournalSurface {
     var cancelButton: NSButton?
     override var acceptsFirstResponder: Bool { true }
     override func keyDown(with event: NSEvent) { interpretKeyEvents([event]) }
+    override func insertNewline(_ sender: Any?) { window?.defaultButtonCell?.performClick(sender) }
+    override func insertTab(_ sender: Any?) { window?.selectNextKeyView(sender) }
+    override func insertBacktab(_ sender: Any?) { window?.selectPreviousKeyView(sender) }
     override func cancelOperation(_ sender: Any?) {
         guard let cancelButton else { super.cancelOperation(sender); return }
         _ = cancelButton.sendAction(cancelButton.action, to: cancelButton.target)
