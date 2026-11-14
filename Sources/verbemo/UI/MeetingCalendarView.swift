@@ -65,8 +65,15 @@ final class MeetingCalendarView: NSStackView {
             if !metadata.participants.isEmpty {
                 addArrangedSubview(JournalStyle.caption(localised("INVITEES", "ПРИГЛАШЁННЫЕ")))
                 let visible = inviteesExpanded ? metadata.participants : Array(metadata.participants.prefix(4))
-                let people = body(visible.map(\.name).joined(separator: "\n"))
+                let people = NSStackView(views: visible.map(invitee))
+                people.orientation = .vertical
+                people.alignment = .leading
+                people.spacing = 2
                 people.identifier = .init("calendar.invitees")
+                for view in people.arrangedSubviews {
+                    view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+                    view.widthAnchor.constraint(equalTo: people.widthAnchor).isActive = true
+                }
                 addArrangedSubview(people)
                 if metadata.participants.count > 4 {
                     addArrangedSubview(expansionButton(
@@ -97,6 +104,39 @@ final class MeetingCalendarView: NSStackView {
         field.font = .systemFont(ofSize: 12)
         field.isSelectable = true
         return field
+    }
+    private func invitee(_ participant: CalendarParticipant) -> NSView {
+        let name = participant.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = participant.email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = !name.isEmpty ? name : !email.isEmpty ? email : localised("Unnamed invitee", "Приглашённый без имени")
+        guard let url = Self.emailURL(email) else { return body(title) }
+        let button = StudioActionButton(title: title, target: self, action: #selector(openEmail))
+        button.isBordered = false
+        button.alignment = .left
+        button.font = .systemFont(ofSize: 12)
+        button.contentTintColor = JournalStyle.accent
+        button.cell?.lineBreakMode = .byTruncatingTail
+        button.cell?.representedObject = url
+        button.toolTip = email
+        button.setAccessibilityRole(.link)
+        button.setAccessibilityLabel(title)
+        button.setAccessibilityHelp(email)
+        button.setAccessibilityURL(url)
+        return button
+    }
+    static func emailURL(_ email: String) -> URL? {
+        guard !email.isEmpty, !email.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }
+        // Encode recipient delimiters too: calendar data must not add recipients or message headers.
+        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: ",;:&=/?#%"))
+        guard let path = email.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.percentEncodedPath = path
+        return components.url
+    }
+    @objc private func openEmail(_ sender: NSButton) {
+        guard let url = sender.cell?.representedObject as? URL else { return }
+        if !NSWorkspace.shared.open(url) { NSSound.beep() }
     }
     private func expansionButton(_ title: String, id: String, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)

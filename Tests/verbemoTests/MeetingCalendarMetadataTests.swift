@@ -206,16 +206,18 @@ struct MeetingCalendarViewTests {
         let preview = try field("calendar.agenda")
         #expect(!preview.isHiddenOrHasHiddenAncestor)
         #expect(preview.stringValue == String(agenda.prefix(100)).split(separator: " ").dropLast().joined(separator: " "))
-        let invitees = try field("calendar.invitees")
-        #expect(invitees.stringValue.components(separatedBy: "\n").count == 4)
+        func invitees() throws -> NSStackView {
+            try #require(view.allDescendants.first { $0.identifier?.rawValue == "calendar.invitees" } as? NSStackView)
+        }
+        #expect(try invitees().arrangedSubviews.count == 4)
         let expandAgenda = try button("calendar.expand-agenda")
         _ = NSApplication.shared.sendAction(try #require(expandAgenda.action), to: expandAgenda.target, from: expandAgenda)
         #expect(try field("calendar.agenda").stringValue == agenda)
-        #expect(try field("calendar.invitees").stringValue.components(separatedBy: "\n").count == 4)
+        #expect(try invitees().arrangedSubviews.count == 4)
         let expandPeople = try button("calendar.expand-invitees")
         #expect(expandPeople.title == "Показать всех")
         _ = NSApplication.shared.sendAction(try #require(expandPeople.action), to: expandPeople.target, from: expandPeople)
-        #expect(try field("calendar.invitees").stringValue.components(separatedBy: "\n").count == participantCount)
+        #expect(try invitees().arrangedSubviews.count == participantCount)
         view.update(metadata)
         #expect(try field("calendar.agenda").stringValue == agenda)
         view.update(MeetingCalendarMetadata(["event_id": "another", "association": "confirmed", "agenda": agenda, "title": "Other"]))
@@ -237,6 +239,61 @@ struct MeetingCalendarViewTests {
                 #expect(text.stringValue == agenda)
             }
         }
+    }
+
+    @Test(.speaking(.english), arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func inviteeNamesLinksAndMissingValuesKeepIdentity(appearance: NSAppearance.Name) throws {
+        let metadata = try #require(MeetingCalendarMetadata([
+            "event_id": "event", "association": "confirmed", "title": "Synthetic event",
+            "participants": [
+                ["id": "z", "name": "   ", "email": " z@example.test "],
+                ["id": "a", "name": String(repeating: "Long synthetic name ", count: 12), "email": "a+tag@example.test"],
+                ["id": "named", "name": "Name only", "email": " "],
+                ["id": "unknown", "name": ""],
+            ],
+        ]))
+        let original = metadata.participants
+        let view = MeetingCalendarView()
+        view.appearance = NSAppearance(named: appearance)
+        view.update(metadata)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 270, height: 500),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView = view
+        window.contentView?.layoutSubtreeIfNeeded()
+        let people = try #require(view.allDescendants.first { $0.identifier?.rawValue == "calendar.invitees" } as? NSStackView)
+        let buttons = people.arrangedSubviews.compactMap { $0 as? NSButton }
+        #expect(buttons.map(\.title) == [original[0].name.trimmingCharacters(in: .whitespaces), "z@example.test"])
+        #expect(buttons.map(\.toolTip) == ["a+tag@example.test", "z@example.test"])
+        for (button, email) in zip(buttons, ["a+tag@example.test", "z@example.test"]) {
+            let url = try #require(button.cell?.representedObject as? URL)
+            #expect(URLComponents(url: url, resolvingAgainstBaseURL: false)?.path == email)
+            #expect(button.accessibilityRole() == .link)
+            #expect(button.accessibilityURL() == url)
+            #expect(button.accessibilityHelp() == email)
+            #expect(button.acceptsFirstResponder)
+            #expect(window.makeFirstResponder(button))
+            #expect(button.frame.maxX <= people.bounds.maxX + 1)
+        }
+        #expect(people.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue }.sorted()
+            == ["Name only", "Unnamed invitee"])
+        #expect(metadata.participants == original)
+        #expect(original.map(\.id) == ["a", "z", "unknown", "named"])
+    }
+
+    @Test(arguments: ["a+tag@example.test", "a?subject=hello&cc=other@example.test", "a,b@example.test",
+                       "percent%name@example.test", "имя@example.test", "\"two words\"@example.test"])
+    func emailLinksContainOnlyOneEncodedRecipient(email: String) throws {
+        let url = try #require(MeetingCalendarView.emailURL(email))
+        let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        #expect(components.scheme == "mailto")
+        #expect(components.path == email)
+        #expect(components.query == nil && components.fragment == nil && components.host == nil)
+        #expect(!components.percentEncodedPath.contains(","))
+        #expect(!components.percentEncodedPath.contains("?"))
+        #expect(MeetingCalendarView.emailURL("") == nil)
+        #expect(MeetingCalendarView.emailURL("a@example.test\r\nBcc:other@example.test") == nil)
     }
 
     @Test func candidateUsesTheSharedPickerAndNeverOpensTheCallAsACalendar() throws {
