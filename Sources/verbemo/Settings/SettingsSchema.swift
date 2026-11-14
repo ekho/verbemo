@@ -353,6 +353,17 @@ enum SettingsSchema {
                   .text, describedAs: "~/Verbemo Recordings", askedInSetup: true),
         ]),
 
+        Section(title: localised("Old recordings", "Старые записи"), entries: [
+            Entry(["cleanup", "days"], localised("Age in days", "Возраст в днях"),
+                  localised("A positive whole number of 24-hour days from recording start. No age is selected by default.",
+                            "Положительное целое число суток по 24 часа от начала записи. По умолчанию срок не выбран."),
+                  .number(unit: localised("days", "дней")), describedAs: localised("Choose", "Укажите")),
+            Entry(["cleanup", "mode"], localised("Automatic cleanup", "Автоматическая очистка"),
+                  localised("Off by default. Checks at launch and every 24 hours while Verbemo runs. Busy and open recordings are skipped. Entire recording moves all materials to Trash. Audio only keeps transcripts, summaries, versions and other documents; playback and retranscription need restored audio.",
+                            "По умолчанию выключена. Проверка при запуске и каждые 24 часа работы Verbemo. Занятые и открытые записи пропускаются. «Запись целиком» перемещает все материалы в Корзину. «Только аудио» сохраняет расшифровки, сводки, версии и другие документы; для воспроизведения и повторной расшифровки потребуется вернуть аудио."),
+                  .choice(["off", "audio", "recording"]), default: "off"),
+        ]),
+
         Section(title: localised("Transcription", "Расшифровка"), entries: [
             Entry(["transcription", "enabled"],
                   localised("Transcribe recordings", "Расшифровывать записи"),
@@ -739,6 +750,10 @@ enum SettingsSchema {
         case (.text(let raw), .number):
             let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty { return .clear }
+            if entry.path == ["cleanup", "days"] {
+                guard let days = Int(text), RecordingCleanup.valid(days: days) else { return .invalid }
+                return .set(days)
+            }
             if entry.path == ["mcp", "port"] {
                 guard let port = Int(text), (1024...65535).contains(port) else { return .invalid }
                 return port == 52763 ? .clear : .set(port)

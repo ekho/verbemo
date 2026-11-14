@@ -213,6 +213,7 @@ enum SessionInventory {
     /// with the reason dropped: here it is only ever "is there audio".
     private static func audioSurvives(_ dir: URL, meta: [String: Any]) -> Bool {
         if PostProcessor.obstacleToTranscribing(dir, meta: meta) == nil { return true }
+        if let files = try? RecordingCleanup.audioFiles(in: dir, meta: meta), !files.isEmpty { return true }
         return (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?.contains {
             $0.hasPrefix("diarization-source-") && $0.hasSuffix(".caf")
         } == true

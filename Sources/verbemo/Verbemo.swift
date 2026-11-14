@@ -283,6 +283,13 @@ final class AppController {
     /// — see `SweepScheduler`. It sweeps whatever folder is current when it
     /// runs.
     private var sweeps: SweepScheduler!
+    private lazy var cleanup = RecordingCleanupController(root: { [weak self, root] in self?.root ?? root }, operations: operations,
+        busy: { [weak self] dir in
+            guard let self else { return true }
+            return pendingRoot != nil || imports.isRunning || mediaImportTask != nil
+                || session?.dir.standardizedFileURL.resolvingSymlinksInPath().path == dir.path
+                || (recordingsBuilt && recordings.protectsFromCleanup(dir))
+        })
     private var mediaImport: MediaImportCoordinator
     private let liveTranscription = LiveTranscriptionCoordinator()
     private let calendar: CalendarWatcher
@@ -527,6 +534,11 @@ final class AppController {
             })
         configDiskWatch = ConfigWatch.DiskWatch()
         window.mcp = mcp
+        window.cleanup = cleanup
+        cleanup.onChange = { [weak self] in
+            self?.window.cleanupChanged()
+            self?.sessionsChanged()
+        }
         mcp.refresh()
         showConfigProblems()
         setupRequestObserver = SetupRequest.observe { [weak self] in self?.showSetup() }
@@ -592,6 +604,7 @@ final class AppController {
                 }
             }
             await transcription.resumePending(root: root)
+            if !isStopping { cleanup.start() }
             // After the queue has drained, not merely after it has been asked
             // to start: a session that transcribes in this pass gets named
             // and summarized by the coordinator itself, and the sweep is only
@@ -787,6 +800,7 @@ final class AppController {
         imports.close()
         cancelImport()
         uiCleanup = window.stopForTermination()
+        uiCleanup.append(cleanup.stopForTermination())
         if recordingsBuilt { uiCleanup += recordings.stopForTermination() }
         if setupBuilt { uiCleanup += setupPage.stopForTermination() }
     }

@@ -20,15 +20,22 @@ final class SessionDeletionController {
     func isPending(_ dir: URL) -> Bool { recycling.contains(dir) || pending.values.contains { $0.dir == dir } }
 
     init(delay: TimeInterval = 6.5, recycle: @escaping Recycle = { dir, completion in
-        NSWorkspace.shared.recycle([dir]) { destinations, error in
-            Task { @MainActor in
-                if let destination = destinations[dir] { SessionClaim.release(destination) }
-                completion(error)
-            }
+        SessionDeletionController.moveToTrash(dir) { destination, error in
+            if let destination { SessionClaim.release(destination) }
+            completion(error)
         }
     }) {
         self.delay = delay
         self.recycle = recycle
+    }
+
+    /// Finder retains the original location for Put Back; never fall back to permanent deletion.
+    static func moveToTrash(_ url: URL, completion: @escaping @MainActor @Sendable (URL?, Error?) -> Void) {
+        NSWorkspace.shared.recycle([url]) { destinations, error in
+            Task { @MainActor in
+                completion(destinations[url], error ?? (destinations[url] == nil ? CocoaError(.fileWriteUnknown) : nil))
+            }
+        }
     }
 
     @discardableResult

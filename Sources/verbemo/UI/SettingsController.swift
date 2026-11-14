@@ -7,6 +7,10 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         didSet { setup.isRecording = isRecording }
     }
     var isProcessing: (() -> Bool)?
+    var cleanup: RecordingCleanupController? { didSet { refreshCleanup() } }
+    private let cleanupStatus = NSTextField(wrappingLabelWithString: "")
+    private let cleanupRun = NSButton(title: localised("Check now / retry", "Проверить сейчас / повторить"), target: nil, action: nil)
+    private let cleanupReport = NSButton(title: localised("Last cleanup report…", "Отчёт последней очистки…"), target: nil, action: nil)
     var mcp: MCPController? {
         didSet { mcpSettings.controller = mcp }
     }
@@ -145,7 +149,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
             heading.textColor = JournalStyle.ink
             form.insertArrangedSubview(heading, at: 0)
             heading.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
-            let scope = NSTextField(wrappingLabelWithString: localised(
+            let scope = NSTextField(wrappingLabelWithString: destination == .storage ? localised(
+                "Storage settings apply to this profile. Automatic cleanup affects existing recordings only after you choose an age and enable a mode.",
+                "Настройки хранения действуют в этом профиле. Автоматическая очистка затрагивает существующие записи только после выбора срока и включения режима.") : localised(
                 "Settings apply to this profile. Recording and processing options apply to future operations. Existing transcripts and summaries stay unchanged.",
                 "Настройки действуют в этом профиле. Параметры записи и обработки применяются к будущим операциям. Готовые расшифровки и сводки не меняются."))
             scope.identifier = .init("settings.scope")
@@ -170,7 +176,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 let row = (destination == .general || destination == .ktalk) ? SetupLayout.box([SetupLayout.row(title: content)]) : content
                 if destination == .general || destination == .ktalk { content.widthAnchor.constraint(equalTo: row.widthAnchor, constant: -38).isActive = true }
                 providerRows.append((entry, row))
-                let container = destination == .ktalk || common.contains(entry.path.joined(separator: ".")) ? form : rare
+                let container = destination == .ktalk || entry.path.first == "cleanup" || common.contains(entry.path.joined(separator: ".")) ? form : rare
                 container.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: container.widthAnchor, constant: container === form ? -48 : 0).isActive = true
                 if entry.path == Config.Key.calendar.path {
@@ -227,6 +233,24 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                 form.addArrangedSubview(box)
                 box.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true
             }
+            if destination == .storage {
+                let help = NSTextField(wrappingLabelWithString: localised(
+                    "Trash is never emptied automatically. Space is freed when you empty it. To recover, first turn cleanup off, then use Finder’s Put Back on the recording or audio files. The report lists original and Trash locations. On a partial error, moved files stay in Trash; remaining files and documents stay in place. Retry handles only files still present.",
+                    "Корзина не очищается автоматически. Место освободится после её очистки. Для восстановления сначала выключите политику, затем выберите «Вернуть на место» в Корзине Finder для записи или аудиофайлов. Отчёт содержит исходные пути и пути в Корзине. При частичной ошибке перенесённые файлы остаются в Корзине, остальные файлы и документы — на месте. Повтор затрагивает только оставшиеся файлы."))
+                help.font = SetupLayout.detailFont
+                help.textColor = StudioStyle.muted
+                cleanupStatus.font = SetupLayout.detailFont
+                cleanupStatus.identifier = .init("cleanup.status")
+                cleanupRun.target = self; cleanupRun.action = #selector(runCleanup)
+                cleanupRun.identifier = .init("cleanup.run")
+                cleanupReport.target = self; cleanupReport.action = #selector(openCleanupReport)
+                cleanupReport.identifier = .init("cleanup.report")
+                for view in [help, cleanupStatus, cleanupRun, cleanupReport] {
+                    form.addArrangedSubview(view)
+                    view.widthAnchor.constraint(lessThanOrEqualTo: form.widthAnchor, constant: -48).isActive = true
+                }
+                for view in [help, cleanupStatus] { view.widthAnchor.constraint(equalTo: form.widthAnchor, constant: -48).isActive = true }
+            }
             if destination == .storage && Platform.supportsLocalModels {
                 for view in modelsSection() {
                     form.addArrangedSubview(view)
@@ -237,6 +261,15 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         }
     }
     private var optionGroups: [NSView] = []
+
+    func refreshCleanup() {
+        cleanupStatus.stringValue = cleanup?.isRunning == true ? localised("Cleaning…", "Очистка…") : cleanup?.status ?? ""
+        cleanupStatus.isHidden = cleanupStatus.stringValue.isEmpty
+        cleanupRun.isEnabled = cleanup != nil && cleanup?.isRunning == false && (try? RecordingCleanup.policy(in: Config.raw())) != nil
+        cleanupReport.isEnabled = cleanup.map { FileManager.default.fileExists(atPath: $0.reportURL.path) } ?? false
+    }
+    @objc private func runCleanup() { cleanup?.request(); refreshCleanup() }
+    @objc private func openCleanupReport() { if let url = cleanup?.reportURL { NSWorkspace.shared.open(url) } }
     @objc private func toggleOptions(_ sender: NSButton) {
         optionGroups[sender.tag].isHidden = sender.state != .on
         sender.image = NSImage(systemSymbolName: sender.state == .on ? "chevron.down" : "chevron.right", accessibilityDescription: nil)
@@ -646,6 +679,8 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
                     item.title = raw == "auto" ? localised("System", "Как в системе") : raw == "ru" ? "Русский" : "English"
                 case ["system_audio"]:
                     item.title = raw == "app" ? localised("Call application", "Приложение звонка") : localised("All Mac audio", "Весь звук Mac")
+                case ["cleanup", "mode"]:
+                    item.title = raw == "off" ? localised("Off", "Выключена") : raw == "audio" ? localised("Audio only", "Только аудио") : localised("Entire recording", "Запись целиком")
                 default: break
                 }
             }
@@ -729,6 +764,7 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         serviceNotice.isHidden = notices.isEmpty
         for (entry, view) in providerRows { view.isHidden = !providerIsSelected(entry.path) }
         mcpSettings.refresh()
+        refreshCleanup()
     }
 
     private func providerIsSelected(_ path: [String]) -> Bool {
@@ -795,6 +831,9 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
 
         let resolution = SettingsSchema.resolve(input, for: entry)
         if case .invalid = resolution {
+            if entry.path == ["cleanup", "days"] {
+                operationNotice = localised("Enter a positive whole number of days.", "Введите положительное целое число дней.")
+            }
             // Letters in a number field: put back what is actually stored
             // rather than writing a guess or leaving the field lying.
             refresh()
@@ -807,6 +846,17 @@ final class SettingsController: NSObject, NSTextFieldDelegate {
         guard SettingsSchema.changes(
             resolution, from: value(at: entry.path, in: Config.raw()))
         else { return }
+
+        if entry.path == ["cleanup", "mode"], case .set(let mode) = resolution {
+            var candidate = Config.raw()
+            var settings = candidate["cleanup"] as? [String: Any] ?? [:]
+            settings["mode"] = mode; candidate["cleanup"] = settings
+            guard (try? RecordingCleanup.policy(in: candidate)) != nil else {
+                operationNotice = localised("Choose an age in days before enabling cleanup.", "Перед включением очистки укажите возраст в днях.")
+                refresh(); return
+            }
+        }
+        if entry.path.first == "cleanup" { operationNotice = "" }
 
 
         switch resolution {

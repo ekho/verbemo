@@ -237,6 +237,40 @@ only values that differ from the defaults. A compact example:
 - `interface_language` is `auto`, `en`, or `ru`. `dock_icon`, `menu_bar_icon`,
   and `window` control where Verbemo appears.
 
+On macOS, `cleanup.mode` defaults to `off`. Choose `audio` (all saved audio only)
+or `recording` (the entire recording), and explicitly set `cleanup.days` to a
+positive whole number. There is no default age. The exact threshold is elapsed
+24-hour days from `meta.json`'s recording start, not the file modification date.
+Cleanup checks at application launch and every 24 hours while Verbemo runs;
+Storage and models also offers **Check now / retry**. Unreadable dates and unsafe
+paths are skipped and reported. Open/selected recordings, recording markers,
+queued/running work, claims and pending bulk operations are protected. Hidden
+import/merge staging is never eligible. A newly selected recordings folder is
+used on the next check, after the existing root handoff has completed.
+
+Both modes use the macOS Trash, which Verbemo never empties. Disk space is freed
+only when you empty Trash yourself. Audio-only cleanup covers indexed microphone,
+system, imported and KTalk/merge participant tracks, retained originals and known
+mixed/archive/diarization audio files inside the recording. It preserves metadata,
+transcripts, summaries, transcript versions, speaker assignments, processing state
+and other non-audio materials. Playback and retranscription require audio; after
+cleanup the UI reads the files actually remaining. No external path or symbolic
+link target is deleted. Unknown or unsafe audio metadata fails closed.
+
+Before restoring anything, turn automatic cleanup **off**. In Finder's Trash,
+select the recording folder or audio files and use **Put Back**. If Finder cannot
+restore automatically, the last cleanup report lists original and Trash paths;
+move those items back to their original locations without replacing existing
+files. The report is available in Storage and models and at
+`~/.config/verbemo/cleanup-report.txt`. Each requested move is recorded before
+calling Finder. On partial failure, completed moves remain in Trash, failed items
+remain in the recording, and all documents stay readable. Fix the reported cause
+and retry: only still-present files are moved. Stopping the app waits for the
+current Finder operation and prevents further moves. A crash may leave a pending
+move in the report: inspect that source path and Trash before retrying. Emptying
+Trash permanently removes this recovery route. This age policy is independent of
+`keep_audio`, which controls ordinary post-transcription audio retention.
+
 For Anthropic summaries, `summary.api_key_path` names the key file;
 `ANTHROPIC_API_KEY` takes precedence. The OpenAI and compatible-server key-file
 settings above are separate. The OpenAI key is not automatically forwarded to
