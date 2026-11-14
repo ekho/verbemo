@@ -51,11 +51,14 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
     private var settingsBuilt = false
     private var settingsServiceViews: [NSView] = []
     var mcp: MCPController? { didSet { if settingsBuilt { settings.mcp = mcp } } }
+    var cleanup: RecordingCleanupController? { didSet { if settingsBuilt { settings.cleanup = cleanup } } }
+    func cleanupChanged() { if settingsBuilt { settings.refreshCleanup() } }
     private var stopping = false
     lazy var settings: SettingsController = {
         settingsBuilt = true
         let settings = SettingsController(hostWindow: panel, calendar: calendar)
         settings.mcp = mcp
+        settings.cleanup = cleanup
         settings.isProcessing = { [weak self] in self?.isProcessing?() == true }
         settings.isRecording = { [weak self] in self?.recordingBarIsVisible == true }
         settingsServiceViews = settings.serviceViews

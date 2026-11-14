@@ -69,6 +69,8 @@ extension Config {
         case interfaceTheme = "interface_theme"
         case interfaceLanguage = "interface_language"
         case keepAudio = "keep_audio"
+        case cleanupMode = "cleanup.mode"
+        case cleanupDays = "cleanup.days"
         case summaryEnabled = "summary.enabled"
         case summaryBackend = "summary.backend"
         case summaryLanguage = "summary.language"

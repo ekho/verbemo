@@ -9,7 +9,7 @@ enum SettingsPage {
         case "call_integrations": return .ktalk
         case "transcription", "live_transcription", "transcript_echo_filter": return .transcription
         case "summary", "speaker_names": return .summary
-        case "recordings_dir", "keep_audio": return .storage
+        case "recordings_dir", "keep_audio", "cleanup": return .storage
         case "calendar", "calendar_ids": return .calendar
         case "auto_record", "system_audio", "mic_voice_processing", "offline_echo_cancellation", "on_stop": return .recording
         default: return .general

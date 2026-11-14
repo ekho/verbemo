@@ -393,6 +393,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var deletionCompleted = 0
     var isProcessing: Bool { !workByMeeting.isEmpty || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
+    func protectsFromCleanup(_ dir: URL) -> Bool {
+        let canonical = dir.standardizedFileURL.resolvingSymlinksInPath()
+        return workByMeeting.keys.contains { $0.standardizedFileURL.resolvingSymlinksInPath().path == canonical.path } || deletion.isPending(dir)
+            || selectedMeetings.contains { $0.dir.standardizedFileURL.resolvingSymlinksInPath().path == canonical.path }
+    }
     private var summarySheets: [URL: (version: URL, sheet: SummaryRegenerationSheet)] = [:]
     private var workByMeeting: [URL: String] = [:]
     private var mergeTask: Task<Void, Never>?
@@ -2459,6 +2464,8 @@ private extension MeetingLibraryController {
             for stage in MeetingPresentation.stages(item, active: activeRecording, version: selectedVersion).filter({ $0.symbol != "calendar" }) {
                 let image = MeetingListView.icon(stage)
                 let title = stage.symbol == "mic" && activeRecording?.dir != item.dir && !item.hasAudio ? localised("Audio not retained", "Аудио не сохранено") : stage.title
+                image.setAccessibilityLabel(title)
+                image.toolTip = title
                 let label = NSTextField(wrappingLabelWithString: (stage.state == .pending && stage.symbol != "checklist" ? localised("Waiting: ", "Ожидание: ") : "") + title)
                 label.font = .systemFont(ofSize: 11)
                 label.setContentHuggingPriority(.init(1), for: .horizontal)

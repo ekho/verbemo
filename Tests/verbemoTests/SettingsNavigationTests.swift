@@ -344,7 +344,9 @@ struct SettingsNavigationTests {
                 let scope = try #require(page.allDescendants.first {
                     $0.identifier?.rawValue == "settings.scope"
                 } as? NSTextField)
-                #expect(scope.stringValue.contains("Готовые расшифровки и сводки не меняются"))
+                #expect(scope.stringValue.contains(destination == .storage
+                    ? "только после выбора срока и включения режима"
+                    : "Готовые расшифровки и сводки не меняются"))
                 #expect(scope.maximumNumberOfLines == 0)
                 let heading = try #require(page.allDescendants.first {
                     $0.identifier?.rawValue == "settings.heading"

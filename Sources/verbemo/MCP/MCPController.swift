@@ -150,7 +150,9 @@ import Foundation
             guard let key = Config.Key(rawValue: path) else { continue }
             switch entry.kind {
             case .toggle: values[path] = .bool(Config.flag(key, in: json))
-            case .number: values[path] = .number(Config.number(key, in: json))
+            case .number:
+                values[path] = entry.hasValueDefault ? .number(Config.number(key, in: json))
+                    : (Config.value(key, in: json) as? Double).map(MCPJSON.number) ?? .null
             case .choice, .text, .multilineText:
                 values[path] = entry.hasValueDefault ? .string(Config.string(key, in: json)) : .optional(Config.text(key, in: json))
             case .list: values[path] = Config.list(key, in: json).map { .array($0.map(MCPJSON.string)) } ?? .null

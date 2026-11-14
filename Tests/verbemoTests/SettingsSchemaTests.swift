@@ -456,6 +456,7 @@ struct SettingsSchemaTests {
                 case .toggle:
                     #expect(entry.defaultValue is Bool, "\(entry.path) toggle default isn't a Bool")
                 case .number:
+                    guard entry.hasValueDefault else { continue }
                     let integer = entry.defaultValue as? Int
                     let real = entry.defaultValue as? Double
                     #expect(integer != nil || real?.isFinite == true,
