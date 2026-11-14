@@ -190,6 +190,9 @@ struct JournalWorkspaceTests {
         let row = try #require(library.tableView(table, rowViewForRow: 0))
         row.frame = NSRect(x: 0, y: 0, width: width, height: 62)
         row.backgroundColor = .clear
+        let window = HoverWindow(contentRect: row.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = row
+        window.pointer = row.convert(.init(x: width / 2, y: 31), to: nil)
         func paintedColumns(_ draw: () -> Void) throws -> [Int] {
             let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: 62,
                 bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -214,6 +217,7 @@ struct JournalWorkspaceTests {
         let selectedBackground = try paintedColumns { row.drawBackground(in: row.bounds) }
         #expect(selectedBackground.isEmpty, "Hover must not darken an already selected row")
         row.isSelected = false
+        window.pointer = .init(x: -10, y: -10)
         row.mouseExited(with: entered)
         let cleared = try paintedColumns { row.drawBackground(in: row.bounds) }
         #expect(cleared.isEmpty)
