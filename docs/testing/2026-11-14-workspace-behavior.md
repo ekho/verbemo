@@ -57,3 +57,33 @@ appearances, a 760×600 window, long event title/agenda/invitees and a multiline
 diarization error were checked. The inspector scrolled to its last controls; its
 close button restored the document and keyboard focus in the compact window.
 Accessibility labels/value were inspected; spoken VoiceOver was not exercised.
+
+English GUI also verified the accessible width setter (270 → 410 points) and
+retention of that width across recording → saved-meeting presentation.
+
+## #123 — selection after Stop
+
+Publishing idle removed the active row before the asynchronous inventory scan
+could include its saved replacement. The existing fallback then selected an older
+meeting. The controller now keeps the stopped item until the scan includes it,
+preserving the selected folder through both updates. Folder identity uses
+normalized paths so equivalent file URLs cannot duplicate the temporary row.
+Search, activity titles and the list use the same inventory.
+
+If metadata cannot be saved, the current row stays visible and the existing
+messages popover explains that recovery will finish it on the next launch. This
+does not claim a transcription failure or enqueue processing without metadata.
+Audio capture, cleanup, processing and recovery ownership are unchanged.
+
+The original regression failed six assertions; native GUI also reproduced Stop
+selecting an older meeting. `RecordingSelectionTests` covers successful/failed
+metadata publication while viewing either the current recording or an older
+meeting, immediate publication, refresh, title search, metadata recovery,
+processing start and transcript publication. It checks that the recovered row
+appears only once and that the reading context remains selected.
+
+Native GUI on the fixed code: English/light successful Stop retained the current
+meeting after refresh. English/dark with an injected metadata write failure also
+retained it; the messages popover contained the product's recovery explanation.
+The temporary host uses real window/library/session code with fake capture and
+synthetic data. Real audio capture and actual recognition were not exercised.

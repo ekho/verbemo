@@ -87,6 +87,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let pasteboard: NSPasteboard
     private let table = MeetingTableView()
     private var activeRecording: MeetingPresentation.ActiveRecording?
+    private var stoppedRecording: SessionInventory.Item?
     var onOpenActiveRecording: (() -> Void)?
     var onRenameActiveRecording: ((String) throws -> Void)?
     var onAssociateActiveRecording: ((URL, CalendarWatcher.Meeting?) throws -> Void)?
@@ -94,11 +95,28 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     func setActiveRecording(_ value: MeetingPresentation.ActiveRecording?) {
         guard activeRecording != value else { return }
         let refreshDetail = selected == nil || selected?.dir == activeRecording?.dir || selected?.dir == value?.dir
+        if let previous = activeRecording, value == nil {
+            if let saved = SessionInventory.item(for: previous.dir) {
+                stoppedRecording = saved
+            } else {
+                let reason = localised("Recording metadata could not be saved. The recording is kept for recovery on the next launch.",
+                    "Не удалось сохранить сведения о записи. Запись оставлена для восстановления при следующем запуске.")
+                stoppedRecording = .init(dir: previous.dir, name: previous.dir.lastPathComponent,
+                    title: previous.title, started: previous.started, duration: nil, trigger: nil, engine: nil,
+                    transcript: .off, diarization: nil, unreadableDiarization: false,
+                    speakers: .off, summary: .off, namedSpeakers: nil, sizeBytes: 0, hasAudio: true)
+                showServiceError(reason)
+            }
+        }
         activeRecording = value
         if libraryQuery.isEmpty { show(allItems, refreshDetail: refreshDetail) }
         else { restartLibrarySearch() }
+        if value == nil { reload() }
     }
     private var allItems: [SessionInventory.Item] = []
+    private var inventory: [SessionInventory.Item] {
+        (activeRecording.map { [$0.item] } ?? []) + (stoppedRecording.map { [$0] } ?? []) + allItems
+    }
     private var meetingFilter: ApplicationNavigationState.Destination = .allMeetings
     private let search = StudioSearchField()
     private let librarySearchStatus = NSTextField(labelWithString: "")
@@ -1045,6 +1063,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     /// Show another recordings folder: the one Setup has just moved verbemo to.
     func setRoot(_ folder: URL) {
         root = folder
+        stoppedRecording = nil
         libraryNavigationFailed = false
         libraryReadingPosition = nil
         table.deselectAll(nil)
@@ -1116,7 +1135,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         show(allItems)
         guard !terminating, !libraryQuery.isEmpty, scan == nil else { return }
         let generation = librarySearchGeneration, query = libraryQuery, root = self.root
-        let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
         let inputs = inventory.map { item in
             MeetingLibrarySearch.Input(dir: item.dir, title: item.title ?? item.name,
                 metadata: [item.name, MeetingPresentation.date(item.started)]
@@ -1162,7 +1180,6 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private var activityTitles: [URL: String] = [:]
     var attentionMeetings: [MeetingPresentation.Attention] {
         let active = activeRecording
-        let inventory = (active.map { [$0.item] } ?? []) + allItems
         return inventory.compactMap { item in
             guard !deletion.isPending(item.dir) else { return nil }
             return MeetingPresentation.attention(for: item, active: active)
@@ -1185,9 +1202,13 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         reloadingList = true
         defer { reloadingList = false }
         let previous = preferredSelection ?? selected?.dir ?? rememberedMeeting
+        // Keep the stopped row through scans that began before its metadata was published.
+        if let stoppedRecording, found.contains(where: { $0.dir.standardizedFileURL.path == stoppedRecording.dir.standardizedFileURL.path })
+            || !FileManager.default.fileExists(atPath: stoppedRecording.dir.path) {
+            self.stoppedRecording = nil
+        }
         allItems = found.filter { $0.dir != activeRecording?.dir }
-        activityTitles = Dictionary(allItems.map { ($0.dir.standardizedFileURL.resolvingSymlinksInPath(), $0.title ?? $0.name) }, uniquingKeysWith: { first, _ in first })
-        let inventory = (activeRecording.map { [$0.item] } ?? []) + allItems
+        activityTitles = Dictionary(inventory.map { ($0.dir.standardizedFileURL.resolvingSymlinksInPath(), $0.title ?? $0.name) }, uniquingKeysWith: { first, _ in first })
         items = inventory.filter { item in
             !deletion.isPending(item.dir) && MeetingPresentation.matches(item, filter: meetingFilter, query: "", active: activeRecording)
                 && (libraryQuery.isEmpty || (libraryHits.map { $0[item.dir] != nil }
@@ -1208,7 +1229,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
         table.reloadData()
         if meetingSelectionActive {
-            if let previous, let row = items.firstIndex(where: { $0.dir == previous }) {
+            if let previous, let row = items.firstIndex(where: { $0.dir.standardizedFileURL.path == previous.standardizedFileURL.path }) {
                 table.selectRowIndexes([row], byExtendingSelection: false)
             } else if !items.isEmpty {
                 table.selectRowIndexes([0], byExtendingSelection: false)
