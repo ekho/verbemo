@@ -99,9 +99,10 @@ final class MeetingPlaybackView: JournalSurface {
     }
 
     /// A shared timeline streams the originals without exporting or rewriting audio.
-    static func makeItem(_ sources: [Source]) async throws -> AVPlayerItem {
+    static func makeItem(_ sources: [Source], isMerged: Bool = false) async throws -> AVPlayerItem {
         let composition = AVMutableComposition()
         var tracks: [AVMutableCompositionTrack] = []
+        var intervals: [(start: Double, end: Double)] = []
         for source in sources {
             try Task.checkCancellation()
             let asset = AVURLAsset(url: source.url)
@@ -114,13 +115,23 @@ final class MeetingPlaybackView: JournalSurface {
                 }
                 try destination.insertTimeRange(range, of: track, at: CMTime(value: Int64(source.offsetMs), timescale: 1000))
                 tracks.append(destination)
+                let start = Double(source.offsetMs) / 1000
+                intervals.append((start, start + range.duration.seconds))
             }
         }
         guard !tracks.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
         let mix = AVMutableAudioMix()
+        let boundaries = isMerged ? Set(intervals.flatMap { [$0.start, $0.end] }).sorted() : []
+        let gains = boundaries.map { time in
+            (time, 1 / Float(max(1, intervals.filter { $0.start <= time && $0.end > time }.count)))
+        }
         mix.inputParameters = tracks.map { track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
             parameters.setVolume(1 / Float(tracks.count), at: .zero)
+            // Sequential parts must not grow quieter as more source tracks are added.
+            for (time, gain) in gains {
+                parameters.setVolume(gain, at: CMTime(seconds: time, preferredTimescale: 48_000))
+            }
             return parameters
         }
         let item = AVPlayerItem(asset: composition)
@@ -144,9 +155,10 @@ final class MeetingPlaybackView: JournalSurface {
         message.toolTip = message.stringValue
         refreshControls()
         guard !next.isEmpty else { return }
+        let isMerged = dir.flatMap(SessionState.read)?["merge"] != nil
         loading = Task { [weak self] in
             do {
-                let item = try await Self.makeItem(next)
+                let item = try await Self.makeItem(next, isMerged: isMerged)
                 let duration = try await item.asset.load(.duration)
                 try Task.checkCancellation()
                 guard let self else { return }

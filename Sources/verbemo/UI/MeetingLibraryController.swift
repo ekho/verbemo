@@ -372,23 +372,30 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let busyLabel = NSTextField(labelWithString: "")
 
     private var items: [SessionInventory.Item] = []
+    var selectedMeetings: [SessionInventory.Item] {
+        table.selectedRowIndexes.compactMap { items.indices.contains($0) ? items[$0] : nil }
+    }
     private var selected: SessionInventory.Item? {
         if !meetingSelectionActive { return items.first { $0.dir == rememberedMeeting } }
+        if selectedMeetings.count > 1, let current = selectedMeetings.first(where: { $0.dir == versionSession }) { return current }
         return table.selectedRow >= 0 && table.selectedRow < items.count
             ? items[table.selectedRow]
             : nil
     }
     var onActivityChange: (() -> Void)?
-    private let deletion = SessionDeletionController()
+    private let deletion: SessionDeletionController
     var mcpPendingDeletion: Set<String> { Set(allItems.filter { deletion.isPending($0.dir) }.map { $0.dir.lastPathComponent }) }
     private let deletionNotice = NSStackView()
     private let deletionLabel = NSTextField(labelWithString: "")
     var serviceViews: [NSView] { [detailError, resultNotice, deletionNotice, busyLabel, librarySearchStatus] + audioPlayer.serviceViews }
-    private var undoDeletionID: UUID?
+    private var undoDeletionIDs: [UUID] = []
+    private var deletionFailures: [String] = []
+    private var deletionCompleted = 0
     var isProcessing: Bool { !workByMeeting.isEmpty || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var summarySheets: [URL: (version: URL, sheet: SummaryRegenerationSheet)] = [:]
     private var workByMeeting: [URL: String] = [:]
+    private var mergeTask: Task<Void, Never>?
     private let operations: ProcessingOperations
     private var displayedOperations: [ProcessingOperations.Snapshot] = []
     private var selectedWork: String? { selected.flatMap { workByMeeting[$0.dir] } }
@@ -412,9 +419,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     init(root: URL, pasteboard: NSPasteboard = .general,
-         operations: ProcessingOperations = .shared, hostWindow: NSWindow) {
+         operations: ProcessingOperations = .shared, hostWindow: NSWindow,
+         deletion: SessionDeletionController = SessionDeletionController()) {
         processingCancellation = MeetingProcessingCancellation(operations: operations)
         self.operations = operations
+        self.deletion = deletion
         self.root = root
         self.pasteboard = pasteboard
         panel = hostWindow
@@ -471,6 +480,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         for task in scans { task.cancel() }
         scan = nil
         var cleanup = scans + processingCancellation.stopObserving()
+        if let mergeTask {
+            mergeTask.cancel()
+            if let sheet = panel.attachedSheet { panel.endSheet(sheet, returnCode: .abort) }
+            cleanup.append(mergeTask)
+        }
         for task in librarySearchTasks.values { task.cancel(); cleanup.append(task) }
         librarySearchTask = nil
         if let monitor { cleanup.append(monitor) }
@@ -490,6 +504,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         table.headerView = nil
         table.style = .plain
         table.selectionHighlightStyle = .regular
+        table.allowsMultipleSelection = true
+        table.setAccessibilityLabel(localised("Recordings", "Записи"))
+        table.setAccessibilityHelp(localised("Use Command or Shift to select recordings. Command-Delete moves the selection to Trash.",
+            "Выбирайте записи с Command или Shift. Command-Delete перемещает выбранные записи в корзину."))
+        table.onDelete = { [weak self] in self?.deleteClicked() }
         table.backgroundColor = StudioStyle.sidebar
         table.rowHeight = 64
         table.intercellSpacing = NSSize(width: 0, height: 4)
@@ -504,7 +523,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         meetingMenu.autoenablesItems = false
         table.onContext = { [weak self] row in
             guard let self, row < self.items.count else { return }
-            self.table.selectRowIndexes([row], byExtendingSelection: false)
+            if !self.table.selectedRowIndexes.contains(row) {
+                self.table.selectRowIndexes([row], byExtendingSelection: false)
+            }
             self.showDetail()
             self.onSelectMeeting?()
         }
@@ -882,6 +903,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
     @objc private func searchChanged() { libraryNavigationFailed = false; restartLibrarySearch() }
     @objc private func meetingClicked() {
+        guard selectedMeetings.count == 1 else { return }
         if let selected, selected.dir == activeRecording?.dir { onOpenActiveRecording?(); return }
         revealLibraryHit()
         onSelectMeeting?()
@@ -1202,6 +1224,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         reloadingList = true
         defer { reloadingList = false }
         let previous = preferredSelection ?? selected?.dir ?? rememberedMeeting
+        let previousSelection = Set(selectedMeetings.map { $0.dir.standardizedFileURL.path })
         // Keep the stopped row through scans that began before its metadata was published.
         if let stoppedRecording, found.contains(where: { $0.dir.standardizedFileURL.path == stoppedRecording.dir.standardizedFileURL.path })
             || !FileManager.default.fileExists(atPath: stoppedRecording.dir.path) {
@@ -1229,7 +1252,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
         table.reloadData()
         if meetingSelectionActive {
-            if let previous, let row = items.firstIndex(where: { $0.dir.standardizedFileURL.path == previous.standardizedFileURL.path }) {
+            let retained = IndexSet(items.indices.filter { previousSelection.contains(items[$0].dir.standardizedFileURL.path) })
+            if !retained.isEmpty {
+                table.selectRowIndexes(retained, byExtendingSelection: false)
+            } else if let previous, let row = items.firstIndex(where: { $0.dir.standardizedFileURL.path == previous.standardizedFileURL.path }) {
                 table.selectRowIndexes([row], byExtendingSelection: false)
             } else if !items.isEmpty {
                 table.selectRowIndexes([0], byExtendingSelection: false)
@@ -1928,44 +1954,141 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     /// delete is somebody's only record of a conversation, and the Trash is
     /// what makes that recoverable.
     @objc private func deleteClicked() {
-        guard let item = selected else { return }
-        if let why = Self.deleteRefusal(for: item.dir) {
-            say(why, about: item)
-            return
-        }
+        let selection = selectedMeetings
+        guard !selection.isEmpty, panel.attachedSheet == nil else { return }
         let alert = NSAlert()
-        alert.messageText = localised("Delete \(item.title ?? item.name)?", "Удалить «\(item.title ?? item.name)»?")
+        alert.messageText = selection.count == 1
+            ? localised("Delete \(selection[0].title ?? selection[0].name)?", "Удалить «\(selection[0].title ?? selection[0].name)»?")
+            : localised("Delete \(selection.count) recordings?", "Удалить записи: \(selection.count)?")
         alert.informativeText = localised(
-            "The audio and all transcript versions will move to the macOS Trash after a short Undo period.",
-            "Аудио и все версии расшифровки будут перемещены в корзину macOS. В течение нескольких секунд удаление можно отменить.")
+            "The selected audio and all transcript versions will move to the macOS Trash after a short Undo period. Busy recordings will be kept.\n\n",
+            "Выбранное аудио и все версии расшифровки будут перемещены в корзину macOS. В течение нескольких секунд удаление можно отменить. Занятые записи останутся.\n\n")
+            + selection.prefix(5).map { String(($0.title ?? $0.name).prefix(80)) }.joined(separator: "\n")
+            + (selection.count > 5 ? localised("\n… and \(selection.count - 5) more.", "\n… ещё \(selection.count - 5).") : "")
         alert.addButton(withTitle: localised("Delete", "Удалить"))
         alert.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
         Task { @MainActor [self] in
             guard panel.attachedSheet == nil else { return }
             guard await alert.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
-            do {
-                let id = try deletion.schedule(item.dir) { [weak self] result in
-                    guard let self else { return }
-                    self.deletionNotice.isHidden = true
-                    self.onActivityChange?()
-                    self.reload()
-                    if case .failure(let error) = result { self.showServiceError(error.localizedDescription) }
-                }
-                undoDeletionID = id
-                deletionLabel.stringValue = localised("Meeting deleted", "Встреча удалена")
-                deletionNotice.isHidden = false
-                onActivityChange?()
-                show(allItems)
-            } catch { showServiceError(error.localizedDescription) }
+            deleteConfirmed(selection)
         }
     }
 
-    @objc private func undoDeletion() {
-        guard let id = undoDeletionID, deletion.undo(id) else { return }
-        undoDeletionID = nil
-        deletionNotice.isHidden = true
+    /// The sheet captures identities before awaiting; neither filtering nor a scan can retarget it.
+    func deleteConfirmed(_ selection: [SessionInventory.Item]) {
+        guard !terminating else { return }
+        if !deletion.hasWork { deletionFailures = []; deletionCompleted = 0; undoDeletionIDs = [] }
+        for item in selection {
+            if let why = Self.deleteRefusal(for: item.dir) {
+                deletionFailures.append("\(item.title ?? item.name): \(why)")
+                continue
+            }
+            if isBusy(item.dir) || activeRecording?.dir == item.dir {
+                deletionFailures.append(localised("\(item.title ?? item.name): recording is busy.", "\(item.title ?? item.name): запись занята."))
+                continue
+            }
+            do {
+                let id = try deletion.schedule(item.dir) { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success: self.deletionCompleted += 1
+                    case .failure(let error): self.deletionFailures.append("\(item.title ?? item.name): \(error.localizedDescription)")
+                    }
+                    self.updateDeletionNotice()
+                    self.reload()
+                }
+                undoDeletionIDs.append(id)
+            } catch { deletionFailures.append("\(item.title ?? item.name): \(error.localizedDescription)") }
+        }
+        show(allItems)
+        updateDeletionNotice()
+    }
+
+    private func updateDeletionNotice() {
+        deletionLabel.stringValue = localised("Moved to Trash: \(deletionCompleted). Pending: \(deletion.pendingCount). Failed: \(deletionFailures.count).",
+            "В корзине: \(deletionCompleted). Ожидают: \(deletion.pendingCount). Не удалено: \(deletionFailures.count).")
+        deletionLabel.toolTip = deletionFailures.isEmpty ? deletionLabel.stringValue : deletionFailures.joined(separator: "\n")
+        deletionLabel.setAccessibilityHelp(deletionLabel.toolTip)
+        deletionNotice.isHidden = deletion.pendingCount == 0 && deletionCompleted == 0 && deletionFailures.isEmpty
+        (deletionNotice.arrangedSubviews.last as? NSButton)?.isEnabled = deletion.pendingCount > 0
         onActivityChange?()
+    }
+
+    @objc private func undoDeletion() {
+        for id in undoDeletionIDs { deletion.undo(id) }
+        undoDeletionIDs = []
+        updateDeletionNotice()
         reload()
+    }
+
+    private var mergeRefusal: String? {
+        if mergeTask != nil { return localised("Wait for the current merge to finish.", "Дождитесь завершения объединения.") }
+        if selectedMeetings.contains(where: { isBusy($0.dir) || activeRecording?.dir == $0.dir
+            || FileManager.default.fileExists(atPath: $0.dir.appendingPathComponent(".recording.json").path) }) {
+            return localised("Wait until all selected recordings are idle.", "Дождитесь, когда все выбранные записи освободятся.")
+        }
+        if selectedMeetings.contains(where: { !$0.hasAudio }) {
+            return localised("Every selected recording needs saved audio.", "Для каждой выбранной записи нужно сохранённое аудио.")
+        }
+        return nil
+    }
+
+    @objc private func mergeClicked() {
+        let selection = selectedMeetings
+        guard !terminating, selection.count >= 2, mergeRefusal == nil, panel.attachedSheet == nil else { return }
+        let dirs = selection.map(\.dir), root = root, home = Home.current, operations = operations
+        let language = InterfaceLanguage.current
+        for item in selection { setWorking(true, in: item.dir) }
+        mergeTask = Task { @MainActor [self] in
+            defer {
+                mergeTask = nil
+                for item in selection { setWorking(false, in: item.dir) }
+            }
+            do {
+                let inspection = Task.detached(priority: .userInitiated) {
+                    try Home.$scoped.withValue(home) {
+                        try InterfaceLanguage.$scoped.withValue(language) { try RecordingMerge.inspect(dirs) }
+                    }
+                }
+                let plan = try await withTaskCancellationHandler { try await inspection.value } onCancel: { inspection.cancel() }
+                try Task.checkCancellation()
+                let confirmation = NSAlert()
+                confirmation.messageText = localised("Merge \(selection.count) recordings?", "Объединить записи: \(selection.count)?")
+                confirmation.informativeText = localised(
+                    "A new recording joins these parts in start-time order, without gaps between them (overlaps play sequentially). All originals and their edits stay unchanged. Microphone/system audio is mixed in sync; participant tracks keep their source identities. Transcript and summary are created anew using your settings and normal processing actions. The calendar is kept only when every part has the same calendar context.\n\n",
+                    "Новая запись соединит части по времени начала без промежутков; перекрывающиеся части прозвучат последовательно. Все оригиналы и правки останутся. Микрофон и системный звук сводятся синхронно; дорожки участников сохраняют исходные идентификаторы. Расшифровка и сводка создаются заново по вашим настройкам и обычным командам обработки. Календарь переносится только при полном совпадении у всех частей.\n\n")
+                    + plan.parts.prefix(5).enumerated().map { "\($0.offset + 1). \(String($0.element.title.prefix(80)))" }.joined(separator: "\n")
+                    + (plan.parts.count > 5 ? localised("\n… and \(plan.parts.count - 5) more.", "\n… ещё \(plan.parts.count - 5).") : "")
+                confirmation.addButton(withTitle: localised("Merge", "Объединить"))
+                confirmation.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
+                guard await confirmation.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
+                try Task.checkCancellation()
+                let worker = Task.detached(priority: .utility) {
+                    try Home.$scoped.withValue(home) {
+                        try InterfaceLanguage.$scoped.withValue(language) {
+                            try RecordingMerge.create(dirs, in: root, operations: operations, expected: plan)
+                        }
+                    }
+                }
+                let progress = NSAlert()
+                progress.messageText = localised("Merging recordings…", "Объединение записей…")
+                progress.informativeText = localised("The originals are kept. You can cancel before the new recording is saved.",
+                    "Оригиналы сохраняются. Можно отменить операцию до сохранения новой записи.")
+                progress.addButton(withTitle: localised("Cancel merge", "Отменить объединение")).keyEquivalent = "\u{1b}"
+                progress.beginJournalSheetModal(for: panel) { response in
+                    if response == .alertFirstButtonReturn { worker.cancel() }
+                }
+                defer { if progress.window.sheetParent != nil { panel.endSheet(progress.window, returnCode: .abort) } }
+                let result = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+                guard !terminating else { return }
+                onRetranscribe?(result)
+                _ = await reveal(result)
+            } catch is CancellationError {
+                if !terminating { showServiceError(localised("Merge cancelled. Original recordings are unchanged.", "Объединение отменено. Оригиналы не изменены.")) }
+            } catch {
+                if !terminating { showServiceError(localised("Could not merge recordings. Originals are unchanged. ", "Не удалось объединить записи. Оригиналы не изменены. ") + error.localizedDescription) }
+            }
+        }
     }
 
     /// Why a session cannot go to the Trash now, or nil when it can.
@@ -2009,8 +2132,21 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
 extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         guard menu === meetingMenu else { return }
-        let rendered = MeetingActionsMenu.make(state: currentActions, target: self, action: #selector(meetingAction(_:)))
         menu.removeAllItems()
+        if selectedMeetings.count > 1 {
+            let merge = NSMenuItem(title: localised("Merge recordings…", "Объединить записи…"), action: #selector(mergeClicked), keyEquivalent: "")
+            merge.target = self
+            merge.toolTip = mergeRefusal
+            merge.isEnabled = merge.toolTip == nil
+            menu.addItem(merge)
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: localised("Delete \(selectedMeetings.count) recordings…", "Удалить записи: \(selectedMeetings.count)…"),
+                action: #selector(deleteClicked), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            return
+        }
+        let rendered = MeetingActionsMenu.make(state: currentActions, target: self, action: #selector(meetingAction(_:)))
         for item in rendered.items { rendered.removeItem(item); menu.addItem(item) }
     }
 
@@ -2033,7 +2169,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
             libraryReadingPosition = nil
         }
         showDetail()
-        revealLibraryHit()
+        if selectedMeetings.count == 1 { revealLibraryHit() }
         if librarySearchPending { saveLibraryReadingPosition() }
         onSelectMeeting?()
     }

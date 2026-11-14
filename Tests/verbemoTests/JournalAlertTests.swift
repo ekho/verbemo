@@ -37,7 +37,6 @@ struct JournalAlertTests {
             if let sheet = parent.attachedSheet { parent.endSheet(sheet) }
             parent.orderOut(nil)
         }
-        let button = alert.buttons[index]
         let sheet = try #require(parent.attachedSheet)
         #expect(sheet.defaultButtonCell === alert.buttons.first?.cell)
         if index == 1 {
@@ -46,7 +45,10 @@ struct JournalAlertTests {
                 charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
             sheet.sendEvent(escape)
         } else {
-            #expect(button.sendAction(button.action, to: button.target))
+            let enter = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                timestamp: 0, windowNumber: sheet.windowNumber, context: nil, characters: "\r",
+                charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+            sheet.sendEvent(enter)
         }
         for _ in 0..<200 where response == nil {
             try await Task.sleep(for: .milliseconds(10))
