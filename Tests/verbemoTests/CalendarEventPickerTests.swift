@@ -56,6 +56,102 @@ struct CalendarEventPickerTests {
         #expect(changes == 2)
     }
 
+    private func timedEvent(_ id: String, start: Date, duration: TimeInterval = 1800) -> CalendarWatcher.Meeting {
+        .init(id: id, title: "Synthetic \(id)", start: start, end: start.addingTimeInterval(duration),
+              attendees: [], link: nil, looksLikeCall: true)
+    }
+
+    @Test func initialPositionUsesContainingIntervalThenNearestBoundaryAndStableTies() {
+        let before = timedEvent("before", start: now.addingTimeInterval(-3600))
+        let after = timedEvent("after", start: now.addingTimeInterval(1800))
+        let current = timedEvent("current", start: now.addingTimeInterval(-300))
+        let ended = timedEvent("ended", start: now.addingTimeInterval(-1800))
+        #expect(CalendarEventPicker.nearestRow(in: [], to: now) == nil)
+        #expect(CalendarEventPicker.nearestRow(in: [before, after, current], to: now) == 2)
+        #expect(CalendarEventPicker.nearestRow(in: [ended, current], to: now) == 1)
+        #expect(CalendarEventPicker.nearestRow(in: [before, after], to: now) == 0)
+        #expect(CalendarEventPicker.nearestRow(in: [after, before], to: now) == 0)
+        #expect(CalendarEventPicker.nearestRow(in: [before, after], to: now.addingTimeInterval(600)) == 1)
+        #expect(CalendarEventPicker.nearestRow(in: [before, after], to: now.addingTimeInterval(-600)) == 0)
+        #expect(CalendarEventPicker.nearestRow(in: [before, after], to: now.addingTimeInterval(86400)) == 1)
+    }
+
+    @Test func initialPositionUsesAbsoluteTimeAcrossLocalMidnightAndDST() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/New_York"))
+        let iso = ISO8601DateFormatter()
+        let recording = try #require(iso.date(from: "2026-11-01T01:15:00-04:00"))
+        let overnight = timedEvent("overnight", start: try #require(iso.date(from: "2026-10-31T23:30:00-04:00")), duration: 3 * 3600)
+        let later = timedEvent("repeated hour", start: try #require(iso.date(from: "2026-11-01T01:30:00-05:00")))
+        let query = CalendarEventQuery(date: recording, calendar: calendar)
+        #expect(query.range.duration == 25 * 3600)
+        let events = [overnight, later].filter(query.matches)
+        #expect(events.count == 2)
+        #expect(CalendarEventPicker.nearestRow(in: events, to: recording) == 0)
+        #expect(CalendarEventPicker.nearestRow(in: events, to: later.start) == 1)
+    }
+
+    @Test(.freshHome) func openingScrollsAfterAsyncLoadButDoesNotSelectOrRepeatOnInteraction() async throws {
+        let picker = CalendarEventPicker()
+        let events = (0..<24).map { timedEvent(String($0), start: now.addingTimeInterval(Double($0) * 3600)) }
+        let recording = events[20].start.addingTimeInterval(300)
+        picker.update(date: recording, snapshot: nil, contextID: "saved")
+        picker.setSelection(events[0])
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 440, height: 80),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = picker
+        window.orderFront(nil)
+        defer { picker.cancel(); window.close() }
+        var pending: CheckedContinuation<[CalendarWatcher.Meeting], Never>?
+        picker.loadEvents = { _ in await withCheckedContinuation { pending = $0 } }
+        var writes = 0
+        picker.onSelect = { _ in writes += 1 }
+        picker.open()
+        for _ in 0..<100 where pending == nil { await Task.yield() }
+        let continuation = try #require(pending)
+        #expect(picker.meetings.isEmpty)
+        continuation.resume(returning: events)
+        await picker.settled()
+        #expect(picker.table.visibleRect.intersects(picker.table.rect(ofRow: 20)))
+        #expect(picker.table.selectedRow == -1 && writes == 0)
+        #expect(picker.selectedMeeting?.id == "0")
+        picker.table.scrollRowToVisible(0)
+        picker.update(date: recording, snapshot: nil, contextID: "saved")
+        #expect(picker.table.visibleRect.intersects(picker.table.rect(ofRow: 0)))
+        picker.loadEvents = { _ in events }
+        picker.search.stringValue = "Synthetic"
+        picker.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
+        await picker.settled()
+        #expect(picker.search.stringValue == "Synthetic")
+        #expect(!picker.table.visibleRect.intersects(picker.table.rect(ofRow: 20)))
+        picker.date.dateValue = recording.addingTimeInterval(86400)
+        #expect(picker.date.sendAction(picker.date.action, to: picker.date.target))
+        await picker.settled()
+        #expect(picker.search.stringValue.isEmpty)
+        #expect(!picker.table.visibleRect.intersects(picker.table.rect(ofRow: 20)))
+        #expect(writes == 0)
+        picker.loadEvents = { _ in [] }
+        picker.reload(scrollTo: recording); await picker.settled()
+        #expect(picker.table.numberOfRows == 0 && writes == 0)
+    }
+
+    @Test(.freshHome) func draftPickerUsesOpeningTimeWithoutChangingSuggestedSelection() async throws {
+        let opening = Date()
+        let events = (-12...12).map { timedEvent(String($0), start: opening.addingTimeInterval(Double($0) * 3600)) }
+        let sheet = NewRecordingSheet(calendarEnabled: true, now: opening.addingTimeInterval(-3600)) { _ in
+            (events[0], events)
+        }
+        defer { sheet.calendarPicker.cancel(); sheet.panel.close() }
+        sheet.load(); await sheet.settled()
+        sheet.panel.orderFront(nil)
+        sheet.calendarPicker.loadEvents = { _ in events }
+        sheet.calendarPicker.open(); await sheet.calendarPicker.settled()
+        #expect(sheet.calendarPicker.table.visibleRect.intersects(sheet.calendarPicker.table.rect(ofRow: 12)))
+        #expect(sheet.selectedMeeting?.id == events[0].id)
+        #expect(sheet.calendarPicker.table.selectedRow == -1)
+    }
+
     @Test(.freshHome) func staleSearchAndCancelledSelectionCannotChangeAnotherMeeting() async throws {
         let picker = CalendarEventPicker()
         picker.date.dateValue = now
@@ -65,7 +161,7 @@ struct CalendarEventPickerTests {
             if query.title.isEmpty { return await withCheckedContinuation { pending = $0 } }
             return [next]
         }
-        picker.reload()
+        picker.reload(scrollTo: now)
         for _ in 0..<100 where pending == nil { await Task.yield() }
         let continuation = try #require(pending)
         picker.search.stringValue = "next"
