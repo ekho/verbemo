@@ -19,6 +19,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
     private let popover = NSPopover()
     private var task: Task<Void, Never>?
     private var contextID: String?
+    private var recordingStart: Date?
     private(set) var meetings: [CalendarWatcher.Meeting] = []
     private(set) var selectedMeeting: CalendarWatcher.Meeting?
 
@@ -127,6 +128,7 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func update(date: Date, snapshot: MeetingCalendarMetadata?, contextID: String, enabled: Bool = true) {
+        recordingStart = date
         if self.contextID != contextID {
             cancel()
             self.contextID = contextID
@@ -150,9 +152,9 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
         guard button.isEnabled, button.window != nil else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeFirstResponder(search)
-        reload()
+        reload(scrollTo: recordingStart ?? Date())
     }
-    func reload(debounce: Bool = false) {
+    func reload(debounce: Bool = false, scrollTo time: Date? = nil) {
         task?.cancel()
         meetings = []; table.reloadData()
         status.stringValue = localised("Loading calendar events…", "Загрузка событий календаря…")
@@ -167,6 +169,10 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
                 guard !Task.isCancelled else { return }
                 meetings = result
                 table.reloadData()
+                if let time, let row = Self.nearestRow(in: result, to: time) {
+                    table.layoutSubtreeIfNeeded()
+                    table.scrollRowToVisible(row)
+                }
                 let from = String(MeetingPresentation.date(query.range.start).prefix(10))
                 let to = String(MeetingPresentation.date(query.range.end.addingTimeInterval(-1)).prefix(10))
                 let range = from == to ? from : from + " – " + to
@@ -177,6 +183,14 @@ final class CalendarEventPicker: NSStackView, NSSearchFieldDelegate, NSTableView
                 show(error)
             }
         }
+    }
+    static func nearestRow(in meetings: [CalendarWatcher.Meeting], to time: Date) -> Int? {
+        func rank(_ meeting: CalendarWatcher.Meeting) -> (Int, TimeInterval) {
+            if meeting.start <= time && time < meeting.end { return (0, 0) }
+            return (1, min(abs(meeting.start.timeIntervalSince(time)), abs(meeting.end.timeIntervalSince(time))))
+        }
+        // min keeps the list's order for ties; a linked event never overrides the recording time.
+        return meetings.indices.min { rank(meetings[$0]) < rank(meetings[$1]) }
     }
     func settled() async { await task?.value }
     func cancel() { task?.cancel(); popover.close() }
