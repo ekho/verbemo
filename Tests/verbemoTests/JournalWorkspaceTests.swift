@@ -303,8 +303,9 @@ struct JournalWorkspaceTests {
             ("meeting.processing-transcript", "meeting.retranscribe", "Расшифровать повторно"),
             ("meeting.processing-summary", "meeting.generate-summary", "Создать сводку"),
         ] {
-            let row = try #require(inspector.allDescendants.first { $0.identifier?.rawValue == rowID } as? NSStackView)
-            let button = try #require(row.arrangedSubviews.last as? NSButton)
+            let group = try #require(inspector.allDescendants.first { $0.identifier?.rawValue == rowID })
+            let button = try #require(group.allDescendants.first { $0.identifier?.rawValue == buttonID } as? NSButton)
+            let row = try #require(button.superview as? NSStackView)
             let stage = try #require(row.arrangedSubviews.compactMap { $0 as? NSTextField }.first)
             #expect(button.identifier?.rawValue == buttonID)
             #expect(button.title.isEmpty && button.image != nil && button.imagePosition == .imageOnly)

@@ -36,6 +36,7 @@ enum MeetingPresentation {
         var title: String
         var state: StageState
         var diarized = false
+        var activitySymbol: String? = nil
     }
     static func date(_ date: Date?, timeZone: TimeZone = .current) -> String {
         guard let date else { return "" }
@@ -93,7 +94,7 @@ enum MeetingPresentation {
     static func calendarLinked(_ dir: URL) -> Bool {
         MeetingCalendarMetadata.read(from: dir)?.isConfirmed == true
     }
-    static func stages(_ item: SessionInventory.Item, active: ActiveRecording? = nil) -> [Stage] {
+    static func stages(_ item: SessionInventory.Item, active: ActiveRecording? = nil, version: TranscriptVersions.Version? = nil) -> [Stage] {
         if let active, active.dir == item.dir {
             var stages: [Stage] = []
             if calendarLinked(item.dir) { stages.append(Stage(symbol: "calendar", title: localised("Linked calendar event", "Связано с событием календаря"), state: .done)) }
@@ -104,17 +105,32 @@ enum MeetingPresentation {
                 : Stage(symbol: "checklist", title: localised("Summary waits for transcription", "Сводка ожидает расшифровки"), state: .waiting))
             return stages
         }
-        let busy = SessionClaim.isHeld(item.dir)
-        let ready = item.transcript == .done && !TranscriptVersions.isRequested(item.dir)
+        let session = item.dir
+        let item = version.flatMap { $0.dir != session ? SessionInventory.item(for: $0.dir) : nil } ?? item
+        let requested = TranscriptVersions.isRequested(session)
+        let transcriptStep = version?.state ?? item.transcript
+        let busy = SessionClaim.isHeld(session)
+        let ready = transcriptStep == .done && (version?.isRequest == false || !requested)
         let operations = ProcessingOperations.shared.snapshot().filter {
-            $0.session == item.dir.standardizedFileURL.resolvingSymlinksInPath()
+            $0.session == session.standardizedFileURL.resolvingSymlinksInPath()
         }
         let operation = operations.first { $0.state != .waiting } ?? operations.first
+        let versionOperation = operation.flatMap { operation -> ProcessingOperations.Snapshot? in
+            guard let version else { return operation }
+            if operation.kind == .transcription {
+                return version.isRequest || (version.isCurrent && !requested) ? operation : nil
+            }
+            guard !version.isRequest,
+                  (operation.artifactDirectory ?? session.standardizedFileURL.resolvingSymlinksInPath()) == version.dir.standardizedFileURL.resolvingSymlinksInPath() else { return nil }
+            return operation
+        }
         func stage(_ step: SessionInventory.Step, symbol: String, label: String, done: String, active: Bool) -> Stage {
             if active { return Stage(symbol: symbol, title: label, state: .active) }
             switch step {
             case .done: return Stage(symbol: symbol, title: done, state: .done)
-            case .off: return Stage(symbol: symbol, title: localised("Summary was not created", "Сводка не создавалась"), state: .off)
+            case .off: return Stage(symbol: symbol, title: symbol == "checklist"
+                ? localised("Summary was not created", "Сводка не создавалась")
+                : localised("Transcript not created", "Расшифровка не создавалась"), state: .off)
             case .failed(let reason): return Stage(symbol: symbol, title: reason, state: .failed)
             case .pending, .deferred: return Stage(symbol: symbol, title: label, state: .pending)
             }
@@ -124,23 +140,61 @@ enum MeetingPresentation {
         let incomplete = SessionState.read(item.dir)?["capture_failure"] != nil
         result.append(Stage(symbol: "mic", title: incomplete ? localised("Recording incomplete", "Запись неполная")
             : localised("Recording saved", "Запись сохранена"), state: incomplete ? .failed : .done))
-        var transcript = stage(item.transcript, symbol: "doc.text", label: localised("Transcription", "Расшифровка"),
-            done: localised("Transcript ready", "Расшифровка готова"), active: busy && !ready)
-        transcript.diarized = item.diarization.map { $0.status != .skipped && $0.status != .notApplicable } ?? item.isDiarized
-        if transcript.diarized { transcript.title += localised(" · diarization enabled", " · диаризация включена") }
+        var transcript = stage(transcriptStep, symbol: "doc.text", label: localised("Transcript not created", "Расшифровка не создавалась"),
+            done: localised("Transcript ready", "Расшифровка готова"), active: false)
+        if let operation = versionOperation, [.transcription, .diarization, .postProcessing].contains(operation.kind) {
+            let action: String
+            switch operation.kind {
+            case .diarization:
+                action = localised("Diarization", "Диаризация")
+                transcript.activitySymbol = "person.wave.2"
+            case .postProcessing:
+                action = item.speakers.isOutstanding ? localised("Speaker naming", "Определение имён")
+                    : localised("Finishing processing", "Завершение обработки")
+                transcript.activitySymbol = "person.text.rectangle"
+            default: action = localised("Transcription", "Расшифровка")
+            }
+            transcript.state = operation.state == .running ? .active : .waiting
+            transcript.title = operation.state == .cancelling
+                ? localised("Cancelling: ", "Отмена: ") + action
+                : operation.state == .waiting ? localised("Queued: ", "В очереди: ") + action : action
+        } else if busy && !ready {
+            transcript.state = .waiting
+            transcript.title = localised("Transcription waits for other processing to finish", "Расшифровка ожидает завершения другой обработки")
+        } else if transcriptStep == .deferred {
+            transcript.title = localised("Transcription deferred — retry processing", "Расшифровка отложена — повторите обработку")
+        } else if requested && version?.isRequest != false && transcriptStep == .pending {
+            transcript.title = localised("Transcription queued", "Расшифровка в очереди")
+        }
+        if transcript.state != .active, versionOperation == nil {
+            if item.unreadableDiarization {
+                transcript.state = .failed
+                transcript.title = localised("Transcript blocked: diarization state cannot be read", "Расшифровка заблокирована: не читается состояние диаризации")
+            } else if ready, let state = item.diarization, !state.isFinal {
+                transcript.state = state.hasFailedAttempt || state.status == .partial ? .failed : .waiting
+                transcript.activitySymbol = "person.wave.2"
+                transcript.title = transcript.state == .failed
+                    ? localised("Transcript needs a diarization decision", "Расшифровка требует решения по диаризации")
+                    : localised("Transcript waits for diarization", "Расшифровка ожидает диаризацию")
+            }
+        }
+        transcript.diarized = ready && (item.diarization.map { $0.status == .completed } ?? item.isDiarized)
         result.append(transcript)
-        var summary = stage(item.summary, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),
-            done: localised("Summary ready", "Сводка готова"), active: operation?.kind == .summary && operation?.state == .running)
+        let summaryStep: SessionInventory.Step = version?.isRequest == true ? .pending : item.summary
+        var summary = stage(summaryStep, symbol: "checklist", label: localised("Preparing summary", "Подготовка сводки"),
+            done: localised("Summary ready", "Сводка готова"), active: versionOperation?.kind == .summary && versionOperation?.state == .running)
         if summary.state == .failed { summary.title = localised("Summary creation failed", "Сбой создания сводки") }
-        if operation?.kind == .summary, operation?.state != .running {
-            summary.state = operation?.state == .cancelling ? .waiting : .pending
-            summary.title = operation?.state == .cancelling
+        if let operation = versionOperation, operation.kind == .summary, operation.state != .running {
+            summary.state = operation.state == .cancelling ? .waiting : .pending
+            summary.title = operation.state == .cancelling
                 ? localised("Cancelling summary", "Создание сводки отменяется")
                 : localised("Summary queued", "Сводка в очереди")
-        } else if summary.state != .active && item.summary.isOutstanding {
+        } else if summary.state != .active && summary.state != .failed && summaryStep != .done {
             summary.state = .waiting
             if !ready {
-                summary.title = localised("Summary waits for transcription", "Сводка ожидает расшифровки")
+                summary.title = versionOperation != nil || (requested && transcriptStep == .pending)
+                    ? localised("Summary waits for transcription", "Сводка ожидает расшифровки")
+                    : localised("Create a finished transcript first", "Сначала создайте окончательную расшифровку")
             } else if item.unreadableDiarization {
                 summary.title = localised("Summary blocked: diarization state cannot be read", "Сводка заблокирована: не читается состояние диаризации")
             } else if let diarization = item.diarization, !diarization.isFinal {
@@ -149,12 +203,15 @@ enum MeetingPresentation {
                     : diarization.status == .deferred
                         ? localised("Summary waits for the diarization model — download or skip", "Сводка ожидает модель диаризации — скачайте её или пропустите этап")
                         : localised("Summary waits for diarization", "Сводка ожидает диаризацию")
-            } else if operation?.kind == .postProcessing && item.speakers.isOutstanding {
+            } else if versionOperation?.kind == .postProcessing && item.speakers.isOutstanding {
                 summary.title = localised("Summary waits for speaker naming", "Сводка ожидает определения имён")
-            } else if operation != nil || busy {
+            } else if operation != nil || busy || requested {
                 summary.title = localised("Summary waits for other processing to finish", "Сводка ожидает завершения другой обработки")
-            } else if item.summary == .deferred {
+            } else if summaryStep == .deferred {
                 summary.title = localised("Summary deferred — retry processing", "Сводка отложена — повторите обработку")
+            } else if summaryStep == .off {
+                summary.state = .off
+                summary.title = localised("Summary was not created", "Сводка не создавалась")
             } else {
                 summary.state = .pending
                 summary.title = localised("Summary not started", "Сводка ещё не запущена")
