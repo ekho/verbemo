@@ -28,3 +28,32 @@ meeting showed no accumulated highlights. Instrumented native cursor coordinates
 identified exactly one hovered row. Computer Use's scroll marker differs from the
 stationary native cursor; pointer exit is established by the regression test,
 not by that overlay. Physical trackpad momentum was not separately exercised.
+
+## #112 — inspector width
+
+The existing Studio columns and width constraint now use an AppKit divider with
+a grip, resize cursor, keyboard focus and accessible splitter value. Dragging,
+Left/Right, Home/End and accessibility adjustment share the same bounds. The
+minimum is the former fixed 270-point inspector; the maximum uses the library's
+480-point limit and retains at least the existing 420-point document minimum.
+The existing compact layout (below 850 points inside the workspace) still switches
+between document and details rather than squeezing both into the available space.
+
+Width is kept for this controller/window, including hide/show and window resizing.
+The left library has no autosave/persisted width; no new preference was introduced.
+
+`InspectorResizeTests` covers both appearances: real drag event handlers, Tab and
+arrows, accessible adjustment, min/max, shrink/expand, compact presentation and
+hide/show. Its fixture starts at 760 points, opens the window, then expands to
+1340 points and checks the initial pane visibility/width before dragging. Sizing
+before opening left the first CI run in compact layout (197-point hidden pane),
+so it did not exercise the intended divider. The key-view loop is settled before
+checking Tab. Neighboring recording-workspace and library suites also pass.
+
+Native GUI: dragged 270 → 400 → 480 points, adjusted with arrows, reached the
+divider through Shift-Tab/Tab, verified Home/minimum and End/maximum, and restored
+286 points after hide/show and a 1340 → 760 → 1340 window cycle. Light and dark
+appearances, a 760×600 window, long event title/agenda/invitees and a multiline
+diarization error were checked. The inspector scrolled to its last controls; its
+close button restored the document and keyboard focus in the compact window.
+Accessibility labels/value were inspected; spoken VoiceOver was not exercised.

@@ -141,6 +141,8 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         }
     }
     private var inspectorWidth: NSLayoutConstraint?
+    private let inspectorDivider = InspectorDivider()
+    private var preferredInspectorWidth: CGFloat = 270
     private let scroll = NSScrollView()
     private var displayChanges: ConfigWatch.Token?
 
@@ -803,9 +805,14 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         let compact = columns.bounds.width < 850
         let visible = inspectorRequested ?? !compact
         inspectorWidth?.isActive = !compact
+        let maximum = max(270, min(480, columns.bounds.width - 420 - inspectorDivider.bounds.width))
+        let width = min(preferredInspectorWidth, maximum)
+        inspectorWidth?.constant = width
+        inspectorDivider.update(width: width, maximum: maximum)
         columns.arrangedSubviews[0].isHidden = compact && visible
         columns.arrangedSubviews[1].isHidden = compact || !visible
         columns.arrangedSubviews[2].isHidden = !visible
+        if inspectorDivider.isHidden, panel.firstResponder === inspectorDivider { panel.selectNextKeyView(inspectorDivider) }
         inspectorButton.state = visible ? .on : .off
         inspectorButton.setAccessibilityValue(visible ? 1 : 0)
     }
@@ -2183,9 +2190,11 @@ private extension MeetingLibraryController {
             document.topAnchor.constraint(equalTo: documentHost.topAnchor), document.bottomAnchor.constraint(equalTo: documentHost.bottomAnchor),
         ])
         documentHost.identifier = .init("meeting.document")
-        let divider = JournalSurface(StudioStyle.line)
-        divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        let columns = JournalColumns(views: [documentHost, divider, inspectorSurface])
+        inspectorDivider.onResize = { [weak self] width in
+            self?.preferredInspectorWidth = width
+            self?.updateCompactLayout()
+        }
+        let columns = JournalColumns(views: [documentHost, inspectorDivider, inspectorSurface])
         columns.identifier = .init("meeting.columns")
         columns.orientation = .horizontal
         columns.alignment = .top
