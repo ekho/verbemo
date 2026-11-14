@@ -2397,6 +2397,7 @@ private final class LibraryFilterButton: NSButton {
 private final class JournalMeetingRow: NSTableRowView {
     private var hover = false
     private var tracking: NSTrackingArea?
+    private var scrollChanges: ConfigWatch.Token?
     override var interiorBackgroundStyle: NSView.BackgroundStyle { .normal }
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
@@ -2415,9 +2416,26 @@ private final class JournalMeetingRow: NSTableRowView {
         let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area)
         tracking = area
+        // Replacing a tracking area during scrolling can discard its mouse-exit event.
+        updateHover()
     }
-    override func mouseEntered(with event: NSEvent) { hover = true; needsDisplay = true }
-    override func mouseExited(with event: NSEvent) { hover = false; needsDisplay = true }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        scrollChanges = nil
+        if let clip = enclosingScrollView?.contentView {
+            clip.postsBoundsChangedNotifications = true
+            scrollChanges = ConfigWatch.Token(NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification, object: clip, queue: .main
+            ) { [weak self] _ in MainActor.assumeIsolated { self?.updateHover() } })
+        }
+        updateHover()
+    }
+    private func updateHover() {
+        hover = window.map { $0.isKeyWindow && visibleRect.contains(convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? false
+        needsDisplay = true
+    }
+    override func mouseEntered(with event: NSEvent) { updateHover() }
+    override func mouseExited(with event: NSEvent) { updateHover() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
 
