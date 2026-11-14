@@ -148,6 +148,7 @@ final class MeetingListView: NSTableCellView {
 @MainActor
 final class MeetingTableView: NSTableView {
     var onContext: ((Int) -> Void)?
+    var onDelete: (() -> Void)?
     private var measuredWidth: CGFloat = 0
     override func layout() {
         super.layout()
@@ -158,11 +159,14 @@ final class MeetingTableView: NSTableView {
     }
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = row(at: convert(event.locationInWindow, from: nil))
-        if row >= 0 { onContext?(row) }
+        guard row >= 0 else { return nil }
+        onContext?(row)
         return super.menu(for: event)
     }
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 109 && event.modifierFlags.contains(.shift), selectedRow >= 0 {
+        if event.keyCode == 51 && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+            onDelete?()
+        } else if event.keyCode == 109 && event.modifierFlags.contains(.shift), selectedRow >= 0 {
             onContext?(selectedRow)
             menu?.popUp(positioning: nil, at: rect(ofRow: selectedRow).origin, in: self)
         } else { super.keyDown(with: event) }

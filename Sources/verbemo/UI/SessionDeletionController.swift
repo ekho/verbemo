@@ -15,6 +15,7 @@ final class SessionDeletionController {
     private var recycling: Set<URL> = []
     private var accepting = true
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    var pendingCount: Int { pending.count }
     var hasWork: Bool { !pending.isEmpty || !recycling.isEmpty }
     func isPending(_ dir: URL) -> Bool { recycling.contains(dir) || pending.values.contains { $0.dir == dir } }
 

@@ -372,19 +372,25 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     private let busyLabel = NSTextField(labelWithString: "")
 
     private var items: [SessionInventory.Item] = []
+    var selectedMeetings: [SessionInventory.Item] {
+        table.selectedRowIndexes.compactMap { items.indices.contains($0) ? items[$0] : nil }
+    }
     private var selected: SessionInventory.Item? {
         if !meetingSelectionActive { return items.first { $0.dir == rememberedMeeting } }
+        if selectedMeetings.count > 1, let current = selectedMeetings.first(where: { $0.dir == versionSession }) { return current }
         return table.selectedRow >= 0 && table.selectedRow < items.count
             ? items[table.selectedRow]
             : nil
     }
     var onActivityChange: (() -> Void)?
-    private let deletion = SessionDeletionController()
+    private let deletion: SessionDeletionController
     var mcpPendingDeletion: Set<String> { Set(allItems.filter { deletion.isPending($0.dir) }.map { $0.dir.lastPathComponent }) }
     private let deletionNotice = NSStackView()
     private let deletionLabel = NSTextField(labelWithString: "")
     var serviceViews: [NSView] { [detailError, resultNotice, deletionNotice, busyLabel, librarySearchStatus] + audioPlayer.serviceViews }
-    private var undoDeletionID: UUID?
+    private var undoDeletionIDs: [UUID] = []
+    private var deletionFailures: [String] = []
+    private var deletionCompleted = 0
     var isProcessing: Bool { !workByMeeting.isEmpty || deletion.hasWork || processingCancellation.hasPending }
     func cancelPendingDeletion() { deletion.cancelAll(); onActivityChange?() }
     private var summarySheets: [URL: (version: URL, sheet: SummaryRegenerationSheet)] = [:]
@@ -412,9 +418,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
 
     init(root: URL, pasteboard: NSPasteboard = .general,
-         operations: ProcessingOperations = .shared, hostWindow: NSWindow) {
+         operations: ProcessingOperations = .shared, hostWindow: NSWindow,
+         deletion: SessionDeletionController = SessionDeletionController()) {
         processingCancellation = MeetingProcessingCancellation(operations: operations)
         self.operations = operations
+        self.deletion = deletion
         self.root = root
         self.pasteboard = pasteboard
         panel = hostWindow
@@ -490,6 +498,11 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         table.headerView = nil
         table.style = .plain
         table.selectionHighlightStyle = .regular
+        table.allowsMultipleSelection = true
+        table.setAccessibilityLabel(localised("Recordings", "Записи"))
+        table.setAccessibilityHelp(localised("Use Command or Shift to select recordings. Command-Delete moves the selection to Trash.",
+            "Выбирайте записи с Command или Shift. Command-Delete перемещает выбранные записи в корзину."))
+        table.onDelete = { [weak self] in self?.deleteClicked() }
         table.backgroundColor = StudioStyle.sidebar
         table.rowHeight = 64
         table.intercellSpacing = NSSize(width: 0, height: 4)
@@ -504,7 +517,9 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         meetingMenu.autoenablesItems = false
         table.onContext = { [weak self] row in
             guard let self, row < self.items.count else { return }
-            self.table.selectRowIndexes([row], byExtendingSelection: false)
+            if !self.table.selectedRowIndexes.contains(row) {
+                self.table.selectRowIndexes([row], byExtendingSelection: false)
+            }
             self.showDetail()
             self.onSelectMeeting?()
         }
@@ -882,6 +897,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     }
     @objc private func searchChanged() { libraryNavigationFailed = false; restartLibrarySearch() }
     @objc private func meetingClicked() {
+        guard selectedMeetings.count == 1 else { return }
         if let selected, selected.dir == activeRecording?.dir { onOpenActiveRecording?(); return }
         revealLibraryHit()
         onSelectMeeting?()
@@ -1202,6 +1218,7 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
         reloadingList = true
         defer { reloadingList = false }
         let previous = preferredSelection ?? selected?.dir ?? rememberedMeeting
+        let previousSelection = Set(selectedMeetings.map { $0.dir.standardizedFileURL.path })
         // Keep the stopped row through scans that began before its metadata was published.
         if let stoppedRecording, found.contains(where: { $0.dir.standardizedFileURL.path == stoppedRecording.dir.standardizedFileURL.path })
             || !FileManager.default.fileExists(atPath: stoppedRecording.dir.path) {
@@ -1229,7 +1246,10 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
             : localised("No meetings yet. Start a recording or import an audio file.", "Встреч пока нет. Начните запись или импортируйте аудиофайл.")
         table.reloadData()
         if meetingSelectionActive {
-            if let previous, let row = items.firstIndex(where: { $0.dir.standardizedFileURL.path == previous.standardizedFileURL.path }) {
+            let retained = IndexSet(items.indices.filter { previousSelection.contains(items[$0].dir.standardizedFileURL.path) })
+            if !retained.isEmpty {
+                table.selectRowIndexes(retained, byExtendingSelection: false)
+            } else if let previous, let row = items.firstIndex(where: { $0.dir.standardizedFileURL.path == previous.standardizedFileURL.path }) {
                 table.selectRowIndexes([row], byExtendingSelection: false)
             } else if !items.isEmpty {
                 table.selectRowIndexes([0], byExtendingSelection: false)
@@ -1928,43 +1948,70 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
     /// delete is somebody's only record of a conversation, and the Trash is
     /// what makes that recoverable.
     @objc private func deleteClicked() {
-        guard let item = selected else { return }
-        if let why = Self.deleteRefusal(for: item.dir) {
-            say(why, about: item)
-            return
-        }
+        let selection = selectedMeetings
+        guard !selection.isEmpty, panel.attachedSheet == nil else { return }
         let alert = NSAlert()
-        alert.messageText = localised("Delete \(item.title ?? item.name)?", "Удалить «\(item.title ?? item.name)»?")
+        alert.messageText = selection.count == 1
+            ? localised("Delete \(selection[0].title ?? selection[0].name)?", "Удалить «\(selection[0].title ?? selection[0].name)»?")
+            : localised("Delete \(selection.count) recordings?", "Удалить записи: \(selection.count)?")
         alert.informativeText = localised(
-            "The audio and all transcript versions will move to the macOS Trash after a short Undo period.",
-            "Аудио и все версии расшифровки будут перемещены в корзину macOS. В течение нескольких секунд удаление можно отменить.")
+            "The selected audio and all transcript versions will move to the macOS Trash after a short Undo period. Busy recordings will be kept.\n\n",
+            "Выбранное аудио и все версии расшифровки будут перемещены в корзину macOS. В течение нескольких секунд удаление можно отменить. Занятые записи останутся.\n\n")
+            + selection.prefix(5).map { String(($0.title ?? $0.name).prefix(80)) }.joined(separator: "\n")
+            + (selection.count > 5 ? localised("\n… and \(selection.count - 5) more.", "\n… ещё \(selection.count - 5).") : "")
         alert.addButton(withTitle: localised("Delete", "Удалить"))
         alert.addButton(withTitle: localised("Cancel", "Отмена")).keyEquivalent = "\u{1b}"
         Task { @MainActor [self] in
             guard panel.attachedSheet == nil else { return }
             guard await alert.beginJournalSheetModal(for: panel) == .alertFirstButtonReturn else { return }
-            do {
-                let id = try deletion.schedule(item.dir) { [weak self] result in
-                    guard let self else { return }
-                    self.deletionNotice.isHidden = true
-                    self.onActivityChange?()
-                    self.reload()
-                    if case .failure(let error) = result { self.showServiceError(error.localizedDescription) }
-                }
-                undoDeletionID = id
-                deletionLabel.stringValue = localised("Meeting deleted", "Встреча удалена")
-                deletionNotice.isHidden = false
-                onActivityChange?()
-                show(allItems)
-            } catch { showServiceError(error.localizedDescription) }
+            deleteConfirmed(selection)
         }
     }
 
-    @objc private func undoDeletion() {
-        guard let id = undoDeletionID, deletion.undo(id) else { return }
-        undoDeletionID = nil
-        deletionNotice.isHidden = true
+    /// The sheet captures identities before awaiting; neither filtering nor a scan can retarget it.
+    func deleteConfirmed(_ selection: [SessionInventory.Item]) {
+        guard !terminating else { return }
+        if !deletion.hasWork { deletionFailures = []; deletionCompleted = 0; undoDeletionIDs = [] }
+        for item in selection {
+            if let why = Self.deleteRefusal(for: item.dir) {
+                deletionFailures.append("\(item.title ?? item.name): \(why)")
+                continue
+            }
+            if isBusy(item.dir) || activeRecording?.dir == item.dir {
+                deletionFailures.append(localised("\(item.title ?? item.name): recording is busy.", "\(item.title ?? item.name): запись занята."))
+                continue
+            }
+            do {
+                let id = try deletion.schedule(item.dir) { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success: self.deletionCompleted += 1
+                    case .failure(let error): self.deletionFailures.append("\(item.title ?? item.name): \(error.localizedDescription)")
+                    }
+                    self.updateDeletionNotice()
+                    self.reload()
+                }
+                undoDeletionIDs.append(id)
+            } catch { deletionFailures.append("\(item.title ?? item.name): \(error.localizedDescription)") }
+        }
+        show(allItems)
+        updateDeletionNotice()
+    }
+
+    private func updateDeletionNotice() {
+        deletionLabel.stringValue = localised("Moved to Trash: \(deletionCompleted). Pending: \(deletion.pendingCount). Failed: \(deletionFailures.count).",
+            "В корзине: \(deletionCompleted). Ожидают: \(deletion.pendingCount). Не удалено: \(deletionFailures.count).")
+        deletionLabel.toolTip = deletionFailures.isEmpty ? deletionLabel.stringValue : deletionFailures.joined(separator: "\n")
+        deletionLabel.setAccessibilityHelp(deletionLabel.toolTip)
+        deletionNotice.isHidden = deletion.pendingCount == 0 && deletionCompleted == 0 && deletionFailures.isEmpty
+        (deletionNotice.arrangedSubviews.last as? NSButton)?.isEnabled = deletion.pendingCount > 0
         onActivityChange?()
+    }
+
+    @objc private func undoDeletion() {
+        for id in undoDeletionIDs { deletion.undo(id) }
+        undoDeletionIDs = []
+        updateDeletionNotice()
         reload()
     }
 
@@ -2009,8 +2056,15 @@ final class MeetingLibraryController: NSObject, NSSearchFieldDelegate {
 extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         guard menu === meetingMenu else { return }
-        let rendered = MeetingActionsMenu.make(state: currentActions, target: self, action: #selector(meetingAction(_:)))
         menu.removeAllItems()
+        if selectedMeetings.count > 1 {
+            let item = NSMenuItem(title: localised("Delete \(selectedMeetings.count) recordings…", "Удалить записи: \(selectedMeetings.count)…"),
+                action: #selector(deleteClicked), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            return
+        }
+        let rendered = MeetingActionsMenu.make(state: currentActions, target: self, action: #selector(meetingAction(_:)))
         for item in rendered.items { rendered.removeItem(item); menu.addItem(item) }
     }
 
@@ -2033,7 +2087,7 @@ extension MeetingLibraryController: NSTableViewDataSource, NSTableViewDelegate, 
             libraryReadingPosition = nil
         }
         showDetail()
-        revealLibraryHit()
+        if selectedMeetings.count == 1 { revealLibraryHit() }
         if librarySearchPending { saveLibraryReadingPosition() }
         onSelectMeeting?()
     }
