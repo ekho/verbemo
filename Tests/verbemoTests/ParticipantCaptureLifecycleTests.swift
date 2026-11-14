@@ -30,6 +30,39 @@ actor FakeCallAudioCapture: CallAudioCapture {
 
 @MainActor
 struct ParticipantCaptureLifecycleTests {
+    @Test func capturedTracksDisappearDuringFallbackPreparationWithoutLiveTranscription() async throws {
+        let root = try ParticipantAudioRecorderTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stopped = Gate(), ready = Gate()
+        let capture = FakeCallAudioCapture(stopGate: stopped, startGate: ready)
+        let session = try RecordingSession(root: root, mic: FakeMicRecorder(), system: FakeSystemRecorder())
+        try session.start(callAudio: { capture }, fallbackPermission: { true })
+        #expect(session.captureSource == .preparing)
+        #expect(session.capturedParticipantTracks.isEmpty)
+        ready.open()
+        try await wait { session.captureSource == .direct }
+        capture.continuation.yield(.track(ParticipantAudioRecorderTests.descriptor()))
+        try await wait { session.participantSnapshot?.tracks.count == 1 }
+        #expect(session.capturedParticipantTracks.isEmpty)
+        capture.continuation.yield(.audio(.init(trackID: "p1", generation: 1, frameStart: 0,
+            sampleRate: 48000, samples: [0.5])))
+        try await wait { session.capturedParticipantTracks.count == 1 }
+        capture.continuation.finish(throwing: CallAudioFailure.timedOut)
+        try await wait { session.captureSource == .preparing }
+        #expect(session.sourceError != nil)
+        #expect(session.capturedParticipantTracks.isEmpty)
+        stopped.open()
+        try await wait { session.captureSource == .fallback }
+        #expect(session.capturedParticipantTracks.isEmpty)
+        session.pause()
+        session.resume()
+        session.stop(); await session.finishCapture()
+        let meta = try SessionMeta.read(from: session.dir)
+        #expect(meta.callAudio?.tracks.count == 1)
+        let track = try #require(meta.tracks.first { $0.participant != nil })
+        #expect(try AVAudioFile(forReading: session.dir.appendingPathComponent(track.file)).length == 1)
+    }
+
     @Test func pauseCompletedDuringPreparationRedactsQueuedAudio() async throws {
         let root = try ParticipantAudioRecorderTests.folder()
         defer { try? FileManager.default.removeItem(at: root) }
