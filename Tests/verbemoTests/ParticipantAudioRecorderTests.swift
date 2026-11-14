@@ -6,6 +6,39 @@ import Testing
 @testable import verbemo
 
 struct ParticipantAudioRecorderTests {
+    @Test func capturedListRequiresFreshPCMAndRetainsSavedTracksAfterRemoval() throws {
+        let dir = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let recorder = ParticipantAudioRecorder(directory: dir, offsetMs: 0)
+        defer { recorder.close() }
+        try recorder.consume(.track(Self.descriptor()))
+        try recorder.consume(.heartbeat(frame: 0, sampleRate: 48000))
+        #expect(recorder.capturedTracks(at: 10).isEmpty)
+        try recorder.consume(.audio(.init(trackID: "p1", generation: 1, frameStart: 0,
+            sampleRate: 48000, samples: [0, 0])), at: 10)
+        #expect(recorder.capturedTracks(at: 12.9).count == 1, "Silent PCM confirms a track without live ASR")
+        #expect(recorder.capturedTracks(at: 13).isEmpty, "A heartbeat must not keep a stalled track current")
+        let renamed = CallAudioTrack(id: "p1", participant: .init(id: "p1", name: "Updated name", isLocal: false, isGuest: true),
+            generation: 1, sampleRate: 48000)
+        try recorder.consume(.track(renamed), at: 13)
+        #expect(recorder.capturedTracks(at: 13).isEmpty, "Metadata does not renew PCM freshness")
+        recorder.isPaused = true
+        try recorder.consume(.audio(.init(trackID: "p1", generation: 1, frameStart: 2,
+            sampleRate: 48000, samples: [0.5])), at: 14)
+        #expect(recorder.capturedTracks(at: 14).map(\.name) == ["Updated name"])
+        try recorder.consume(.track(Self.descriptor(generation: 2)), at: 14)
+        #expect(recorder.capturedTracks(at: 14).isEmpty, "Replacement requires its own PCM")
+        try recorder.consume(.audio(.init(trackID: "p1", generation: 2, frameStart: 3,
+            sampleRate: 48000, samples: [0])), at: 15)
+        #expect(recorder.capturedTracks(at: 15).map(\.generation) == [2])
+        try recorder.consume(.removed("p1"))
+        #expect(recorder.capturedTracks(at: 15).isEmpty)
+        #expect(recorder.snapshot.tracks.count == 2)
+        #expect(recorder.snapshot.files.values.allSatisfy { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) })
+        recorder.close()
+        #expect(recorder.capturedTracks(at: 15).isEmpty)
+    }
+
     @Test func delayedAudioAfterResumeRedactsPauseIntervalsInFileAndLiveSink() throws {
         let dir = try Self.folder()
         defer { try? FileManager.default.removeItem(at: dir) }

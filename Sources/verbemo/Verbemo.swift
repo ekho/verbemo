@@ -1268,6 +1268,8 @@ final class AppController {
     /// never disagree about whether something is being recorded.
     private func present(_ state: MenuBarController.State, elapsed: String?) {
         menuBar.update(state: state, elapsed: elapsed)
+        window.updateCaptureSource(session?.captureSource ?? .ordinary, tracks: session?.capturedParticipantTracks ?? [],
+                                   recovering: session?.sourceError != nil)
         window.recordingTitle = session?.title ?? localised("New meeting", "Новая встреча")
         window.update(state: state, elapsed: elapsed)
         updateActiveRecording()
@@ -1285,7 +1287,6 @@ final class AppController {
         guard !isStopping else { return }
         showAutoRecord()
         guard let session else { return }
-        window.updateCaptureSource(session.captureSource)
         present(
             session.isPaused ? .paused : session.captureSource == .preparing ? .preparing : session.captureSource == .ended ? .waiting : .recording,
             elapsed: Self.format(Date().timeIntervalSince(session.startedAt))

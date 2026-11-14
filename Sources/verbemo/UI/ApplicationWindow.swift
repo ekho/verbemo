@@ -42,8 +42,8 @@ final class ApplicationWindow: NSObject, NSWindowDelegate {
         return view
     }()
     var isProcessing: (() -> Bool)?
-    func updateCaptureSource(_ source: RecordingSession.CaptureSource) {
-        liveView.captureSource = source
+    func updateCaptureSource(_ source: RecordingSession.CaptureSource, tracks: [CallAudioMetadata.Track] = [], recovering: Bool = false) {
+        liveView.updateCaptureSource(source, tracks: tracks, recovering: recovering)
         recordingBar.toolTip = source.title
     }
     var readAudioLevels: (() -> (mic: AudioMeter.Reading, system: AudioMeter.Reading))?
