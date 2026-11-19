@@ -83,6 +83,9 @@ final class RecordingSession {
     private var callAudio: CallAudioMetadata?
     private var participantRecorder: ParticipantAudioRecorder?
     var participantSnapshot: ParticipantAudioRecorder.Snapshot? { participantRecorder?.snapshot }
+    var capturedParticipantTracks: [CallAudioMetadata.Track] {
+        captureSource == .direct && !recordingStopped ? participantRecorder?.capturedTracks() ?? [] : []
+    }
     private var audioCapture: (any CallAudioCapture)?
     private var audioPreparation: Task<Void, Never>?
     private var audioConsumer: Task<Void, Never>?

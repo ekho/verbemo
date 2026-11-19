@@ -6,14 +6,10 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
     private let micLevel = AudioLevelView(title: localised("Microphone", "Микрофон"), source: "mic")
     private let systemLevel = AudioLevelView(title: localised("Computer audio", "Звук компьютера"), source: "system")
     private let sourceLabel = NSTextField(wrappingLabelWithString: "")
-    var captureSource: RecordingSession.CaptureSource = .ordinary {
-        didSet {
-            sourceLabel.stringValue = captureSource.title
-            sourceLabel.textColor = captureSource == .fallback ? .systemOrange : JournalStyle.muted
-            micLevel.title = captureSource == .direct ? localised("Your call audio", "Ваш звук в звонке") : localised("Microphone", "Микрофон")
-            systemLevel.title = captureSource == .direct ? localised("Other participants", "Остальные участники") : localised("Computer audio", "Звук компьютера")
-        }
-    }
+    private let sources = NSStackView()
+    private let trackRows = FlippedStackView()
+    private lazy var tracksScroll = SetupLayout.scroller(around: trackRows)
+    private var displayedTracks: [CallAudioMetadata.Track]?
     private var levelTimer: Timer?
     var onRename: ((String) throws -> Void)?
     private let name = NSTextField()
@@ -36,11 +32,16 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         name.identifier = .init("recording-title")
         name.setAccessibilityLabel(localised("Current meeting title", "Название текущей встречи"))
         name.delegate = self
-        let sources = NSStackView(views: [
-            micLevel, systemLevel,
-        ])
+        sources.setViews([micLevel, systemLevel], in: .center)
         sources.distribution = .fillEqually
         sources.spacing = 24
+        trackRows.orientation = .vertical
+        trackRows.alignment = .leading
+        trackRows.spacing = 6
+        tracksScroll.identifier = .init("recording.tracks")
+        tracksScroll.setAccessibilityLabel(localised("Captured KTalk tracks", "Получаемые дорожки KTalk"))
+        tracksScroll.heightAnchor.constraint(equalToConstant: 100).isActive = true
+        tracksScroll.isHidden = true
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         meetingActionsHost.setContentHuggingPriority(.required, for: .horizontal)
         meetingActionsHost.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -58,7 +59,7 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
         sourceLabel.font = SetupLayout.detailFont
         sourceLabel.maximumNumberOfLines = 0
         sourceLabel.identifier = .init("recording.source")
-        let stack = NSStackView(views: [titleRow, recordingBar, sourceLabel, sources, transcript])
+        let stack = NSStackView(views: [titleRow, recordingBar, sourceLabel, sources, tracksScroll, transcript])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
@@ -73,11 +74,45 @@ final class LiveTranscriptView: NSView, NSTextFieldDelegate {
             recordingBar.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sourceLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sources.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            tracksScroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
             transcript.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
+        updateCaptureSource(.ordinary)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func updateCaptureSource(_ source: RecordingSession.CaptureSource, tracks: [CallAudioMetadata.Track] = [], recovering: Bool = false) {
+        sourceLabel.stringValue = source == .preparing && recovering
+            ? localised("KTalk audio unavailable — preparing microphone and computer audio…",
+                        "Звук KTalk недоступен — подготовка микрофона и звука компьютера…")
+            : source.title
+        sourceLabel.textColor = source == .fallback || source == .failed || recovering ? .systemOrange : JournalStyle.muted
+        sources.isHidden = source != .ordinary && source != .fallback
+        tracksScroll.isHidden = source != .direct
+        let current = source == .direct ? tracks : []
+        guard displayedTracks != current else { return }
+        displayedTracks = current
+        let labels = current.isEmpty
+            ? [localised("No participant audio is arriving", "Звук участников пока не поступает")]
+            : current.map { track in
+                let name = track.name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                let role = track.isLocal ? localised("You", "Вы") : localised("Participant", "Участник")
+                return role + " — " + (name.isEmpty ? localised("name unknown", "имя неизвестно") : name)
+            }
+        let rows = labels.map { text in
+            let row = NSTextField(wrappingLabelWithString: text)
+            row.font = SetupLayout.detailFont
+            row.textColor = StudioStyle.ink
+            row.maximumNumberOfLines = 2
+            row.toolTip = text
+            row.setAccessibilityLabel(text)
+            row.identifier = .init("recording.track")
+            return row
+        }
+        trackRows.setViews(rows, in: .center)
+        for row in rows { row.widthAnchor.constraint(equalTo: trackRows.widthAnchor).isActive = true }
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

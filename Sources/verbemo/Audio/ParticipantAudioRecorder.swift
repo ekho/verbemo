@@ -22,6 +22,7 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
         var index: Int
         var file: AVAudioFile
         var nextFrame: Int64?
+        var receivedAt: TimeInterval?
     }
     private struct State {
         var snapshot = Snapshot()
@@ -49,6 +50,14 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
     }
 
     var snapshot: Snapshot { state.withLock { $0.snapshot } }
+    /// Metadata alone is not capture; silence is PCM too. Match the transport's 3-second lease.
+    func capturedTracks(at now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> [CallAudioMetadata.Track] {
+        state.withLock { state in
+            state.entries.values.filter { entry in
+                entry.receivedAt.map { now - $0 < 3 } ?? false
+            }.sorted { $0.index < $1.index }.map { state.snapshot.tracks[$0.index] }
+        }
+    }
     var isPaused: Bool {
         get { state.withLock { $0.paused } }
         set { setPaused(newValue) }
@@ -85,7 +94,7 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
 
     /// True means the recovery manifest needs a fresh physical index.
     @discardableResult
-    func consume(_ event: CallAudioEvent) throws -> Bool {
+    func consume(_ event: CallAudioEvent, at now: TimeInterval = ProcessInfo.processInfo.systemUptime) throws -> Bool {
         try state.withLock { state in
             guard !state.closed else { throw CallAudioFailure.stopped }
             switch event {
@@ -166,6 +175,7 @@ final class ParticipantAudioRecorder: @unchecked Sendable {
                     if peak >= AudioLevel.speechThreshold { state.remoteSoundAt = Date() }
                 }
                 entry.nextFrame = chunk.frameStart + Int64(samples.count)
+                entry.receivedAt = now
                 state.entries[chunk.trackID] = entry
                 state.sink?(.audio(state.snapshot.tracks[entry.index], buffer, milliseconds: milliseconds))
                 return first || hadGap
