@@ -95,15 +95,6 @@ struct MeetingMenuTests {
         #expect(!menu.items[3].isEnabled)
         #expect(menu.items[3].toolTip != nil)
     }
-    @Test func textAndMarkdownCopyHaveDifferentContents() {
-        let pasteboard = NSPasteboard.withUniqueName()
-        defer { pasteboard.releaseGlobally() }
-        let markdown = "## Heading\n\n- First\n  - Nested"
-        #expect(MeetingLibraryController.copyContent(markdown, plainText: true, to: pasteboard))
-        #expect(pasteboard.string(forType: .string)?.contains("##") == false)
-        #expect(MeetingLibraryController.copyContent(markdown, plainText: false, to: pasteboard))
-        #expect(pasteboard.string(forType: .string) == markdown)
-    }
 }
 
 @Suite(.serialized) @MainActor

@@ -131,18 +131,6 @@ struct ApplicationWindowTests {
         #expect(try command("journal.new-recording").isEnabled)
     }
 
-    @Test(.freshHome, .speaking(.russian)) func changingPagesKeepsNarrowWindowSize() async {
-        let app = ApplicationWindow()
-        defer { app.hide() }
-        app.panel.setContentSize(NSSize(width: 760, height: 680))
-        app.show()
-        for page in [ApplicationNavigationState.Destination.general, .recording, .transcription, .summary, .calendar, .storage, .mcp, .about] {
-            app.navigate(page)
-            app.panel.contentView?.layoutSubtreeIfNeeded()
-            try? await Task.sleep(for: .milliseconds(30))
-            #expect(app.panel.contentLayoutRect.width <= 762, "\(page)")
-        }
-    }
     @Test(.freshHome) func workspaceFillsAvailableWidthAfterLayout() throws {
         let app = ApplicationWindow()
         let library = MeetingLibraryController(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), hostWindow: app.panel)

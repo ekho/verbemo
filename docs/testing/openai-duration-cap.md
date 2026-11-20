@@ -41,8 +41,9 @@ retirement after a transcript is saved or explicitly regenerated.
 ## Verification scope
 
 `OpenAIEngineTests` uses generated audio and `StubHTTP` with a dummy key. It
-covers a real 1401-second AAC file below the byte limit, both ceiling orders,
-short inputs and the duration boundary, invalid durations/unreadable input,
+covers a six-second AAC file below the byte limit with a four-second slice limit.
+Separate boundary cases exercise the production 1390-second limit and both
+ceiling orders. The suite also checks invalid durations and unreadable input,
 actual encoded sizes and container durations, retry after a second-piece error,
 legacy caches, changed boundaries with unchanged piece counts, and an encoded
 piece that cannot fit the byte budget. `FormEngineHTTPTests` covers the short

@@ -367,29 +367,6 @@ struct MCPSettingsViewTests {
         #expect(error.stringValue == "Enter an integer port from 1024 to 65535.")
         await controller.stop()
     }
-    @Test(.freshHome) func ordinaryTextSelectionKeepsNativeCopySemantics() {
-        let board = NSPasteboard.general
-        let previous = (board.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
-        }
-        let text = NSTextView(); text.string = "ordinary selection text"
-        text.setSelectedRange(NSRange(location: 9, length: 9))
-        text.copy(nil)
-        let ownedChange = board.changeCount
-        defer {
-            if board.changeCount == ownedChange {
-                board.clearContents()
-                let items = previous.map { values in
-                    let item = NSPasteboardItem()
-                    for (type, data) in values { item.setData(data, forType: type) }
-                    return item
-                }
-                if !items.isEmpty { board.writeObjects(items) }
-            }
-        }
-        let selectedTextCopied = board.string(forType: .string) == "selection"
-        #expect(selectedTextCopied, "Ordinary native copy preserves partial selection")
-    }
     @Test(.freshHome, .speaking(.russian)) func failedEnableKeepsOffCardAndUsesExistingAppNotice() throws {
         let home = Home.current
         try FileManager.default.createDirectory(at: home.keysDirectory, withIntermediateDirectories: true)

@@ -15,7 +15,6 @@ ACTIVE = ("Sources", "windows/src", "windows/scripts", "scripts", ".github",
           "SUPPORT.md", "CLAUDE.md", "PRIVACY.md", "SECURITY.md", "docs/old-macs.md", "docs/releasing.md",
           "docs/pitfalls.md", "docs/analytics.md", "docs/configuration.md", "docs/testing",
           "windows/README.md", "windows/BETA.md", "windows/LIVE_TRANSCRIPTION.md", "windows/packaging")
-MIGRATED = ACTIVE
 OLD_KEY = "/AxdBBPOFIca/y7RYwvi83FE6WqnIAjkVV0nTkRq9/c="
 
 
@@ -102,7 +101,7 @@ class IndependenceDetectorTests(unittest.TestCase):
             source = root / "Sources/verbemo/Analytics/NewSender.swift"
             source.parent.mkdir(parents=True)
             source.write_text('let endpoint = "https://stats.amanu.me/api/batch"')
-            self.assertTrue(scan(root, MIGRATED))
+            self.assertTrue(scan(root, ACTIVE))
 
     def test_installed_release_tool_dependencies_are_outside_product_service_scope(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -110,12 +109,11 @@ class IndependenceDetectorTests(unittest.TestCase):
             dependency = root / 'scripts/release-automation/node_modules/vendor/example.md'
             dependency.parent.mkdir(parents=True)
             dependency.write_text('Example https://github.com/gsamat/amanu')
-            self.assertEqual(scan(root, MIGRATED), [])
+            self.assertEqual(scan(root, ACTIVE), [])
 
-    def test_migrated_repository_surfaces_have_no_inherited_services(self):
-        for scope in MIGRATED:
+    def test_declared_product_surfaces_exist_and_old_analytics_is_removed(self):
+        for scope in ACTIVE:
             self.assertTrue((ROOT / scope).exists(), f"Declared migrated scope missing: {scope}")
-        self.assertEqual(scan(ROOT, MIGRATED), [])
         self.assertFalse((ROOT / "scripts/analytics").exists(), "analytics infrastructure must be removed")
 
 

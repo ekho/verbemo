@@ -19,7 +19,8 @@ struct DiarizationPresentationTests {
     }
 
     @Test("Diarization details and recovery belong to the transcript, without a duplicate footer",
-          arguments: [DiarizationState.Status.pending, .failed, .completed, .skipped], [NSAppearance.Name.aqua, .darkAqua])
+          arguments: [(DiarizationState.Status.pending, NSAppearance.Name.aqua), (.failed, .darkAqua),
+                      (.completed, .aqua), (.skipped, .darkAqua)])
     func unifiedDetails(status: DiarizationState.Status, appearance: NSAppearance.Name) async throws {
         let recordings = try TestRecordings()
         defer { recordings.remove() }

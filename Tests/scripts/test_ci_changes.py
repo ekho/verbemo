@@ -22,10 +22,13 @@ class ChangesTests(unittest.TestCase):
     def test_platform_and_tool_changes_select_their_consumers(self):
         cases = [
             ('Sources/verbemo/Config.swift', {'macos_test', 'macos_build'}),
-            ('Packages/CallIntegrations/Sources/KTalkIntegration/KTalkCDP.swift', {'macos_test', 'macos_build'}),
-            ('Packages/CallIntegrations/Tests/test_transport.py', {'macos_test', 'macos_build'}),
+            ('Packages/CallIntegrations/Sources/KTalkIntegration/KTalkCDP.swift', {'macos_test', 'macos_build', 'call_integrations'}),
+            ('Packages/CallIntegrations/Package.swift', {'macos_test', 'macos_build', 'call_integrations'}),
+            ('Packages/CallIntegrations/Tests/test_transport.py', {'call_integrations'}),
+            ('Packages/CallIntegrations/Sources/CallIntegrationProbe/main.swift', {'call_integrations'}),
             ('Tests/verbemoTests/ConfigTests.swift', {'macos_test'}),
             ('Tests/QuietTestWindows/QuietTestWindows.m', {'macos_test'}),
+            ('Tests/Fixtures/MCP/contract.json', {'macos_test', 'windows_test'}),
             ('windows/src/Verbemo.App/Config.cs', {'windows_test', 'windows_build'}),
             ('windows/src/Verbemo.App/App.xaml.cs', {'windows_test', 'windows_build', 'scripts'}),
             ('windows/tests/Verbemo.Core.Tests/ConfigTests.cs', {'windows_test'}),
@@ -57,7 +60,7 @@ class ChangesTests(unittest.TestCase):
                 self.assertEqual(self.select([path]), expected)
 
     def test_shared_inputs_and_unknown_build_files_fail_safe(self):
-        both = {'macos_test', 'macos_build', 'windows_test', 'windows_build', 'scripts', 'macos_scripts'}
+        both = {'macos_test', 'macos_build', 'call_integrations', 'windows_test', 'windows_build', 'scripts', 'macos_scripts'}
         for path in ('VERSION', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'scripts/release_manifest.py'):
             with self.subTest(path=path):
                 self.assertEqual(self.select([path]), both)
@@ -118,8 +121,8 @@ class ChangesTests(unittest.TestCase):
             self.assertEqual(run('push', {'before': renamed, 'after': git('rev-parse', 'HEAD')}),
                              {'windows_test', 'windows_build'})
             for before in ('0' * 40, 'f' * 40):
-                self.assertEqual(len(run('push', {'before': before, 'after': head})), 8)
-            self.assertEqual(len(run('workflow_dispatch', {})), 8)
+                self.assertEqual(run('push', {'before': before, 'after': head}), self.select(['.github/workflows/ci.yml']))
+            self.assertEqual(run('workflow_dispatch', {}), self.select(['.github/workflows/ci.yml']))
 
 
 if __name__ == '__main__':

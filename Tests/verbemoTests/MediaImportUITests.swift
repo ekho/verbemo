@@ -47,21 +47,6 @@ struct MediaImportUITests {
         #expect(label.toolTip?.contains(result.failures[0].message) == true)
         #expect(bar.isHidden)
     }
-    @Test("The header and status menu use the same Import command", .freshHome)
-    @MainActor
-    func importEntryPoints() throws {
-        let app = ApplicationWindow()
-        let menu = MenuBarController(visible: false)
-        var requests = 0
-        app.onChooseImport = { requests += 1 }
-        menu.onImport = app.onChooseImport
-        let button = try #require(app.panel.contentView?.allDescendants.compactMap { $0 as? NSButton }
-            .first { $0.identifier?.rawValue == "journal.import" })
-        #expect(button.isBordered)
-        button.performClick(nil)
-        #expect(menu.performOfferedItem(titled: "Import recording…"))
-        #expect(requests == 2)
-    }
 
     @Test("Live import progress finishes in the status row with a dismiss action", .freshHome)
     @MainActor

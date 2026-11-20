@@ -8,7 +8,10 @@ workflow changes, unknown build inputs and manual CI runs select every check.
 | Changed paths | Checks |
 | --- | --- |
 | `Sources/**`, `Package.swift`, `Package.resolved` | macOS tests and universal preview build |
+| Libraries, resources or manifest in `Packages/CallIntegrations/` | Standalone package, transport and audio-capture tests, macOS app tests and universal preview build |
+| Only tests or the diagnostic probe in `Packages/CallIntegrations/` | Standalone package, transport and audio-capture tests |
 | `Tests/verbemoTests/**` | macOS tests; no package build |
+| `Tests/Fixtures/MCP/contract.json` | macOS and Windows app tests |
 | `windows/src/**`, Windows build configuration | Windows tests and development package build |
 | Windows test projects and harness | Windows tests; no package build |
 | Windows packaging scripts | Windows tests, package build and shared script checks |
@@ -23,6 +26,7 @@ The product identity guard always runs on Linux. Native tests run the complete
 affected platform suite: there is no reliable source-to-individual-test dependency
 map. macOS tests remain serial and require the final Swift Testing report.
 
+Windows runs both hook lifecycle scenarios in the regular Live suite.
 Windows CI packaging waits for the separate Windows test job, then uses
 `-Development -SkipTests`. Signed packaging rejects `-SkipTests`; release builds
 keep their default full tests. CPU and Unicode checks still run on the actual

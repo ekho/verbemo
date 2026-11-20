@@ -580,15 +580,16 @@ import Darwin
 
     @Test func speakerStatisticsBudgetNeverErasesValidTranscriptAvailability() throws {
         let root = try fixture(), dir = root.appendingPathComponent("meeting"), meeting = try id(root)
-        func write(_ count: Int) throws {
-            let segments = (0..<count).map { Transcript.Segment(speaker: "voice\($0)", start_ms: $0, end_ms: $0 + 1, text: "x") }
+        func write(_ count: Int, prefix: String = "voice") throws {
+            let segments = (0..<count).map { Transcript.Segment(speaker: "\(prefix)\($0)", start_ms: $0, end_ms: $0 + 1, text: "x") }
             try JSONEncoder().encode(Transcript(engine: "test", model: "test", created_at: "2026-10-28T00:00:00Z", segments: segments)).write(to: dir.appendingPathComponent("transcript.json"))
         }
         try write(5000)
         let card = try call("get_meeting", root, ["meeting_id": .string(meeting)])
         #expect(card["has_transcript"] == .bool(true))
         #expect(card["speakers"]?.array?.count == 5000)
-        try write(40_000)
+        // Exceed the byte budget with fewer distinct labels; one label still fits on a transcript page.
+        try write(128, prefix: String(repeating: "v", count: MCPContract.hardResponseBytes / 128))
         let listing = try call("list_meetings", root)
         #expect(listing["items"]?.array?.first?["has_transcript"] == .bool(true))
         #expect(listing["partial"] == .bool(true))
