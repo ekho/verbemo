@@ -5,12 +5,14 @@ import CallIntegrations
 actor KTalkAccessibility {
     private var applications: [pid_t: AXUIElement] = [:]
     private var restore: Set<pid_t> = []
+    private var callWindow = CallWindowState.unobserved
 
     func stop() {
         for pid in restore {
             if let app = applications[pid] { AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanFalse) }
         }
         applications.removeAll(); restore.removeAll()
+        callWindow = .unobserved
     }
 
     func read() -> KTalkReading {
@@ -21,7 +23,8 @@ actor KTalkAccessibility {
         for pid in Array(applications.keys) where !pids.contains(pid) {
             applications.removeValue(forKey: pid); restore.remove(pid)
         }
-        var candidates: [KTalkReading] = []
+        var candidates: [(window: AXUIElement, reading: KTalkReading)] = []
+        var completeWindowList = true
         for process in running {
             let pid = process.processIdentifier
             let app = applications[pid] ?? AXUIElementCreateApplication(pid)
@@ -31,21 +34,67 @@ actor KTalkAccessibility {
                AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success {
                 restore.insert(pid)
             }
-            var windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement] ?? []
+            let listed = attribute(app, kAXWindowsAttribute) as? [AXUIElement]
+            if listed == nil { completeWindowList = false }
+            var windows = listed ?? []
             for key in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
                 if let value = attribute(app, key), CFGetTypeID(value) == AXUIElementGetTypeID() {
                     let window = unsafeDowncast(value, to: AXUIElement.self)
                     if !windows.contains(where: { CFEqual($0, window) }) { windows.append(window) }
                 }
             }
-            for window in windows.prefix(8) {
-                candidates.append(scan(window, pid: pid))
-            }
+            if windows.count > 8 { completeWindowList = false }
+            for window in windows.prefix(8) { candidates.append((window, scan(window, pid: pid))) }
         }
-        let active = candidates.filter { $0.participation == .inCall }
-        if active.count == 1 { return active[0] }
-        if active.isEmpty, let preparing = candidates.first(where: { $0.participation == .preparing }) { return preparing }
-        return .init(participation: .unknown)
+        return callWindow.resolve(candidates, completeWindowList: completeWindowList, isAuxiliaryDialog: isAuxiliaryDialog) { window in
+            var role: CFTypeRef?
+            return AXUIElementCopyAttributeValue(window, kAXRoleAttribute as CFString, &role) == .invalidUIElement
+        }
+    }
+
+    private func isAuxiliaryDialog(_ window: AXUIElement) -> Bool {
+        // KTalk 3.8 recreates this nonmodal dialog when focus returns to its main window.
+        attribute(window, kAXSubroleAttribute) as? String == kAXDialogSubrole
+            && attribute(window, kAXTitleAttribute) as? String == "Window"
+            && attribute(window, kAXModalAttribute) as? Bool == false
+    }
+
+    enum CallWindowState {
+        case unobserved
+        case joined(AXUIElement, windows: Set<AXUIElement>)
+        case closed(knownWindows: Set<AXUIElement>)
+
+        mutating func resolve(_ candidates: [(window: AXUIElement, reading: KTalkReading)],
+                              completeWindowList: Bool, isAuxiliaryDialog: (AXUIElement) -> Bool,
+                              isDestroyed: (AXUIElement) -> Bool) -> KTalkReading {
+            let windows = Set(candidates.map(\.window))
+            let active = candidates.filter { $0.reading.participation == .inCall }
+            if active.count > 1 {
+                self = .unobserved
+                return .init(participation: .unknown)
+            }
+            if let call = active.first {
+                self = .joined(call.window, windows: windows)
+                return call.reading
+            }
+            if let preparing = candidates.first(where: { $0.reading.participation == .preparing }) {
+                if case .closed = self { self = .unobserved }
+                return preparing.reading
+            }
+            guard completeWindowList else { return .init(participation: .unknown) }
+            // A hidden or temporarily unreadable meeting can disappear from the AX window list.
+            if case let .joined(window, previous) = self, !windows.contains(window), isDestroyed(window) {
+                self = .closed(knownWindows: previous)
+            }
+            if case let .closed(previous) = self {
+                guard windows.subtracting(previous).allSatisfy(isAuxiliaryDialog) else {
+                    self = .unobserved
+                    return .init(participation: .unknown)
+                }
+                return .init(participation: .idle)
+            }
+            return .init(participation: .unknown)
+        }
     }
 
     private func attribute(_ element: AXUIElement, _ key: String) -> CFTypeRef? {

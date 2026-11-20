@@ -23,7 +23,7 @@ import CallIntegrations
 /// never ends, and neither can be arranged on purpose with a real one.
 @MainActor
 protocol AutoRecordedSession: AnyObject {
-    var callIntegrationID: String? { get }
+    var integrationCall: CallObservation? { get }
     var startedAt: Date { get }
     var trigger: RecordingSession.Trigger { get }
     var lastMicSoundAt: Date? { get }
@@ -32,7 +32,6 @@ protocol AutoRecordedSession: AnyObject {
 }
 
 extension RecordingSession: AutoRecordedSession {}
-extension AutoRecordedSession { var callIntegrationID: String? { nil } }
 
 /// The two questions the controller asks the calendar, so a test can answer
 /// them with meetings of its own.
@@ -104,9 +103,8 @@ final class AutoRecordController {
         /// A recording is running, ours or the user's; the stop rules own it.
         case recording
         /// A recording ended while its call may well still be going: the user
-        /// stopped it, or a backstop did. Nothing starts again until the mic
-        /// has been let go for `stopDelay` — the call is over, and the next
-        /// one is a new call.
+        /// stopped it, or a backstop did. Wait for the mic to be released.
+        /// A manual stop can also be followed by a positively identified new call.
         case standingDown(StandDown)
         /// A start was refused. Nothing is tried again before this moment.
         case backingOff(until: Date)
@@ -127,7 +125,8 @@ final class AutoRecordController {
     private let checkMic: (Config.AutoRecordSettings) -> MicActivityMonitor.Result
     private let callObservations: () -> [CallObservation]
     private var currentCall: CallObservation?
-    private var trackedIntegrationID: String?
+    private var trackedCall: CallObservation?
+    private var pendingCallID: String?
     private var callUnknown = false
     private let now: () -> Date
     private var timer: Timer?
@@ -262,6 +261,7 @@ final class AutoRecordController {
     /// The user started a recording by hand — don't treat it as ours.
     func noteManualStart() {
         currentEvent = calendar?.bestMatch(for: now())
+        trackedCall = nil
         phase = .watching
     }
 
@@ -269,7 +269,15 @@ final class AutoRecordController {
     /// don't want it recorded; stay out of the way until that call actually
     /// ends, and consider the current calendar event dealt with.
     func noteManualStop() {
-        trackedIntegrationID = currentSession?()?.callIntegrationID ?? trackedIntegrationID
+        if let recorded = currentSession?()?.integrationCall ?? trackedCall {
+            let stoppedAt = now()
+            // The user may press Stop after already joining the next meeting.
+            trackedCall = callObservations().first {
+                $0.integrationID == recorded.integrationID && $0.participation == .inCall
+                    && (0...5).contains(stoppedAt.timeIntervalSince($0.observedAt))
+            } ?? recorded
+        }
+        pendingCallID = nil
         phase = .standingDown(.manualStop)
         notice = .manualStop
         micActiveSince = nil
@@ -322,7 +330,7 @@ final class AutoRecordController {
             observations: observations, settings: settings, now: now)
         let mic = signal.microphone
         currentCall = signal.observation
-        let relevantID = currentSession?()?.callIntegrationID ?? trackedIntegrationID
+        let relevantID = (currentSession?()?.integrationCall ?? trackedCall)?.integrationID
         callUnknown = relevantID.map { id in
             guard let value = observations.first(where: { $0.integrationID == id }) else { return true }
             return value.participation == .unknown || !(0...5).contains(now.timeIntervalSince(value.observedAt))
@@ -377,7 +385,7 @@ final class AutoRecordController {
 
         switch phase {
         case .standingDown(let why):
-            guard callOver else {
+            guard callOver || (why == .manualStop && nextCallIsReady(now: now, delay: settings.startDelay)) else {
                 switch why {
                 case .manualStop:
                     notice = .manualStop
@@ -466,6 +474,23 @@ final class AutoRecordController {
         }
     }
 
+    private func nextCallIsReady(now: Date, delay: TimeInterval) -> Bool {
+        // AX and the application can give the same ongoing call different IDs.
+        guard let stopped = trackedCall, stopped.participation == .inCall,
+              let currentCall, currentCall.integrationID == stopped.integrationID,
+              let source = stopped.source, currentCall.source == source,
+              let previous = stopped.call?.participationID ?? stopped.call?.id, !previous.isEmpty,
+              let next = currentCall.call?.participationID ?? currentCall.call?.id, !next.isEmpty, previous != next else {
+            pendingCallID = nil
+            return false
+        }
+        if pendingCallID != next {
+            pendingCallID = next
+            micActiveSince = now
+        }
+        return micActiveSince.map { now.timeIntervalSince($0) >= delay } ?? false
+    }
+
     /// Ask the owner to start, and decide what a refusal means. The owner
     /// does not retry on its own: it used to be asked again on the very next
     /// tick, and every five seconds after that each refusal cost a banner and
@@ -474,7 +499,7 @@ final class AutoRecordController {
         _ trigger: RecordingSession.Trigger, _ context: MeetingContext, now: Date
     ) -> Bool {
         if startRecording?(trigger, context) == true {
-            trackedIntegrationID = context.callObservation?.integrationID
+            trackedCall = context.callObservation
             phase = .recording
             startFailures = 0
             return true

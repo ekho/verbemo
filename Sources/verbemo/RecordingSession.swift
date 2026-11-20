@@ -58,8 +58,7 @@ final class RecordingSession {
 
     private var editedTitle: String?
     var title: String? { editedTitle ?? context.title ?? context.callObservation?.call?.title ?? integrationCall?.call?.title }
-    var callIntegrationID: String? { integrationCall?.integrationID }
-    private var integrationCall: CallObservation?
+    private(set) var integrationCall: CallObservation?
     typealias CallAudioFactory = @Sendable () async throws -> any CallAudioCapture
     enum CaptureSource: Equatable {
         case ordinary, preparing, direct, fallback, ended, failed

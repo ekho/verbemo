@@ -10,7 +10,8 @@ enum KTalkModel {
               Set(participants.map(\.id)).count == participants.count,
               participants.allSatisfy({ !$0.id.isEmpty }),
               participants.filter(\.local).count <= 1 else { throw InvalidModel() }
-        let call = CallInfo(id: "\(targetID):\(room.conference_id ?? room.key)", title: room.title,
+        let call = CallInfo(id: "\(targetID):\(room.conference_id ?? room.key)",
+            participationID: "\(targetID):\(room.key)", title: room.title,
             url: space.appendingPathComponent(room.key),
             participants: participants.map { .init(id: $0.id, name: $0.name, isLocal: $0.local,
                 isGuest: $0.guest, microphoneMuted: $0.microphone_muted, cameraMuted: $0.camera_muted) },

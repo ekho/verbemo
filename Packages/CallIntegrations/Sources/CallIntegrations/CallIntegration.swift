@@ -31,6 +31,8 @@ public struct CallParticipant: Codable, Sendable, Equatable {
 public struct CallInfo: Codable, Sendable, Equatable {
     /// Provider-scoped identity for this local call, not a display name.
     public var id: String
+    /// Stable across metadata updates when the ID used for audio capture can change.
+    public var participationID: String?
     public var title: String?
     public var url: URL?
     /// nil means unavailable; [] means a successfully read empty roster.
@@ -38,10 +40,11 @@ public struct CallInfo: Codable, Sendable, Equatable {
     public var localParticipantID: String?
     public var microphoneMuted: Bool?
     public var cameraMuted: Bool?
-    public init(id: String, title: String? = nil, url: URL? = nil,
+    public init(id: String, participationID: String? = nil, title: String? = nil, url: URL? = nil,
                 participants: [CallParticipant]? = nil, localParticipantID: String? = nil,
                 microphoneMuted: Bool? = nil, cameraMuted: Bool? = nil) {
-        self.id = id; self.title = title; self.url = url; self.participants = participants
+        self.id = id; self.participationID = participationID
+        self.title = title; self.url = url; self.participants = participants
         self.localParticipantID = localParticipantID
         self.microphoneMuted = microphoneMuted; self.cameraMuted = cameraMuted
     }

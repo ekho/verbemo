@@ -1,3 +1,4 @@
+import CallIntegrations
 import Foundation
 import Testing
 
@@ -211,7 +212,7 @@ struct ManualStopAutoRecordTests {
 
 @MainActor
 final class FakeAutoSession: AutoRecordedSession {
-    var callIntegrationID: String?
+    var integrationCall: CallObservation?
     let startedAt: Date
     let trigger: RecordingSession.Trigger
     var lastMicSoundAt: Date?

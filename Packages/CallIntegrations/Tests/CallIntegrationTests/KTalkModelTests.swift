@@ -18,6 +18,17 @@ struct KTalkModelTests {
         #expect(result.call?.participants?.map(\.name) == ["Test Host", "Test Guest"])
         #expect(result.call?.participants?.last?.microphoneMuted == false)
     }
+
+    @Test func lateConferenceMetadataPreservesTheIdentityOfTheJoinedRoom() throws {
+        let before = joined.replacingOccurrences(of: #","conference_id":"meeting-a""#, with: "")
+        let initial = try #require(KTalkModel.reading(Data(before.utf8), targetID: "first", space: space).call)
+        let updated = try #require(KTalkModel.reading(Data(joined.utf8), targetID: "first", space: space).call)
+        let next = try #require(KTalkModel.reading(Data(joined.utf8), targetID: "second", space: space).call)
+        #expect(initial.id != updated.id)
+        #expect(initial.participationID == "first:probe")
+        #expect(initial.participationID == updated.participationID)
+        #expect(next.participationID != updated.participationID)
+    }
     @Test(arguments: [false, true])
     func unnamedRoomPreservesParticipationThroughProjection(_ joined: Bool) throws {
         let context = try #require(JSContext())
