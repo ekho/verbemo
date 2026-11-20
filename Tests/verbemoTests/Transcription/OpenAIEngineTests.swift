@@ -8,14 +8,13 @@ import Testing
 /// from one request becomes segments on the session's clock, and a meeting too
 /// long for one request is cut up and put back together.
 struct OpenAIEngineTests {
-    @Test("A small long AAC recording is sliced, and a retry reuses only completed pieces", .freshHome)
+    @Test("An AAC recording over the duration limit is sliced, and a retry reuses only completed pieces", .freshHome)
     func longAudioRetry() async throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("verbemo-openai-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = try Self.folder()
         defer { try? FileManager.default.removeItem(at: dir) }
         let audio = dir.appendingPathComponent("mixed.m4a")
-        try TestAudio.write(to: audio, seconds: 1401, sampleRate: 48_000, settings: [
+        let sliceDuration: TimeInterval = 4
+        try TestAudio.write(to: audio, seconds: 6, settings: [
             AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000,
             AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 64_000,
         ]) { _, frame in Float(frame % 80) / 200 - 0.2 }
@@ -29,7 +28,7 @@ struct OpenAIEngineTests {
             """)
         }
         let engine = try OpenAITranscriptionEngine(
-            apiKey: "test-key", session: service.session, retry: .once)
+            durationLimit: sliceDuration, apiKey: "test-key", session: service.session, retry: .once)
         await #expect(throws: CloudHTTP.Failure.self) { try await engine.transcribe(audio) }
         try #require(service.requests.count == 2)
         #expect(ProviderCache.files(in: dir).count == 1)
@@ -40,18 +39,18 @@ struct OpenAIEngineTests {
         #expect(pieces.count == 2)
         for piece in pieces {
             let duration = try await AVURLAsset(url: piece).load(.duration).seconds
-            #expect(duration > 0 && duration < 1400)
+            #expect(duration > 0 && duration <= sliceDuration + 0.1)
             #expect(try Data(contentsOf: piece).count < 25 * 1_048_576)
         }
 
         let resumed = try OpenAITranscriptionEngine(
-            apiKey: "test-key", session: service.session, retry: .once)
+            durationLimit: sliceDuration, apiKey: "test-key", session: service.session, retry: .once)
         let segments = try await resumed.transcribe(audio)
         #expect(service.requests.count == 3)
         #expect(segments.map(\.text) == ["piece1", "piece3"])
         #expect(segments.map(\.speaker) == ["1A", "2A"])
-        #expect(segments.map(\.start) == [0.1, 1390.1])
-        #expect(segments.map(\.end) == [0.8, 1390.8])
+        #expect(segments.map(\.start) == [0.1, sliceDuration + 0.1])
+        #expect(segments.map(\.end) == [0.8, sliceDuration + 0.8])
         #expect(try Data(contentsOf: audio) == original)
         #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("openai-slices").path))
         let cached = try await resumed.transcribe(audio)
@@ -205,25 +204,6 @@ struct OpenAIEngineTests {
         #expect(segments[0].speaker == "A")
         #expect(segments[1].text == "there")
         #expect(segments[1].start == 603.0)
-    }
-
-    /// Labels are per request, so the "A" of the second piece is a different
-    /// person from the "A" of the first as far as anyone knows. Prefixing
-    /// keeps them apart; merging them would hand two strangers one name.
-    @Test("A sliced meeting keeps each piece's speakers apart")
-    func labelsArePerSlice() throws {
-        let decoded = try Self.response("""
-        {"segments":[{"start":1.0,"end":2.0,"text":"go on","speaker":"A"}]}
-        """)
-
-        let first = OpenAITranscriptionEngine.segments(
-            from: decoded, offset: 0, labelPrefix: "1")
-        let second = OpenAITranscriptionEngine.segments(
-            from: decoded, offset: 2400, labelPrefix: "2")
-
-        #expect(first[0].speaker == "1A")
-        #expect(second[0].speaker == "2A")
-        #expect(second[0].start == 2401.0)
     }
 
     /// A response with speech but nothing the diarizer would split: keeping

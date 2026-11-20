@@ -4,11 +4,11 @@ import os
 from pathlib import Path
 import subprocess
 
-CHECKS = ('macos_test', 'macos_build', 'windows_test', 'windows_build',
+CHECKS = ('macos_test', 'macos_build', 'call_integrations', 'windows_test', 'windows_build',
           'scripts', 'macos_scripts', 'landing', 'automation')
 MACOS = {'macos_test', 'macos_build'}
 WINDOWS = {'windows_test', 'windows_build'}
-SHARED = MACOS | WINDOWS | {'scripts', 'macos_scripts'}
+SHARED = MACOS | WINDOWS | {'call_integrations', 'scripts', 'macos_scripts'}
 
 
 def select_checks(paths):
@@ -27,9 +27,15 @@ def select_checks(paths):
             selected.add('scripts')
         elif path.startswith('Tests/macos-scripts/'):
             selected.add('macos_scripts')
+        elif path == 'Tests/Fixtures/MCP/contract.json':
+            selected.update(('macos_test', 'windows_test'))
         elif path.startswith(('Tests/verbemoTests/', 'Tests/QuietTestWindows/')):
             selected.add('macos_test')
-        elif path.startswith(('Sources/', 'Packages/CallIntegrations/')):
+        elif path.startswith(('Packages/CallIntegrations/Tests/', 'Packages/CallIntegrations/Sources/CallIntegrationProbe/')):
+            selected.add('call_integrations')
+        elif path.startswith('Packages/CallIntegrations/'):
+            selected.update(MACOS | {'call_integrations'})
+        elif path.startswith('Sources/'):
             selected.update(MACOS)
         elif path in ('Package.swift', 'Package.resolved'):
             selected.update(MACOS | {'scripts'})

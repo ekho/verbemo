@@ -416,6 +416,7 @@ import enum MCP.Version
             return try #require(response as? HTTPURLResponse).statusCode
         }
         let request = Data("POST /mcp HTTP/1.1\r\n\(headers)Content-Type: application/json\r\nAccept: application/json\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)".utf8)
+        let sentAt = ContinuousClock.now
         for _ in 0..<8 {
             let fd = try socket(port: port); sockets.append(fd)
             _ = request.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
@@ -426,6 +427,14 @@ import enum MCP.Version
         for _ in 0..<(deadline ? 3500 : 200) where cancelled.count < 8 { try await Task.sleep(for: .milliseconds(10)) }
         #expect(cancelled.count == 8)
         #expect(finished.count == 0)
+        if deadline {
+            let elapsed = sentAt.duration(to: .now)
+            #expect(elapsed >= .seconds(29) && elapsed < .seconds(34))
+            for fd in sockets {
+                var byte: UInt8 = 0
+                #expect(Darwin.read(fd, &byte, 1) == 0, "The deadline closes the client while the query is still winding down")
+            }
+        }
         // Give the cancelled SDK response waiters time to unwind, while actual reads stay held.
         try await Task.sleep(for: .milliseconds(100))
         for _ in 0..<3 { #expect(try await status() == 503) }
@@ -444,21 +453,6 @@ import enum MCP.Version
         #expect(stopped.count == 1)
     }
 
-    @Test func jsonDeadlineCancelsHandlerAndTransportWaiter() async throws {
-        let root = try fixture(), cancelled = Counter(), token = String(repeating: "f", count: 64)
-        let host = MCPHTTP(port: 55301, token: token, gate: { scope in .init(runtime: .init(root: root, cancelled: { scope.isCancelled }), settings: nil) }, query: { _, _, runtime, _ in
-            while !runtime.cancelled() { usleep(1000) }
-            _ = cancelled.increment(); throw MCPFailure(.serverStopping)
-        })
-        try await host.start()
-        let started = Date()
-        do { _ = try await wire(port: 55301, token: token, method: "tools/call", params: .object(["name": .string("get_meeting")])); Issue.record("Deadline did not close the request") } catch { }
-        #expect(Date().timeIntervalSince(started) >= 29)
-        #expect(Date().timeIntervalSince(started) < 34)
-        for _ in 0..<100 where cancelled.count == 0 { try await Task.sleep(for: .milliseconds(5)) }
-        #expect(cancelled.count == 1)
-        await host.stop()
-    }
     @Test func twoAudioTransfersLimitAndHeaderBodyIdleDeadlines() async throws {
         let root = try fixture(bytes: 38_400_044), token = String(repeating: "1", count: 64)
         let host = MCPHTTP(port: 55302, token: token, gate: { scope in .init(runtime: .init(root: root, port: 55302, cancelled: { scope.isCancelled }), settings: nil) })

@@ -83,43 +83,20 @@ def xcode_major_version():
     "Icon Composer assets require Xcode 26 or later",
 )
 class AppIconTests(unittest.TestCase):
-    def test_icon_composer_asset_builds_all_macos_appearances(self):
-        self.assertTrue(
-            (ICON / "icon.json").is_file(),
-            "Resources/Verbemo.icon/icon.json is missing",
-        )
-
+    def test_build_keeps_classic_icon_and_all_macos_appearances(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
-            partial_plist = output / "partial.plist"
             result = subprocess.run(
-                [
-                    "xcrun",
-                    "actool",
-                    "--compile",
-                    str(output),
-                    "--platform",
-                    "macosx",
-                    "--minimum-deployment-target",
-                    "14.2",
-                    "--app-icon",
-                    "Verbemo",
-                    "--output-partial-info-plist",
-                    str(partial_plist),
-                    str(ICON),
-                ],
+                [str(BUILD_SCRIPT), str(ICON), str(CLASSIC_ICON), str(output), "14.2"],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertTrue((output / "Assets.car").is_file())
-            self.assertTrue((output / "Verbemo.icns").is_file())
-
-            with partial_plist.open("rb") as file:
-                generated_info = plistlib.load(file)
-            self.assertEqual(generated_info["CFBundleIconName"], "Verbemo")
-            self.assertEqual(generated_info["CFBundleIconFile"], "Verbemo")
+            with (ROOT / "Packaging/Verbemo-Info.plist").open("rb") as file:
+                app_info = plistlib.load(file)
+            self.assertEqual((output / (app_info["CFBundleIconFile"] + ".icns")).read_bytes(),
+                             CLASSIC_ICON.read_bytes())
 
             catalog = subprocess.run(
                 ["assetutil", "--info", str(output / "Assets.car")],
@@ -132,7 +109,7 @@ class AppIconTests(unittest.TestCase):
                 item.get("Appearance"): item
                 for item in renditions
                 if item.get("AssetType") == "IconImageStack"
-                and item.get("Name") == "Verbemo"
+                and item.get("Name") == app_info["CFBundleIconName"]
             }
             self.assertEqual(
                 set(stacks),
@@ -153,7 +130,7 @@ class AppIconTests(unittest.TestCase):
                 item.get("Appearance"): item
                 for item in renditions
                 if item.get("AssetType") == "IconGroup"
-                and item.get("Name") == "Verbemo/Group"
+                and item.get("Name") == app_info["CFBundleIconName"] + "/Group"
             }
             self.assertEqual(set(groups), set(stacks))
             for appearance, group in groups.items():
@@ -167,30 +144,6 @@ class AppIconTests(unittest.TestCase):
                 width, height = map(int, layer["LayerSize"].split(","))
                 self.assertGreaterEqual(width, 1200)
                 self.assertGreaterEqual(height, 1200)
-
-    def test_app_icon_build_keeps_the_classic_fallback(self):
-        self.assertTrue(BUILD_SCRIPT.is_file(), "scripts/build-app-icon.sh is missing")
-
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory)
-            result = subprocess.run(
-                [
-                    str(BUILD_SCRIPT),
-                    str(ICON),
-                    str(CLASSIC_ICON),
-                    str(output),
-                    "14.2",
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertTrue((output / "Assets.car").is_file())
-            self.assertEqual(
-                (output / "Verbemo.icns").read_bytes(),
-                CLASSIC_ICON.read_bytes(),
-            )
 
 
 if __name__ == "__main__":
