@@ -33,6 +33,8 @@ mkdir "$WORK/mounted"
 hdiutil attach -readonly -nobrowse -mountpoint "$WORK/mounted" "$WORK/image.dmg" >/dev/null
 MOUNT="$WORK/mounted"
 codesign --verify --deep --strict "$MOUNT/Verbemo.app"
+# Signature verification accepts dangling framework links. Check traversal without modifying the app.
+/usr/bin/xattr -r "$MOUNT/Verbemo.app" >/dev/null
 [ "$(readlink "$MOUNT/Applications")" = /Applications ] || die 'Applications link is missing'
 if [ -n "$GUIDE" ]; then
     cmp -s "$GUIDE" "$MOUNT/${GUIDE##*/}" || die 'first launch guide is missing or incomplete'

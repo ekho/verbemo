@@ -203,7 +203,8 @@ app: build $(ICON)
 	@# Sparkle's XPC services exist so a sandboxed app can still download and
 	@# install; verbemo is not sandboxed, so they are two more binaries to sign,
 	@# notarize and ship for nothing.
-	@rm -rf $(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices
+	@rm -rf $(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices \
+		$(APP)/Contents/Frameworks/Sparkle.framework/XPCServices
 	@echo "signing app as: $(SIGN_ID)"
 	@# Innermost first. codesign seals what it finds, so anything signed after
 	@# the app that contains it invalidates the app's own seal — and the failure

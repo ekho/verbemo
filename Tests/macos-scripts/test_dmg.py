@@ -88,8 +88,16 @@ for rep in NSBitmapImageRep.imageReps(with: data) {
             try:
                 guide = next(mount.glob('*.txt'))
                 instructions = guide.read_text(encoding='utf-8')
-                self.assertIn('sudo xattr -dr com.apple.quarantine "/Applications/Verbemo.app" &&\n'
+                quarantine = 'com.apple.quarantine'
+                xattr = ['xattr', '-drs', quarantine]
+                self.assertIn(f'sudo {" ".join(xattr)} "/Applications/Verbemo.app" &&\n'
                               'open "/Applications/Verbemo.app"', instructions)
+                # Older previews contain a dangling link, which the guide must handle.
+                (installed / 'Contents/Resources/target.txt').unlink()
+                link = installed / 'Contents/Resources/link.txt'
+                self.run_command('xattr', '-ws', quarantine, '0083;00000001;VerbemoTest;', str(link))
+                self.run_command(*xattr, str(installed))
+                self.assertNotIn(quarantine.encode(), self.run_command('xattr', '-s', str(link)).splitlines())
                 self.assertFalse(os.access(guide, os.X_OK))
                 with DSStore.open(str(mount / '.DS_Store'), 'r') as store:
                     # Look up the filename as Finder sees it on the mounted volume.
