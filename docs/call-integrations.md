@@ -51,9 +51,15 @@ for that application, so automatic recording can start with fallback capture.
 This fallback has the same limits as ordinary detection: microphone use in a
 prejoin screen can look like a call when exact participation is unavailable.
 Other call apps keep the existing detection. A muted call remains in progress;
-confirmed prejoin does not start recording. Unknown observation suspends the end-of-call
-clock for a tracked call and cannot release the manual-stop hold. Existing
-duration and silence backstops remain active.
+confirmed prejoin does not start recording. When macOS Accessibility confirms
+that the recognized meeting window was closed, the usual stop delay can start
+with the main KTalk window still open. Unknown observation suspends the end-of-call
+clock for a tracked call and cannot release the manual-stop hold. After a manual
+stop, a distinct joined call reported by the same integration and source can
+start once it has been observed for the configured start delay, even when the
+gap between meetings is short. KTalk's CDP observation identifies that local
+participation by window and room, so later conference metadata cannot restart
+the stopped recording. Existing duration and silence backstops remain active.
 
 Observed call metadata is saved under `call`, separately from calendar invitees.
 Direct capture requires a fresh, unique joined application call. The session owns
@@ -127,3 +133,8 @@ CAF samples and the live-audio relay. Windows is not implemented by this package
 
 CI and the common release workflow run both the package tests and the native
 transport fixture separately from the application tests.
+
+On macOS 26.7.3 with KTalk 3.8.0.13562, an empty meeting in a separate window
+triggered an Accessibility-based recording. After leaving the room and keeping
+the main KTalk window open, Verbemo saved both device tracks with
+`stop_reason: call-ended` about 17 seconds later (configured delay 15 seconds).
