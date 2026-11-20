@@ -10,7 +10,7 @@ downloaded from the official releases page.
 
 https://github.com/ekho/verbemo/releases
 
-sudo xattr -dr com.apple.quarantine "/Applications/Verbemo.app" &&
+sudo xattr -drs com.apple.quarantine "/Applications/Verbemo.app" &&
 open "/Applications/Verbemo.app"
 
 Пароль администратора запрашивается для снятия метки карантина. Verbemo
